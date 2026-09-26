@@ -21,6 +21,10 @@ def test_wireguard_peer_profile_accepts_ipv4_endpoint(tmp_path,monkeypatch):
     monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
     outputs=iter(["CLIENT_PRIVATE","CLIENT_PUBLIC","SERVER_PUBLIC",""])
     monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:next(outputs))
+    monkeypatch.setattr(protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint,iface="wg0":{
+        "runtime_ok":True,"endpoint_is_ip":True,"endpoint_ip_version":4,
+        "resolved_ipv4":["203.0.113.10"],"local_ipv4":["203.0.113.10"],"dns_matches_server":True,"warnings":[]
+    })
     result=protocol_ops.create_wireguard_peer("client01","203.0.113.10")
     assert "Endpoint = 203.0.113.10:443" in result["config"]
     assert "PersistentKeepalive = 15" in result["config"]
@@ -31,9 +35,30 @@ def test_wireguard_peer_profile_accepts_domain_endpoint(tmp_path,monkeypatch):
     monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
     outputs=iter(["CLIENT_PRIVATE","CLIENT_PUBLIC","SERVER_PUBLIC",""])
     monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:next(outputs))
+    monkeypatch.setattr(protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint,iface="wg0":{
+        "runtime_ok":True,"endpoint_is_ip":False,"endpoint_ip_version":None,
+        "resolved_ipv4":["203.0.113.10"],"local_ipv4":["203.0.113.10"],"dns_matches_server":True,"warnings":[]
+    })
     result=protocol_ops.create_wireguard_peer("client02","vpn.example.com")
     assert "Endpoint = vpn.example.com:443" in result["config"]
+    assert "Endpoint = 203.0.113.10:443" in result["ip_config"]
+    assert result["fallback_ipv4"]=="203.0.113.10"
     assert result["endpoint"]=="vpn.example.com"
+
+def test_wireguard_peer_rejects_domain_not_pointing_to_vps(tmp_path,monkeypatch):
+    wg,conf=_wg_fixture(tmp_path)
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    monkeypatch.setattr(protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint,iface="wg0":{
+        "runtime_ok":True,"endpoint_is_ip":False,"endpoint_ip_version":None,
+        "resolved_ipv4":["198.51.100.25"],"local_ipv4":["203.0.113.10"],"dns_matches_server":False,
+        "warnings":["DNS-only direct A required"]
+    })
+    try:
+        protocol_ops.create_wireguard_peer("client03","vpn.example.com")
+    except protocol_ops.ProtocolError as exc:
+        assert "does not resolve directly" in str(exc)
+    else:
+        raise AssertionError("mismatched WireGuard domain should be rejected")
 
 def test_wireguard_domain_diagnostics_matches_server_ipv4(tmp_path,monkeypatch):
     wg,conf=_wg_fixture(tmp_path)
