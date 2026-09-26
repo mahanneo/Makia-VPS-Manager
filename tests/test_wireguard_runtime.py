@@ -101,6 +101,7 @@ def test_wireguard_repair_rewrites_idempotent_forward_and_scoped_nat(tmp_path,mo
     wg,conf=_wg_fixture(tmp_path)
     monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
     monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"ens3")
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
     monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
     monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *args,**kwargs:{"active":False,"changed":False})
     monkeypatch.setattr(protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint="",iface="wg0":{"runtime_ok":True,"warnings":[]})
