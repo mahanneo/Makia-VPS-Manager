@@ -566,9 +566,21 @@ async function revokeAccess(kind,key,name){
 async function reissueWireGuard(name){
   if(!confirm('Peer قدیمی '+name+' باطل و Key جدید ساخته شود؟'))return;
   const endpoint=window.PANEL_DOMAIN||location.hostname;
+  const d=window.__operatorSettings?.defaults||{};
   try{
+    const preflight=await api('/api/protocols/wireguard/diagnostics?endpoint='+encodeURIComponent(endpoint));
+    if(!preflight.runtime_ok||!preflight.endpoint_ok){
+      alert('Reissue متوقف شد: ابتدا WireGuard Runtime/Endpoint را از Protocol Hub تعمیر کنید.\n'+(preflight.warnings||[]).join('\n'));
+      return;
+    }
     await api('/api/access/wireguard/'+encodeURIComponent(name),{method:'DELETE'});
-    const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns:'1.1.1.1'})});
+    const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({
+      name,endpoint,
+      dns:d.wireguard_dns||'1.1.1.1',
+      mtu:Number(d.wireguard_mtu||1280),
+      keepalive:Number(d.wireguard_keepalive??15),
+      allowed_ips:d.wireguard_allowed_ips||'0.0.0.0/0'
+    })});
     showProvisionSuccess('wireguard',name,name,(await api('/api/accounts/generate-secret?mode=pin6')).secret,null,r);
   }catch(e){alert(e.message)}
 }
