@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.17.0-rc1] - 2026-09-26
+
+### WireGuard Reliability
+- Added deep WireGuard diagnostics for service state, wg0 presence, UDP listener, IPv4 forwarding, FORWARD rules, source-scoped NAT, endpoint DNS/IP readiness and peer handshake/traffic state.
+- Added safe WireGuard Repair Runtime with pre-change backup, idempotent top-priority FORWARD rules, source-scoped MASQUERADE, UFW UDP allowance, restart validation and rollback on failure.
+- New WireGuard bootstraps use the hardened forwarding/NAT rules by default.
+- Safe updater now detects legacy wg0, attempts runtime repair before the final host smoke gate and rolls back when an already-healthy WireGuard runtime is broken by the update.
+- makia-doctor and makia-uat-smoke now gate WireGuard forwarding, NAT and UDP listener health.
+
+### IP / Domain Compatibility
+- Added Protocol Hub IP / Domain Readiness Matrix for SSH, Xray, WireGuard and OpenVPN.
+- WireGuard now diagnoses direct-IP and DNS-only domain endpoints and flags wrong/proxied A records and incompatible IPv6-only paths.
+- Existing OpenVPN domain/IP diagnostics remain integrated.
+- Added regression tests for WireGuard client profiles using both IPv4 and domain endpoints and for endpoint readiness aggregation.
+
+### UI
+- Replaced the browser-native white sidebar scrollbar with a thin Glass-style scrollbar and matching scroll surfaces.
+- Added WireGuard Diagnostics / Repair actions and peer handshake telemetry in Protocol Hub.
+
+### Update Safety
+- Preserved MAKIA_SUPPORT_WEBHOOK_TOKEN when loading owner/support configuration during updates.
+- Updated version and client shell cache to v0.17.0-rc1.
+
+### Release status
+Release candidate. CI validates runtime contracts and config generation; final Stable still requires one real external-client UAT for WireGuard/OpenVPN/Xray/SSH over both the public IPv4 and the direct DNS-only domain.
+
 ## [0.16.0-rc1] - 2026-09-26
 
 ### Owner Control Center

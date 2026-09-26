@@ -508,8 +508,8 @@ def bootstrap_wireguard(port=51820, cidr="10.66.66.1/24", iface="wg0", mtu=0):
         f"ListenPort = {int(port)}\n"
         f"PrivateKey = {private}\n"
         +(f"MTU = {mtu}\n" if mtu else "")
-        +f"PostUp = iptables -A FORWARD -i {iface} -j ACCEPT; iptables -A FORWARD -o {iface} -j ACCEPT; iptables -t nat -A POSTROUTING -o {uplink} -j MASQUERADE\n"
-        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT; iptables -D FORWARD -o {iface} -j ACCEPT; iptables -t nat -D POSTROUTING -o {uplink} -j MASQUERADE\n",
+        +f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; iptables -t nat -C POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE\n"
+        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; iptables -t nat -D POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
         encoding="utf-8"
     )
     os.chmod(conf,0o600)
@@ -635,6 +635,259 @@ def remove_wireguard_peer(public_key, iface="wg0"):
     conf.write_text("\n".join(cleaned).rstrip()+"\n",encoding="utf-8")
     os.chmod(conf,0o600)
     return {"removed":True,"public_key":public_key,"interface":iface}
+
+def _wireguard_server_config(iface="wg0"):
+    conf=WG_DIR/f"{iface}.conf"
+    result={"config":str(conf),"exists":conf.exists(),"address":"","port":0,"mtu":0,"network":"","uplink":""}
+    if not conf.exists():
+        return result
+    text=conf.read_text(encoding="utf-8",errors="ignore")
+    address_m=re.search(r"(?m)^Address\s*=\s*([^\n#]+)",text)
+    port_m=re.search(r"(?m)^ListenPort\s*=\s*(\d+)",text)
+    mtu_m=re.search(r"(?m)^MTU\s*=\s*(\d+)",text)
+    if address_m:
+        try:
+            interface=ipaddress.ip_interface(address_m.group(1).strip())
+            result["address"]=str(interface)
+            result["network"]=str(interface.network)
+        except Exception:
+            result["address"]=address_m.group(1).strip()
+    if port_m:
+        result["port"]=int(port_m.group(1))
+    if mtu_m:
+        result["mtu"]=int(mtu_m.group(1))
+    try:
+        result["uplink"]=_default_iface()
+    except Exception:
+        result["uplink"]=""
+    return result
+
+def _wireguard_udp_listener(port):
+    if not port or not shutil.which("ss"):
+        return False
+    p=subprocess.run(["ss","-H","-lun"],text=True,capture_output=True,timeout=8,check=False)
+    if p.returncode!=0:
+        return False
+    return any(re.search(rf":{int(port)}\b",line) for line in (p.stdout or "").splitlines())
+
+def _iptables_check(args):
+    if not shutil.which("iptables"):
+        return None
+    p=subprocess.run(["iptables",*args],text=True,capture_output=True,timeout=8,check=False)
+    return p.returncode==0
+
+def _wireguard_peer_runtime(iface="wg0"):
+    peers=[]
+    if not _installed("wg"):
+        return peers
+    try:
+        latest={}
+        for line in _run(["wg","show",iface,"latest-handshakes"],timeout=5).splitlines():
+            cols=line.split()
+            if len(cols)>=2:
+                latest[cols[0]]=int(cols[1] or 0)
+        transfers={}
+        for line in _run(["wg","show",iface,"transfer"],timeout=5).splitlines():
+            cols=line.split()
+            if len(cols)>=3:
+                transfers[cols[0]]={"rx":int(cols[1] or 0),"tx":int(cols[2] or 0)}
+        now_ts=int(time.time())
+        for peer in list_wireguard_peers(iface):
+            key=peer.get("public_key","")
+            ts=int(latest.get(key) or 0)
+            age=(now_ts-ts) if ts else None
+            tr=transfers.get(key,{"rx":0,"tx":0})
+            peers.append({**peer,"latest_handshake":ts,"handshake_age":age,"rx":tr["rx"],"tx":tr["tx"]})
+    except Exception:
+        pass
+    return peers
+
+def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
+    endpoint=str(endpoint or "").strip()
+    cfg=_wireguard_server_config(iface)
+    service_active=_active(f"wg-quick@{iface}")
+    interfaces=[]
+    try:
+        interfaces=[x for x in _run(["wg","show","interfaces"],timeout=5).split() if x]
+    except Exception:
+        interfaces=[]
+    interface_present=iface in interfaces
+    ip_forward=False
+    try:
+        ip_forward=Path("/proc/sys/net/ipv4/ip_forward").read_text(encoding="utf-8").strip()=="1"
+    except Exception:
+        pass
+    listener=_wireguard_udp_listener(cfg.get("port"))
+    uplink=cfg.get("uplink") or ""
+    network=cfg.get("network") or ""
+    forward_in=_iptables_check(["-C","FORWARD","-i",iface,"-j","ACCEPT"])
+    forward_out=_iptables_check(["-C","FORWARD","-o",iface,"-j","ACCEPT"])
+    nat=None
+    if network and uplink:
+        nat=_iptables_check(["-t","nat","-C","POSTROUTING","-s",network,"-o",uplink,"-j","MASQUERADE"])
+        if nat is False:
+            # Historical Makia configs used a broad MASQUERADE rule without -s.
+            nat=_iptables_check(["-t","nat","-C","POSTROUTING","-o",uplink,"-j","MASQUERADE"])
+    resolved4=[]; resolved6=[]; endpoint_is_ip=False; ip_version=None; dns_matches_server=None
+    warnings=[]
+    if endpoint:
+        endpoint=_validate_endpoint_host(endpoint,"WireGuard endpoint")
+        try:
+            parsed=ipaddress.ip_address(endpoint)
+            endpoint_is_ip=True; ip_version=parsed.version
+            if parsed.version==4: resolved4=[parsed.compressed]
+            else: resolved6=[parsed.compressed]
+        except ValueError:
+            try: resolved4=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET)})
+            except Exception: resolved4=[]
+            try: resolved6=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET6)})
+            except Exception: resolved6=[]
+        local4=_local_ipv4_candidates()
+        if not endpoint_is_ip:
+            dns_matches_server=bool(set(resolved4)&set(local4)) if resolved4 and local4 else None
+            if not resolved4:
+                warnings.append("دامنه WireGuard رکورد A/IPv4 قابل استفاده ندارد.")
+            if resolved6:
+                warnings.append("دامنه AAAA هم دارد؛ WireGuard می‌تواند IPv6 را انتخاب کند. اگر VPS مسیر IPv6 کامل ندارد، برای Endpoint از A/IPv4 مستقیم یا دامنه بدون AAAA ناسازگار استفاده کنید.")
+            if dns_matches_server is False:
+                warnings.append("رکورد A دامنه با IPv4 این VPS تطابق ندارد. WireGuard خام از HTTP/CDN Proxy عبور نمی‌کند؛ رکورد باید DNS-only و مستقیم به VPS باشد.")
+        elif ip_version!=4:
+            warnings.append("Bootstrap فعلی WireGuard سرور IPv4-only است؛ Endpoint IPv6 برای این Runtime توصیه نمی‌شود.")
+    else:
+        local4=_local_ipv4_candidates()
+    if not cfg.get("exists"): warnings.append("فایل wg0.conf وجود ندارد.")
+    if not service_active: warnings.append("سرویس wg-quick@wg0 فعال نیست.")
+    if not interface_present: warnings.append("Interface wg0 در runtime دیده نمی‌شود.")
+    if not listener and cfg.get("port"): warnings.append(f"UDP listener روی Port {cfg.get('port')} دیده نشد.")
+    if not ip_forward: warnings.append("net.ipv4.ip_forward فعال نیست.")
+    if forward_in is False or forward_out is False: warnings.append("Forwarding ruleهای WireGuard در iptables کامل نیستند.")
+    if nat is False: warnings.append("NAT/MASQUERADE برای شبکه WireGuard روی uplink پیدا نشد.")
+    peers=_wireguard_peer_runtime(iface)
+    recent=sum(1 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)
+    endpoint_ok=True
+    if endpoint:
+        endpoint_ok=bool(
+            (endpoint_is_ip and ip_version==4) or
+            ((not endpoint_is_ip) and resolved4 and dns_matches_server is not False)
+        )
+    runtime_ok=bool(cfg.get("exists") and service_active and interface_present and listener and ip_forward and forward_in is not False and forward_out is not False and nat is not False)
+    return {
+        "ok":bool(runtime_ok and endpoint_ok),
+        "runtime_ok":runtime_ok,
+        "endpoint_ok":endpoint_ok,
+        "interface":iface,
+        "config":cfg.get("config"),
+        "address":cfg.get("address"),
+        "network":network,
+        "port":cfg.get("port"),
+        "mtu":cfg.get("mtu"),
+        "uplink":uplink,
+        "service_active":service_active,
+        "interface_present":interface_present,
+        "listener":listener,
+        "ip_forward":ip_forward,
+        "forward_in":forward_in,
+        "forward_out":forward_out,
+        "nat":nat,
+        "endpoint":endpoint,
+        "endpoint_is_ip":endpoint_is_ip,
+        "endpoint_ip_version":ip_version,
+        "resolved_ipv4":resolved4,
+        "resolved_ipv6":resolved6,
+        "local_ipv4":local4,
+        "dns_matches_server":dns_matches_server,
+        "peers":peers,
+        "recent_handshakes":recent,
+        "warnings":warnings,
+    }
+
+def repair_wireguard_runtime(iface="wg0"):
+    if not re.fullmatch(r"wg\d{1,2}",iface):
+        raise ProtocolError("invalid WireGuard interface name")
+    cfg=_wireguard_server_config(iface)
+    conf=Path(cfg["config"])
+    if not conf.exists():
+        raise ProtocolError("WireGuard server config is not available")
+    if not cfg.get("port") or not cfg.get("network"):
+        raise ProtocolError("WireGuard config is missing Address or ListenPort")
+    uplink=_default_iface()
+    original=conf.read_text(encoding="utf-8",errors="ignore")
+    backup_dir=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
+    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup=backup_dir/f"wireguard-repair-{int(time.time())}.conf"
+    shutil.copy2(conf,backup)
+    network=cfg["network"]
+    post_up=(
+        f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; "
+        f"iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; "
+        f"iptables -t nat -C POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {network} -o {uplink} -j MASQUERADE"
+    )
+    post_down=(
+        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; "
+        f"iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; "
+        f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true"
+    )
+    updated=re.sub(r"(?m)^PostUp\s*=.*$",post_up,original,count=1) if re.search(r"(?m)^PostUp\s*=",original) else original.rstrip()+"\n"+post_up+"\n"
+    updated=re.sub(r"(?m)^PostDown\s*=.*$",post_down,updated,count=1) if re.search(r"(?m)^PostDown\s*=",updated) else updated.rstrip()+"\n"+post_down+"\n"
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    sysctl=sysctl_dir/"99-makia-wireguard.conf"
+    try:
+        conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
+        os.chmod(conf,0o600)
+        sysctl.write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        _ufw_allow_if_active(cfg["port"],"udp","WireGuard")
+        _run(["systemctl","enable",f"wg-quick@{iface}"],timeout=20)
+        _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
+        diagnostics=wireguard_endpoint_diagnostics("",iface)
+        if not diagnostics.get("runtime_ok"):
+            raise ProtocolError("WireGuard runtime remains unhealthy after repair: "+"; ".join(diagnostics.get("warnings") or []))
+    except Exception:
+        try:
+            shutil.copy2(backup,conf)
+            os.chmod(conf,0o600)
+            _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
+        except Exception:
+            pass
+        raise
+    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
+
+def protocol_endpoint_matrix(endpoint):
+    endpoint=_validate_endpoint_host(endpoint,"public endpoint")
+    local4=_local_ipv4_candidates()
+    try:
+        parsed=ipaddress.ip_address(endpoint)
+        is_ip=True
+        resolved4=[parsed.compressed] if parsed.version==4 else []
+        resolved6=[parsed.compressed] if parsed.version==6 else []
+    except ValueError:
+        is_ip=False
+        try: resolved4=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET)})
+        except Exception: resolved4=[]
+        try: resolved6=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET6)})
+        except Exception: resolved6=[]
+    dns_match=True if is_ip else (bool(set(resolved4)&set(local4)) if resolved4 and local4 else None)
+    x=xray_status()
+    wg=wireguard_endpoint_diagnostics(endpoint) if (WG_DIR/"wg0.conf").exists() else {"ok":False,"runtime_ok":False,"warnings":["WireGuard server not bootstrapped"]}
+    ov=openvpn_endpoint_diagnostics(endpoint) if (OVPN_DIR/"server/server.conf").exists() else {"ok":False,"warnings":["OpenVPN server not bootstrapped"]}
+    ssh=ssh_status()
+    x_ports=[int(i.get("port")) for i in (x.get("inbounds") or []) if i.get("port")]
+    rows=[
+        {"id":"ssh","label":"SSH","transport":"TCP","ports":[22],"runtime":bool(ssh.get("service_active")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
+        {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":x_ports,"runtime":bool(x.get("service_active") and x_ports),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
+        {"id":"wireguard","label":"WireGuard","transport":"UDP","ports":[wg.get("port")] if wg.get("port") else [],"runtime":bool(wg.get("runtime_ok")),"endpoint_ok":bool(wg.get("endpoint_ok",False))},
+        {"id":"openvpn","label":"OpenVPN","transport":str(ov.get("proto") or "").upper(),"ports":[ov.get("port")] if ov.get("port") else [],"runtime":bool(ov.get("service_active") and ov.get("listener")),"endpoint_ok":bool(ov.get("endpoint_is_ip") or (ov.get("resolved_ipv4") and ov.get("dns_matches_server") is not False))},
+    ]
+    for row in rows:
+        row["ready"]=bool(row["runtime"] and row["endpoint_ok"])
+    return {
+        "endpoint":endpoint,"endpoint_is_ip":is_ip,"resolved_ipv4":resolved4,"resolved_ipv6":resolved6,
+        "local_ipv4":local4,"dns_matches_server":dns_match,
+        "rows":rows,"all_ready":all(r["ready"] for r in rows),
+        "wireguard":wg,"openvpn":ov,
+        "note":"این تست Readiness سمت سرور، DNS و Listener را بررسی می‌کند؛ تأیید نهایی اتصال از اینترنت باید با Client واقعی خارج از VPS انجام شود."
+    }
 
 def _openvpn_proto(proto,server=False):
     proto=str(proto or "udp").strip().lower()

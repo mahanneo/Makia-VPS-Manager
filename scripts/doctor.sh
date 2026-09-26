@@ -99,7 +99,23 @@ else
 fi
 
 if command -v wg >/dev/null 2>&1; then
-  if wg show >/dev/null 2>&1; then ok "WireGuard tooling" "ready"; else warn "WireGuard tooling" "installed but no readable interface"; fi
+  if [[ -f /etc/wireguard/wg0.conf ]]; then
+    if ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_endpoint_diagnostics("")
+assert d.get("runtime_ok"), "; ".join(d.get("warnings") or [])
+print("wg0", d.get("port"), d.get("network"), d.get("uplink"))
+PY
+    ); then
+      ok "WireGuard runtime" "forwarding + NAT + listener ready"
+    else
+      fail "WireGuard runtime" "run Protocols → WireGuard → Repair Runtime"
+    fi
+  elif wg show >/dev/null 2>&1; then
+    ok "WireGuard tooling" "installed; wg0 not bootstrapped"
+  else
+    warn "WireGuard tooling" "installed but no readable interface"
+  fi
 else
   warn "WireGuard" "not installed (optional)"
 fi

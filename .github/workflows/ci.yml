@@ -67,6 +67,7 @@ jobs:
           test -f docs/UAT-0.14.0-RC1.md
           test -f docs/UAT-0.15.0-RC1.md
           test -f docs/UAT-0.16.0-RC1.md
+          test -f docs/UAT-0.17.0-RC1.md
           test -f docs/OWNER-CONTROL-CENTER-FA.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f owner_console/app.py
@@ -196,6 +197,24 @@ jobs:
           grep -q -- '--control-plane' scripts/configure-owner.py
           grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/configure-owner.py
           ! grep -R --line-number 'BEGIN PRIVATE KEY' app owner_console tools scripts docs --exclude='*.md'
+
+
+      - name: UAT v0.17 contract
+        run: |
+          grep -q 'WireGuard / Endpoint Compatibility UAT' docs/UAT-0.17.0-RC1.md
+          grep -q 'wireguard_endpoint_diagnostics' app/protocol_ops.py
+          grep -q 'repair_wireguard_runtime' app/protocol_ops.py
+          grep -q 'protocol_endpoint_matrix' app/protocol_ops.py
+          grep -q '/api/protocols/wireguard/diagnostics' app/main.py
+          grep -q '/api/protocols/wireguard/repair' app/main.py
+          grep -q '/api/protocols/endpoint-matrix' app/main.py
+          grep -q 'wireguard-diagnostics' app/static/app.js
+          grep -q 'wireguard-repair' app/static/app.js
+          grep -q 'endpoint-matrix' app/static/app.js
+          grep -q 'Checking WireGuard forwarding/NAT runtime' scripts/update.sh
+          grep -q 'WireGuard forwarding + NAT + listener' scripts/uat-smoke.sh
+          grep -q 'scrollbar-color:#2f6f94 transparent' app/static/app.css
+          grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/update.sh
 
   browser-smoke:
     runs-on: ubuntu-24.04

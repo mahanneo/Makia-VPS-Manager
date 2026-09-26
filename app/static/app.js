@@ -785,12 +785,12 @@ async function protocols(renderToken=window.__viewRenderToken){
     ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Install & Setup</button>'
     : (!w.config
       ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Bootstrap wg0</button>'
-      : '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Peers</button>');
+      : '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Peers</button><button class="engine-btn" data-action="wireguard-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="wireguard-repair">Repair Runtime</button>');
   const oActions=!o.installed
     ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Install & Setup</button>'
     : (!o.config
       ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Bootstrap Server</button>'
-      : '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Clients</button>');
+      : '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Clients</button><button class="engine-btn" data-action="openvpn-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="openvpn-repair">Repair Runtime</button>');
   const stActions=!s.installed
     ? '<button class="engine-btn" data-action="protocol-install" data-kind="stunnel">Install Stunnel</button>'
     : '<button class="engine-btn" data-action="nav" data-view="services">Service Control</button>';
@@ -799,7 +799,7 @@ async function protocols(renderToken=window.__viewRenderToken){
   const inboundHtml=(x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(i.tag||'untagged')+'</b><span>'+htmlEsc(i.protocol||'unknown')+'</span></div><div><b>'+htmlEsc((i.listen||'0.0.0.0')+':'+(i.port??'-'))+'</b><span>'+Number(i.clients||0)+' clients</span></div></div>').join(''):'<div class="empty compact">Inbound قابل‌خواندن پیدا نشد.</div>';
 
   content.innerHTML=[
-    '<section class="protocol-command"><div><div class="eyebrow">ENGINE & TRANSPORT CONTROL</div><h2>Protocol Hub</h2><p>Engineها، Server Bootstrap و تنظیمات پیشرفته اینجا مدیریت می‌شوند؛ ساخت Client فقط در Access Center انجام می‌شود.</p><div class="hero-actions"><button class="primary action-lg" data-action="nav" data-view="access">Open Access Center</button><button class="ghost action-lg" data-action="protocol-refresh">Refresh Engines</button></div></div>',
+    '<section class="protocol-command"><div><div class="eyebrow">ENGINE & TRANSPORT CONTROL</div><h2>Protocol Hub</h2><p>Engineها، Server Bootstrap و تنظیمات پیشرفته اینجا مدیریت می‌شوند؛ ساخت Client فقط در Access Center انجام می‌شود.</p><div class="hero-actions"><button class="primary action-lg" data-action="nav" data-view="access">Open Access Center</button><button class="ghost action-lg" data-action="endpoint-matrix">IP / Domain Readiness</button><button class="ghost action-lg" data-action="protocol-refresh">Refresh Engines</button></div></div>',
     '<div class="protocol-readiness"><b>'+ready+'/'+total+'</b><span>CAPABILITIES READY</span></div></section>',
     '<section class="engine-grid">',
       engineCard('X','Xray Core','VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / Proxy',protocolState(x.installed,x.service_active),'<span>'+htmlEsc(x.version||'Version unavailable')+'</span><span>'+Number((x.inbounds||[]).length)+' inbounds</span>',xActions),
@@ -918,8 +918,57 @@ async function repairXrayRuntime(){
   }catch(e){alert('Xray repair: '+e.message)}
 }
 
-async function bootstrapWireGuard(){const port=Number(prompt('WireGuard UDP port','51820'));if(!port)return;const cidr=prompt('Server tunnel CIDR','10.66.66.1/24');if(!cidr)return;try{const r=await api('/api/protocols/wireguard/bootstrap',{method:'POST',body:JSON.stringify({port,cidr})});toast('WireGuard '+r.interface+' started');await protocols()}catch(e){alert(e.message)}}
-async function createWireGuardPeer(){const d=window.__operatorSettings?.defaults||{};const name=prompt('Peer name','client01');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const dns=prompt('Client DNS',d.wireguard_dns||'1.1.1.1')||'1.1.1.1';try{const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns,mtu:Number(d.wireguard_mtu||1280),keepalive:Number(d.wireguard_keepalive??15),allowed_ips:d.wireguard_allowed_ips||'0.0.0.0/0'})});configModal('WireGuard · '+name,r.config,name+'.conf','wireguard',name)}catch(e){alert(e.message)}}
+async function bootstrapWireGuard(){const d=window.__operatorSettings?.defaults||{};const port=Number(prompt('WireGuard UDP port',String(d.wireguard_port||443)));if(!port)return;const cidr=prompt('Server tunnel CIDR',d.wireguard_cidr||'10.66.66.1/24');if(!cidr)return;try{const r=await api('/api/protocols/wireguard/bootstrap',{method:'POST',body:JSON.stringify({port,cidr,mtu:Number(d.wireguard_mtu||1280)})});toast('WireGuard '+r.interface+' started');await protocols()}catch(e){alert(e.message)}}
+async function createWireGuardPeer(){const d=window.__operatorSettings?.defaults||{};const name=prompt('Peer name','client01');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const dns=prompt('Client DNS',d.wireguard_dns||'1.1.1.1')||'1.1.1.1';try{const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns,mtu:Number(d.wireguard_mtu||1280),keepalive:Number(d.wireguard_keepalive??15),allowed_ips:d.wireguard_allowed_ips||'0.0.0.0/0'})});configModal('WireGuard · '+name,r.config,name+'.conf','wireguard',name);if(r.diagnostics&&!r.diagnostics.ok)toast('Config ساخته شد؛ WireGuard Diagnostics نیاز به بررسی دارد')}catch(e){alert(e.message)}}
+async function openWireGuardDiagnostics(){
+  try{
+    const endpoint=window.PANEL_DOMAIN||location.hostname;
+    const d=await api('/api/protocols/wireguard/diagnostics?endpoint='+encodeURIComponent(endpoint));
+    const warnings=(d.warnings||[]).map(x=>'<div class="diagnostic-hint">• '+htmlEsc(x)+'</div>').join('');
+    const peers=(d.peers||[]).map(p=>'<div class="wg-peer-runtime"><div><b>'+htmlEsc(p.name||'peer')+'</b><span>'+htmlEsc(p.allowed_ips||'')+'</span></div><div><b>'+(p.handshake_age===null?'Never':Math.max(0,Number(p.handshake_age))+'s ago')+'</b><span>RX '+fmtBytes(p.rx||0)+' · TX '+fmtBytes(p.tx||0)+'</span></div></div>').join('');
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal diagnostics-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">WIREGUARD RUNTIME DIAGNOSTICS</div><h3>wg0 · '+(d.runtime_ok?'Healthy':'Attention')+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="xray-diagnostic-grid">',
+        '<div><span>Service</span><b class="'+(d.service_active?'ok-text':'bad-text')+'">'+(d.service_active?'ACTIVE':'DOWN')+'</b></div>',
+        '<div><span>Interface</span><b class="'+(d.interface_present?'ok-text':'bad-text')+'">'+(d.interface_present?'wg0 READY':'MISSING')+'</b></div>',
+        '<div><span>UDP Listener</span><b class="'+(d.listener?'ok-text':'bad-text')+'">'+(d.listener?(':'+Number(d.port)):'MISSING')+'</b></div>',
+        '<div><span>IP Forward</span><b class="'+(d.ip_forward?'ok-text':'bad-text')+'">'+(d.ip_forward?'ON':'OFF')+'</b></div>',
+        '<div><span>NAT</span><b class="'+(d.nat!==false?'ok-text':'bad-text')+'">'+(d.nat===false?'MISSING':'READY')+'</b></div>',
+        '<div><span>Endpoint</span><b class="'+(d.endpoint_ok?'ok-text':'bad-text')+'">'+htmlEsc(d.endpoint||'-')+'</b></div>',
+      '</div>',
+      '<div class="domain-resolution-grid"><div><span>A / IPv4</span><code>'+htmlEsc((d.resolved_ipv4||[]).join(', ')||'none')+'</code></div><div><span>AAAA / IPv6</span><code>'+htmlEsc((d.resolved_ipv6||[]).join(', ')||'none')+'</code></div><div><span>VPS IPv4</span><code>'+htmlEsc((d.local_ipv4||[]).join(', ')||'unknown')+'</code></div></div>',
+      warnings?'<div class="diagnostic-hints">'+warnings+'</div>':'<div class="wizard-note success-note"><b>WireGuard runtime ready</b><span>Forwarding، NAT، UDP listener و Endpoint بررسی شدند.</span></div>',
+      '<div class="journal-head"><b>Peer Handshakes</b><span>'+Number(d.recent_handshakes||0)+' recent</span></div><div class="wg-peer-list">'+(peers||'<div class="empty compact">Peer runtime ثبت نشده است.</div>')+'</div>',
+      '<div class="wizard-note"><b>Domain note</b><span>برای WireGuard دامنه باید DNS-only و مستقیم به VPS باشد. Proxy/CDN HTTP مانند Cloudflare برای UDP خام WireGuard مناسب نیست.</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="primary" data-action="wireguard-repair">Repair & Restart</button></div>',
+      '</div></div>'
+    ].join('');
+  }catch(e){alert('WireGuard diagnostics: '+e.message)}
+}
+async function repairWireGuardRuntime(){
+  if(!confirm('Makia از wg0.conf بکاپ می‌گیرد، IP forwarding، NAT و Forward rules را اصلاح می‌کند و WireGuard را Restart می‌کند. ادامه؟'))return;
+  try{const r=await api('/api/protocols/wireguard/repair',{method:'POST'});toast(r?.diagnostics?.runtime_ok?'WireGuard repaired and healthy':'WireGuard repair completed');await openWireGuardDiagnostics()}catch(e){alert('WireGuard repair: '+e.message)}
+}
+async function openEndpointMatrix(){
+  const initial=window.PANEL_DOMAIN||location.hostname;
+  const endpoint=prompt('دامنه یا IP عمومی برای بررسی همه پروتکل‌ها',initial);
+  if(!endpoint)return;
+  try{
+    const d=await api('/api/protocols/endpoint-matrix?endpoint='+encodeURIComponent(endpoint));
+    const rows=(d.rows||[]).map(r=>'<div class="endpoint-row"><span class="endpoint-dot '+(r.ready?'ok':'bad')+'"></span><div><b>'+htmlEsc(r.label)+'</b><small>'+htmlEsc(r.transport||'')+'</small></div><div><b>'+htmlEsc((r.ports||[]).filter(Boolean).join(', ')||'-')+'</b><small>Ports</small></div><div><span class="status-chip '+(r.runtime?'ok':'bad')+'">'+(r.runtime?'Runtime':'Runtime fail')+'</span><span class="status-chip '+(r.endpoint_ok?'ok':'bad')+'">'+(r.endpoint_ok?'Endpoint':'DNS/IP fail')+'</span></div></div>').join('');
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal diagnostics-modal endpoint-matrix-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">IP / DOMAIN READINESS MATRIX</div><h3>'+htmlEsc(d.endpoint)+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="diagnostic-score '+(d.all_ready?'':'fail')+'"><div><b>'+(d.all_ready?'Server-side ready':'Attention required')+'</b><span>SSH · Xray · WireGuard · OpenVPN</span></div><span>'+((d.resolved_ipv4||[]).join(', ')||'No IPv4')+'</span></div>',
+      '<div class="endpoint-matrix">'+rows+'</div>',
+      '<div class="wizard-note"><b>تفسیر نتیجه</b><span>'+htmlEsc(d.note||'')+'</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="ghost" data-action="wireguard-diagnostics">WireGuard</button><button class="ghost" data-action="openvpn-diagnostics">OpenVPN</button></div>',
+      '</div></div>'
+    ].join('');
+  }catch(e){alert('Endpoint readiness: '+e.message)}
+}
+
 async function bootstrapOpenVPN(){const port=Number(prompt('OpenVPN port','1194'));if(!port)return;const proto=(prompt('Protocol: udp or tcp','udp')||'udp').toLowerCase();try{await api('/api/protocols/openvpn/bootstrap',{method:'POST',body:JSON.stringify({port,proto})});toast('OpenVPN server started');await protocols()}catch(e){alert(e.message)}}
 async function createOpenVPNClient(){const name=prompt('Client name','client01');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const port=Number(prompt('OpenVPN port',String(window.__operatorSettings?.defaults?.openvpn_port||1194)))||1194;const proto=(prompt('Protocol: udp or tcp',window.__operatorSettings?.defaults?.openvpn_proto||'udp')||'udp').toLowerCase();try{const r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name,endpoint,port,proto})});configModal('OpenVPN · '+name,r.config,name+'.ovpn','openvpn',name);if(r.diagnostics?.warnings?.length)toast('OpenVPN ساخته شد؛ Domain Diagnostics هشدار دارد')}catch(e){alert(e.message)}}
 function configModal(titleText,textData,fileName,kind=null,key=null){
@@ -1386,6 +1435,9 @@ async function handleMakiaAction(btn){
   if(action==='protocol-install'){await performProtocolInstall(btn.dataset.kind);return}
   if(action==='protocol-bootstrap'){await performProtocolBootstrap(btn.dataset.kind,btn.dataset.installed==='1');return}
   if(action==='protocol-refresh'){await currentView();return}
+  if(action==='endpoint-matrix'){await openEndpointMatrix();return}
+  if(action==='wireguard-diagnostics'){await openWireGuardDiagnostics();return}
+  if(action==='wireguard-repair'){await repairWireGuardRuntime();return}
   if(action==='openvpn-diagnostics'){await openOpenVPNDiagnostics();return}
   if(action==='openvpn-repair'){await repairOpenVPNRuntime();return}
   if(action==='xray-diagnostics'){await openXrayDiagnostics();return}
