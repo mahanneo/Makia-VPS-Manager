@@ -31,7 +31,7 @@ jobs:
       - name: Unit tests
         run: pytest -q
       - name: Bash syntax
-        run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh
+        run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh tests/*.sh
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
@@ -67,6 +67,9 @@ jobs:
           test -f docs/UAT-0.14.0-RC1.md
           test -f docs/UAT-0.15.0-RC1.md
           test -f docs/UAT-0.16.0-RC1.md
+          test -f docs/UAT-0.17.0-RC2.md
+          test -f tests/wireguard_netns_smoke.sh
+          test -f tests/test_wireguard_delivery.py
           test -f docs/UAT-0.17.0-RC1.md
           test -f docs/OWNER-CONTROL-CENTER-FA.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
@@ -216,6 +219,17 @@ jobs:
           grep -q 'scrollbar-color:#2f6f94 transparent' app/static/app.css
           grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/update.sh
 
+      - name: UAT v0.17 rc2 contract
+        run: |
+          grep -q 'Protocol Runtime / WireGuard External UAT' docs/UAT-0.17.0-RC2.md
+          grep -q 'external_udp_path_verified' app/protocol_ops.py
+          grep -q 'ssh_endpoint_diagnostics' app/protocol_ops.py
+          grep -q 'xray_endpoint_diagnostics' app/protocol_ops.py
+          grep -q 'alternate_config' app/access_ops.py
+          grep -q 'fallback_ipv4' app/main.py
+          grep -q 'wireguard_netns_smoke.sh' .github/workflows/ci.yml
+          pytest -q tests/test_wireguard_runtime.py tests/test_wireguard_delivery.py tests/test_endpoint_matrix.py tests/test_openvpn_domain.py
+
   browser-smoke:
     runs-on: ubuntu-24.04
     env:
@@ -235,6 +249,17 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Protected export browser smoke
         run: python tests/browser_smoke.py
+
+  wireguard-netns-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install WireGuard runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools iproute2 iputils-ping
+      - name: WireGuard direct-IP and domain handshake
+        run: bash tests/wireguard_netns_smoke.sh
 
   xray-core-smoke:
     runs-on: ubuntu-24.04

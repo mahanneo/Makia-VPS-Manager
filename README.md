@@ -4,8 +4,15 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current release candidate:** `v0.16.0-rc1`  
+> **Current release candidate:** `v0.17.0-rc2`  
 > CI validation is required before merge; a real-host UAT is still required before any Stable designation.
+
+## v0.17.0-rc2 WireGuard runtime + endpoint verification
+- WireGuard peer issuance now preflights the real server runtime (service, interface, UDP listener, IPv4 forwarding, FORWARD and NAT) and uses the guarded repair path when required.
+- DNS-only WireGuard domains must resolve directly to the VPS IPv4. Domain exports also include a direct-IP fallback `.conf` and QR when a matching public IPv4 is available.
+- The IP / Domain Readiness matrix now requires real SSH and Xray listeners instead of treating a green systemd unit as sufficient.
+- CI includes a Linux network-namespace WireGuard handshake test for both direct IPv4 and hostname endpoints.
+- A healthy VPS runtime does **not** prove that a carrier/ISP permits WireGuard UDP. Final Stable still requires an external-client UAT over the real network path.
 
 ## v0.16 Owner Control Center & consent-based Remote Support
 - A separate Owner Control Center manages customers, installations, signed licenses, renewals, revocations, support tickets and owner audit history.

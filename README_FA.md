@@ -1,3 +1,15 @@
+## نسخه v0.17.0-rc2 — سخت‌گیری Runtime و خروجی دوگانه WireGuard
+
+در RC2 ساخت Peer فقط به Running بودن Service اکتفا نمی‌کند. قبل از صدور کانفیگ، وضعیت Interface، UDP Listener، IPv4 Forwarding، FORWARD Rule و NAT بررسی می‌شود و در صورت نیاز Repair امن اجرا می‌شود.
+
+برای Endpoint دامنه، رکورد A باید به IPv4 همین VPS اشاره کند و DNS-only/direct باشد. اگر دامنه معتبر باشد، بسته WireGuard علاوه بر کانفیگ دامنه، یک کانفیگ و QR مستقیم IPv4 نیز به‌عنوان fallback تحویل می‌دهد.
+
+ماتریس IP / Domain برای SSH و Xray نیز اکنون Listener واقعی را بررسی می‌کند. CI یک Handshake واقعی WireGuard داخل Linux network namespace را هم برای IPv4 و هم hostname اجرا می‌کند.
+
+> مهم: سالم بودن Runtime سرور و PASS شدن CI به معنی تضمین کارکرد WireGuard در ایران یا هر ISP/Carrier خاص نیست. اگر UDP در مسیر Client مسدود باشد، Diagnostics نبود Handshake را نشان می‌دهد و UAT باید از یک Client واقعی خارج از VPS انجام شود.
+
+راهنمای UAT: [UAT v0.17.0-rc2](docs/UAT-0.17.0-RC2.md)
+
 ## نسخه v0.17.0-rc1 — WireGuard Runtime Repair و تست IP/Domain
 
 در این نسخه تشخیص و تعمیر WireGuard عمیق‌تر شده است. پنل وضعیت Service، Interface، UDP Listener، IP Forwarding، FORWARD Rule، NAT و Handshake Peerها را بررسی می‌کند و گزینه **Repair Runtime** دارد.
