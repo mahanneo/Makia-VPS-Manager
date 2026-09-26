@@ -812,7 +812,7 @@ def repair_wireguard_runtime(iface="wg0"):
         raise ProtocolError("WireGuard config is missing Address or ListenPort")
     uplink=_default_iface()
     original=conf.read_text(encoding="utf-8",errors="ignore")
-    backup_dir=Path("/var/backups/makia-vps-manager")
+    backup_dir=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
     backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
     backup=backup_dir/f"wireguard-repair-{int(time.time())}.conf"
     shutil.copy2(conf,backup)
