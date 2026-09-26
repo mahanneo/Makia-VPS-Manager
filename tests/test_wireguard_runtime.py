@@ -112,3 +112,62 @@ def test_wireguard_repair_rewrites_idempotent_forward_and_scoped_nat(tmp_path,mo
     assert "iptables -I FORWARD 1 -o wg0 -j ACCEPT" in text
     assert "-t nat -C POSTROUTING -s 10.66.66.0/24 -o ens3 -j MASQUERADE" in text
     assert Path(result["backup"]).exists()
+
+
+def test_wireguard_repair_inserts_directives_before_first_peer(tmp_path,monkeypatch):
+    wg=tmp_path/"wireguard"
+    wg.mkdir()
+    conf=wg/"wg0.conf"
+    conf.write_text(
+        "[Interface]\n"
+        "Address = 10.66.66.1/24\n"
+        "ListenPort = 51820\n"
+        "PrivateKey = SERVER_PRIVATE\n"
+        "\n"
+        "[Peer]\n"
+        "PublicKey = CLIENT_PUBLIC\n"
+        "AllowedIPs = 10.66.66.2/32\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"eth0")
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl.d"))
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *args,**kwargs:{"active":False,"changed":False})
+    monkeypatch.setattr(protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint="",iface="wg0":{"runtime_ok":True,"warnings":[]})
+    protocol_ops.repair_wireguard_runtime()
+    text=conf.read_text(encoding="utf-8")
+    interface_block=text.split("[Peer]",1)[0]
+    peer_block=text.split("[Peer]",1)[1]
+    assert "PostUp =" in interface_block
+    assert "PostDown =" in interface_block
+    assert "PostUp =" not in peer_block
+    assert "PostDown =" not in peer_block
+
+
+def test_wireguard_diagnostics_warns_when_peers_have_no_recent_handshake(tmp_path,monkeypatch):
+    wg,conf=_wg_fixture(tmp_path)
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"eth0")
+    monkeypatch.setattr(protocol_ops,"_active",lambda svc:True)
+    monkeypatch.setattr(protocol_ops,"_installed",lambda name:True)
+    monkeypatch.setattr(protocol_ops,"_wireguard_udp_listener",lambda port:True)
+    monkeypatch.setattr(protocol_ops,"_iptables_check",lambda args:True)
+    monkeypatch.setattr(protocol_ops,"_local_ipv4_candidates",lambda:["203.0.113.10"])
+    monkeypatch.setattr(protocol_ops,"_wireguard_peer_runtime",lambda iface="wg0":[{"public_key":"k","handshake_age":None,"rx":0,"tx":0}])
+    def fake_run(args,*a,**kw):
+        if args[:3]==["wg","show","interfaces"]:
+            return "wg0"
+        return ""
+    monkeypatch.setattr(protocol_ops,"_run",fake_run)
+    real_read=Path.read_text
+    def fake_read(self,*a,**kw):
+        if str(self)=="/proc/sys/net/ipv4/ip_forward":
+            return "1\n"
+        return real_read(self,*a,**kw)
+    monkeypatch.setattr(protocol_ops.Path,"read_text",fake_read)
+    result=protocol_ops.wireguard_endpoint_diagnostics("203.0.113.10")
+    assert result["runtime_ok"] is True
+    assert result["external_udp_verified"] is False
+    assert any("UDP" in warning for warning in result["warnings"])

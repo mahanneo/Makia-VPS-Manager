@@ -68,6 +68,7 @@ jobs:
           test -f docs/UAT-0.15.0-RC1.md
           test -f docs/UAT-0.16.0-RC1.md
           test -f docs/UAT-0.17.0-RC1.md
+          test -f docs/UAT-0.17.0-RC2.md
           test -f docs/OWNER-CONTROL-CENTER-FA.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f owner_console/app.py
@@ -215,6 +216,14 @@ jobs:
           grep -q 'WireGuard forwarding + NAT + listener' scripts/uat-smoke.sh
           grep -q 'scrollbar-color:#2f6f94 transparent' app/static/app.css
           grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/update.sh
+
+      - name: UAT v0.17 rc2 contract
+        run: |
+          grep -q 'WireGuard Repair Hardening UAT' docs/UAT-0.17.0-RC2.md
+          grep -q '_wireguard_set_interface_directive' app/protocol_ops.py
+          grep -q 'external_udp_verified' app/protocol_ops.py
+          grep -q 'test_wireguard_repair_inserts_directives_before_first_peer' tests/test_wireguard_runtime.py
+          grep -q 'test_wireguard_diagnostics_warns_when_peers_have_no_recent_handshake' tests/test_wireguard_runtime.py
 
   browser-smoke:
     runs-on: ubuntu-24.04

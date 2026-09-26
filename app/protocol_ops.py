@@ -764,6 +764,8 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     if nat is False: warnings.append("NAT/MASQUERADE برای شبکه WireGuard روی uplink پیدا نشد.")
     peers=_wireguard_peer_runtime(iface)
     recent=sum(1 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)
+    if peers and recent==0:
+        warnings.append("هیچ Handshake تازه‌ای از Peerها دیده نشده است. اگر Client در حال تلاش برای اتصال است، علاوه بر Endpoint/Key، احتمال مسدودبودن UDP در فایروال دیتاسنتر، NAT بالادست یا شبکه/ISP را بررسی کنید؛ سلامت سمت سرور به‌تنهایی دسترسی UDP از اینترنت را اثبات نمی‌کند.")
     endpoint_ok=True
     if endpoint:
         endpoint_ok=bool(
@@ -798,8 +800,24 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "dns_matches_server":dns_matches_server,
         "peers":peers,
         "recent_handshakes":recent,
+        "external_udp_verified":False,
+        "external_udp_note":"برای اثبات دسترسی UDP باید Handshake واقعی از Client خارج VPS دیده شود؛ Diagnostics سمت سرور نمی‌تواند فیلترینگ اپراتور/کشور یا فایروال بالادست را به‌تنهایی رد کند.",
         "warnings":warnings,
     }
+
+def _wireguard_set_interface_directive(config_text,key,value_line):
+    """Replace or insert an Interface directive without ever appending it inside a Peer block."""
+    pattern=rf"(?m)^{re.escape(key)}\s*=.*$"
+    if re.search(pattern,config_text):
+        return re.sub(pattern,value_line,config_text,count=1)
+    peer=re.search(r"(?m)^\[Peer\]\s*$",config_text)
+    insert_at=peer.start() if peer else len(config_text)
+    head=config_text[:insert_at].rstrip()
+    tail=config_text[insert_at:].lstrip("\n")
+    merged=head+"\n"+value_line+"\n"
+    if tail:
+        merged+="\n"+tail
+    return merged
 
 def repair_wireguard_runtime(iface="wg0"):
     if not re.fullmatch(r"wg\d{1,2}",iface):
@@ -827,11 +845,13 @@ def repair_wireguard_runtime(iface="wg0"):
         f"iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; "
         f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true"
     )
-    updated=re.sub(r"(?m)^PostUp\s*=.*$",post_up,original,count=1) if re.search(r"(?m)^PostUp\s*=",original) else original.rstrip()+"\n"+post_up+"\n"
-    updated=re.sub(r"(?m)^PostDown\s*=.*$",post_down,updated,count=1) if re.search(r"(?m)^PostDown\s*=",updated) else updated.rstrip()+"\n"+post_down+"\n"
+    updated=_wireguard_set_interface_directive(original,"PostUp",post_up)
+    updated=_wireguard_set_interface_directive(updated,"PostDown",post_down)
     sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
     sysctl_dir.mkdir(parents=True,exist_ok=True)
     sysctl=sysctl_dir/"99-makia-wireguard.conf"
+    sysctl_existed=sysctl.exists()
+    sysctl_previous=sysctl.read_bytes() if sysctl_existed else b""
     try:
         conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
         os.chmod(conf,0o600)
@@ -847,6 +867,10 @@ def repair_wireguard_runtime(iface="wg0"):
         try:
             shutil.copy2(backup,conf)
             os.chmod(conf,0o600)
+            if sysctl_existed:
+                sysctl.write_bytes(sysctl_previous)
+            elif sysctl.exists():
+                sysctl.unlink()
             _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
         except Exception:
             pass
