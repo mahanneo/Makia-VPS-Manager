@@ -190,7 +190,7 @@ def main():
             page.locator('[data-action="wizard-next"]').click()
             assert page.locator("#wizSessions").count()==1
             page.locator('[data-action="wizard-next"]').click()
-            assert "Endpoint (IP)" in page.locator(".review-grid").inner_text()
+            assert "Endpoint (IP)" in page.locator(".review-grid").inner_text(), page.locator(".review-grid").inner_text()
             assert "8.8.8.8" in page.locator(".review-grid").inner_text()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
