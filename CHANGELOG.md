@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.17.0-rc2] - 2026-09-26
+
+### WireGuard Repair Hardening
+- Fixed a legacy-config repair bug where missing `PostUp` / `PostDown` directives could be appended after the first `[Peer]` block, producing an invalid wg-quick configuration.
+- Repair now inserts missing runtime directives inside the `[Interface]` section before any peer blocks.
+- WireGuard sysctl state is restored when runtime repair fails and rolls back.
+- Diagnostics now explicitly distinguish server-side health from real external UDP reachability. If peers exist but no recent handshake is observed, Makia warns about endpoint/key mismatch, upstream firewall/NAT, ISP/network UDP filtering, or datacenter filtering.
+- This release candidate still requires real external-client VPS UAT before Stable.
+
+
 ## [0.17.0-rc1] - 2026-09-26
 
 ### WireGuard Reliability
