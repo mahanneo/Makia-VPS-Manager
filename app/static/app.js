@@ -194,7 +194,7 @@ function accessCard(a){
   const stateClass=a.status==='active'?'ok':a.status==='expired'?'bad':'warn';
   let meta='',policy='';
   if(a.kind==='ssh'){
-    meta=(a.expire_date||'بدون انقضا')+(a.plan?' · '+htmlEsc(a.plan):'');
+    meta=htmlEsc(a.expire_date||'بدون انقضا')+(a.plan?' · '+htmlEsc(a.plan):'');
     policy='Sessions '+Number(a.online||0)+'/'+Number(a.connection_limit||1)+' · Devices '+Number(a.device_limit||1);
   }else if(a.kind==='xray'){
     const quota=a.quota_bytes?fmtBytes(a.quota_bytes):'Unlimited';
@@ -203,6 +203,7 @@ function accessCard(a){
   }else if(a.kind==='wireguard'){
     meta=htmlEsc(a.address||'WireGuard peer');policy='Native tunnel profile';
   }else{meta='Certificate profile';policy='OpenVPN PKI access'}
+  if(a.endpoint)policy+=' · '+htmlEsc(a.endpoint);
   const delivery=window.__operatorSettings?.delivery||{};
   const shareLabel=a.kind==='ssh'?'NPV Import':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
   const shareAllowed=a.can_export&&shareLabel&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
@@ -235,14 +236,19 @@ async function openProvisionWizard(protocol){
   ]);
   window.__operatorSettings=operator;
   const d=operator.defaults||{};
+  const initialEndpoint=window.PANEL_DOMAIN||location.hostname;
+  const initialMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(initialEndpoint)?'ip':'domain';
+  const ovpn=window.__protocolData?.openvpn||{};
   provisionState={
     step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',
-    endpoint:window.PANEL_DOMAIN||location.hostname,password:'',passwordMode:d.ssh_password_mode||'pin6',
+    endpoint:initialEndpoint,endpointMode:initialMode,
+    endpointValues:{ip:initialMode==='ip'?initialEndpoint:'',domain:initialMode==='domain'?initialEndpoint:''},
+    password:'',passwordMode:d.ssh_password_mode||'pin6',
     expireDate:'',plan:'',note:'',sessions:Number(d.ssh_sessions||1),devices:Number(d.ssh_devices||1),
     xrayProtocol:d.xray_protocol||'vless',port:Number(d.xray_port||2087),transport:d.xray_transport||'xhttp',security:d.xray_security||'reality',path:d.xray_path||'/makia',
     sni:d.xray_sni||'www.microsoft.com',realityDest:d.xray_reality_target||'www.microsoft.com:443',
     quota:Number(d.xray_quota_gb??50),expireDays:Number(d.xray_expire_days??30),resetDays:Number(d.xray_reset_days??30),
-    dns:d.wireguard_dns||'1.1.1.1',wgPort:Number(d.wireguard_port||443),wgMtu:Number(d.wireguard_mtu||1280),wgKeepalive:Number(d.wireguard_keepalive??15),wgAllowedIps:d.wireguard_allowed_ips||'0.0.0.0/0',wgCidr:d.wireguard_cidr||'10.66.66.1/24',ovpnProto:d.openvpn_proto||'udp',ovpnPort:Number(d.openvpn_port||1194),
+    dns:d.wireguard_dns||'1.1.1.1',wgPort:Number(d.wireguard_port||443),wgMtu:Number(d.wireguard_mtu||1280),wgKeepalive:Number(d.wireguard_keepalive??15),wgAllowedIps:d.wireguard_allowed_ips||'0.0.0.0/0',wgCidr:d.wireguard_cidr||'10.66.66.1/24',ovpnProto:String(ovpn.proto||d.openvpn_proto||'udp').startsWith('tcp')?'tcp':'udp',ovpnPort:Number(ovpn.port||d.openvpn_port||1194),
     packagePassword:''
   };
   if(protocol==='ssh'){
@@ -303,6 +309,7 @@ function wizardIdentityFields(s){
     '<div class="wizard-form two"><label>Username<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
     '<label>Password / PIN<div class="input-action"><input id="wizPassword" value="'+htmlEsc(s.password)+'"><button class="soft" data-action="wizard-secret" data-mode="pin6">Generate</button></div>',
     '<div class="preset-row"><button data-action="wizard-secret" data-mode="pin4">PIN 4</button><button data-action="wizard-secret" data-mode="pin6">PIN 6</button><button data-action="wizard-secret" data-mode="easy8">Easy 8</button><button data-action="wizard-secret" data-mode="strong">Strong</button></div></label>',
+    wizardEndpointFields(s),
     '<label>Plan<input id="wizPlan" value="'+htmlEsc(s.plan)+'" placeholder="VIP / Trial / 30D"></label>',
     '<label>Internal note<input id="wizNote" value="'+htmlEsc(s.note)+'" placeholder="نام مشتری / سفارش"></label></div>'
   ].join('');
@@ -311,13 +318,13 @@ function wizardIdentityFields(s){
     '<div class="wizard-form two"><label>Protocol<select id="wizXrayProtocol">',
     ['vless','vmess','trojan','shadowsocks','hysteria2','http','socks'].map(x=>'<option value="'+x+'" '+(s.xrayProtocol===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join(''),
     '</select></label><label>Client name<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
-    '<label>Public domain / IP<input id="wizEndpoint" value="'+htmlEsc(s.endpoint)+'"></label>',
+    wizardEndpointFields(s),
     '<label>Port<input id="wizPort" type="number" min="1" max="65535" value="'+Number(s.port)+'"></label></div>'
   ].join('');
   if(s.protocol==='wireguard') return [
     '<div class="wizard-section-title"><h4>WireGuard Peer</h4><p>برای هر دستگاه یک Peer مستقل بساز.</p></div>',
     '<div class="wizard-form two"><label>Peer name<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
-    '<label>Public domain / IP<input id="wizEndpoint" value="'+htmlEsc(s.endpoint)+'"></label>',
+    wizardEndpointFields(s),
     '<label>DNS<input id="wizDns" value="'+htmlEsc(s.dns)+'"></label>',
     '<label>MTU<input id="wizWgMtu" type="number" min="576" max="1500" value="'+Number(s.wgMtu||1280)+'"></label>',
     '<label>Persistent Keepalive<input id="wizWgKeepalive" type="number" min="0" max="3600" value="'+Number(s.wgKeepalive??15)+'"></label>',
@@ -327,10 +334,16 @@ function wizardIdentityFields(s){
   return [
     '<div class="wizard-section-title"><h4>OpenVPN Client</h4><p>Certificate مستقل برای این Client ساخته می‌شود.</p></div>',
     '<div class="wizard-form two"><label>Client name<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
-    '<label>Public domain / IP<input id="wizEndpoint" value="'+htmlEsc(s.endpoint)+'"></label>',
-    '<label>Port<input id="wizOvpnPort" type="number" min="1" max="65535" value="'+Number(s.ovpnPort)+'"></label>',
-    '<label>Transport<select id="wizOvpnProto"><option value="udp" '+(s.ovpnProto==='udp'?'selected':'')+'>UDP</option><option value="tcp" '+(s.ovpnProto==='tcp'?'selected':'')+'>TCP</option></select></label></div>'
+    wizardEndpointFields(s),
+    '<label>Server port<input id="wizOvpnPort" type="number" value="'+Number(s.ovpnPort)+'" readonly></label>',
+    '<label>Server transport<input value="'+htmlEsc(s.ovpnProto.toUpperCase())+'" readonly></label></div>'
   ].join('');
+}
+
+function wizardEndpointFields(s){
+  const mode=s.endpointMode==='ip'?'ip':'domain';
+  return '<label>Endpoint type<select id="wizEndpointMode"><option value="domain" '+(mode==='domain'?'selected':'')+'>دامنه</option><option value="ip" '+(mode==='ip'?'selected':'')+'>IPv4 عمومی</option></select></label>'+
+    '<label>'+(mode==='ip'?'Public IPv4':'Domain / hostname')+'<input id="wizEndpoint" dir="ltr" autocomplete="off" placeholder="'+(mode==='ip'?'IPv4 عمومی VPS':'vpn.example.com')+'" value="'+htmlEsc(s.endpoint)+'"><small>'+(mode==='domain'?(s.protocol==='xray'?'TLS ممکن است به SNI و گواهی معتبر نیاز داشته باشد.':s.protocol==='ssh'?'رکورد A باید مستقیم به VPS برسد؛ AAAA فقط با IPv6 سالم سرور.':'رکورد A باید مستقیم به VPS برسد؛ Proxy/CDN برای این پروتکل مناسب نیست.'):'IP عمومی سرور را وارد کن؛ خروجی کلاینت از همین IP استفاده می‌کند.')+'</small></label>';
 }
 
 function wizardPolicyFields(s){
@@ -361,7 +374,7 @@ function wizardReview(s){
   const summary=[];
   summary.push(['Protocol',s.protocol==='xray'?s.xrayProtocol.toUpperCase():s.protocol.toUpperCase()]);
   summary.push(['Name',s.name]);
-  if(s.endpoint)summary.push(['Endpoint',s.endpoint]);
+  if(s.endpoint)summary.push(['Endpoint ('+(s.endpointMode==='ip'?'IP':'Domain')+')',s.endpoint]);
   if(s.protocol==='ssh'){summary.push(['Expire',s.expireDate||'No expiry']);summary.push(['Sessions',s.sessions]);summary.push(['Devices',s.devices])}
   if(s.protocol==='xray'){summary.push(['Port',s.port]);summary.push(['Transport',s.transport]);summary.push(['Security',s.security]);summary.push(['Quota',s.quota?String(s.quota)+' GB':'Unlimited']);summary.push(['Days',s.expireDays||'Unlimited'])}
   return [
@@ -377,6 +390,7 @@ function captureWizard(){
   const val=id=>document.getElementById(id)?.value;
   if(val('wizName')!==undefined)s.name=val('wizName').trim();
   if(val('wizEndpoint')!==undefined)s.endpoint=val('wizEndpoint').trim();
+  if(s.endpointValues)s.endpointValues[s.endpointMode]=s.endpoint;
   if(val('wizPassword')!==undefined)s.password=val('wizPassword');
   if(val('wizPlan')!==undefined)s.plan=val('wizPlan');
   if(val('wizNote')!==undefined)s.note=val('wizNote');
@@ -407,7 +421,10 @@ function validateWizardStep(){
   if(s.step===2){
     if(!s.name)return 'نام کاربر/Client لازم است.';
     if(s.protocol==='ssh'&&(!s.password||s.password.length<4))return 'Password/PIN حداقل ۴ کاراکتر باشد.';
-    if(s.protocol!=='ssh'&&!s.endpoint)return 'دامنه یا IP عمومی لازم است.';
+    if(!s.endpoint)return 'دامنه یا IP عمومی لازم است.';
+    const isIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s.endpoint);
+    if(s.endpointMode==='ip'&&!isIp)return 'در حالت IP، آدرس IPv4 عمومی را وارد کن.';
+    if(s.endpointMode==='domain'&&(isIp||!/^([a-z0-9-]+\.)+[a-z0-9-]+\.?$/i.test(s.endpoint)))return 'در حالت دامنه، یک hostname معتبر وارد کن.';
     if(s.protocol==='xray'&&(!s.port||s.port<1||s.port>65535))return 'Port معتبر وارد کن.';
   }
   if(s.step===3&&s.protocol==='xray'&&s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY در Wizard فعلی Makia فقط برای VLESS فعال است.';
@@ -436,15 +453,15 @@ async function createProvisionedAccess(){
   try{
     let r,kind=s.protocol,key=s.name;
     if(s.protocol==='ssh'){
-      r=await api('/api/accounts',{method:'POST',body:JSON.stringify({username:s.name,password:s.password,password_mode:'manual',expire_date:s.expireDate||null,plan:s.plan,note:s.note,connection_limit:s.sessions,device_limit:s.devices,quota_mb:0,renewal_days:0})});
+      r=await api('/api/accounts',{method:'POST',body:JSON.stringify({username:s.name,password:s.password,password_mode:'manual',endpoint:s.endpoint,endpoint_mode:s.endpointMode,expire_date:s.expireDate||null,plan:s.plan,note:s.note,connection_limit:s.sessions,device_limit:s.devices,quota_mb:0,renewal_days:0})});
       key=s.name;
     }else if(s.protocol==='xray'){
-      r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify({protocol:s.xrayProtocol,port:s.port,name:s.name,endpoint:s.endpoint,transport:s.transport,security:s.security,path_value:s.path,server_name:s.sni,reality_dest:s.realityDest,quota_gb:s.quota,expire_days:s.expireDays,ip_limit:s.devices,reset_days:s.resetDays})});
+      r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify({protocol:s.xrayProtocol,port:s.port,name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,transport:s.transport,security:s.security,path_value:s.path,server_name:s.sni,reality_dest:s.realityDest,quota_gb:s.quota,expire_days:s.expireDays,ip_limit:s.devices,reset_days:s.resetDays})});
       kind='xray';key=String(r.client_id);
     }else if(s.protocol==='wireguard'){
-      r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,dns:s.dns,mtu:s.wgMtu,keepalive:s.wgKeepalive,allowed_ips:s.wgAllowedIps})});key=s.name;
+      r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,dns:s.dns,mtu:s.wgMtu,keepalive:s.wgKeepalive,allowed_ips:s.wgAllowedIps})});key=s.name;
     }else{
-      r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
+      r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
     }
     showProvisionSuccess(kind,key,s.name,s.packagePassword,s.protocol==='ssh'?s.password:null,r);
   }catch(e){alert(e.message);if(createBtn){createBtn.disabled=false;createBtn.textContent='ساخت و آماده‌سازی'}}
@@ -1521,6 +1538,15 @@ document.addEventListener('click',e=>{
   }
   const btn=e.target.closest('[data-action]');
   if(btn){e.preventDefault();Promise.resolve(handleMakiaAction(btn)).catch(err=>alert(err?.message||String(err)))}
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='wizEndpointMode'&&provisionState){
+    const next=e.target.value;
+    captureWizard();
+    provisionState.endpointMode=next;
+    provisionState.endpoint=provisionState.endpointValues[next]||'';
+    renderProvisionWizard();
+  }
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 

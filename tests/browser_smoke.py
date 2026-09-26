@@ -180,6 +180,18 @@ def main():
             page.locator('[data-shell-action="create-access"]').click()
             page.locator(".provision-wizard").wait_for()
             assert page.locator(".wizard-protocol").count()==4
+            page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
+            page.locator("#wizEndpointMode").select_option("ip")
+            page.locator("#wizEndpoint").fill("8.8.8.8")
+            page.locator("#wizEndpointMode").select_option("domain")
+            page.locator("#wizEndpoint").fill("vpn.example.com")
+            page.locator("#wizEndpointMode").select_option("ip")
+            assert page.locator("#wizEndpoint").input_value()=="8.8.8.8"
+            page.locator('[data-action="wizard-next"]').click()
+            assert page.locator("#wizSessions").count()==1
+            page.locator('[data-action="wizard-next"]').click()
+            assert "Endpoint (IP)" in page.locator(".review-grid").text_content()
+            assert "8.8.8.8" in page.locator(".review-grid").text_content()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('aside.sidebar button[data-view="dashboard"]').click()

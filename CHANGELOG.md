@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.18.0] - 2026-09-26
+
+### Explicit IP / domain delivery
+- The Access Center wizard now has an explicit IPv4 or domain choice for SSH/NPV, Xray, WireGuard and OpenVPN. The selected value is validated on the server before provisioning and appears in the review and access card.
+- SSH/NPV exports now use the chosen endpoint instead of silently using the panel domain.
+- OpenVPN stored exports preserve the chosen endpoint across subsequent Native, QR and Protected ZIP deliveries instead of switching to the panel domain. Creation rejects a port/transport mismatch with the actual OpenVPN server before issuing a client certificate.
+- Xray VMess TLS share links include the configured SNI, including when connecting to a public IPv4.
+- Provisioning defaults for OpenVPN port/transport are read from the active server configuration.
+
+### Verification boundary
+- CI covers Python/JS/Bash, unit and regression tests, browser navigation/delivery smoke, and Xray Core 26.3.27. Real DNS, UDP reachability and client handshake on the user's VPS are still a separate host UAT gate; this version number is an official code baseline, not a guarantee about every external network.
+
 ## [0.17.0-rc3] - 2026-09-26
 
 ### WireGuard domain endpoint

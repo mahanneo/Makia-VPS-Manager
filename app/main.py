@@ -671,6 +671,8 @@ def accounts(request:Request):
 
 class AccountCreate(BaseModel):
     username:str
+    endpoint:str|None=Field(default=None,max_length=255)
+    endpoint_mode:str="auto"
     password:str|None=Field(default=None,min_length=4,max_length=128)
     password_mode:str="manual"
     expire_date:str|None=None
@@ -707,12 +709,17 @@ def create_account(payload:AccountCreate,request:Request):
     if not password:
         raise HTTPException(400,"password is required")
     try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint or public_host(request),payload.endpoint_mode,direct=True,check_aaaa=True)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    try:
         system_ops.create_ssh_user(payload.username,password,payload.expire_date)
         upsert_profile(payload.username,payload.plan,payload.note,payload.expire_date,payload.connection_limit,payload.quota_mb,1,payload.device_limit,payload.renewal_days)
-        delivery=access_ops.ssh_payload(public_host(request),payload.username,password,22,ssh_npv_options(payload.username))
+        delivery=access_ops.ssh_payload(endpoint,payload.username,password,22,ssh_npv_options(payload.username))
         artifact_id=artifact_save("ssh",payload.username,payload.username,"ssh",delivery,{
             "expire_date":payload.expire_date or "","plan":payload.plan or "",
-            "connection_limit":payload.connection_limit,"device_limit":payload.device_limit
+            "connection_limit":payload.connection_limit,"device_limit":payload.device_limit,
+            "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode
         })
     except system_ops.OperationError as e: raise HTTPException(400,str(e))
     audit(actor,"account_create",payload.username,f"plan={payload.plan}; limit={payload.connection_limit}; quota_mb={payload.quota_mb}; password_mode={payload.password_mode}",ip(request))
@@ -739,10 +746,15 @@ def update_account(username:str,payload:AccountUpdate,request:Request):
         upsert_profile(username,payload.plan,payload.note,None if payload.clear_expire else payload.expire_date,payload.connection_limit,payload.quota_mb,1 if payload.enabled else 0,payload.device_limit,payload.renewal_days)
     except system_ops.OperationError as e: raise HTTPException(400,str(e))
     if payload.password:
-        delivery=access_ops.ssh_payload(public_host(request),username,payload.password,22,ssh_npv_options(username))
+        previous=get_access_artifact_by_key("ssh",username)
+        try: previous_meta=json.loads(previous.get("metadata_json") or "{}") if previous else {}
+        except (TypeError,ValueError): previous_meta={}
+        selected_host=previous_meta.get("endpoint") or public_host(request)
+        delivery=access_ops.ssh_payload(selected_host,username,payload.password,22,ssh_npv_options(username))
         artifact_save("ssh",username,username,"ssh",delivery,{
             "expire_date":None if payload.clear_expire else (payload.expire_date or ""),
-            "plan":payload.plan or "","connection_limit":payload.connection_limit,"device_limit":payload.device_limit
+            "plan":payload.plan or "","connection_limit":payload.connection_limit,"device_limit":payload.device_limit,
+            "endpoint":selected_host,"endpoint_mode":previous_meta.get("endpoint_mode","auto")
         })
     audit(actor,"account_update",username,f"enabled={payload.enabled}; limit={payload.connection_limit}; quota_mb={payload.quota_mb}",ip(request))
     return {"ok":True}
@@ -860,6 +872,7 @@ class XrayQuickInbound(BaseModel):
     port:int=Field(ge=1,le=65535)
     name:str=Field(min_length=1,max_length=48)
     endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
     transport:str="tcp"
     security:str="none"
     path_value:str=Field(default="/",max_length=255)
@@ -876,8 +889,9 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
     if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
         raise HTTPException(400,"Xray client name must be unique because traffic accounting uses the client email/name identity")
     try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
         result=protocol_ops.create_xray_inbound(
-            payload.protocol,payload.port,payload.name,payload.endpoint,
+            payload.protocol,payload.port,payload.name,endpoint,
             payload.transport,payload.security,payload.path_value,payload.server_name,payload.reality_dest
         )
     except protocol_ops.ProtocolError as e:
@@ -904,7 +918,7 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
     artifact_id=artifact_save("xray",str(client_id),payload.name,payload.protocol,delivery,{
         "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
         "transport":result.get("transport",""),"security":result.get("security",""),
-        "subscription_id":sub_id
+        "subscription_id":sub_id,"endpoint":endpoint,"endpoint_mode":payload.endpoint_mode
     })
     result["client_id"]=client_id
     result["artifact_id"]=artifact_id
@@ -1240,6 +1254,7 @@ def protocol_endpoint_matrix_get(request:Request,endpoint:str=""):
 class WireGuardPeer(BaseModel):
     name:str=Field(min_length=1,max_length=48)
     endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
     dns:str=Field(default="1.1.1.1",max_length=64)
     mtu:int=Field(default=1280,ge=576,le=1500)
     keepalive:int=Field(default=15,ge=0,le=3600)
@@ -1249,12 +1264,14 @@ class WireGuardPeer(BaseModel):
 def wireguard_peer_create(payload:WireGuardPeer,request:Request):
     actor=require_feature(request,"wireguard",True)
     try:
-        result=protocol_ops.create_wireguard_peer(payload.name,payload.endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
-        result["diagnostics"]=protocol_ops.wireguard_endpoint_diagnostics(payload.endpoint)
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
+        result=protocol_ops.create_wireguard_peer(payload.name,endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
+        result["diagnostics"]=protocol_ops.wireguard_endpoint_diagnostics(endpoint)
         delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
         artifact_id=artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
             "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
-            "endpoint":result.get("endpoint",""),"port":result.get("port"),"dns":result.get("dns",""),
+            "endpoint":result.get("endpoint",""),"endpoint_mode":payload.endpoint_mode,
+            "port":result.get("port"),"dns":result.get("dns",""),
             "mtu":result.get("mtu"),"keepalive":result.get("keepalive"),"allowed_ips":result.get("allowed_ips","")
         })
     except protocol_ops.ProtocolError as e:
@@ -1300,6 +1317,7 @@ def openvpn_repair(request:Request):
 class OpenVPNClient(BaseModel):
     name:str=Field(min_length=1,max_length=48)
     endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
     port:int=Field(default=1194,ge=1,le=65535)
     proto:str="udp"
 
@@ -1307,11 +1325,13 @@ class OpenVPNClient(BaseModel):
 def openvpn_client_create(payload:OpenVPNClient,request:Request):
     actor=require_feature(request,"openvpn",True)
     try:
-        result=protocol_ops.create_openvpn_client(payload.name,payload.endpoint,payload.port,payload.proto)
-        result["diagnostics"]=protocol_ops.openvpn_endpoint_diagnostics(payload.endpoint)
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
+        result=protocol_ops.create_openvpn_client(payload.name,endpoint,payload.port,payload.proto)
+        result["diagnostics"]=protocol_ops.openvpn_endpoint_diagnostics(endpoint)
         delivery=access_ops.openvpn_payload(payload.name,result["config"])
         artifact_id=artifact_save("openvpn",payload.name,payload.name,"openvpn",delivery,{
-            "endpoint":payload.endpoint,"port":payload.port,"transport":payload.proto
+            "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,
+            "port":payload.port,"transport":payload.proto
         })
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
@@ -1379,11 +1399,9 @@ def _current_delivery_payload(kind,key,payload,request):
                 summary["host"],username,password,int(summary.get("port") or 22),ssh_npv_options(username)
             )
     elif kind=="openvpn":
-        try:
-            rendered=protocol_ops.render_openvpn_client(key,public_host(request))
-            result=access_ops.openvpn_payload(key,rendered["config"])
-        except protocol_ops.ProtocolError:
-            result=payload
+        # Stored exports carry the client's chosen IP/domain. Regenerating from
+        # the panel domain would silently replace that choice on every download.
+        result=payload
     elif kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -1416,6 +1434,10 @@ def access_entries(request:Request):
     require_user(request)
     artifacts={(a["kind"],a["external_key"]):a for a in list_access_artifacts()}
     rows=[]
+    def saved_endpoint(artifact):
+        if not artifact:return ""
+        try:return str(json.loads(artifact.get("metadata_json") or "{}").get("endpoint") or "")
+        except (TypeError,ValueError):return ""
 
     for item in account_rows():
         key=item["username"]
@@ -1426,7 +1448,7 @@ def access_entries(request:Request):
             "online":item.get("online",0),"device_limit":item.get("device_limit",1),
             "connection_limit":item.get("connection_limit",1),"expire_date":item.get("expire_date"),
             "plan":item.get("plan",""),"can_export":bool(art),"artifact_id":art["id"] if art else None,
-            "legacy":not bool(art)
+            "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
     protocol_rows=protocol_clients_get(request) if license_feature_enabled("xray") else []
@@ -1440,7 +1462,7 @@ def access_entries(request:Request):
             "quota_bytes":item.get("quota_bytes",0),"used_bytes":item.get("usage",{}).get("total",0),
             "expire_at":item.get("expire_at",0),"can_export":True,
             "artifact_id":art["id"] if art else None,"subscription_id":item.get("subscription_id",""),
-            "legacy":not bool(art)
+            "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
@@ -1464,7 +1486,8 @@ def access_entries(request:Request):
         rows.append({
             "id":f"openvpn:{key}","kind":"openvpn","key":key,"name":key,"protocol":"openvpn",
             "status":"active","online":None,"device_limit":1,"can_export":True,
-            "artifact_id":art["id"] if art else None,"legacy":not bool(art)
+            "artifact_id":art["id"] if art else None,"legacy":not bool(art),
+            "endpoint":saved_endpoint(art)
         })
 
     order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
