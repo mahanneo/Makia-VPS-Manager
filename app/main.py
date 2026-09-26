@@ -1204,11 +1204,13 @@ def wireguard_peer_create(payload:WireGuardPeer,request:Request):
     actor=require_feature(request,"wireguard",True)
     try:
         result=protocol_ops.create_wireguard_peer(payload.name,payload.endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
-        result["diagnostics"]=protocol_ops.wireguard_endpoint_diagnostics(payload.endpoint)
-        delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
+        delivery=access_ops.wireguard_payload(
+            payload.name,result["config"],result.get("address"),
+            result.get("ip_config") or None,"ip"
+        )
         artifact_id=artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
             "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
-            "endpoint":result.get("endpoint",""),"port":result.get("port"),"dns":result.get("dns",""),
+            "endpoint":result.get("endpoint",""),"fallback_ipv4":result.get("fallback_ipv4",""),"port":result.get("port"),"dns":result.get("dns",""),
             "mtu":result.get("mtu"),"keepalive":result.get("keepalive"),"allowed_ips":result.get("allowed_ips","")
         })
     except protocol_ops.ProtocolError as e:
@@ -1338,6 +1340,26 @@ def _current_delivery_payload(kind,key,payload,request):
             result=access_ops.openvpn_payload(key,rendered["config"])
         except protocol_ops.ProtocolError:
             result=payload
+    elif kind=="wireguard":
+        config=str(payload.get("primary_text") or "")
+        summary=dict(payload.get("summary") or {})
+        alternate=""
+        match=re.search(r"(?m)^\s*Endpoint\s*=\s*([^\s:]+):(\d+)\s*$",config)
+        if match:
+            endpoint=match.group(1).strip()
+            try:
+                ipaddress.ip_address(endpoint)
+            except ValueError:
+                try:
+                    diag=protocol_ops.wireguard_endpoint_diagnostics(endpoint)
+                    local4=set(diag.get("local_ipv4") or [])
+                    fallback=next((x for x in diag.get("resolved_ipv4") or [] if x in local4),"")
+                    if fallback:
+                        alternate=config.replace(match.group(0),f"Endpoint = {fallback}:{match.group(2)}",1)
+                except Exception:
+                    alternate=""
+        if config:
+            result=access_ops.wireguard_payload(key,config,summary.get("address"),alternate or None,"ip")
     elif kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
