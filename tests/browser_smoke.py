@@ -196,6 +196,15 @@ def main():
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
                 assert "active" in (nav.get_attribute("class") or ""), f"{view} sidebar item not active"
 
+            page.locator('aside.sidebar button[data-view="protocols"]').click()
+            page.locator('[data-action="endpoint-matrix"]').wait_for()
+            page.evaluate("() => { window.prompt = () => '127.0.0.1'; }")
+            page.locator('[data-action="endpoint-matrix"]').click()
+            page.locator(".endpoint-matrix-modal").wait_for()
+            assert page.locator(".endpoint-row").count()==4
+            assert "IP / DOMAIN READINESS MATRIX" in page.locator(".endpoint-matrix-modal").inner_text()
+            page.locator('.close-btn[data-action="modal-close"]').click()
+
             page.evaluate("() => openXrayDiagnostics()")
             page.locator(".xray-diagnostics-modal").wait_for()
             assert "XRAY RUNTIME DIAGNOSTICS" in page.locator(".xray-diagnostics-modal").inner_text()
