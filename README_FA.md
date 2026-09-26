@@ -1,3 +1,15 @@
+## نسخه v0.17.0-rc1 — WireGuard Runtime Repair و تست IP/Domain
+
+در این نسخه تشخیص و تعمیر WireGuard عمیق‌تر شده است. پنل وضعیت Service، Interface، UDP Listener، IP Forwarding، FORWARD Rule، NAT و Handshake Peerها را بررسی می‌کند و گزینه **Repair Runtime** دارد.
+
+همچنین در Protocol Hub گزینه **IP / Domain Readiness** اضافه شده تا یک IP یا دامنه را برای SSH، Xray، WireGuard و OpenVPN از نظر Runtime، DNS و Listener بررسی کنید.
+
+Updater نیز WireGuard موجود را قبل از UAT نهایی بررسی می‌کند و در صورت نیاز با Backup تعمیر می‌کند.
+
+> توجه: تست داخلی و CI جای تست اتصال واقعی از یک موبایل/کامپیوتر خارج از VPS را نمی‌گیرد. برای Stable باید IP و Domain واقعی روی Client خارجی تست شوند.
+
+راهنمای UAT: [UAT v0.17.0-rc1](docs/UAT-0.17.0-RC1.md)
+
 # راهنمای فارسی Makia VPS Manager
 
 **Makia VPS Manager** یک پنل مدیریت VPS برای مدیریت دسترسی‌های SSH، Xray، WireGuard و OpenVPN، تحویل امن کانفیگ، دامنه/HTTPS، بکاپ و مهاجرت سرور است.
