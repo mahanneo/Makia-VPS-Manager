@@ -7,7 +7,7 @@ if [[ -r "$ENV_FILE" ]]; then
   while IFS='=' read -r key value; do
     [[ -z "$key" || "$key" == \#* ]] && continue
     case "$key" in
-      MAKIA_SUPPORT_TELEGRAM|MAKIA_SUPPORT_WEBHOOK_URL|MAKIA_RELEASE_ARCHIVE_URL|MAKIA_RELEASE_BEARER_TOKEN|MAKIA_ADMIN_ALLOWED_CIDRS)
+      MAKIA_SUPPORT_TELEGRAM|MAKIA_SUPPORT_WEBHOOK_URL|MAKIA_SUPPORT_WEBHOOK_TOKEN|MAKIA_RELEASE_ARCHIVE_URL|MAKIA_RELEASE_BEARER_TOKEN|MAKIA_ADMIN_ALLOWED_CIDRS)
         printf -v "$key" '%s' "$value"
         export "$key"
         ;;
@@ -82,6 +82,13 @@ OVPN_WAS_ACTIVE=0
 if [[ -f /etc/openvpn/server/server.conf ]]; then
   OVPN_WAS_PRESENT=1
   systemctl is-active --quiet openvpn-server@server 2>/dev/null && OVPN_WAS_ACTIVE=1 || true
+fi
+
+WG_WAS_PRESENT=0
+WG_WAS_ACTIVE=0
+if [[ -f /etc/wireguard/wg0.conf ]]; then
+  WG_WAS_PRESENT=1
+  systemctl is-active --quiet wg-quick@wg0 2>/dev/null && WG_WAS_ACTIVE=1 || true
 fi
 
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -246,6 +253,31 @@ PY
   fi
 fi
 
+# Repair legacy WireGuard forwarding/NAT rules and restart wg0.
+# The old bootstrap appended FORWARD rules behind some firewall chains; v0.17
+# normalizes them to idempotent top-priority rules and source-scoped NAT.
+if [[ "$WG_WAS_PRESENT" -eq 1 ]]; then
+  echo "Checking WireGuard forwarding/NAT runtime..."
+  if ! ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_endpoint_diagnostics("")
+if not d.get("runtime_ok"):
+    result=protocol_ops.repair_wireguard_runtime()
+    d=result["diagnostics"]
+if not d.get("runtime_ok"):
+    raise SystemExit("WireGuard runtime remains unhealthy after repair: "+"; ".join(d.get("warnings") or []))
+print("WireGuard runtime validation PASS:", d.get("interface"), d.get("port"), d.get("uplink"))
+PY
+  ); then
+    if [[ "$WG_WAS_ACTIVE" -eq 1 ]]; then
+      echo "WireGuard was active before this update but is unhealthy now; updater will roll back."
+      exit 7
+    fi
+    echo "WARNING: WireGuard was already unhealthy before the update and automatic repair could not fix it."
+    echo "The panel update will continue so WireGuard Diagnostics and Repair are available."
+  fi
+fi
+
 nginx -t
 systemctl restart makia-vps-manager
 systemctl enable --now makia-policy-enforcer
@@ -279,6 +311,9 @@ if [[ "$XRAY_WAS_PRESENT" -eq 1 && "$XRAY_WAS_ACTIVE" -eq 0 ]] && ! systemctl is
 fi
 if [[ "$OVPN_WAS_PRESENT" -eq 1 && "$OVPN_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
   UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_OPENVPN_FAILURE=1)
+fi
+if [[ "$WG_WAS_PRESENT" -eq 1 && "$WG_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet wg-quick@wg0 2>/dev/null; then
+  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE=1)
 fi
 if ! "${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke; then
   echo "Post-update host smoke failed."
