@@ -533,6 +533,7 @@ def _wg_used_ips(iface):
                     pass
     return used
 
+
 def create_wireguard_peer(name, endpoint, iface="wg0", dns="1.1.1.1", mtu=1280, keepalive=15, allowed_ips="0.0.0.0/0"):
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid peer name")
@@ -543,6 +544,24 @@ def create_wireguard_peer(name, endpoint, iface="wg0", dns="1.1.1.1", mtu=1280, 
     conf=WG_DIR/f"{iface}.conf"
     if not conf.exists():
         raise ProtocolError("WireGuard server is not bootstrapped")
+
+    # A green systemd unit is not enough: repair forwarding/NAT/listener state
+    # before issuing a peer, then validate the requested public endpoint.
+    runtime=wireguard_endpoint_diagnostics(endpoint,iface)
+    if not runtime.get("runtime_ok"):
+        repair_wireguard_runtime(iface)
+        runtime=wireguard_endpoint_diagnostics(endpoint,iface)
+    if not runtime.get("runtime_ok"):
+        raise ProtocolError("WireGuard runtime is unhealthy: "+"; ".join(runtime.get("warnings") or []))
+    if runtime.get("endpoint_is_ip"):
+        if int(runtime.get("endpoint_ip_version") or 0)!=4:
+            raise ProtocolError("WireGuard server bootstrap is IPv4-only in this release; use the VPS public IPv4 endpoint")
+    else:
+        if not runtime.get("resolved_ipv4"):
+            raise ProtocolError("WireGuard domain has no usable IPv4/A record")
+        if runtime.get("dns_matches_server") is False:
+            raise ProtocolError("WireGuard domain does not resolve directly to this VPS IPv4; use a DNS-only/direct A record or the VPS IP")
+
     text=conf.read_text(encoding="utf-8",errors="ignore")
     m=re.search(r"Address\s*=\s*([^\n]+)",text)
     p=re.search(r"ListenPort\s*=\s*(\d+)",text)
@@ -577,8 +596,23 @@ def create_wireguard_peer(name, endpoint, iface="wg0", dns="1.1.1.1", mtu=1280, 
         f"AllowedIPs = {allowed_ips}\n"
         f"PersistentKeepalive = {keepalive}\n"
     )
-    return {"name":name,"address":str(client_ip),"public_key":client_public,"config":client,"endpoint":endpoint,"port":int(p.group(1)),"dns":dns,"mtu":mtu,"keepalive":keepalive,"allowed_ips":allowed_ips}
-
+    fallback_ipv4=""
+    ip_config=""
+    if not runtime.get("endpoint_is_ip"):
+        local4=set(runtime.get("local_ipv4") or [])
+        fallback_ipv4=next((x for x in runtime.get("resolved_ipv4") or [] if x in local4),"")
+        if fallback_ipv4:
+            ip_config=client.replace(
+                f"Endpoint = {_uri_host(endpoint)}:{p.group(1)}",
+                f"Endpoint = {fallback_ipv4}:{p.group(1)}",
+                1,
+            )
+    return {
+        "name":name,"address":str(client_ip),"public_key":client_public,
+        "config":client,"ip_config":ip_config,"fallback_ipv4":fallback_ipv4,
+        "endpoint":endpoint,"port":int(p.group(1)),"dns":dns,"mtu":mtu,
+        "keepalive":keepalive,"allowed_ips":allowed_ips,"diagnostics":runtime,
+    }
 def list_wireguard_peers(iface="wg0"):
     conf=WG_DIR/f"{iface}.conf"
     if not conf.exists():
@@ -764,6 +798,8 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     if nat is False: warnings.append("NAT/MASQUERADE برای شبکه WireGuard روی uplink پیدا نشد.")
     peers=_wireguard_peer_runtime(iface)
     recent=sum(1 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)
+    if cfg.get("exists") and service_active and interface_present and listener and peers and recent==0:
+        warnings.append("Runtime سمت VPS سالم به‌نظر می‌رسد اما Handshake اخیر دیده نمی‌شود. مسیر UDP بین Client و VPS (ISP/Carrier/Upstream Firewall/NAT/فیلترینگ شبکه) ممکن است بسته باشد؛ این مسیر فقط با Client واقعی خارج از VPS قابل تأیید است.")
     endpoint_ok=True
     if endpoint:
         endpoint_ok=bool(
@@ -798,6 +834,7 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "dns_matches_server":dns_matches_server,
         "peers":peers,
         "recent_handshakes":recent,
+        "external_udp_path_verified":False,
         "warnings":warnings,
     }
 
@@ -853,42 +890,111 @@ def repair_wireguard_runtime(iface="wg0"):
         raise
     return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
 
-def protocol_endpoint_matrix(endpoint):
-    endpoint=_validate_endpoint_host(endpoint,"public endpoint")
+
+def _endpoint_runtime_state(endpoint,label="endpoint"):
+    endpoint=_validate_endpoint_host(endpoint,label)
     local4=_local_ipv4_candidates()
+    resolved4=[]; resolved6=[]; is_ip=False; ip_version=None
     try:
         parsed=ipaddress.ip_address(endpoint)
-        is_ip=True
-        resolved4=[parsed.compressed] if parsed.version==4 else []
-        resolved6=[parsed.compressed] if parsed.version==6 else []
+        is_ip=True; ip_version=parsed.version
+        if parsed.version==4: resolved4=[parsed.compressed]
+        else: resolved6=[parsed.compressed]
     except ValueError:
-        is_ip=False
         try: resolved4=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET)})
         except Exception: resolved4=[]
         try: resolved6=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET6)})
         except Exception: resolved6=[]
-    dns_match=True if is_ip else (bool(set(resolved4)&set(local4)) if resolved4 and local4 else None)
-    x=xray_status()
-    wg=wireguard_endpoint_diagnostics(endpoint) if (WG_DIR/"wg0.conf").exists() else {"ok":False,"runtime_ok":False,"warnings":["WireGuard server not bootstrapped"]}
-    ov=openvpn_endpoint_diagnostics(endpoint) if (OVPN_DIR/"server/server.conf").exists() else {"ok":False,"warnings":["OpenVPN server not bootstrapped"]}
-    ssh=ssh_status()
-    x_ports=[int(i.get("port")) for i in (x.get("inbounds") or []) if i.get("port")]
+    matches=True if is_ip and ip_version==4 else (bool(set(resolved4)&set(local4)) if resolved4 and local4 else None)
+    return {
+        "endpoint":endpoint,"endpoint_is_ip":is_ip,"endpoint_ip_version":ip_version,
+        "resolved_ipv4":resolved4,"resolved_ipv6":resolved6,"local_ipv4":local4,
+        "dns_matches_server":matches,
+    }
+
+def _listener_present(port,proto):
+    port=int(port or 0)
+    proto=str(proto or "").strip().lower()
+    if not port or not shutil.which("ss"):
+        return False
+    flag="-lun" if proto=="udp" else "-ltn"
+    p=subprocess.run(["ss","-H",flag],text=True,capture_output=True,timeout=8,check=False)
+    if p.returncode!=0:
+        return False
+    return any(re.search(rf":{re.escape(str(port))}\b",line) for line in (p.stdout or "").splitlines())
+
+def _ssh_runtime_port():
+    # sshd -T reflects Include files and effective configuration where available.
+    for binary in ("sshd","/usr/sbin/sshd"):
+        if shutil.which(binary) or Path(binary).exists():
+            try:
+                p=subprocess.run([binary,"-T"],text=True,capture_output=True,timeout=8,check=False)
+                if p.returncode==0:
+                    m=re.search(r"(?m)^port\s+(\d+)\s*$",p.stdout or "")
+                    if m: return int(m.group(1))
+            except Exception:
+                pass
+    return 22
+
+def ssh_endpoint_diagnostics(endpoint):
+    state=_endpoint_runtime_state(endpoint,"SSH endpoint")
+    port=_ssh_runtime_port()
+    active=_active("ssh") or _active("sshd")
+    listener=_listener_present(port,"tcp")
+    endpoint_ok=bool(
+        (state["endpoint_is_ip"] and state["endpoint_ip_version"]==4) or
+        ((not state["endpoint_is_ip"]) and state["resolved_ipv4"] and state["dns_matches_server"] is not False)
+    )
+    warnings=[]
+    if not active: warnings.append("سرویس SSH فعال نیست.")
+    if not listener: warnings.append(f"TCP listener روی Port {port} دیده نشد.")
+    if not state["endpoint_is_ip"] and not state["resolved_ipv4"]: warnings.append("دامنه SSH رکورد A/IPv4 قابل استفاده ندارد.")
+    if not state["endpoint_is_ip"] and state["dns_matches_server"] is False: warnings.append("رکورد A دامنه SSH به IPv4 این VPS اشاره نمی‌کند.")
+    return {**state,"port":port,"service_active":active,"listener":listener,"endpoint_ok":endpoint_ok,"ok":bool(active and listener and endpoint_ok),"warnings":warnings}
+
+def xray_endpoint_diagnostics(endpoint):
+    state=_endpoint_runtime_state(endpoint,"Xray endpoint")
+    status=xray_status()
+    rows=[]
+    for inbound in status.get("inbounds") or []:
+        port=int(inbound.get("port") or 0)
+        tcp=_listener_present(port,"tcp") if port else False
+        udp=_listener_present(port,"udp") if port else False
+        rows.append({**inbound,"tcp_listener":tcp,"udp_listener":udp,"listener":bool(tcp or udp),"ok":bool(status.get("service_active") and (tcp or udp))})
+    endpoint_ok=bool(
+        (state["endpoint_is_ip"] and state["endpoint_ip_version"]==4) or
+        ((not state["endpoint_is_ip"]) and state["resolved_ipv4"] and state["dns_matches_server"] is not False)
+    )
+    warnings=[]
+    if not status.get("service_active"): warnings.append("سرویس Xray فعال نیست.")
+    if status.get("service_active") and rows and not all(x.get("listener") for x in rows):
+        warnings.append("حداقل یک Xray inbound در config وجود دارد اما listener واقعی TCP/UDP آن دیده نشد.")
+    if not rows: warnings.append("هیچ Xray inbound فعالی در config پیدا نشد.")
+    if not state["endpoint_is_ip"] and not state["resolved_ipv4"]: warnings.append("دامنه Xray رکورد A/IPv4 قابل استفاده ندارد.")
+    if not state["endpoint_is_ip"] and state["dns_matches_server"] is False:
+        warnings.append("رکورد A دامنه Xray به IPv4 این VPS اشاره نمی‌کند؛ برای RAW/REALITY/Hysteria2 مسیر مستقیم لازم است و Proxy/CDN فقط برای transportهای سازگار قابل استفاده است.")
+    return {**state,"installed":status.get("installed",False),"service_active":status.get("service_active",False),"inbounds":rows,"endpoint_ok":endpoint_ok,"ok":bool(status.get("installed") and status.get("service_active") and rows and all(x.get("listener") for x in rows) and endpoint_ok),"warnings":warnings}
+
+def protocol_endpoint_matrix(endpoint):
+    endpoint=_validate_endpoint_host(endpoint,"public endpoint")
+    base=_endpoint_runtime_state(endpoint,"public endpoint")
+    ssh=ssh_endpoint_diagnostics(endpoint)
+    x=xray_endpoint_diagnostics(endpoint)
+    wg=wireguard_endpoint_diagnostics(endpoint) if (WG_DIR/"wg0.conf").exists() else {"ok":False,"runtime_ok":False,"endpoint_ok":False,"warnings":["WireGuard server not bootstrapped"]}
+    ov=openvpn_endpoint_diagnostics(endpoint) if (OVPN_DIR/"server/server.conf").exists() else {"ok":False,"service_active":False,"listener":False,"warnings":["OpenVPN server not bootstrapped"]}
     rows=[
-        {"id":"ssh","label":"SSH","transport":"TCP","ports":[22],"runtime":bool(ssh.get("service_active")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
-        {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":x_ports,"runtime":bool(x.get("service_active") and x_ports),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
-        {"id":"wireguard","label":"WireGuard","transport":"UDP","ports":[wg.get("port")] if wg.get("port") else [],"runtime":bool(wg.get("runtime_ok")),"endpoint_ok":bool(wg.get("endpoint_ok",False))},
-        {"id":"openvpn","label":"OpenVPN","transport":str(ov.get("proto") or "").upper(),"ports":[ov.get("port")] if ov.get("port") else [],"runtime":bool(ov.get("service_active") and ov.get("listener")),"endpoint_ok":bool(ov.get("endpoint_is_ip") or (ov.get("resolved_ipv4") and ov.get("dns_matches_server") is not False))},
+        {"id":"ssh","label":"SSH / NPV","transport":"TCP","ports":[ssh.get("port")] if ssh.get("port") else [],"service_active":bool(ssh.get("service_active")),"listener":bool(ssh.get("listener")),"runtime":bool(ssh.get("service_active") and ssh.get("listener")),"endpoint_ok":bool(ssh.get("endpoint_ok")),"warnings":ssh.get("warnings") or []},
+        {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":[int(i.get("port")) for i in (x.get("inbounds") or []) if i.get("port")],"service_active":bool(x.get("service_active")),"listener":bool((x.get("inbounds") or []) and all(i.get("listener") for i in x.get("inbounds") or [])),"runtime":bool(x.get("ok") or (x.get("service_active") and (x.get("inbounds") or []) and all(i.get("listener") for i in x.get("inbounds") or []))),"endpoint_ok":bool(x.get("endpoint_ok")),"warnings":x.get("warnings") or []},
+        {"id":"wireguard","label":"WireGuard","transport":"UDP","ports":[wg.get("port")] if wg.get("port") else [],"service_active":bool(wg.get("service_active")),"listener":bool(wg.get("listener")),"runtime":bool(wg.get("runtime_ok")),"endpoint_ok":bool(wg.get("endpoint_ok",False)),"warnings":wg.get("warnings") or []},
+        {"id":"openvpn","label":"OpenVPN","transport":str(ov.get("proto") or "").upper(),"ports":[ov.get("port")] if ov.get("port") else [],"service_active":bool(ov.get("service_active")),"listener":bool(ov.get("listener")),"runtime":bool(ov.get("service_active") and ov.get("listener")),"endpoint_ok":bool(ov.get("endpoint_is_ip") or (ov.get("resolved_ipv4") and ov.get("dns_matches_server") is not False)),"warnings":ov.get("warnings") or []},
     ]
     for row in rows:
         row["ready"]=bool(row["runtime"] and row["endpoint_ok"])
     return {
-        "endpoint":endpoint,"endpoint_is_ip":is_ip,"resolved_ipv4":resolved4,"resolved_ipv6":resolved6,
-        "local_ipv4":local4,"dns_matches_server":dns_match,
-        "rows":rows,"all_ready":all(r["ready"] for r in rows),
-        "wireguard":wg,"openvpn":ov,
-        "note":"این تست Readiness سمت سرور، DNS و Listener را بررسی می‌کند؛ تأیید نهایی اتصال از اینترنت باید با Client واقعی خارج از VPS انجام شود."
+        **base,"rows":rows,"all_ready":all(r["ready"] for r in rows),
+        "ssh":ssh,"xray":x,"wireguard":wg,"openvpn":ov,
+        "note":"Readiness سمت سرور، DNS و listener واقعی را بررسی می‌کند. مسیر اینترنت/ISP، مخصوصاً UDP WireGuard/OpenVPN، فقط با Client واقعی خارج از VPS تأیید می‌شود و این تست تضمین عبور از فیلترینگ شبکه نیست."
     }
-
 def _openvpn_proto(proto,server=False):
     proto=str(proto or "udp").strip().lower()
     if proto in {"udp","udp4"}:
