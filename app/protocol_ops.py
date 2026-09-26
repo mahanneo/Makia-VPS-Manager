@@ -829,7 +829,9 @@ def repair_wireguard_runtime(iface="wg0"):
     )
     updated=re.sub(r"(?m)^PostUp\s*=.*$",post_up,original,count=1) if re.search(r"(?m)^PostUp\s*=",original) else original.rstrip()+"\n"+post_up+"\n"
     updated=re.sub(r"(?m)^PostDown\s*=.*$",post_down,updated,count=1) if re.search(r"(?m)^PostDown\s*=",updated) else updated.rstrip()+"\n"+post_down+"\n"
-    sysctl=Path("/etc/sysctl.d/99-makia-wireguard.conf")
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    sysctl=sysctl_dir/"99-makia-wireguard.conf"
     try:
         conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
         os.chmod(conf,0o600)
