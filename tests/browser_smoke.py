@@ -117,7 +117,7 @@ def main():
             page.locator('[data-action="connectivity-run"]').click()
             page.locator(".connectivity-summary").wait_for()
             assert "SERVER-SIDE READINESS" in page.locator(".connectivity-summary").inner_text()
-            page.locator('[data-action="modal-close"]').click()
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.locator('aside.sidebar button[data-view="license"]').click()
             page.locator(".license-hero.full").wait_for()
             assert "LIC-BROWSER" in page.locator("#content").inner_text()
