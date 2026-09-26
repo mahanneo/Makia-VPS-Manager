@@ -4,6 +4,20 @@
 
 > وضعیت فعلی پروژه Release Candidate است. قبل از استفاده Production، UAT واقعی روی VPS مقصد انجام شود.
 
+## نسخه v0.16.1-rc1 — رفع Runtime پروتکل‌ها و WireGuard
+
+این نسخه مشکل مهم «سرویس Running است ولی Protocol واقعاً کار نمی‌کند» را هدف می‌گیرد.
+
+- WireGuard علاوه بر systemd، از نظر UDP Listener، Kernel Interface، IP Forwarding، NAT/MASQUERADE و FORWARD Rule بررسی می‌شود.
+- گزینه Diagnostics و Repair برای WireGuard اضافه شده و Repair کلیدها و Peerهای فعلی را حفظ می‌کند.
+- اگر WireGuard با Domain ساخته شود، Protected ZIP علاوه بر پروفایل Domain، یک پروفایل مستقیم IP و QR دوم با همان Credential می‌سازد.
+- در Protocol Hub بخش IP / Domain Lab اضافه شده تا SSH، WireGuard، OpenVPN و Xray روی Domain یا IP بررسی شوند.
+- Xray، WireGuard و OpenVPN در صورت خرابی Runtime دیگر صرفاً به‌خاطر Running بودن process سبز نمایش داده نمی‌شوند.
+- Updater در صورت وجود WireGuard قدیمی آن را Diagnose/Repair می‌کند و Rollback شامل configهای Protocol هم شده است.
+- نوار Scroll سمت راست و Scrollهای داخلی پنل با ظاهر مدرن Glass بازطراحی شده‌اند.
+
+توجه: این تست‌ها سلامت سمت VPS، DNS، Listener، NAT و Runtime را اثبات می‌کنند. برای تأیید قطعی مسیر ISP/اپراتور، یک اتصال واقعی از دستگاهی بیرون از VPS نیز لازم است.
+
 ## نسخه v0.16.0-rc1 — Owner Control Center و Remote Support امن
 
 از این نسخه، مدیریت تجاری Makia از یک **Owner Control Center جدا** انجام می‌شود. این سرویس روی VPS مشتری نصب نمی‌شود و Private Key صدور License فقط روی سرور مالک باقی می‌ماند.

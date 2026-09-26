@@ -162,7 +162,20 @@ def validate_restored():
             p=run(["xray","run","-test","-format=json","-config",str(config)],check=False)
             checks.append(("xray",p.returncode==0))
     if Path("/etc/wireguard/wg0.conf").exists():
-        checks.append(("wireguard",run(["wg","show","wg0"],check=False).returncode==0))
+        try:
+            sys.path.insert(0,str(APP))
+            from app import protocol_ops
+            checks.append(("wireguard",bool(protocol_ops.wireguard_diagnostics("wg0").get("runtime_ok"))))
+        except Exception:
+            checks.append(("wireguard",False))
+    if Path("/etc/openvpn/server/server.conf").exists():
+        try:
+            sys.path.insert(0,str(APP))
+            from app import protocol_ops
+            d=protocol_ops._openvpn_server_runtime()
+            checks.append(("openvpn",bool(d.get("service_active") and d.get("listener") and str(d.get("proto") or "") in {"udp4","tcp4-server"})))
+        except Exception:
+            checks.append(("openvpn",False))
     return checks
 
 
@@ -229,6 +242,14 @@ def main():
         sys.path.insert(0,str(APP))
         from app import protocol_ops
         protocol_ops.repair_xray_runtime()
+
+    # Normalize restored protocol runtimes before the final stack validation.
+    sys.path.insert(0,str(APP))
+    from app import protocol_ops
+    if Path("/etc/wireguard/wg0.conf").exists():
+        protocol_ops.repair_wireguard_runtime("wg0")
+    if Path("/etc/openvpn/server/server.conf").exists():
+        protocol_ops.repair_openvpn_ipv4_runtime()
 
     restart_stack()
     checks=validate_restored()

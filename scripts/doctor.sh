@@ -98,16 +98,77 @@ else
   warn "Xray" "not installed (optional)"
 fi
 
-if command -v wg >/dev/null 2>&1; then
-  if wg show >/dev/null 2>&1; then ok "WireGuard tooling" "ready"; else warn "WireGuard tooling" "installed but no readable interface"; fi
+if [[ -f /etc/wireguard/wg0.conf ]]; then
+  WG_DIAG="$(cd /opt/makia-vps-manager && MAKIA_DATA_DIR=/opt/makia-vps-manager/data ./.venv/bin/python - <<'PY' 2>&1
+from app import protocol_ops
+d=protocol_ops.wireguard_diagnostics("wg0")
+print("port="+str(d.get("port"))+
+      " listener="+str(d.get("listener"))+
+      " forward="+str(d.get("ip_forward"))+
+      " nat="+str(d.get("nat_rule"))+
+      " rules="+str(bool(d.get("forward_in_rule") and d.get("forward_out_rule"))) +
+      " peers="+str(d.get("peer_count")))
+if not d.get("runtime_ok"):
+    raise SystemExit("; ".join(d.get("warnings") or ["unhealthy"]))
+PY
+)"
+  if [[ "$?" -eq 0 ]]; then
+    ok "WireGuard runtime" "$WG_DIAG"
+  else
+    fail "WireGuard runtime" "$WG_DIAG"
+  fi
+elif command -v wg >/dev/null 2>&1; then
+  warn "WireGuard" "tooling installed, wg0 not configured"
 else
   warn "WireGuard" "not installed (optional)"
 fi
 
-if command -v openvpn >/dev/null 2>&1; then
-  ok "OpenVPN tooling" "$(openvpn --version 2>/dev/null | head -n1)"
+if [[ -f /etc/openvpn/server/server.conf ]]; then
+  OVPN_DIAG="$(cd /opt/makia-vps-manager && MAKIA_DATA_DIR=/opt/makia-vps-manager/data ./.venv/bin/python - <<'PY' 2>&1
+from app import protocol_ops
+d=protocol_ops._openvpn_server_runtime()
+print("proto="+str(d.get("proto"))+" port="+str(d.get("port"))+" listener="+str(d.get("listener")))
+if str(d.get("proto") or "") not in {"udp4","tcp4-server"} or not d.get("service_active") or not d.get("listener"):
+    raise SystemExit("OpenVPN runtime is not healthy")
+PY
+)"
+  if [[ "$?" -eq 0 ]]; then
+    ok "OpenVPN runtime" "$OVPN_DIAG"
+  else
+    fail "OpenVPN runtime" "$OVPN_DIAG"
+  fi
+elif command -v openvpn >/dev/null 2>&1; then
+  warn "OpenVPN" "tooling installed, server not configured"
 else
   warn "OpenVPN" "not installed (optional)"
+fi
+
+ENDPOINT_DIAG="$(cd /opt/makia-vps-manager && MAKIA_DATA_DIR=/opt/makia-vps-manager/data ./.venv/bin/python - <<'PY' 2>&1
+from app import protocol_ops
+from app.db import get_setting
+endpoint=(get_setting("panel_domain","") or "").strip()
+if not endpoint:
+    ips=protocol_ops._local_ipv4_candidates()
+    endpoint=ips[0] if ips else ""
+if not endpoint:
+    print("no public endpoint configured")
+    raise SystemExit(2)
+d=protocol_ops.endpoint_connectivity_matrix(endpoint)
+parts=[]
+for name in ("ssh","wireguard","openvpn","xray"):
+    row=d.get(name)
+    if isinstance(row,dict):
+        parts.append(name+"="+("PASS" if row.get("ok") else "CHECK"))
+print(endpoint+" · "+", ".join(parts))
+PY
+)"
+ENDPOINT_RC=$?
+if [[ "$ENDPOINT_RC" -eq 0 ]]; then
+  ok "Protocol endpoint matrix" "$ENDPOINT_DIAG"
+elif [[ "$ENDPOINT_RC" -eq 2 ]]; then
+  warn "Protocol endpoint matrix" "$ENDPOINT_DIAG"
+else
+  warn "Protocol endpoint matrix" "$ENDPOINT_DIAG"
 fi
 
 printf '\nSummary: %d PASS · %d WARN · %d FAIL\n\n' "$PASS" "$WARN" "$FAIL"

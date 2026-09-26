@@ -194,7 +194,9 @@ def client_guide_text(kind,protocol=""):
             "WireGuard\n"
             "1) موبایل: برنامه رسمی WireGuard > + > Create from QR code یا Import from file.\n"
             "2) Windows/macOS: Import tunnel(s) from file و فایل .conf را انتخاب کنید.\n"
-            "3) Endpoint/Port/MTU/DNS را بدون هماهنگی تغییر ندهید.\n"
+            "3) اگر پروفایل با Domain ساخته شده باشد، Protected ZIP یک فایل و QR دوم با پسوند -ip هم دارد؛ این فایل همان Peer/Key را با Endpoint مستقیم IPv4 استفاده می‌کند و برای تشخیص مشکل DNS مفید است.\n"
+            "4) دامنه WireGuard باید A record مستقیم/DNS-only به VPS داشته باشد؛ HTTP/CDN Proxy تونل UDP WireGuard را عبور نمی‌دهد.\n"
+            "5) Endpoint/Port/MTU/DNS را بدون هماهنگی تغییر ندهید.\n"
         )
     if kind=="openvpn":
         return common+(
@@ -275,19 +277,25 @@ def ssh_payload(host,username,password,port=22,npv_options=None):
         })
     return result
 
-def wireguard_payload(name,config,address=None):
-    filename=f"{safe_filename(name)}.conf"
+def wireguard_payload(name,config,address=None,alternate_config=None,alternate_label="ip"):
+    safe=safe_filename(name)
+    filename=f"{safe}.conf"
+    files={
+        filename:str(config).encode("utf-8"),
+        f"{safe}-qr.svg":make_qr_svg(str(config)),
+        "connection-guide-fa.txt":client_guide_text("wireguard").encode("utf-8"),
+    }
+    if alternate_config:
+        alt_label=safe_filename(alternate_label or "alternate")
+        files[f"{safe}-{alt_label}.conf"]=str(alternate_config).encode("utf-8")
+        files[f"{safe}-{alt_label}-qr.svg"]=make_qr_svg(str(alternate_config))
     return {
         "native_filename":filename,
-        "files":{
-            filename:str(config).encode("utf-8"),
-            f"{safe_filename(name)}-qr.svg":make_qr_svg(str(config)),
-            "connection-guide-fa.txt":client_guide_text("wireguard").encode("utf-8"),
-        },
+        "files":files,
         "primary_text":str(config),
         "share_text":str(config),
         "share_type":"wireguard",
-        "summary":{"address":address or ""},
+        "summary":{"address":address or "","alternate_profile":bool(alternate_config),"alternate_label":alternate_label if alternate_config else ""},
     }
 
 def openvpn_payload(name,config):

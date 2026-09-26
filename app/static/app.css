@@ -530,3 +530,79 @@ body[data-license-tier="community"] nav button[data-view="nodes"]::after{
 .support-code-box{margin:12px 0;padding:16px;border:1px solid rgba(98,217,255,.45);border-radius:14px;background:#020d18;color:#9eeaff;font:700 18px/1.5 ui-monospace,monospace;letter-spacing:1.2px;text-align:center}
 body[data-remote-support="1"] .topbar{margin-top:42px}
 @media(max-width:760px){.remote-support-create{grid-template-columns:1fr}.remote-support-banner{top:5px;align-items:flex-start;flex-wrap:wrap}.remote-support-banner span{min-width:70%}.support-grant-list>div{grid-template-columns:1fr auto}}
+
+
+/* v0.16.1 refined in-panel scrollbars */
+.sidebar nav,
+.modal,
+.table,
+.command-modal #commandList,
+.capability-strip,
+.support-ticket-list,
+.recovery-list {
+  scrollbar-width:thin;
+  scrollbar-color:rgba(72,202,238,.72) rgba(5,19,34,.34);
+  scrollbar-gutter:stable;
+}
+.sidebar nav{overscroll-behavior:contain;padding-inline-end:3px}
+.sidebar nav::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.table::-webkit-scrollbar,
+.command-modal #commandList::-webkit-scrollbar,
+.capability-strip::-webkit-scrollbar,
+.support-ticket-list::-webkit-scrollbar,
+.recovery-list::-webkit-scrollbar{width:8px;height:8px}
+.sidebar nav::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.table::-webkit-scrollbar-track,
+.command-modal #commandList::-webkit-scrollbar-track,
+.capability-strip::-webkit-scrollbar-track,
+.support-ticket-list::-webkit-scrollbar-track,
+.recovery-list::-webkit-scrollbar-track{
+  background:rgba(4,17,31,.42);
+  border-radius:999px;
+}
+.sidebar nav::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.table::-webkit-scrollbar-thumb,
+.command-modal #commandList::-webkit-scrollbar-thumb,
+.capability-strip::-webkit-scrollbar-thumb,
+.support-ticket-list::-webkit-scrollbar-thumb,
+.recovery-list::-webkit-scrollbar-thumb{
+  min-height:44px;
+  border:2px solid transparent;
+  border-radius:999px;
+  background:linear-gradient(180deg,rgba(71,216,245,.9),rgba(108,124,255,.78)) padding-box;
+  box-shadow:0 0 14px rgba(53,214,255,.18);
+}
+.sidebar nav::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover,
+.table::-webkit-scrollbar-thumb:hover,
+.command-modal #commandList::-webkit-scrollbar-thumb:hover,
+.capability-strip::-webkit-scrollbar-thumb:hover,
+.support-ticket-list::-webkit-scrollbar-thumb:hover,
+.recovery-list::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg,rgba(120,231,252,.98),rgba(142,124,255,.92)) padding-box;
+}
+.sidebar nav::-webkit-scrollbar-button,
+.modal::-webkit-scrollbar-button,
+.table::-webkit-scrollbar-button,
+.command-modal #commandList::-webkit-scrollbar-button,
+.capability-strip::-webkit-scrollbar-button,
+.support-ticket-list::-webkit-scrollbar-button,
+.recovery-list::-webkit-scrollbar-button{width:0;height:0;display:none}
+.sidebar nav::-webkit-scrollbar-corner,
+.modal::-webkit-scrollbar-corner,
+.table::-webkit-scrollbar-corner{background:transparent}
+
+.connectivity-lab-btn{margin-top:12px;width:100%}
+.connectivity-summary{display:grid;place-items:center;margin:12px auto 16px;width:150px;height:92px;border:1px solid rgba(81,177,226,.38);border-radius:18px;background:radial-gradient(circle at 30% 20%,rgba(53,214,255,.15),transparent 55%),rgba(5,19,34,.72)}
+.connectivity-summary b{font-size:28px;line-height:1}.connectivity-summary span{margin-top:5px;font-size:8px;letter-spacing:1.5px;color:var(--muted)}
+.connectivity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.connectivity-card{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px;border:1px solid #27405c;border-radius:14px;background:rgba(7,23,40,.76)}
+.connectivity-card>div{min-width:0}.connectivity-card b{display:block;font-size:12px}.connectivity-card span{display:block;margin-top:5px;color:var(--muted);font-size:9px}.connectivity-card small{display:block;margin-top:7px;color:#7f9bb4;font-size:8px;line-height:1.6}
+.connectivity-card em{font-size:9px;font-style:normal;padding:5px 8px;border-radius:999px;border:1px solid #3a536f}
+.connectivity-card.pass{border-color:rgba(45,212,167,.36)}.connectivity-card.pass em{color:#9ff0ce;border-color:#275441;background:#0c1a16}
+.connectivity-card.fail{border-color:rgba(255,107,122,.34)}.connectivity-card.fail em{color:#ffafb9;border-color:#63313b;background:#1d0f14}
+.connectivity-card.muted-card{opacity:.65}
+@media(max-width:700px){.connectivity-grid{grid-template-columns:1fr}}

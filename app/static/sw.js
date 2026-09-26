@@ -1,4 +1,4 @@
-const CACHE='makia-shell-v0160';
+const CACHE='makia-shell-v0161';
 const CORE=['/static/makia.svg','/static/manifest.webmanifest'];
 
 self.addEventListener('install',event=>{

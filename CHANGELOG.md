@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.16.1-rc1] - 2026-09-26
+
+### Protocol runtime reliability
+- WireGuard health now verifies the real UDP listener, kernel interface, IPv4 forwarding, subnet-scoped NAT/MASQUERADE and FORWARD rules instead of treating a running systemd unit as sufficient.
+- Added transactional WireGuard Repair: existing peer/private keys are preserved, the server config is backed up, firewall hooks are rebuilt idempotently, and failures roll back.
+- New WireGuard peers refuse a domain endpoint whose A record does not resolve directly to this VPS and automatically repair an unhealthy local runtime before provisioning.
+- Domain-based WireGuard delivery now includes a second direct-IPv4 .conf and QR using the same client key/peer, making DNS-vs-transport troubleshooting practical without reissuing credentials.
+- Xray and OpenVPN catalog status now distinguish service activity from actual listener/runtime readiness; Xray UDP transports such as Hysteria2 and mKCP are detected correctly.
+- Added an authenticated IP / Domain Connectivity Lab for SSH, WireGuard, OpenVPN and Xray.
+
+### Update / recovery hardening
+- The updater now detects pre-existing WireGuard health, attempts the new repair path after code update, and protects previously healthy WireGuard installations with rollback semantics.
+- Runtime rollback archives now include active WireGuard, OpenVPN and Xray configuration paths and protocol services are restarted after rollback.
+- Portable migration restore now normalizes and validates WireGuard and OpenVPN as well as Xray.
+- Fixed updater environment preservation for `MAKIA_SUPPORT_WEBHOOK_TOKEN`.
+
+### UI
+- Replaced the browser-default white sidebar scrollbar with a thin Glass-style scrollbar and consistent scroll treatment for modals, tables and command lists.
+- Protocol Hub and Services now show Runtime attention when a protocol process is running but its transport is unhealthy.
+- Added WireGuard Diagnostics/Repair controls and the IP / Domain Connectivity Lab.
+
+### Verification
+- Added WireGuard unit coverage for idempotent firewall rules, runtime diagnostics, repair preservation and domain/IP fallback delivery.
+- Added SSH/Xray IP+domain readiness tests and protocol connectivity-matrix coverage.
+- Added a real Linux network-namespace WireGuard smoke test that performs handshakes through both a direct IPv4 endpoint and a hostname.
+- Added v0.16.1 UAT contract.
+
+### Release status
+Release candidate. CI validates server-side runtime and local protocol handshakes; final last-mile confirmation still requires a real external client/network because ISP, carrier NAT and upstream firewall behavior cannot be proven from CI alone.
+
 ## [0.16.0-rc1] - 2026-09-26
 
 ### Owner Control Center

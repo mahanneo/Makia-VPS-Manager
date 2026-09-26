@@ -31,7 +31,7 @@ jobs:
       - name: Unit tests
         run: pytest -q
       - name: Bash syntax
-        run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh
+        run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh tests/*.sh
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
@@ -67,6 +67,8 @@ jobs:
           test -f docs/UAT-0.14.0-RC1.md
           test -f docs/UAT-0.15.0-RC1.md
           test -f docs/UAT-0.16.0-RC1.md
+          test -f docs/UAT-0.16.1-RC1.md
+          test -f tests/wireguard_netns_smoke.sh
           test -f docs/OWNER-CONTROL-CENTER-FA.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f owner_console/app.py
@@ -197,6 +199,26 @@ jobs:
           grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/configure-owner.py
           ! grep -R --line-number 'BEGIN PRIVATE KEY' app owner_console tools scripts docs --exclude='*.md'
 
+
+      - name: UAT v0.16.1 contract
+        run: |
+          grep -q 'Protocol Runtime / IP+Domain / WireGuard Recovery UAT' docs/UAT-0.16.1-RC1.md
+          grep -q 'def wireguard_diagnostics' app/protocol_ops.py
+          grep -q 'def repair_wireguard_runtime' app/protocol_ops.py
+          grep -q 'def endpoint_connectivity_matrix' app/protocol_ops.py
+          grep -q '/api/protocols/wireguard/diagnostics' app/main.py
+          grep -q '/api/protocols/wireguard/repair' app/main.py
+          grep -q '/api/protocols/connectivity' app/main.py
+          grep -q 'wireguard-diagnostics' app/static/app.js
+          grep -q 'connectivity-lab' app/static/app.js
+          grep -q 'refined in-panel scrollbars' app/static/app.css
+          grep -q 'MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE' scripts/update.sh
+          grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/update.sh
+          grep -q 'wireguard_diagnostics' scripts/uat-smoke.sh
+          grep -q 'repair_wireguard_runtime' scripts/restore-portable.py
+          grep -q 'WireGuard runtime' scripts/doctor.sh
+          pytest -q tests/test_wireguard_runtime.py tests/test_wireguard_delivery.py tests/test_endpoint_delivery.py tests/test_protocol_endpoint_matrix.py tests/test_openvpn_domain.py
+
   browser-smoke:
     runs-on: ubuntu-24.04
     env:
@@ -216,6 +238,17 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Protected export browser smoke
         run: python tests/browser_smoke.py
+
+  wireguard-netns-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install WireGuard runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools iproute2 iputils-ping
+      - name: WireGuard direct-IP and domain handshake
+        run: bash tests/wireguard_netns_smoke.sh
 
   xray-core-smoke:
     runs-on: ubuntu-24.04

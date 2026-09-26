@@ -107,6 +107,17 @@ def main():
             assert page.locator(".glass-summary-grid article").count()==4
             assert page.locator(".glass-service-card").count()>=8
             assert "FULL ACCESS" in page.locator(".license-tier-chip").inner_text()
+            scrollbar_width=page.locator("aside.sidebar nav").evaluate("(el)=>getComputedStyle(el,'::-webkit-scrollbar').width")
+            assert scrollbar_width=="8px"
+            page.locator('aside.sidebar button[data-view="protocols"]').click()
+            page.locator('[data-action="connectivity-lab"]').wait_for()
+            page.locator('[data-action="connectivity-lab"]').click()
+            page.locator("#connectivityEndpoint").wait_for()
+            page.locator("#connectivityEndpoint").fill("127.0.0.1")
+            page.locator('[data-action="connectivity-run"]').click()
+            page.locator(".connectivity-summary").wait_for()
+            assert "SERVER-SIDE READINESS" in page.locator(".connectivity-summary").inner_text()
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.locator('aside.sidebar button[data-view="license"]').click()
             page.locator(".license-hero.full").wait_for()
             assert "LIC-BROWSER" in page.locator("#content").inner_text()

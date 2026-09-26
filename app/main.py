@@ -158,6 +158,7 @@ def _support_operator_mutation_allowed(request:Request)->bool:
         return True
     return path in {
         "/api/protocols/xray/repair",
+        "/api/protocols/wireguard/repair",
         "/api/protocols/openvpn/repair",
         "/api/support/requests",
     }
@@ -854,6 +855,15 @@ def protocols(request:Request):
     require_user(request)
     return protocol_ops.catalog()
 
+@app.get("/api/protocols/connectivity")
+def protocol_connectivity(request:Request,endpoint:str=""):
+    require_user(request)
+    target=(endpoint or public_host(request)).strip()
+    try:
+        return protocol_ops.endpoint_connectivity_matrix(target)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+
 class XrayQuickInbound(BaseModel):
     protocol:str
     port:int=Field(ge=1,le=65535)
@@ -1161,6 +1171,26 @@ def wireguard_bootstrap(payload:WireGuardBootstrap,request:Request):
     audit(actor,"wireguard_bootstrap","wg0",f"port={payload.port}; cidr={payload.cidr}; mtu={payload.mtu}",ip(request))
     return result
 
+@app.get("/api/protocols/wireguard/diagnostics")
+def wireguard_diagnostics_get(request:Request,endpoint:str=""):
+    require_feature(request,"wireguard")
+    target=(endpoint or public_host(request)).strip()
+    try:
+        return protocol_ops.wireguard_diagnostics("wg0",target)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+
+@app.post("/api/protocols/wireguard/repair")
+def wireguard_repair(request:Request):
+    actor=require_feature(request,"wireguard",True)
+    try:
+        result=protocol_ops.repair_wireguard_runtime("wg0")
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"wireguard_repair_failed","wg0",str(e)[:500],ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"wireguard_repair","wg0",f"backup={result.get('backup')}",ip(request))
+    return result
+
 class WireGuardPeer(BaseModel):
     name:str=Field(min_length=1,max_length=48)
     endpoint:str=Field(min_length=1,max_length=255)
@@ -1174,10 +1204,13 @@ def wireguard_peer_create(payload:WireGuardPeer,request:Request):
     actor=require_feature(request,"wireguard",True)
     try:
         result=protocol_ops.create_wireguard_peer(payload.name,payload.endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
-        delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
+        delivery=access_ops.wireguard_payload(
+            payload.name,result["config"],result.get("address"),
+            result.get("ip_config") or None,"ip"
+        )
         artifact_id=artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
             "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
-            "endpoint":result.get("endpoint",""),"port":result.get("port"),"dns":result.get("dns",""),
+            "endpoint":result.get("endpoint",""),"fallback_ipv4":result.get("fallback_ipv4",""),"port":result.get("port"),"dns":result.get("dns",""),
             "mtu":result.get("mtu"),"keepalive":result.get("keepalive"),"allowed_ips":result.get("allowed_ips","")
         })
     except protocol_ops.ProtocolError as e:
@@ -1307,6 +1340,30 @@ def _current_delivery_payload(kind,key,payload,request):
             result=access_ops.openvpn_payload(key,rendered["config"])
         except protocol_ops.ProtocolError:
             result=payload
+    elif kind=="wireguard":
+        config=str(payload.get("primary_text") or "")
+        summary=dict(payload.get("summary") or {})
+        alternate=""
+        match=re.search(r"(?m)^\s*Endpoint\s*=\s*([^\s:]+):(\d+)\s*$",config)
+        if match:
+            endpoint=match.group(1).strip()
+            try:
+                ipaddress.ip_address(endpoint)
+            except ValueError:
+                try:
+                    ep=protocol_ops._resolve_endpoint(endpoint,"WireGuard endpoint")
+                    local4=set(ep.get("local_ipv4") or [])
+                    fallback=next((x for x in ep.get("resolved_ipv4") or [] if x in local4),"")
+                    if fallback:
+                        alternate=config.replace(
+                            match.group(0),
+                            f"Endpoint = {fallback}:{match.group(2)}",
+                            1,
+                        )
+                except Exception:
+                    alternate=""
+        if config:
+            result=access_ops.wireguard_payload(key,config,summary.get("address"),alternate or None,"ip")
     elif kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -1636,6 +1693,22 @@ def diagnostics_self_test(request:Request):
         add("panel_tls_expiry",False,exc,"warn")
 
     try:
+        wg=protocol_ops.wireguard_status()
+        if wg.get("installed") and wg.get("config"):
+            diag=protocol_ops.wireguard_diagnostics("wg0",public_host(request))
+            detail=(
+                f"udp/{diag.get('port')} listener={diag.get('listener')} · "
+                f"forward={diag.get('ip_forward')} · nat={diag.get('nat_rule')} · "
+                f"rules={bool(diag.get('forward_in_rule') and diag.get('forward_out_rule'))}"
+            )
+            add("wireguard_runtime",bool(diag.get("runtime_ok")),detail+"; "+("; ".join(diag.get("warnings") or [])),"error")
+            endpoint=diag.get("endpoint") or {}
+            if endpoint and not endpoint.get("endpoint_is_ip"):
+                add("wireguard_domain",bool(endpoint.get("resolved_ipv4")) and endpoint.get("dns_matches_server") is not False,"; ".join(diag.get("warnings") or []) or "Domain A record points directly to this VPS","warn")
+    except Exception as exc:
+        add("wireguard_runtime",False,exc,"warn")
+
+    try:
         ovpn=protocol_ops.openvpn_status()
         if ovpn.get("installed") and ovpn.get("config"):
             diag=protocol_ops.openvpn_endpoint_diagnostics(public_host(request))
@@ -1644,6 +1717,19 @@ def diagnostics_self_test(request:Request):
                 add("openvpn_domain",bool(diag.get("resolved_ipv4")) and diag.get("dns_matches_server") is not False,"; ".join(diag.get("warnings") or []) or "Domain A record points to this VPS","warn")
     except Exception as exc:
         add("openvpn_runtime",False,exc,"warn")
+
+    try:
+        endpoint=(get_setting("panel_domain","") or "").strip()
+        if endpoint:
+            matrix=protocol_ops.endpoint_connectivity_matrix(endpoint)
+            add(
+                "protocol_endpoint_matrix",
+                bool(matrix.get("ok")),
+                f"{endpoint}: {matrix.get('passed')}/{matrix.get('checked')} configured protocols server-side ready",
+                "warn",
+            )
+    except Exception as exc:
+        add("protocol_endpoint_matrix",False,exc,"warn")
 
     critical=[x for x in checks if not x["ok"] and x["level"]=="error"]
     warnings=[x for x in checks if not x["ok"] and x["level"]=="warn"]

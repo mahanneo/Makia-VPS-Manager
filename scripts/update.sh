@@ -7,7 +7,7 @@ if [[ -r "$ENV_FILE" ]]; then
   while IFS='=' read -r key value; do
     [[ -z "$key" || "$key" == \#* ]] && continue
     case "$key" in
-      MAKIA_SUPPORT_TELEGRAM|MAKIA_SUPPORT_WEBHOOK_URL|MAKIA_RELEASE_ARCHIVE_URL|MAKIA_RELEASE_BEARER_TOKEN|MAKIA_ADMIN_ALLOWED_CIDRS)
+      MAKIA_SUPPORT_TELEGRAM|MAKIA_SUPPORT_WEBHOOK_URL|MAKIA_SUPPORT_WEBHOOK_TOKEN|MAKIA_RELEASE_ARCHIVE_URL|MAKIA_RELEASE_BEARER_TOKEN|MAKIA_ADMIN_ALLOWED_CIDRS)
         printf -v "$key" '%s' "$value"
         export "$key"
         ;;
@@ -31,6 +31,9 @@ on_exit(){
     echo "Update failed. Restoring previous Makia runtime..."
     set +e
     systemctl stop makia-vps-manager 2>/dev/null
+    systemctl stop wg-quick@wg0 2>/dev/null
+    systemctl stop openvpn-server@server 2>/dev/null
+    systemctl stop xray 2>/dev/null
     rm -rf "$APP/app"
     tar -xzf "$RELEASE_BACKUP" -C /
     if [[ -f "$APP/requirements.txt" && -x "$APP/.venv/bin/pip" ]]; then
@@ -38,6 +41,9 @@ on_exit(){
     fi
     systemctl daemon-reload
     nginx -t >/dev/null 2>&1 && systemctl reload nginx
+    if [[ "${XRAY_WAS_PRESENT:-0}" -eq 1 ]]; then systemctl restart xray 2>/dev/null; fi
+    if [[ "${OVPN_WAS_PRESENT:-0}" -eq 1 ]]; then systemctl restart openvpn-server@server 2>/dev/null; fi
+    if [[ "${WG_WAS_PRESENT:-0}" -eq 1 ]]; then systemctl restart wg-quick@wg0 2>/dev/null; fi
     systemctl restart makia-vps-manager
     systemctl restart makia-policy-enforcer 2>/dev/null
     systemctl restart makia-metrics-sampler 2>/dev/null
@@ -84,6 +90,36 @@ if [[ -f /etc/openvpn/server/server.conf ]]; then
   systemctl is-active --quiet openvpn-server@server 2>/dev/null && OVPN_WAS_ACTIVE=1 || true
 fi
 
+WG_WAS_PRESENT=0
+WG_WAS_HEALTHY=0
+if [[ -f /etc/wireguard/wg0.conf ]]; then
+  WG_WAS_PRESENT=1
+  WG_PORT="$(awk -F= '$1 ~ /^[[:space:]]*ListenPort[[:space:]]*$/{gsub(/[[:space:]]/,"",$2); print $2; exit}' /etc/wireguard/wg0.conf 2>/dev/null || true)"
+  WG_ADDRESS="$(awk -F= '$1 ~ /^[[:space:]]*Address[[:space:]]*$/{gsub(/^[[:space:]]+|[[:space:]]+$/,"",$2); split($2,a,","); print a[1]; exit}' /etc/wireguard/wg0.conf 2>/dev/null || true)"
+  WG_NETWORK=""
+  if [[ -n "$WG_ADDRESS" ]]; then
+    WG_NETWORK="$(python3 - "$WG_ADDRESS" <<'PY' 2>/dev/null || true
+import ipaddress,sys
+try: print(ipaddress.ip_interface(sys.argv[1]).network)
+except Exception: pass
+PY
+)"
+  fi
+  WG_UPLINK="$(ip -4 route show default 2>/dev/null | awk '/ dev /{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')"
+  if systemctl is-active --quiet wg-quick@wg0 2>/dev/null \
+     && command -v wg >/dev/null 2>&1 \
+     && wg show wg0 >/dev/null 2>&1 \
+     && [[ "$(sysctl -n net.ipv4.ip_forward 2>/dev/null || true)" == "1" ]] \
+     && [[ -n "$WG_PORT" ]] \
+     && ss -H -lun 2>/dev/null | grep -Eq ":${WG_PORT}([[:space:]]|$)" \
+     && [[ -n "$WG_NETWORK" && -n "$WG_UPLINK" ]] \
+     && iptables -w 5 -t nat -C POSTROUTING -s "$WG_NETWORK" -o "$WG_UPLINK" -j MASQUERADE >/dev/null 2>&1 \
+     && iptables -w 5 -C FORWARD -i wg0 -j ACCEPT >/dev/null 2>&1 \
+     && iptables -w 5 -C FORWARD -o wg0 -j ACCEPT >/dev/null 2>&1; then
+    WG_WAS_HEALTHY=1
+  fi
+fi
+
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="/var/backups/makia-vps-manager/makia-data-${STAMP_DATA}.tar.gz"
 BACKUP_TMP="$(mktemp -d)"
@@ -127,7 +163,12 @@ for item in \
   "etc/systemd/system/makia-policy-enforcer.service" \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
-  "etc/nginx/sites-available/makia-vps-manager"; do
+  "etc/nginx/sites-available/makia-vps-manager" \
+  "etc/wireguard" \
+  "etc/sysctl.d/99-makia-wireguard.conf" \
+  "etc/openvpn/server/server.conf" \
+  "usr/local/etc/xray" \
+  "etc/xray"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
 tar -C / -czf "$RELEASE_BACKUP" "${SNAPSHOT[@]}"
@@ -246,6 +287,31 @@ PY
   fi
 fi
 
+if [[ "$WG_WAS_PRESENT" -eq 1 ]]; then
+  echo "Checking WireGuard listener, forwarding and NAT runtime..."
+  if ! ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_diagnostics("wg0")
+if not d.get("runtime_ok"):
+    result=protocol_ops.repair_wireguard_runtime("wg0")
+    d=result["diagnostics"]
+if not d.get("runtime_ok"):
+    raise SystemExit("WireGuard remains unhealthy after repair: "+"; ".join(d.get("warnings") or []))
+print("WireGuard runtime validation PASS:",
+      "port="+str(d.get("port")),
+      "network="+str(d.get("network")),
+      "uplink="+str(d.get("uplink")))
+PY
+  ); then
+    if [[ "$WG_WAS_HEALTHY" -eq 1 ]]; then
+      echo "WireGuard was healthy before this update but is unhealthy now; updater will roll back."
+      exit 7
+    fi
+    echo "WARNING: WireGuard was already unhealthy before the update and automatic repair could not fully recover it."
+    echo "The update will continue so the new WireGuard Diagnostics / Repair tools are available."
+  fi
+fi
+
 nginx -t
 systemctl restart makia-vps-manager
 systemctl enable --now makia-policy-enforcer
@@ -279,6 +345,9 @@ if [[ "$XRAY_WAS_PRESENT" -eq 1 && "$XRAY_WAS_ACTIVE" -eq 0 ]] && ! systemctl is
 fi
 if [[ "$OVPN_WAS_PRESENT" -eq 1 && "$OVPN_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
   UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_OPENVPN_FAILURE=1)
+fi
+if [[ "$WG_WAS_PRESENT" -eq 1 && "$WG_WAS_HEALTHY" -eq 0 ]]; then
+  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE=1)
 fi
 if ! "${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke; then
   echo "Post-update host smoke failed."

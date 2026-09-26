@@ -4,8 +4,18 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current release candidate:** `v0.16.0-rc1`  
+> **Current release candidate:** `v0.16.1-rc1`  
 > CI validation is required before merge; a real-host UAT is still required before any Stable designation.
+
+## v0.16.1 Protocol Runtime Reliability
+- WireGuard now has real runtime diagnostics for UDP listener, kernel interface, IPv4 forwarding, NAT/MASQUERADE, FORWARD rules, peers and recent handshakes.
+- WireGuard Repair preserves keys and peers, creates a backup, rebuilds idempotent firewall hooks, restarts the interface and rolls back on failure.
+- Domain-based WireGuard clients also receive a direct-IP fallback profile/QR in their protected package.
+- Protocol Hub includes an IP / Domain Connectivity Lab for SSH, WireGuard, OpenVPN and Xray.
+- Xray/WireGuard/OpenVPN UI status distinguishes a running systemd process from actual protocol readiness.
+- The updater and portable restore paths now normalize/validate WireGuard runtime too.
+- Sidebar and in-panel scrollbars use a consistent modern Glass treatment.
+- UAT contract: `docs/UAT-0.16.1-RC1.md`.
 
 ## v0.16 Owner Control Center & consent-based Remote Support
 - A separate Owner Control Center manages customers, installations, signed licenses, renewals, revocations, support tickets and owner audit history.

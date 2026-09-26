@@ -43,6 +43,7 @@ def test_remote_operator_mutation_allowlist(monkeypatch):
     from app import main as main_app
     monkeypatch.setattr(main_app,"require_user",lambda request:"support:7:operator")
     assert main_app.require_mutation(_request("/api/protocols/xray/repair"))=="support:7:operator"
+    assert main_app.require_mutation(_request("/api/protocols/wireguard/repair"))=="support:7:operator"
     assert main_app.require_mutation(_request("/api/protocols/openvpn/repair"))=="support:7:operator"
     assert main_app.require_mutation(_request("/api/services/xray/restart"))=="support:7:operator"
     assert main_app.require_mutation(_request("/api/support/requests"))=="support:7:operator"

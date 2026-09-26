@@ -20,10 +20,17 @@ ovpn_bad(){
     bad "$1"
   fi
 }
+wg_bad(){
+  if [[ "${MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE:-0}" == "1" ]]; then
+    printf '! %s (pre-existing WireGuard failure; panel diagnostics/repair update allowed)\n' "$1"
+  else
+    bad "$1"
+  fi
+}
 
 [[ -d "$APP" ]] || { bad "Makia runtime missing at $APP"; exit 1; }
 
-printf '\nMakia v0.13.1 host smoke\n'
+printf '\nMakia host smoke / protocol runtime gate\n'
 printf '%s\n' '---------------------'
 
 VERSION="$(cat "$APP/VERSION" 2>/dev/null || true)"
@@ -136,11 +143,48 @@ if [[ -f /etc/openvpn/server/server.conf ]]; then
 fi
 
 if [[ -f /etc/wireguard/wg0.conf ]]; then
-  if command -v wg >/dev/null 2>&1 && wg show wg0 >/tmp/makia-wg-show.txt 2>&1; then
-    ok "WireGuard wg0 runtime"
+  if ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_diagnostics("wg0")
+print("WireGuard diagnostics:",
+      "service="+str(d.get("service_active")),
+      "interface="+str(d.get("interface_active")),
+      "listener="+str(d.get("listener")),
+      "ip_forward="+str(d.get("ip_forward")),
+      "nat="+str(d.get("nat_rule")),
+      "forward="+str(bool(d.get("forward_in_rule") and d.get("forward_out_rule"))),
+      "port="+str(d.get("port")))
+if not d.get("runtime_ok"):
+    raise SystemExit("; ".join(d.get("warnings") or ["WireGuard runtime unhealthy"]))
+PY
+  ); then
+    ok "WireGuard listener + forwarding + NAT"
   else
-    bad "WireGuard wg0 runtime"
+    wg_bad "WireGuard listener / forwarding / NAT runtime"
   fi
+fi
+
+if ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+from app.db import get_setting
+endpoint=(get_setting("panel_domain","") or "").strip()
+if not endpoint:
+    candidates=protocol_ops._local_ipv4_candidates()
+    endpoint=candidates[0] if candidates else ""
+if not endpoint:
+    print("No public endpoint configured; connectivity matrix skipped")
+else:
+    d=protocol_ops.endpoint_connectivity_matrix(endpoint)
+    print("Protocol endpoint matrix:", endpoint, f"{d.get('passed')}/{d.get('checked')} server-side ready")
+    for name in ("ssh","wireguard","openvpn","xray"):
+        row=d.get(name)
+        if isinstance(row,dict):
+            print(" -",name, "PASS" if row.get("ok") else "CHECK", "; ".join(row.get("warnings") or []))
+PY
+); then
+  ok "Protocol IP/domain readiness probe"
+else
+  bad "Protocol IP/domain readiness probe"
 fi
 
 if command -v makia-restore-portable >/dev/null 2>&1; then

@@ -35,6 +35,15 @@ def test_wireguard_peer_compatibility_profile(tmp_path,monkeypatch):
             return ""
         raise AssertionError(args)
     monkeypatch.setattr(protocol_ops,"_run",fake_run)
+    monkeypatch.setattr(protocol_ops,"wireguard_diagnostics",lambda iface="wg0",endpoint="":{
+        "runtime_ok":True,
+        "endpoint":{
+            "endpoint_is_ip":False,
+            "resolved_ipv4":["203.0.113.10"],
+            "local_ipv4":["203.0.113.10"],
+            "dns_matches_server":True,
+        },
+    })
     result=protocol_ops.create_wireguard_peer(
         "client01","vpn.example.com",dns="1.1.1.1",mtu=1280,keepalive=15,allowed_ips="0.0.0.0/0",
     )
