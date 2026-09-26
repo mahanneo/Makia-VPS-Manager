@@ -16,6 +16,7 @@ def test_wireguard_allowed_ips_validation():
 
 
 def test_wireguard_peer_compatibility_profile(tmp_path,monkeypatch):
+    monkeypatch.setattr(protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint,iface="wg0":{"endpoint_ok":True})
     monkeypatch.setattr(protocol_ops,"WG_DIR",tmp_path)
     conf=tmp_path/"wg0.conf"
     conf.write_text(

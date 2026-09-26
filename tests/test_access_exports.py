@@ -1,4 +1,5 @@
 import io
+import json
 import pytest
 import pyzipper
 from starlette.requests import Request
@@ -25,6 +26,32 @@ def test_encrypted_payload_roundtrip(monkeypatch):
     restored=access_ops.open_payload(token)
     assert restored["files"]["client.conf"] == original["files"]["client.conf"]
     assert restored["summary"]["protocol"] == "wireguard"
+
+def test_wireguard_endpoint_change_preserves_keys_port_and_lines():
+    original="[Interface]\nPrivateKey = secret\nAddress = 10.66.66.2/32\n\n[Peer]\nPublicKey = server\nEndpoint = 8.8.8.8:443\nAllowedIPs = 0.0.0.0/0\n"
+    updated=access_ops.wireguard_replace_endpoint(original,"vpn.example.com")
+    assert updated==original.replace("Endpoint = 8.8.8.8:443","Endpoint = vpn.example.com:443")
+    assert access_ops.wireguard_replace_endpoint(updated,"8.8.8.8")==original
+    with pytest.raises(access_ops.AccessPackageError):
+        access_ops.wireguard_replace_endpoint("[Interface]\nPrivateKey = secret\n","vpn.example.com")
+
+def test_wireguard_endpoint_update_keeps_peer_and_rebuilds_delivery(monkeypatch):
+    config="[Interface]\nPrivateKey = secret\n\n[Peer]\nPublicKey = server\nEndpoint = 8.8.8.8:443\nAllowedIPs = 0.0.0.0/0\n"
+    saved=[]
+    monkeypatch.setattr(main_app,"require_feature",lambda *a:"admin")
+    monkeypatch.setattr(main_app,"require_local_admin",lambda *a:"admin")
+    monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda kind,key:{"payload_enc":"sealed","display_name":key,"metadata_json":json.dumps({"public_key":"peerkey","address":"10.66.66.2","port":443})})
+    monkeypatch.setattr(access_ops,"open_payload",lambda token:{"primary_text":config})
+    monkeypatch.setattr(main_app.protocol_ops,"list_wireguard_peers",lambda:[{"name":"client","public_key":"peerkey"}])
+    monkeypatch.setattr(main_app.protocol_ops,"wireguard_endpoint_diagnostics",lambda endpoint:{"endpoint_ok":True,"endpoint_is_ip":False,"resolved_ipv4":["8.8.8.8"]})
+    monkeypatch.setattr(main_app,"artifact_save",lambda *args:saved.append(args))
+    monkeypatch.setattr(main_app,"audit",lambda *args,**kw:None)
+    scope={"type":"http","method":"POST","path":"/api/access/wireguard/client/endpoint","headers":[],"query_string":b"","scheme":"http","server":("testserver",80),"client":("127.0.0.1",12345)}
+    response=main_app.wireguard_endpoint_update("client",main_app.WireGuardEndpointUpdate(endpoint="vpn.example.com"),Request(scope))
+    assert response["ok"] is True
+    assert saved[0][4]["primary_text"]==config.replace("8.8.8.8:443","vpn.example.com:443")
+    assert b"vpn.example.com:443" in saved[0][4]["files"]["client.conf"]
+    assert saved[0][5]["endpoint"]=="vpn.example.com"
 
 
 def test_protected_zip_requires_password():

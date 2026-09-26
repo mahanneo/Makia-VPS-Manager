@@ -290,6 +290,18 @@ def wireguard_payload(name,config,address=None):
         "summary":{"address":address or ""},
     }
 
+def wireguard_replace_endpoint(config,host):
+    """Change only the client Endpoint host; keep peer keys and the server port."""
+    lines=re.findall(r"(?m)^Endpoint[ \t]*=[ \t]*(\[[^\]]+\]|[^\s:]+):(\d+)[ \t]*$",str(config))
+    if len(lines)!=1:
+        raise AccessPackageError("WireGuard client config must contain exactly one Endpoint")
+    old_host,port=lines[0]
+    replacement=f"Endpoint = {host}:{port}"
+    updated,count=re.subn(r"(?m)^Endpoint[ \t]*=[ \t]*(?:\[[^\]]+\]|[^\s:]+):\d+[ \t]*$",replacement,str(config))
+    if count!=1:
+        raise AccessPackageError("WireGuard client Endpoint could not be updated")
+    return updated
+
 def openvpn_payload(name,config):
     filename=f"{safe_filename(name)}.ovpn"
     return {
