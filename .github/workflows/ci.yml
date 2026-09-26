@@ -69,6 +69,7 @@ jobs:
           test -f docs/UAT-0.16.0-RC1.md
           test -f docs/UAT-0.17.0-RC1.md
           test -f docs/UAT-0.17.0-RC2.md
+          test -f docs/UAT-0.17.0-RC3.md
           test -f docs/OWNER-CONTROL-CENTER-FA.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f owner_console/app.py

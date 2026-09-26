@@ -214,7 +214,8 @@ function accessCard(a){
     : (a.kind==='wireguard'
       ? '<button class="icon-action warnish" data-action="wg-reissue" data-key="'+key+'">Reissue</button>'
       : '<button class="icon-action warnish" data-action="manage-access" data-id="'+id+'">Reset credential</button>');
-  const manage=(a.kind==='ssh'||a.kind==='xray')?'<button class="more-action" data-action="manage-access" data-id="'+id+'">Manage</button>':'';
+  const manage=(a.kind==='ssh'||a.kind==='xray')?'<button class="more-action" data-action="manage-access" data-id="'+id+'">Manage</button>':
+    (a.kind==='wireguard'&&a.can_export?'<button class="more-action" data-action="wg-endpoint-update" data-key="'+key+'" data-endpoint="'+htmlEsc(a.endpoint||'')+'">Endpoint</button>':'');
   return [
     '<article class="access-profile '+kind+'">',
       '<div class="profile-identity"><div class="profile-avatar">'+htmlEsc(String(a.name||'?').slice(0,1).toUpperCase())+'</div><div><div class="profile-name"><b>'+name+'</b><span class="protocol-pill">'+proto+'</span>',
@@ -564,9 +565,12 @@ async function revokeAccess(kind,key,name){
 }
 
 async function reissueWireGuard(name){
-  if(!confirm('Peer قدیمی '+name+' باطل و Key جدید ساخته شود؟'))return;
-  const endpoint=window.PANEL_DOMAIN||location.hostname;
+  const endpoint=prompt('Endpoint برای Peer جدید (دامنه مستقیم یا IPv4)',window.PANEL_DOMAIN||location.hostname);
+  if(!endpoint)return;
   try{
+    const check=await api('/api/protocols/wireguard/diagnostics?endpoint='+encodeURIComponent(endpoint));
+    if(!check.endpoint_ok){alert('Endpoint آماده نیست؛ Peer قدیمی حفظ شد:\n'+(check.warnings||[]).join('\n'));return}
+    if(!confirm('Peer قدیمی '+name+' باطل و Key جدید ساخته شود؟ فایل جدید باید روی Client دوباره Import شود.'))return;
     await api('/api/access/wireguard/'+encodeURIComponent(name),{method:'DELETE'});
     const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns:'1.1.1.1'})});
     showProvisionSuccess('wireguard',name,name,(await api('/api/accounts/generate-secret?mode=pin6')).secret,null,r);
@@ -920,10 +924,12 @@ async function repairXrayRuntime(){
 
 async function bootstrapWireGuard(){const d=window.__operatorSettings?.defaults||{};const port=Number(prompt('WireGuard UDP port',String(d.wireguard_port||443)));if(!port)return;const cidr=prompt('Server tunnel CIDR',d.wireguard_cidr||'10.66.66.1/24');if(!cidr)return;try{const r=await api('/api/protocols/wireguard/bootstrap',{method:'POST',body:JSON.stringify({port,cidr,mtu:Number(d.wireguard_mtu||1280)})});toast('WireGuard '+r.interface+' started');await protocols()}catch(e){alert(e.message)}}
 async function createWireGuardPeer(){const d=window.__operatorSettings?.defaults||{};const name=prompt('Peer name','client01');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const dns=prompt('Client DNS',d.wireguard_dns||'1.1.1.1')||'1.1.1.1';try{const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns,mtu:Number(d.wireguard_mtu||1280),keepalive:Number(d.wireguard_keepalive??15),allowed_ips:d.wireguard_allowed_ips||'0.0.0.0/0'})});configModal('WireGuard · '+name,r.config,name+'.conf','wireguard',name);if(r.diagnostics&&!r.diagnostics.ok)toast('Config ساخته شد؛ WireGuard Diagnostics نیاز به بررسی دارد')}catch(e){alert(e.message)}}
-async function openWireGuardDiagnostics(){
+async function openWireGuardDiagnostics(target=''){
   try{
-    const endpoint=window.PANEL_DOMAIN||location.hostname;
-    const d=await api('/api/protocols/wireguard/diagnostics?endpoint='+encodeURIComponent(endpoint));
+    const endpoint=target||prompt('Endpoint داخل فایل WireGuard کلاینت (دامنه یا IP)',window.PANEL_DOMAIN||location.hostname);
+    if(!endpoint)return;
+    const known=prompt('اگر اتصال با IP کار می‌کند، آن IPv4 را برای مقایسه با رکورد A وارد کنید (اختیاری)','')||'';
+    const d=await api('/api/protocols/wireguard/diagnostics?endpoint='+encodeURIComponent(endpoint)+'&known_working_ipv4='+encodeURIComponent(known));
     const warnings=(d.warnings||[]).map(x=>'<div class="diagnostic-hint">• '+htmlEsc(x)+'</div>').join('');
     const peers=(d.peers||[]).map(p=>'<div class="wg-peer-runtime"><div><b>'+htmlEsc(p.name||'peer')+'</b><span>'+htmlEsc(p.allowed_ips||'')+'</span></div><div><b>'+(p.handshake_age===null?'Never':Math.max(0,Number(p.handshake_age))+'s ago')+'</b><span>RX '+fmtBytes(p.rx||0)+' · TX '+fmtBytes(p.tx||0)+'</span></div></div>').join('');
     modalRoot.innerHTML=[
@@ -934,17 +940,29 @@ async function openWireGuardDiagnostics(){
         '<div><span>Interface</span><b class="'+(d.interface_present?'ok-text':'bad-text')+'">'+(d.interface_present?'wg0 READY':'MISSING')+'</b></div>',
         '<div><span>UDP Listener</span><b class="'+(d.listener?'ok-text':'bad-text')+'">'+(d.listener?(':'+Number(d.port)):'MISSING')+'</b></div>',
         '<div><span>IP Forward</span><b class="'+(d.ip_forward?'ok-text':'bad-text')+'">'+(d.ip_forward?'ON':'OFF')+'</b></div>',
-        '<div><span>NAT</span><b class="'+(d.nat!==false?'ok-text':'bad-text')+'">'+(d.nat===false?'MISSING':'READY')+'</b></div>',
+        '<div><span>NAT</span><b class="'+(d.nat===true?'ok-text':'bad-text')+'">'+(d.nat===true?'READY':'UNKNOWN / MISSING')+'</b></div>',
         '<div><span>Endpoint</span><b class="'+(d.endpoint_ok?'ok-text':'bad-text')+'">'+htmlEsc(d.endpoint||'-')+'</b></div>',
       '</div>',
-      '<div class="domain-resolution-grid"><div><span>A / IPv4</span><code>'+htmlEsc((d.resolved_ipv4||[]).join(', ')||'none')+'</code></div><div><span>AAAA / IPv6</span><code>'+htmlEsc((d.resolved_ipv6||[]).join(', ')||'none')+'</code></div><div><span>VPS IPv4</span><code>'+htmlEsc((d.local_ipv4||[]).join(', ')||'unknown')+'</code></div></div>',
+      '<div class="domain-resolution-grid"><div><span>A / IPv4</span><code>'+htmlEsc((d.resolved_ipv4||[]).join(', ')||'none')+'</code></div><div><span>AAAA / IPv6</span><code>'+htmlEsc((d.resolved_ipv6||[]).join(', ')||'none')+'</code></div><div><span>VPS IPv4</span><code>'+htmlEsc((d.local_ipv4||[]).join(', ')||'unknown')+'</code></div><div><span>VPS IPv6</span><code>'+htmlEsc((d.local_ipv6||[]).join(', ')||'unknown')+'</code></div></div>',
       warnings?'<div class="diagnostic-hints">'+warnings+'</div>':'<div class="wizard-note success-note"><b>WireGuard runtime ready</b><span>Forwarding، NAT، UDP listener و Endpoint بررسی شدند.</span></div>',
       '<div class="journal-head"><b>Peer Handshakes</b><span>'+Number(d.recent_handshakes||0)+' recent</span></div><div class="wg-peer-list">'+(peers||'<div class="empty compact">Peer runtime ثبت نشده است.</div>')+'</div>',
-      '<div class="wizard-note"><b>Domain note</b><span>برای WireGuard دامنه باید DNS-only و مستقیم به VPS باشد. Proxy/CDN HTTP مانند Cloudflare برای UDP خام WireGuard مناسب نیست.</span></div>',
+      '<div class="wizard-note"><b>Domain note</b><span>دامنه باید DNS-only و مستقیم باشد. اگر AAAA با IPv6 عملیاتی VPS مطابقت ندارد، زیر دامنه A-only بسازید. تنظیم دامنه پنل فایل‌های قبلی کلاینت را تغییر نمی‌دهد؛ از Access Center > Endpoint خروجی و QR جدید بگیرید و در دستگاه دوباره Import کنید.</span></div>',
       '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="primary" data-action="wireguard-repair">Repair & Restart</button></div>',
       '</div></div>'
     ].join('');
   }catch(e){alert('WireGuard diagnostics: '+e.message)}
+}
+async function updateWireGuardEndpoint(key,current){
+  const endpoint=prompt('Endpoint جدید برای '+key+' (دامنه مستقیم یا IPv4؛ Port و Key حفظ می‌شوند)',current||window.PANEL_DOMAIN||location.hostname);
+  if(!endpoint)return;
+  try{
+    const known=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(current||'')?current:'';
+    const d=await api('/api/protocols/wireguard/diagnostics?endpoint='+encodeURIComponent(endpoint)+'&known_working_ipv4='+encodeURIComponent(known));
+    if(!d.endpoint_ok){alert('Endpoint آماده نیست:\n'+(d.warnings||[]).join('\n'));return}
+    if(!confirm('فایل و QR این Peer با Endpoint جدید ساخته می‌شود. پس از دریافت خروجی جدید، پروفایل را روی دستگاه کاربر دوباره Import کنید. ادامه؟'))return;
+    await api('/api/access/wireguard/'+encodeURIComponent(key)+'/endpoint',{method:'POST',body:JSON.stringify({endpoint})});
+    toast('Endpoint ذخیره شد؛ Native/QR جدید را به کاربر تحویل بدهید');await access();
+  }catch(e){alert('WireGuard Endpoint: '+e.message)}
 }
 async function repairWireGuardRuntime(){
   if(!confirm('Makia از wg0.conf بکاپ می‌گیرد، IP forwarding، NAT و Forward rules را اصلاح می‌کند و WireGuard را Restart می‌کند. ادامه؟'))return;
@@ -1437,6 +1455,7 @@ async function handleMakiaAction(btn){
   if(action==='protocol-refresh'){await currentView();return}
   if(action==='endpoint-matrix'){await openEndpointMatrix();return}
   if(action==='wireguard-diagnostics'){await openWireGuardDiagnostics();return}
+  if(action==='wg-endpoint-update'){await updateWireGuardEndpoint(dataDec(btn.dataset.key),btn.dataset.endpoint);return}
   if(action==='wireguard-repair'){await repairWireGuardRuntime();return}
   if(action==='openvpn-diagnostics'){await openOpenVPNDiagnostics();return}
   if(action==='openvpn-repair'){await repairOpenVPNRuntime();return}

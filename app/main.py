@@ -1163,13 +1163,59 @@ def wireguard_bootstrap(payload:WireGuardBootstrap,request:Request):
     return result
 
 @app.get("/api/protocols/wireguard/diagnostics")
-def wireguard_diagnostics_get(request:Request,endpoint:str=""):
+def wireguard_diagnostics_get(request:Request,endpoint:str="",known_working_ipv4:str=""):
     require_feature(request,"wireguard")
     target=(endpoint or public_host(request)).strip()
     try:
-        return protocol_ops.wireguard_endpoint_diagnostics(target)
+        diagnostics=protocol_ops.wireguard_endpoint_diagnostics(target)
+        if known_working_ipv4:
+            try:
+                expected=ipaddress.IPv4Address(known_working_ipv4.strip()).compressed
+            except ipaddress.AddressValueError as exc:
+                raise HTTPException(400,"Known working IP must be an IPv4 address") from exc
+            diagnostics["known_working_ipv4"]=expected
+            if not diagnostics["endpoint_is_ip"] and expected not in diagnostics["resolved_ipv4"]:
+                diagnostics["endpoint_ok"]=False
+                diagnostics["ok"]=False
+                diagnostics["warnings"].insert(0,f"رکورد A دامنه به IP شناخته‌شده و سالم ({expected}) اشاره نمی‌کند.")
+        return diagnostics
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
+
+class WireGuardEndpointUpdate(BaseModel):
+    endpoint:str=Field(min_length=1,max_length=255)
+
+@app.post("/api/access/wireguard/{key}/endpoint")
+def wireguard_endpoint_update(key:str,payload:WireGuardEndpointUpdate,request:Request):
+    actor=require_feature(request,"wireguard",True)
+    require_local_admin(request)
+    artifact=get_access_artifact_by_key("wireguard",key)
+    if not artifact:
+        raise HTTPException(409,"Client private key is not retained; reissue this legacy peer")
+    try:
+        profile=access_ops.open_payload(artifact["payload_enc"])
+        metadata=json.loads(artifact.get("metadata_json") or "{}")
+        active=next((p for p in protocol_ops.list_wireguard_peers() if p["name"]==key),None)
+        if not active or not metadata.get("public_key") or active["public_key"]!=metadata["public_key"]:
+            raise HTTPException(409,"Stored profile does not match the active peer")
+        endpoint=protocol_ops._validate_endpoint_host(payload.endpoint,"WireGuard endpoint")
+        diagnostics=protocol_ops.wireguard_endpoint_diagnostics(endpoint)
+        if not diagnostics["endpoint_ok"]:
+            raise HTTPException(409,"WireGuard domain/IP is not ready: "+"; ".join(diagnostics["warnings"]))
+        previous_endpoint=re.search(r"(?m)^Endpoint[ \t]*=[ \t]*([^\s:]+):\d+[ \t]*$",profile["primary_text"])
+        if previous_endpoint and not diagnostics["endpoint_is_ip"]:
+            try: old_ipv4=ipaddress.IPv4Address(previous_endpoint.group(1)).compressed
+            except ipaddress.AddressValueError: old_ipv4=""
+            if old_ipv4 and old_ipv4 not in diagnostics["resolved_ipv4"]:
+                raise HTTPException(409,f"Domain A record does not match the previous working IPv4 ({old_ipv4})")
+        updated=access_ops.wireguard_replace_endpoint(profile["primary_text"],protocol_ops._uri_host(endpoint))
+        refreshed=access_ops.wireguard_payload(key,updated,metadata.get("address"))
+        metadata["endpoint"]=endpoint
+        artifact_save("wireguard",key,artifact["display_name"],"wireguard",refreshed,metadata)
+    except (access_ops.AccessPackageError,KeyError,ValueError,TypeError) as exc:
+        raise HTTPException(409,"Stored WireGuard profile cannot be updated: "+str(exc)) from exc
+    audit(actor,"wireguard_endpoint_update",key,f"endpoint={endpoint}",ip(request))
+    return {"ok":True,"endpoint":endpoint,"diagnostics":diagnostics}
 
 @app.post("/api/protocols/wireguard/repair")
 def wireguard_repair(request:Request):
@@ -1401,11 +1447,14 @@ def access_entries(request:Request):
     for peer in (protocol_ops.list_wireguard_peers() if license_feature_enabled("wireguard") else []):
         key=peer["name"]
         art=artifacts.get(("wireguard",key))
+        try: wg_meta=json.loads(art["metadata_json"]) if art else {}
+        except (ValueError,TypeError): wg_meta={}
         rows.append({
             "id":f"wireguard:{key}","kind":"wireguard","key":key,"name":key,"protocol":"wireguard",
             "status":"active","online":None,"device_limit":1,"can_export":bool(art),
             "artifact_id":art["id"] if art else None,"legacy":not bool(art),
-            "public_key":peer.get("public_key",""),"address":peer.get("allowed_ips","")
+            "public_key":peer.get("public_key",""),"address":peer.get("allowed_ips",""),
+            "endpoint":wg_meta.get("endpoint","")
         })
 
     known_ovpn={a["external_key"] for a in artifacts.values() if a["kind"]=="openvpn"}

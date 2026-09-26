@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.0-rc3] - 2026-09-26
+
+### WireGuard domain endpoint
+- Added a creation preflight: unresolved domains, A records pointing away from the VPS (when its public address is visible), and AAAA records without a matching VPS IPv6 are rejected before generating peer keys.
+- Added an Endpoint action for saved WireGuard peers. It regenerates encrypted native, protected and QR exports while preserving the client/server keys, tunnel IP and UDP port; clients must import the new profile.
+- Diagnostics can compare the domain A record with a known working IPv4, including VPS deployments where the public IP is hidden behind upstream NAT. Unknown public IP is reported as unverified.
+- Peer names must be unique, and legacy reissue checks endpoint readiness before removing the old peer.
+- OpenVPN changes from rc2 remain unchanged. This is an RC pending real external-client VPS UAT.
+
 ## [0.17.0-rc2] - 2026-09-26
 
 ### WireGuard Repair Hardening

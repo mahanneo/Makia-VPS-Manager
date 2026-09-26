@@ -537,12 +537,17 @@ def create_wireguard_peer(name, endpoint, iface="wg0", dns="1.1.1.1", mtu=1280, 
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid peer name")
     endpoint=_validate_endpoint_host(endpoint)
+    check=wireguard_endpoint_diagnostics(endpoint,iface)
+    if not check["endpoint_ok"]:
+        raise ProtocolError("WireGuard endpoint is not ready: "+"; ".join(check["warnings"]))
     mtu=_validate_wireguard_mtu(mtu)
     keepalive=_validate_keepalive(keepalive)
     allowed_ips=_validate_wireguard_allowed_ips(allowed_ips)
     conf=WG_DIR/f"{iface}.conf"
     if not conf.exists():
         raise ProtocolError("WireGuard server is not bootstrapped")
+    if any(peer["name"]==name for peer in list_wireguard_peers(iface)):
+        raise ProtocolError("WireGuard peer name already exists")
     text=conf.read_text(encoding="utf-8",errors="ignore")
     m=re.search(r"Address\s*=\s*([^\n]+)",text)
     p=re.search(r"ListenPort\s*=\s*(\d+)",text)
@@ -729,6 +734,8 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
             # Historical Makia configs used a broad MASQUERADE rule without -s.
             nat=_iptables_check(["-t","nat","-C","POSTROUTING","-o",uplink,"-j","MASQUERADE"])
     resolved4=[]; resolved6=[]; endpoint_is_ip=False; ip_version=None; dns_matches_server=None
+    local6=_local_ipv6_candidates()
+    ipv6_matches_server=None
     warnings=[]
     if endpoint:
         endpoint=_validate_endpoint_host(endpoint,"WireGuard endpoint")
@@ -740,21 +747,31 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         except ValueError:
             try: resolved4=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET)})
             except Exception: resolved4=[]
-            try: resolved6=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET6)})
+            try: resolved6=sorted({str(ipaddress.IPv6Address(x[4][0].split("%",1)[0])) for x in socket.getaddrinfo(endpoint,None,socket.AF_INET6)})
             except Exception: resolved6=[]
         local4=_local_ipv4_candidates()
         if not endpoint_is_ip:
-            dns_matches_server=bool(set(resolved4)&set(local4)) if resolved4 and local4 else None
+            public_local4=[x for x in local4 if ipaddress.ip_address(x).is_global]
+            dns_matches_server=bool(set(resolved4)&set(public_local4)) if resolved4 and public_local4 else None
+            ipv6_matches_server=bool(set(resolved6)&set(local6)) if resolved6 and local6 else None
             if not resolved4:
                 warnings.append("دامنه WireGuard رکورد A/IPv4 قابل استفاده ندارد.")
             if resolved6:
-                warnings.append("دامنه AAAA هم دارد؛ WireGuard می‌تواند IPv6 را انتخاب کند. اگر VPS مسیر IPv6 کامل ندارد، برای Endpoint از A/IPv4 مستقیم یا دامنه بدون AAAA ناسازگار استفاده کنید.")
+                if ipv6_matches_server is not True:
+                    warnings.append("دامنه AAAA هم دارد، اما IPv6 عمومی مطابق با VPS تأیید نشد. کلاینت WireGuard ممکن است این مسیر را انتخاب کند؛ از زیر دامنه A-only استفاده کنید یا مسیر IPv6/UDP را جداگانه تأیید کنید.")
+                else:
+                    warnings.append("دامنه AAAA مطابق IPv6 محلی دارد؛ دسترسی UDP از بیرون و فایروال IPv6 هنوز باید با Client واقعی تأیید شود.")
             if dns_matches_server is False:
                 warnings.append("رکورد A دامنه با IPv4 این VPS تطابق ندارد. WireGuard خام از HTTP/CDN Proxy عبور نمی‌کند؛ رکورد باید DNS-only و مستقیم به VPS باشد.")
+            if dns_matches_server is None and resolved4:
+                warnings.append("IPv4 عمومی VPS از این سرور قابل تأیید نیست (احتمال NAT). رکورد A را با Public IP پنل VPS مقایسه کنید؛ این نتیجه اتصال را تأیید نمی‌کند.")
         elif ip_version!=4:
             warnings.append("Bootstrap فعلی WireGuard سرور IPv4-only است؛ Endpoint IPv6 برای این Runtime توصیه نمی‌شود.")
     else:
         local4=_local_ipv4_candidates()
+    public_local4=[x for x in local4 if ipaddress.ip_address(x).is_global]
+    if endpoint_is_ip and ip_version==4 and public_local4 and endpoint not in public_local4:
+        warnings.append("IPv4 انتخاب‌شده با IPv4 عمومی این VPS تطابق ندارد.")
     if not cfg.get("exists"): warnings.append("فایل wg0.conf وجود ندارد.")
     if not service_active: warnings.append("سرویس wg-quick@wg0 فعال نیست.")
     if not interface_present: warnings.append("Interface wg0 در runtime دیده نمی‌شود.")
@@ -769,8 +786,8 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     endpoint_ok=True
     if endpoint:
         endpoint_ok=bool(
-            (endpoint_is_ip and ip_version==4) or
-            ((not endpoint_is_ip) and resolved4 and dns_matches_server is not False)
+            (endpoint_is_ip and ip_version==4 and (not public_local4 or endpoint in public_local4)) or
+            ((not endpoint_is_ip) and resolved4 and dns_matches_server is not False and (not resolved6 or ipv6_matches_server is True))
         )
     runtime_ok=bool(cfg.get("exists") and service_active and interface_present and listener and ip_forward and forward_in is not False and forward_out is not False and nat is not False)
     return {
@@ -797,7 +814,9 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "resolved_ipv4":resolved4,
         "resolved_ipv6":resolved6,
         "local_ipv4":local4,
+        "local_ipv6":local6,
         "dns_matches_server":dns_matches_server,
+        "ipv6_matches_server":ipv6_matches_server,
         "peers":peers,
         "recent_handshakes":recent,
         "external_udp_verified":False,
@@ -934,6 +953,17 @@ def _local_ipv4_candidates():
         out=_run(["ip","-4","route","get","1.1.1.1"],timeout=8)
         m=re.search(r"\bsrc\s+(\d+\.\d+\.\d+\.\d+)",out)
         if m: found.add(str(ipaddress.ip_address(m.group(1))))
+    except Exception:
+        pass
+    return sorted(found)
+
+def _local_ipv6_candidates():
+    found=set()
+    try:
+        out=_run(["ip","-6","addr","show","scope","global"],timeout=8)
+        for item in re.findall(r"\binet6\s+([0-9a-fA-F:]+)/",out):
+            addr=ipaddress.IPv6Address(item)
+            if addr.is_global: found.add(addr.compressed)
     except Exception:
         pass
     return sorted(found)
