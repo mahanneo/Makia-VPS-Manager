@@ -106,6 +106,40 @@ def test_ssh_package_does_not_embed_password_in_openssh_config():
     assert "Password: 123456" in credentials
 
 
+def test_ssh_account_uses_selected_ip_in_npv_and_native_exports(monkeypatch):
+    saved=[]
+    monkeypatch.setattr(main_app,"require_mutation",lambda request:"admin")
+    monkeypatch.setattr(main_app.system_ops,"create_ssh_user",lambda *args:None)
+    monkeypatch.setattr(main_app,"upsert_profile",lambda *args:None)
+    monkeypatch.setattr(main_app,"ssh_npv_options",lambda username:{"enabled":True})
+    monkeypatch.setattr(main_app,"artifact_save",lambda *args:saved.append(args) or 1)
+    monkeypatch.setattr(main_app,"audit",lambda *args,**kwargs:None)
+    request=Request({"type":"http","method":"POST","path":"/api/accounts","headers":[],"query_string":b"","scheme":"http","server":("testserver",80),"client":("127.0.0.1",12345)})
+    payload=main_app.AccountCreate(username="user001",password="123456",endpoint="8.8.8.8",endpoint_mode="ip")
+    main_app.create_account(payload,request)
+    delivery=saved[0][4]
+    assert b"HostName 8.8.8.8" in delivery["files"]["user001-ssh-config.txt"]
+    assert delivery["summary"]["host"]=="8.8.8.8"
+    assert saved[0][5]["endpoint_mode"]=="ip"
+
+
+def test_ssh_password_reset_keeps_selected_endpoint(monkeypatch):
+    saved=[]
+    monkeypatch.setattr(main_app,"require_mutation",lambda request:"admin")
+    monkeypatch.setattr(main_app.system_ops,"update_ssh_user",lambda *args:None)
+    monkeypatch.setattr(main_app.system_ops,"lock_user",lambda *args:None)
+    monkeypatch.setattr(main_app,"upsert_profile",lambda *args:None)
+    monkeypatch.setattr(main_app,"ssh_npv_options",lambda username:{"enabled":True})
+    monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda *args:{"metadata_json":json.dumps({"endpoint":"8.8.8.8","endpoint_mode":"ip"})})
+    monkeypatch.setattr(main_app,"artifact_save",lambda *args:saved.append(args) or 1)
+    monkeypatch.setattr(main_app,"audit",lambda *args,**kwargs:None)
+    monkeypatch.setattr(main_app,"public_host",lambda request:"panel.example.com")
+    request=Request({"type":"http","method":"PUT","path":"/api/accounts/user001","headers":[],"query_string":b"","scheme":"http","server":("testserver",80),"client":("127.0.0.1",12345)})
+    main_app.update_account("user001",main_app.AccountUpdate(password="NewSecret!2026"),request)
+    assert saved[0][4]["summary"]["host"]=="8.8.8.8"
+    assert saved[0][5]["endpoint_mode"]=="ip"
+
+
 def test_xray_package_contains_qr_profile_and_subscription_artifacts():
     payload=access_ops.xray_payload("u1","vless","vless://abc@example.com:443","https://example.com/sub/a","https://example.com/client/a")
     assert "u1-vless.txt" in payload["files"]

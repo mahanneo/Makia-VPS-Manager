@@ -4,8 +4,14 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current release candidate:** `v0.16.0-rc1`  
-> CI validation is required before merge; a real-host UAT is still required before any Stable designation.
+> **Current code baseline:** `v0.18.0`
+> CI validates the repository; connectivity on a real VPS still requires external-client UAT.
+
+## v0.18 IP / domain choice
+- Access Center has an explicit public IPv4 or domain selection for SSH/NPV, Xray, WireGuard and OpenVPN clients.
+- Client exports keep the selected address. OpenVPN profile downloads no longer switch to the panel domain; an existing imported client profile still needs to be re-imported if its endpoint changes.
+- A direct VPN hostname needs DNS-only routing to the VPS. Xray TLS/REALITY has separate SNI and certificate requirements, and may use a supported proxy transport.
+- See [v0.18 protocol UAT](docs/UAT-0.18.0.md) for the IP/domain matrix and the remaining live VPS checks.
 
 ## v0.16 Owner Control Center & consent-based Remote Support
 - A separate Owner Control Center manages customers, installations, signed licenses, renewals, revocations, support tickets and owner audit history.
@@ -22,7 +28,7 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 - Glass Aurora is the new default panel experience, with a glass sidebar/topbar, translucent blue-violet surfaces, responsive service cards, live resource rings and a reorganized operational dashboard.
 - Existing installations migrate once to the Glass theme; Midnight, AMOLED and Graphite remain selectable.
 - OpenVPN domain profiles now use explicit IPv4 transports (`udp4` / `tcp4-client`) so an unrelated AAAA record cannot silently divert a profile away from the IPv4 server.
-- OpenVPN exports are regenerated against the current panel domain and current server transport, preserving existing EasyRSA client credentials.
+- Legacy OpenVPN profiles without a saved export can be regenerated from server PKI; newly saved profiles retain the endpoint chosen at creation.
 - Domain Diagnostics checks A/AAAA resolution, whether the A record reaches this VPS, the OpenVPN listener and service state, and warns about CDN/proxy records.
 - Panel HTTPS/Let's Encrypt is not the OpenVPN tunnel certificate: OpenVPN continues to use its own EasyRSA PKI.
 - A proxied Cloudflare/CDN record is not a raw OpenVPN transport. Use a DNS-only A record that resolves directly to the VPS.

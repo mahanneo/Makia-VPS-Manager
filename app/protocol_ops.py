@@ -307,11 +307,13 @@ def openvpn_status():
     if server_dir.exists():
         configs=[p.stem for p in server_dir.glob("*.conf")]
     active=any(_active(f"openvpn-server@{name}") for name in configs)
+    runtime=_openvpn_server_runtime() if (server_dir/"server.conf").exists() else {}
     return {
         "installed":installed,
         "service_active":active,
         "servers":configs,
         "config":str(server_dir/"server.conf") if (server_dir/"server.conf").exists() else None,
+        "port":runtime.get("port"),"proto":runtime.get("proto"),
     }
 
 def stunnel_status():
@@ -447,6 +449,42 @@ def _uri_host(host):
         return f"[{ip.compressed}]" if ip.version==6 else ip.compressed
     except ValueError:
         return host
+
+def validate_endpoint_selection(value, mode="auto", direct=False, check_aaaa=False):
+    """Validate the address used in client exports before provisioning a service.
+
+    Explicit domain mode checks IPv4 DNS. Direct TCP/UDP services additionally
+    reject a known mismatch with a publicly assigned VPS IPv4. Xray transports
+    may intentionally use a proxy, so their DNS is not required to match.
+    """
+    host=_validate_endpoint_host(value)
+    mode=str(mode or "auto").lower()
+    if mode not in {"auto","ip","domain"}:
+        raise ProtocolError("endpoint mode must be IP or domain")
+    try: address=ipaddress.ip_address(host)
+    except ValueError: address=None
+    if mode=="ip" and (address is None or address.version!=4):
+        raise ProtocolError("IP mode requires a public IPv4 address")
+    if mode=="domain" and address is not None:
+        raise ProtocolError("Domain mode requires a hostname, not an IP address")
+    if mode=="ip" and not address.is_global:
+        raise ProtocolError("IP mode requires a public IPv4 address")
+    if mode=="domain":
+        try: resolved={row[4][0] for row in socket.getaddrinfo(host,None,socket.AF_INET)}
+        except (OSError,ValueError): resolved=set()
+        if not resolved:
+            raise ProtocolError("Domain has no reachable A/IPv4 record")
+        if direct:
+            local={x for x in _local_ipv4_candidates() if ipaddress.ip_address(x).is_global}
+            if local and not resolved.issubset(local):
+                raise ProtocolError("Domain A record does not match this VPS public IPv4; disable HTTP/CDN proxy for this protocol")
+        if check_aaaa:
+            try:
+                resolved6={str(ipaddress.IPv6Address(row[4][0].split("%",1)[0])) for row in socket.getaddrinfo(host,None,socket.AF_INET6)}
+            except (OSError,ValueError): resolved6=set()
+            if resolved6 and not resolved6.issubset(set(_local_ipv6_candidates())):
+                raise ProtocolError("Domain AAAA record does not match a public VPS IPv6; use an A-only hostname or repair IPv6 routing")
+    return host
 
 
 def _endpoint_is_private(host):
@@ -752,8 +790,8 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         local4=_local_ipv4_candidates()
         if not endpoint_is_ip:
             public_local4=[x for x in local4 if ipaddress.ip_address(x).is_global]
-            dns_matches_server=bool(set(resolved4)&set(public_local4)) if resolved4 and public_local4 else None
-            ipv6_matches_server=bool(set(resolved6)&set(local6)) if resolved6 and local6 else None
+            dns_matches_server=set(resolved4).issubset(set(public_local4)) if resolved4 and public_local4 else None
+            ipv6_matches_server=set(resolved6).issubset(set(local6)) if resolved6 and local6 else None
             if not resolved4:
                 warnings.append("دامنه WireGuard رکورد A/IPv4 قابل استفاده ندارد.")
             if resolved6:
@@ -1012,7 +1050,7 @@ def openvpn_endpoint_diagnostics(endpoint):
         except Exception:
             resolved6=[]
     local4=_local_ipv4_candidates()
-    matches=bool(set(resolved4)&set(local4)) if resolved4 and local4 else None
+    matches=set(resolved4).issubset(set(local4)) if resolved4 and local4 else None
     warnings=[]
     if not is_ip and not resolved4:
         warnings.append("دامنه هیچ رکورد IPv4/A قابل استفاده‌ای ندارد؛ OpenVPN این پنل روی IPv4 ساخته می‌شود.")
@@ -1183,6 +1221,12 @@ def create_openvpn_client(name, endpoint, port=1194, proto="udp"):
         raise ProtocolError("invalid OpenVPN protocol")
     if not (OVPN_EASYRSA/"pki/ca.crt").exists():
         raise ProtocolError("OpenVPN server is not bootstrapped")
+    runtime=_openvpn_server_runtime()
+    server_port=int(runtime.get("port") or 0)
+    server_proto="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+    requested_proto="tcp" if proto.startswith("tcp") else "udp"
+    if port!=server_port or requested_proto!=server_proto:
+        raise ProtocolError(f"Client port/transport must match the OpenVPN server ({server_proto}/{server_port})")
     env=os.environ.copy(); env["EASYRSA_BATCH"]="1"
     p=subprocess.run([str(OVPN_EASYRSA/"easyrsa"),"build-client-full",name,"nopass"],cwd=str(OVPN_EASYRSA),env=env,text=True,capture_output=True,timeout=180,check=False)
     if p.returncode!=0:
@@ -1624,6 +1668,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         link=f"trojan://{urllib.parse.quote(credential,safe='')}@{host}:{port}?{query}#{label}"
     elif protocol=="vmess":
         obj={"v":"2","ps":name,"add":host,"port":str(port),"id":credential,"aid":"0","scy":"auto","net":link_type,"type":"none","host":"","path":path_value if method!="grpc" else "","tls":"tls" if security=="tls" else ""}
+        if security=="tls": obj["sni"]=(server_name or "").strip().lower()
         if method=="grpc": obj["path"]=path_value.strip("/")
         link="vmess://"+base64.b64encode(json.dumps(obj,separators=(",",":")).encode()).decode()
     elif protocol=="http":

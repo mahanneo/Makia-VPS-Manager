@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 
 from app import protocol_ops
 
@@ -149,3 +150,13 @@ def test_openvpn_remote_block_ip_stays_single_endpoint():
     assert block=="remote 203.0.113.10 1194\n"
     assert fallback==""
     assert hybrid is False
+
+
+def test_openvpn_client_rejects_wrong_port_before_issuing_certificate(tmp_path,monkeypatch):
+    ovpn,easy=_write_openvpn_fixture(tmp_path,"udp4")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"OVPN_EASYRSA",easy)
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{"port":1194,"proto":"udp4"})
+    monkeypatch.setattr(protocol_ops.subprocess,"run",lambda *args,**kw:(_ for _ in ()).throw(AssertionError("must not issue certificate")))
+    with pytest.raises(protocol_ops.ProtocolError,match="match the OpenVPN server"):
+        protocol_ops.create_openvpn_client("client02","8.8.8.8",443,"udp")
