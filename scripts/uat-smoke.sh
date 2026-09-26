@@ -20,10 +20,17 @@ ovpn_bad(){
     bad "$1"
   fi
 }
+wg_bad(){
+  if [[ "${MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE:-0}" == "1" ]]; then
+    printf '! %s (pre-existing WireGuard failure; panel diagnostics update allowed)\n' "$1"
+  else
+    bad "$1"
+  fi
+}
 
 [[ -d "$APP" ]] || { bad "Makia runtime missing at $APP"; exit 1; }
 
-printf '\nMakia v0.13.1 host smoke\n'
+printf '\nMakia host smoke\n'
 printf '%s\n' '---------------------'
 
 VERSION="$(cat "$APP/VERSION" 2>/dev/null || true)"
@@ -136,10 +143,24 @@ if [[ -f /etc/openvpn/server/server.conf ]]; then
 fi
 
 if [[ -f /etc/wireguard/wg0.conf ]]; then
-  if command -v wg >/dev/null 2>&1 && wg show wg0 >/tmp/makia-wg-show.txt 2>&1; then
-    ok "WireGuard wg0 runtime"
+  if ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_endpoint_diagnostics("")
+assert d.get("service_active"), d.get("warnings")
+assert d.get("interface_present"), d.get("warnings")
+assert d.get("listener"), d.get("warnings")
+assert d.get("ip_forward"), d.get("warnings")
+assert d.get("forward_in") is not False, d.get("warnings")
+assert d.get("forward_out") is not False, d.get("warnings")
+assert d.get("nat") is not False, d.get("warnings")
+print("wg0", d.get("port"), d.get("network"), d.get("uplink"))
+PY
+  ); then
+    ok "WireGuard forwarding + NAT + listener"
   else
-    bad "WireGuard wg0 runtime"
+    wg_bad "WireGuard runtime/forwarding/NAT unhealthy"
+    systemctl status wg-quick@wg0 --no-pager -l || true
+    wg show wg0 || true
   fi
 fi
 
