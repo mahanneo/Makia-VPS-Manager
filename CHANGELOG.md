@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.17.0-rc2] - 2026-09-26
+
+### Runtime Root-Cause Hardening
+- WireGuard peer issuance now refuses to rely on service state alone: it preflights interface, UDP listener, IPv4 forwarding, FORWARD rules and NAT, and invokes the guarded repair path when needed.
+- Domain endpoints without a usable direct A record, or resolving to a different/proxied IPv4, are rejected before a peer artifact is issued.
+- When a domain resolves directly to this VPS, WireGuard delivery includes both the domain profile/QR and a direct-IPv4 fallback profile/QR.
+- Diagnostics explicitly distinguish a healthy VPS runtime from an unverified external UDP path; missing handshakes can indicate ISP/carrier/upstream firewall/NAT filtering.
+
+### Protocol Readiness
+- SSH/NPV readiness now validates the effective SSH port and a real TCP listener.
+- Xray readiness now validates configured inbound ports against actual TCP/UDP listeners.
+- OpenVPN and WireGuard keep their listener/DNS/runtime checks, so the matrix no longer treats systemd green status as sufficient.
+
+### CI / UAT
+- Added a real Linux network-namespace WireGuard handshake gate for direct IPv4 and hostname endpoints.
+- Added WireGuard dual-delivery and listener-matrix regression tests.
+- Release remains RC-only; Stable requires real external-client UAT on the target VPS/network.
+
 ## [0.17.0-rc1] - 2026-09-26
 
 ### WireGuard Reliability
