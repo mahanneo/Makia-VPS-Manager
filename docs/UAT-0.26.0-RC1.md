@@ -34,6 +34,7 @@ Desktop و Mobile:
 - Login با رمز درست موفق و با رمز غلط ناموفق باشد.
 - در صورت تنظیم Domain عمومی، HTTPS باید فعال شود؛ استفاده عمومی روی HTTP/IP هشدار امنیتی دارد.
 - `makia-uat-smoke` برای Domain تنظیم‌شده باید Certificate، Listener واقعی TCP/443 و درخواست `https://DOMAIN/healthz` را PASS کند.
+- Certbot و `python3-certbot-nginx` باید توسط Installer/Updater روت نصب شوند؛ Backend وب نباید `apt-get` اجرا کند. خطاهای `seteuid 42` / `setresuid: Operation not permitted` در مسیر HTTPS Regression محسوب می‌شوند.
 
 ## 3. Users / Access Center
 
