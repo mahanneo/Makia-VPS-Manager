@@ -1,3 +1,20 @@
+## نسخه ۰.۲۷.۰-rc1 — Change Protocol واقعی
+
+در این نسخه یک Workspace جدید **Change Protocol** به پنل اضافه شده است که وضعیت واقعی شش مسیر اتصال را نشان می‌دهد: **IKEv2، WireGuard، OpenVPN UDP، OpenVPN TCP، Stealth/TLS و WStunnel/WSS**.
+
+- **IKEv2** با StrongSwan و `swanctl`، احراز هویت EAP-MSCHAPv2، Certificate دامنه و UDP/500 + UDP/4500 پیاده‌سازی شده است.
+- **WireGuard** همان Backend واقعی Peer/QR/Handshake/Traffic فعلی را استفاده می‌کند.
+- **UDP/TCP** دو اسم نمایشی نیستند؛ Transport واقعی OpenVPN Server را مدیریت می‌کنند.
+- **Stealth**، OpenVPN/TCP را داخل TLS واقعی Stunnel قرار می‌دهد.
+- **WStunnel**، OpenVPN/TCP را از WSS عبور می‌دهد و سمت Client نیز wstunnel لازم دارد.
+- Port collision کنترل می‌شود؛ مثلاً TCP/443 متعلق به HTTPS را نمی‌توان هم‌زمان بدون Multiplexer واقعی به Stealth یا WStunnel داد.
+
+> OpenVPN در این RC همچنان یک Server Profile مدیریت‌شده دارد؛ بنابراین UDP و TCP هم‌زمان READY نیستند و تغییر یکی، Transport همان Server را تغییر می‌دهد. این محدودیت در UI صریح نمایش داده می‌شود و قابلیت جعلی اضافه نشده است.
+
+Installer/Updater وابستگی‌های Host را با root نصب می‌کند؛ Backend وب Package Manager اجرا نمی‌کند. UAT کامل این نسخه در [docs/UAT-0.27.0-RC1.md](docs/UAT-0.27.0-RC1.md) تعریف شده است.
+
+**وضعیت انتشار:** Release Candidate. Stable فقط بعد از Upgrade/Clean-install واقعی VPS و Field Test Client داخل ایران.
+
 ## نسخه ۰.۲۶.۰-rc1 — کاندیدای نهایی انتشار عمومی
 
 این نسخه روی ایرادهای واقعی Host و تکمیل تجربه مدیریتی متمرکز است. خطای ساخت Xray با پیام `runuser: cannot set user id: Operation not permitted` بدون حذف `NoNewPrivileges` رفع شده است؛ Login نیز Focus Surface واحد، تغییر زبان واقعی FA/EN و Dark/Light واقعی دارد.
