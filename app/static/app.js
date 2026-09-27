@@ -746,77 +746,63 @@ function engineCard(icon,name,desc,status,meta,actions=''){
   return '<article class="engine-card"><div class="engine-card-head"><span class="engine-icon">'+htmlEsc(icon)+'</span>'+status+'</div><h3>'+htmlEsc(name)+'</h3><p>'+htmlEsc(desc)+'</p><div class="engine-meta">'+meta+'</div><div class="engine-actions">'+actions+'</div></article>';
 }
 async function wireguard(renderToken=window.__viewRenderToken){
-  title.textContent='WireGuard';setPageContext('PEER WORKSPACE');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن وضعیت WireGuard…</b></div>';
+  title.textContent='WireGuard';setPageContext('WIREGUARD USER MANAGEMENT');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن WireGuard…</b></div>';
   const [stack,rows]=await Promise.all([api('/api/protocols'),api('/api/access')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='wireguard')return;
   window.__protocolData=stack;
   const peers=rows.filter(x=>x.kind==='wireguard'),service=stack.wireguard||{};
+  const active=peers.filter(p=>p.enabled!==false).length;
   const connected=peers.filter(p=>p.enabled&&p.handshake_age!==null&&p.handshake_age!==undefined&&p.handshake_age<180).length;
-  const state=service.config?(service.service_active?'سرویس فعال':'سرویس متوقف'):'نیازمند راه‌اندازی';
+  const rx=peers.reduce((n,p)=>n+Number(p.rx||0),0),tx=peers.reduce((n,p)=>n+Number(p.tx||0),0);
   const peerRows=peers.map(p=>{
-    const key=dataEnc(p.key),name=htmlEsc(p.name),isActive=p.enabled!==false;
-    const age=p.handshake_age===null||p.handshake_age===undefined?'هنوز اتصالی ثبت نشده':(p.handshake_age<180?'متصل · ':'آخرین اتصال · ')+Math.floor(Number(p.handshake_age)/60)+' دقیقه پیش';
-    return '<article class="wg-workspace-peer"><div class="wg-peer-name"><span class="wg-person">'+htmlEsc(p.name.slice(0,1).toUpperCase())+'</span><div><b>'+name+'</b><small>'+htmlEsc(p.address||'')+'</small></div><span class="status-chip '+(isActive?'ok':'warn')+'">'+(isActive?'فعال':'غیرفعال')+'</span></div>'+
-      '<div class="wg-peer-endpoint"><span>Endpoint</span><b dir="ltr">'+htmlEsc(p.endpoint||'نامشخص')+'</b></div>'+
-      '<div class="wg-peer-traffic"><span>'+htmlEsc(isActive?age:'اتصال غیرفعال است')+'</span><b>↓ '+fmtBytes(p.rx||0)+' · ↑ '+fmtBytes(p.tx||0)+'</b></div>'+
-      '<div class="wg-peer-actions">'+(p.can_export?'<button class="soft" data-action="access-share" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">QR / Share</button><button class="soft" data-action="native-export" data-kind="wireguard" data-key="'+key+'">.conf</button><button class="soft" data-action="wg-endpoint-update" data-key="'+key+'" data-endpoint="'+htmlEsc(p.endpoint||'')+'">Endpoint</button>':'<button class="soft" data-action="wg-reissue" data-key="'+key+'">ساخت دوباره</button>')+
-      '<button class="'+(isActive?'soft warnish':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(isActive?'0':'1')+'">'+(isActive?'غیرفعال کردن':'فعال کردن')+'</button><button class="danger" data-action="revoke-access" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">حذف</button></div></article>';
+    const key=dataEnc(p.key),enabled=p.enabled!==false;
+    return '<div class="row protocol-list-row"><div><b>'+htmlEsc(p.name)+'</b><div class="muted">'+htmlEsc(p.address||'WireGuard peer')+'</div></div><div><span class="status-chip '+(enabled?'ok':'bad')+'">'+(enabled?'فعال':'غیرفعال')+'</span><div class="muted">'+(p.handshake_age==null?'بدون Handshake':Math.floor(Number(p.handshake_age)/60)+' دقیقه پیش')+'</div></div><div><b>↓ '+fmtBytes(p.rx||0)+' · ↑ '+fmtBytes(p.tx||0)+'</b><div class="muted" dir="ltr">'+htmlEsc(p.endpoint||'—')+'</div></div><div class="toolbar">'+
+      (p.can_export?'<button class="ghost" data-action="access-share" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">QR</button><button class="ghost" data-action="native-export" data-kind="wireguard" data-key="'+key+'">Config</button>':'')+
+      '<button class="'+(enabled?'soft':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(enabled?'0':'1')+'">'+(enabled?'خاموش':'روشن')+'</button><button class="danger" data-action="revoke-access" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">حذف</button></div></div>';
   }).join('');
   content.innerHTML=[
-    '<section class="wg-workspace-hero"><div><div class="eyebrow">WIREGUARD · WG0</div><h2>مدیریت WireGuard</h2><p>همتاها، آخرین اتصال و ترافیک را در یک‌جا ببینید. برای هر دستگاه تنظیمات مستقل با دامنه یا IP بسازید.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ساخت همتا':'راه‌اندازی WireGuard')+'</button><button class="ghost" data-action="wireguard-diagnostics">بررسی اتصال</button><button class="ghost" data-action="endpoint-matrix">بررسی دامنه / IP</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(service.service_active?'running':'')+'"></span><b>'+state+'</b><small>'+Number(peers.length)+' همتا · '+connected+' اتصال اخیر</small></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>همتاها</span><b>'+peers.length+'</b></div><div><span>فعال</span><b>'+peers.filter(p=>p.enabled!==false).length+'</b></div><div><span>اتصال در ۳ دقیقه اخیر</span><b>'+connected+'</b></div><div><span>رابط‌ها</span><b>'+Number((service.interfaces||[]).length)+'</b></div></section>',
-    '<section class="panel wg-workspace-directory"><div class="panel-head"><div><h3>همتاهای WireGuard</h3><span>HANDSHAKE · TRAFFIC · DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="wg-workspace-list">'+(peerRows||'<div class="empty">هنوز همتایی ساخته نشده است. از «ساخت همتا» شروع کنید.</div>')+'</div></section>',
-    '<section class="wg-workspace-help"><div><b>اتصال با دامنه یا IP</b><p>هنگام ساخت همتا Endpoint را انتخاب کنید. دامنه باید مستقیم به IP سرور اشاره کند و UDP پورت WireGuard در فایروال و ارائه‌دهنده باز باشد.</p></div><button class="ghost" data-action="client-guide" data-kind="wireguard">راهنمای کلاینت ↗</button></section>'
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon wg">WG</span><div><h2>WireGuard</h2><p>مدیریت Peerها، Handshake و ترافیک کاربران WireGuard</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="wireguard-diagnostics">Diagnostics</button><button class="ghost" data-action="nav" data-view="settings">تنظیمات WireGuard</button><button class="primary" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ایجاد همتا جدید':'راه‌اندازی WireGuard')+'</button></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>کل همتاها</span><b>'+peers.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>Handshake اخیر</span><b>'+connected+'</b></div><div><span>ترافیک کل</span><b>'+fmtBytes(rx+tx)+'</b></div></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران WireGuard</h3><span>HANDSHAKE · TRAFFIC · CONFIG</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="neon-table-head"><span>نام همتا</span><span>وضعیت</span><span>ترافیک / Endpoint</span><span>عملیات</span></div><div class="table">'+(peerRows||'<div class="empty">هنوز همتایی ساخته نشده است.</div>')+'</div></section>'
   ].join('');
 }
-
 async function toggleWireGuardPeer(key,enabled){
   if(!confirm((enabled?'فعال کردن':'غیرفعال کردن')+' همتای '+key+'؟'))return;
   try{await api('/api/access/wireguard/'+encodeURIComponent(key)+'/state',{method:'POST',body:JSON.stringify({enabled})});toast(enabled?'همتا فعال شد':'همتا غیرفعال شد');await currentView()}catch(e){alert(e.message)}
 }
 
 async function xrayWorkspace(renderToken=window.__viewRenderToken){
-  title.textContent='Xray / V2Ray';setPageContext('XRAY CLIENT WORKSPACE');
+  title.textContent='V2Ray / Xray';setPageContext('XRAY USER MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی Xray…</b></div>';
-  const [stack,clients,accessRows,operator]=await Promise.all([
-    api('/api/protocols'),api('/api/protocol-clients'),api('/api/access'),api('/api/settings/operator')
-  ]);
+  const [stack,clients,accessRows,operator]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='xray')return;
   window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;
-  const engine=stack.xray||{},rows=accessRows.filter(x=>x.kind==='xray');
-  const managed=clients;
+  const engine=stack.xray||{},managed=clients,rows=accessRows.filter(x=>x.kind==='xray');
   const active=managed.filter(x=>x.enabled&&!x.expired).length;
+  const inactive=managed.length-active;
   const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
-  const quota=managed.reduce((sum,x)=>sum+Number(x.quota_bytes||0),0);
-  const ipViolations=managed.filter(x=>x.ip_violation).length;
-  const inboundHtml=(engine.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(i.tag||'untagged')+'</b><span>'+htmlEsc(String(i.protocol||'unknown').toUpperCase())+'</span></div><div><b>'+htmlEsc((i.listen||'0.0.0.0')+':'+(i.port??'-'))+'</b><span>'+Number(i.clients||0)+' clients</span></div></div>').join('');
   content.innerHTML=[
-    '<section class="wg-workspace-hero"><div><div class="eyebrow">XRAY · VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>فضای مستقل Xray / V2Ray</h2><p>ساخت Client، حجم، تاریخ انقضا، چرخه Reset، IP Limit، وضعیت فعال/غیرفعال و Subscription در همین بخش مدیریت می‌شود.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ ساخت Client':'نصب Xray Core')+'</button><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">Advanced JSON</button><button class="ghost" data-action="xray-tunnel">Tunnel</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(engine.service_active?'running':'')+'"></span><b>'+(engine.service_active?'Xray Running':engine.installed?'Xray Attention':'Xray not installed')+'</b><small>'+htmlEsc(engine.version||'Core version unavailable')+'</small></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>Clientها</span><b>'+managed.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>مصرف کل</span><b>'+fmtBytes(used)+'</b></div><div><span>IP Limit Alert</span><b>'+ipViolations+'</b></div></section>',
-    '<section class="panel"><div class="panel-head"><div><h3>Client Policy</h3><span>QUOTA · EXPIRY · RESET · IP LIMIT · STATUS</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز Client مدیریت‌شده‌ای وجود ندارد.</div>')+'</div></section>',
-    '<section class="split-grid"><div class="panel"><div class="panel-head"><div><h3>Inboundها</h3><span>PORT / TRANSPORT</span></div><button class="ghost" data-action="nav" data-view="protocols">Protocol Hub</button></div><div class="engine-inbounds">'+(inboundHtml||'<div class="empty compact">Inbound خوانا پیدا نشد.</div>')+'</div></div>',
-    '<div class="panel"><div class="panel-head"><div><h3>Delivery Profiles</h3><span>'+rows.length+' EXPORTABLE</span></div><button class="ghost" data-action="client-guide" data-kind="xray">راهنما</button></div><div class="access-cards">'+(rows.length?rows.map(accessCard).join(''):'<div class="empty compact">پروفایل تحویل وجود ندارد.</div>')+'</div></div></section>',
-    quota?'<section class="wg-workspace-help"><div><b>Quota pool</b><p>مجموع سقف‌های تعریف‌شده '+fmtBytes(quota)+' است. هر Client شمارنده و Reset مستقل خودش را دارد.</p></div><button class="ghost" data-action="refresh">Sync counters</button></section>':''
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">V</span><div><h2>V2Ray / Xray</h2><p>VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ ایجاد کاربر جدید':'نصب Xray Core')+'</button></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>کل کاربران</span><b>'+managed.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+inactive+'</b></div><div><span>مصرف کل</span><b>'+fmtBytes(used)+'</b></div></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران V2Ray / Xray</h3><span>QUOTA · EXPIRY · RESET · IP LIMIT · STATUS</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز کاربری ساخته نشده است.</div>')+'</div></section>',
+    '<section class="panel"><div class="panel-head"><div><h3>خروجی و اشتراک کاربران</h3><span>'+rows.length+' PROFILE</span></div><button class="ghost" data-action="client-guide" data-kind="xray">راهنمای اتصال</button></div><div class="access-cards">'+(rows.length?rows.map(accessCard).join(''):'<div class="empty compact">پروفایل قابل تحویل وجود ندارد.</div>')+'</div></section>'
   ].join('');
 }
-
 async function openvpnWorkspace(renderToken=window.__viewRenderToken){
-  title.textContent='OpenVPN';setPageContext('OPENVPN CLIENT WORKSPACE');
+  title.textContent='OpenVPN';setPageContext('OPENVPN USER MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی OpenVPN…</b></div>';
   const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
   window.__protocolData=stack;window.__operatorSettings=operator;
   const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn');
-  const serverName=(engine.servers||[])[0]||'server';
+  const active=engine.service_active?clients.length:0;
   content.innerHTML=[
-    '<section class="wg-workspace-hero"><div><div class="eyebrow">OPENVPN · PKI · NATIVE OVPN</div><h2>فضای مستقل OpenVPN</h2><p>راه‌اندازی سرور، Clientها، فایل OVPN، Domain Diagnostics و عملیات PKI از Xray و SSH جدا شده‌اند.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ساخت Client':'راه‌اندازی OpenVPN')+'</button><button class="ghost" data-action="openvpn-diagnostics">Domain Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair Runtime</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(engine.service_active?'running':'')+'"></span><b>'+(engine.service_active?'OpenVPN Running':engine.installed?'OpenVPN Attention':'OpenVPN not installed')+'</b><small>'+(engine.port?htmlEsc(String(engine.proto||'udp').toUpperCase()+'/'+engine.port):'Server not bootstrapped')+'</small></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>Clientها</span><b>'+clients.length+'</b></div><div><span>Service</span><b>'+(engine.service_active?'ON':'OFF')+'</b></div><div><span>Port</span><b>'+(engine.port||'-')+'</b></div><div><span>Transport</span><b>'+htmlEsc(String(engine.proto||'-').toUpperCase())+'</b></div></section>',
-    '<section class="panel"><div class="panel-head"><div><h3>OpenVPN Clients</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div></section>',
-    '<section class="wg-workspace-help"><div><b>تفکیک قابلیت واقعی</b><p>در این Release فایل و PKI و Revoke واقعی هستند. Quota/Reset per-client برای OpenVPN تا زمانی که Accounting قابل اتکای Runtime اضافه نشود به‌صورت نمایشی نشان داده نمی‌شود.</p></div><button class="ghost" data-action="client-guide" data-kind="openvpn">راهنمای کلاینت ↗</button></section>'
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon ovpn">O</span><div><h2>OpenVPN</h2><p>مدیریت Clientها، PKI و فایل‌های OVPN</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت جدید':'راه‌اندازی OpenVPN')+'</button></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>کل کلاینت‌ها</span><b>'+clients.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+(clients.length-active)+'</b></div><div><span>Port</span><b>'+htmlEsc(String(engine.port||'—'))+'</b></div></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران OpenVPN</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div><div class="wizard-note"><b>Accounting</b><span>Quota/Reset per-client برای OpenVPN تا زمانی که شمارش قابل اتکای Runtime اضافه نشود به‌صورت نمایشی نشان داده نمی‌شود.</span></div></section>'
   ].join('');
 }
-
 async function protocols(renderToken=window.__viewRenderToken){
   title.textContent='Protocol Hub';setPageContext('ENGINE CONTROL');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Engineها…</b></div>';
