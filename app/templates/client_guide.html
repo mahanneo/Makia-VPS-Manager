@@ -3,73 +3,91 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#060913">
-  <title>راهنمای اتصال · Makia</title>
+  <meta name="theme-color" content="#07101d">
+  <title>راهنمای تصویری اتصال · Makia</title>
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
 </head>
-<body class="client-page guide-page">
+<body class="client-page guide-page guide-v26">
   <main class="client-shell guide-shell">
-    <div class="client-brand"><div class="brand-mark">M</div><div><b>MAKIA</b><span>CLIENT CONNECTION GUIDE</span></div></div>
+    <header class="guide-top">
+      <div class="client-brand"><img src="/static/makia.svg" alt=""><div><b>MAKIA</b><span>VISUAL CONNECTION GUIDE</span></div></div>
+      <span class="guide-version">v{{version}}</span>
+    </header>
 
     <section class="client-card guide-hero">
-      <div class="eyebrow">راهنمای عمومی کاربران</div>
-      <h1>چطور کانفیگ Makia را اضافه کنم؟</h1>
-      <p>نوع دسترسی خودت را انتخاب کن. QR، لینک و فایل کانفیگ شامل اطلاعات اتصال هستند؛ فقط از منبعی که مدیر سرویس برایت فرستاده استفاده کن.</p>
-      <div class="guide-nav">
-        <a href="#xray">Xray</a>
-        <a href="#wireguard">WireGuard</a>
-        <a href="#openvpn">OpenVPN</a>
-        <a href="#ssh">SSH / NPV</a>
+      <div class="guide-hero-copy">
+        <div class="eyebrow">راهنمای قدم‌به‌قدم</div>
+        <h1>اتصال بدون حدس و خطا</h1>
+        <p>نوع دسترسی خودت را انتخاب کن. هر بخش با شکل ساده نشان می‌دهد کدام گزینه را در برنامه Client پیدا کنی. QR، لینک و فایل کانفیگ حاوی Credential هستند و باید خصوصی بمانند.</p>
       </div>
+      <div class="guide-hero-visual" aria-hidden="true">
+        <div class="guide-device"><span></span><i>QR</i><b>CONNECT</b></div>
+        <div class="guide-route">→</div>
+        <div class="guide-server"><img src="/static/makia.svg" alt=""><span>MAKIA</span></div>
+      </div>
+      <nav class="guide-nav">
+        <a href="#xray"><span class="guide-mini-icon xray">X</span>Xray</a>
+        <a href="#wireguard"><span class="guide-mini-icon wg">W</span>WireGuard</a>
+        <a href="#openvpn"><span class="guide-mini-icon ovpn">O</span>OpenVPN</a>
+        <a href="#ssh"><span class="guide-mini-icon ssh">›_</span>SSH / NPV</a>
+      </nav>
     </section>
 
     <section class="client-card guide-section" id="xray">
-      <div class="guide-section-head"><span class="guide-icon">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>Xray</h2></div></div>
-      <div class="guide-method-grid">
-        <article><b>روش ۱ — QR مستقیم</b><ol><li>کلاینت سازگار مثل v2rayNG، Hiddify یا NekoBox را باز کن.</li><li>گزینه Scan QR / Add from QR را بزن.</li><li>QR «اتصال مستقیم» را اسکن کن.</li><li>پروفایل ساخته‌شده را انتخاب و Connect کن.</li></ol></article>
-        <article><b>روش ۲ — Copy Link</b><ol><li>لینک مستقیم ارسالی را Copy کن.</li><li>در برنامه گزینه Import from Clipboard / Add from Clipboard را انتخاب کن.</li><li>پروفایل Import شده را فعال کن.</li></ol></article>
-        <article><b>روش ۳ — Subscription</b><ol><li>Subscription URL یا QR اشتراک را از صفحه کاربر بگیر.</li><li>در بخش Subscription برنامه، Add subscription را بزن.</li><li>URL را Paste یا QR را Scan کن.</li><li>Update/Refresh subscription را اجرا کن.</li></ol></article>
+      <div class="guide-section-head"><span class="guide-icon xray">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>Xray / V2Ray</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="63" y="8" width="114" height="129" rx="15"/><rect x="76" y="27" width="88" height="86" rx="6"/><path d="M93 46h54M93 60h41M92 83h24"/><rect x="121" y="76" width="29" height="25" rx="4"/><path d="m129 83 13 11m0-11-13 11"/></svg><figcaption><b>۱. افزودن پروفایل</b><span>Scan QR یا Import from Clipboard را باز کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="58" y="13" width="124" height="118" rx="13"/><rect x="77" y="33" width="86" height="18" rx="5"/><rect x="77" y="60" width="86" height="18" rx="5"/><rect x="77" y="87" width="86" height="23" rx="6"/><path d="M91 69h43m-43 28h30"/></svg><figcaption><b>۲. پروفایل را انتخاب کن</b><span>نام Makia را پیدا کن و بدون تغییر SNI/Key ذخیره کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="55" y="12" width="130" height="120" rx="14"/><circle cx="120" cy="68" r="29"/><path d="M106 69l9 9 20-23"/><rect x="87" y="107" width="66" height="10" rx="5"/></svg><figcaption><b>۳. Connect</b><span>بعد از سبز شدن اتصال، مرور وب و DNS را تست کن.</span></figcaption></figure>
       </div>
-      <div class="notice">اگر پروفایل REALITY است، SNI / Public Key / Short ID از داخل Share Link منتقل می‌شوند و نباید دستی تغییر داده شوند. برای TLS نیز تاریخ و ساعت دستگاه باید درست باشد.</div>
+      <div class="guide-method-grid">
+        <article><b>QR مستقیم</b><p>در v2rayNG، Hiddify، NekoBox یا Client سازگار گزینه Scan QR را بزن و QR همان کاربر را اسکن کن.</p></article>
+        <article><b>Copy Link</b><p>Share Link را Copy و از Import from Clipboard استفاده کن.</p></article>
+        <article><b>Subscription</b><p>Subscription URL را اضافه کن و سپس Update/Refresh را بزن.</p></article>
+      </div>
+      <div class="notice">REALITY: مقادیر SNI، Public Key، Short ID و Fingerprint داخل لینک هستند. آن‌ها را دستی تغییر نده. Trojan و Hysteria2 در Guided mode به Domain/Certificate معتبر نیاز دارند.</div>
     </section>
 
     <section class="client-card guide-section" id="wireguard">
-      <div class="guide-section-head"><span class="guide-icon">W</span><div><div class="eyebrow">NATIVE VPN PROFILE</div><h2>WireGuard</h2></div></div>
-      <div class="guide-method-grid">
-        <article><b>Android / iPhone</b><ol><li>برنامه رسمی WireGuard را باز کن.</li><li>روی + بزن.</li><li>Create from QR code را انتخاب و QR را اسکن کن، یا Import from file را برای فایل <code>.conf</code> بزن.</li><li>Tunnel را روشن کن.</li></ol></article>
-        <article><b>Windows / macOS</b><ol><li>WireGuard را نصب و باز کن.</li><li>Import tunnel(s) from file را انتخاب کن.</li><li>فایل <code>.conf</code> را انتخاب کن.</li><li>Activate را بزن.</li></ol></article>
+      <div class="guide-section-head"><span class="guide-icon wg">W</span><div><div class="eyebrow">NATIVE VPN · QR · CONFIG</div><h2>WireGuard</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="67" y="10" width="106" height="126" rx="14"/><path d="M88 37h64v64H88zM94 43h15v15H94zm37 0h15v15h-15zM94 80h15v15H94zm28-10h9v9h-9zm18 15h8v9h-8z"/></svg><figcaption><b>۱. QR یا فایل</b><span>در WireGuard روی + بزن و Scan QR / Import File را انتخاب کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="52" y="24" width="136" height="94" rx="10"/><path d="M73 45h94M73 59h64M73 73h83M73 87h53"/><circle cx="163" cy="94" r="12"/><path d="m157 94 5 5 8-11"/></svg><figcaption><b>۲. Tunnel را ذخیره کن</b><span>Endpoint، PublicKey، DNS و MTU را تغییر نده.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><path d="M120 14 73 34v35c0 30 19 50 47 62 28-12 47-32 47-62V34z"/><path d="M98 72h44M120 50v44"/><circle cx="120" cy="72" r="28"/></svg><figcaption><b>۳. Activate</b><span>Handshake و دریافت اینترنت را بررسی کن.</span></figcaption></figure>
       </div>
-      <div class="notice">اگر روی یک شبکه خاص وصل نشد، اول Mobile Data و Wi‑Fi را جداگانه تست کن. Endpoint، Port، MTU یا DNS را خودسرانه تغییر نده؛ تنظیمات سازگاری توسط مدیر سرویس تعیین شده‌اند.</div>
+      <div class="notice">اگر روی یک ISP وصل نشد ولی روی شبکه دیگر وصل شد، تنظیمات را خودسرانه تغییر نده. UDP ممکن است در بعضی مسیرها محدود باشد؛ نتیجه سمت سرور به‌تنهایی وضعیت ISP را ثابت نمی‌کند.</div>
     </section>
 
     <section class="client-card guide-section" id="openvpn">
-      <div class="guide-section-head"><span class="guide-icon">O</span><div><div class="eyebrow">PKI PROFILE</div><h2>OpenVPN</h2></div></div>
-      <div class="guide-method-grid">
-        <article><b>OpenVPN Connect</b><ol><li>فایل <code>.ovpn</code> دریافتی را روی دستگاه ذخیره کن.</li><li>OpenVPN Connect را باز کن.</li><li>Upload File / Import Profile را بزن.</li><li>فایل را انتخاب و Add کن.</li><li>پروفایل را Connect کن.</li></ol></article>
+      <div class="guide-section-head"><span class="guide-icon ovpn">O</span><div><div class="eyebrow">PKI · TCP / UDP · OVPN</div><h2>OpenVPN</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><path d="M74 28h92v91H74z"/><path d="M88 49h63M88 64h47M88 79h56"/><path d="m88 100 13 10 24-27"/></svg><figcaption><b>۱. فایل OVPN</b><span>فایل اختصاصی خودت را روی دستگاه ذخیره کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="58" y="19" width="124" height="106" rx="13"/><circle cx="120" cy="59" r="24"/><path d="M109 79v20h22V79M120 66v18"/><rect x="86" y="104" width="68" height="9" rx="4"/></svg><figcaption><b>۲. Import Profile</b><span>در OpenVPN Connect گزینه Upload File / Import Profile را بزن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="53" y="19" width="134" height="106" rx="14"/><path d="M78 47h84M78 64h84"/><rect x="78" y="82" width="84" height="22" rx="11"/><circle cx="151" cy="93" r="7"/></svg><figcaption><b>۳. Connect</b><span>پروفایل را روشن کن؛ TCP/UDP داخل فایل تنظیم شده است.</span></figcaption></figure>
       </div>
-      <div class="notice">فایل OVPN شامل Certificate و تنظیمات اختصاصی همان کاربر است. اگر Endpoint دامنه است، رکورد A باید مستقیم به VPS اشاره کند و برای سرویس‌های Proxy/CDN معمولی مثل Cloudflare در حالت Proxied مناسب نیست. HTTPS پنل با TLS داخلی OpenVPN متفاوت است.</div>
+      <div class="notice">HTTPS پنل با TLS داخلی OpenVPN فرق دارد. اگر پروفایل Domain دارد، رکورد A باید مستقیم به VPS برسد. بعد از تغییر Server Port/Transport، فایل OVPN را دوباره از مدیر دریافت کن.</div>
     </section>
 
     <section class="client-card guide-section" id="ssh">
-      <div class="guide-section-head"><span class="guide-icon">S</span><div><div class="eyebrow">SSH · NPV TUNNEL / NAPSTERNETV</div><h2>SSH و NPV Tunnel</h2></div></div>
-      <div class="guide-method-grid">
-        <article><b>NPV Tunnel / NapsternetV</b><ol><li>لینک <code>npvt-ssh://</code> را Copy کن یا QR مربوط به NPV را باز کن.</li><li>در نسخه سازگار برنامه، Scan QR یا Import from Clipboard را انتخاب کن.</li><li>پروفایل ساخته‌شده را ذخیره و Connect کن.</li></ol></article>
-        <article><b>OpenSSH</b><ol><li>Server، Port، Username و Password را از فایل credentials بردار.</li><li>در Termux/Linux/macOS از <code>ssh USER@SERVER -p PORT</code> استفاده کن.</li><li>در Windows می‌توانی Windows Terminal / OpenSSH یا یک کلاینت SSH سازگار استفاده کنی.</li></ol></article>
+      <div class="guide-section-head"><span class="guide-icon ssh">›_</span><div><div class="eyebrow">SSH · NPV TUNNEL / NAPSTERNETV</div><h2>SSH / NPV</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="50" y="25" width="140" height="94" rx="9"/><path d="m73 52 16 14-16 14M99 81h38"/><circle cx="166" cy="49" r="8"/></svg><figcaption><b>۱. اطلاعات ورود</b><span>Host، Port، Username و Password را از مدیر بگیر.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="63" y="10" width="114" height="125" rx="14"/><rect x="79" y="31" width="82" height="82" rx="5"/><path d="M89 42h20v20H89zm42 0h20v20h-20zm-42 42h20v20H89zm31-11h10v10h-10zm20 17h10v10h-10z"/></svg><figcaption><b>۲. NPV QR</b><span>Scan QR یا Import from Clipboard را در Client سازگار انتخاب کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><path d="M54 32h132v82H54z"/><path d="m72 56 17 13-17 13M101 82h44"/><circle cx="166" cy="93" r="10"/><path d="m161 93 4 4 7-9"/></svg><figcaption><b>۳. اتصال</b><span>در OpenSSH یا NPV اتصال را اجرا و محدودیت Session را رعایت کن.</span></figcaption></figure>
       </div>
-      <div class="notice">OpenSSH رمز عبور را داخل فایل config ذخیره نمی‌کند. Password/PIN را جداگانه نگه دار. اگر NPV Import در نسخه برنامه تو شناخته نشد، از اطلاعات SSH به‌صورت دستی استفاده کن.</div>
+      <div class="notice">OpenSSH رمز را داخل config استاندارد ذخیره نمی‌کند. Credential را خصوصی نگه دار و اگر Import اختصاصی Client شناسایی نشد، اطلاعات SSH را دستی وارد کن.</div>
     </section>
 
     <section class="client-card guide-section" id="troubleshooting">
-      <div class="eyebrow">TROUBLESHOOTING</div>
-      <h2>اگر وصل نشد چه کار کنم؟</h2>
+      <div class="eyebrow">TROUBLESHOOTING</div><h2>اگر وصل نشد</h2>
       <div class="guide-method-grid">
-        <article><b>۱. ابتدا ساده‌ترین موارد</b><p>اینترنت دستگاه، تاریخ/ساعت، فعال نبودن VPN دیگر و درست بودن QR/Link را بررسی کن.</p></article>
-        <article><b>۲. شبکه دیگری تست کن</b><p>Wi‑Fi و Mobile Data را جداگانه امتحان کن. بعضی شبکه‌ها یک پروتکل خاص را محدود می‌کنند.</p></article>
-        <article><b>۳. تنظیمات را دستکاری نکن</b><p>UUID، Password، Public Key، SNI، Port و Endpoint را تغییر نده مگر مدیر سرویس گفته باشد.</p></article>
-        <article><b>۴. برای پشتیبانی</b><p>نام پروفایل، نوع برنامه، سیستم‌عامل و متن خطا را برای مدیر ارسال کن؛ Credential کامل را در گروه عمومی نفرست.</p></article>
+        <article><b>اینترنت و ساعت</b><p>اتصال پایه، تاریخ/ساعت صحیح و خاموش بودن VPN دیگر را بررسی کن.</p></article>
+        <article><b>شبکه دیگر</b><p>Mobile Data و Wi‑Fi را جداگانه امتحان کن؛ محدودیت مسیرها یکسان نیست.</p></article>
+        <article><b>کانفیگ را دستکاری نکن</b><p>UUID، Key، SNI، Port، Endpoint، MTU و DNS را فقط با دستور مدیر تغییر بده.</p></article>
+        <article><b>گزارش دقیق</b><p>نام Profile، سیستم‌عامل، Client app/version و متن خطا را ارسال کن؛ Credential کامل را عمومی نفرست.</p></article>
       </div>
     </section>
-
     <footer>Makia VPS Manager · v{{version}}</footer>
   </main>
 </body>
