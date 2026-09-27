@@ -46,42 +46,48 @@ async function ensureSessionContext(force=false){
   return window.__sessionContext;
 }
 async function dashboard(renderToken=window.__viewRenderToken){
-  title.textContent='Overview';setPageContext('SYSTEMD CONTROL');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی وضعیت سرور…</b></div>';
+  title.textContent='داشبورد';setPageContext('نمای کلی و آمار لحظه‌ای');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال دریافت وضعیت سرور…</b></div>';
   const [d,hist,accessRows,stack]=await Promise.all([
     api('/api/overview'),api('/api/metrics/history?hours=24'),api('/api/access'),api('/api/protocols')
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='dashboard')return;
-  const m=d.metrics,score=healthScore(d);
-  const healthy=(d.services||[]).filter(x=>x.active).length,total=(d.services||[]).length;
+  const m=d.metrics||{},services=d.services||[];
+  const healthy=services.filter(x=>x.active).length,total=services.length;
   const activeAccess=accessRows.filter(x=>x.status==='active').length;
   const networkTotal=Number(m.network?.sent||0)+Number(m.network?.recv||0);
-  const recent=(d.sessions||[]).slice(0,6);
-  const ring=(label,value,cls='')=>'<div class="glass-ring '+cls+'" style="--ring:'+pct(value)+'"><div><b>'+Math.round(Number(value)||0)+'%</b><span>'+label+'</span></div></div>';
-  const serviceCard=s=>'<button class="glass-service-card" data-action="nav" data-view="services"><span class="service-glyph">'+htmlEsc((s.label||s.name||'?').slice(0,1))+'</span><div><b>'+htmlEsc(s.label)+'</b><small>'+htmlEsc(s.name)+'</small></div><em class="'+(s.active?'running':'attention')+'">'+(s.active?'Running':'Attention')+'</em></button>';
+  const counts={
+    xray:accessRows.filter(x=>x.kind==='xray').length,
+    ssh:accessRows.filter(x=>x.kind==='ssh').length,
+    wireguard:accessRows.filter(x=>x.kind==='wireguard').length,
+    openvpn:accessRows.filter(x=>x.kind==='openvpn').length
+  };
+  const countTotal=Math.max(1,counts.xray+counts.ssh+counts.wireguard+counts.openvpn);
+  const p={xray:counts.xray/countTotal*100,ssh:counts.ssh/countTotal*100,wg:counts.wireguard/countTotal*100,ovpn:counts.openvpn/countTotal*100};
+  const svc=services.slice(0,6).map(s=>'<div class="neon-service-pill"><i class="'+(s.active?'on':'')+'"></i><div><b>'+htmlEsc(s.label||s.name)+'</b><span>'+(s.active?'در حال اجرا':'نیاز به بررسی')+'</span></div></div>').join('');
   content.innerHTML=[
-    '<section class="glass-status-hero">',
-      '<div class="glass-status-score"><b>'+healthy+'/'+total+'</b><span>RUNNING</span></div>',
-      '<div class="glass-status-copy"><div class="eyebrow">ALLOWLISTED SERVICES</div><h2>کنترل و سلامت سرور</h2><p>وضعیت زنده سرویس‌ها، منابع، ترافیک و دسترسی‌ها در یک نمای شیشه‌ای عملیاتی.</p></div>',
-      '<div class="glass-status-actions"><span class="access-tier-chip">OPEN ACCESS</span><button class="primary action-lg" data-action="wizard-open">＋ ساخت دسترسی</button><button class="ghost action-lg" data-action="self-test">Self-Test</button></div>',
-    '</section>',
-    '<section class="glass-summary-grid">',
-      '<article><span class="glass-summary-icon">U</span><div><small>کاربران فعال</small><b>'+activeAccess+'</b><em>از '+accessRows.length+' دسترسی</em></div></article>',
-      '<article><span class="glass-summary-icon green">↗</span><div><small>ترافیک ثبت‌شده</small><b>'+fmtBytes(networkTotal)+'</b><em>Sent + Received</em></div></article>',
-      '<article><span class="glass-summary-icon violet">S</span><div><small>سرویس‌های فعال</small><b>'+healthy+' / '+total+'</b><em>Running</em></div></article>',
-      '<article><span class="glass-summary-icon amber">◇</span><div><small>وضعیت سرور</small><b>'+score+'%</b><em>Uptime '+fmtUp(m.uptime_seconds)+'</em></div></article>',
-    '</section>',
-    '<section class="glass-main-grid">',
-      '<div class="panel glass-services-panel"><div class="panel-head"><div><h3>وضعیت سرویس‌ها</h3><span>LIVE SYSTEMD STATE</span></div><button class="ghost" data-action="nav" data-view="services">مدیریت</button></div><div class="glass-service-grid">'+(d.services||[]).map(serviceCard).join('')+'</div></div>',
-      '<div class="panel glass-resource-panel"><div class="panel-head"><div><h3>مصرف منابع سرور</h3><span>REAL-TIME</span></div></div><div class="glass-rings">'+ring('CPU',m.cpu,'cyan')+ring('RAM',m.memory,'violet')+ring('Disk',m.disk,'green')+'</div><div class="glass-network-head"><span>ترافیک شبکه</span><b>'+fmtBytes(networkTotal)+'</b></div>'+svgHistory(hist)+'</div>',
-    '</section>',
-    '<section class="glass-secondary-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>Protocol Workspaces</h3><span>'+accessRows.length+' MANAGED</span></div><button class="ghost" data-action="nav" data-view="access">All clients</button></div><div class="glass-access-strip"><button data-action="nav" data-view="ssh"><b>'+accessRows.filter(x=>x.kind==='ssh').length+'</b><span>SSH / NPV ↗</span></button><button data-action="nav" data-view="xray"><b>'+accessRows.filter(x=>x.kind==='xray').length+'</b><span>Xray / V2Ray ↗</span></button><button data-action="nav" data-view="wireguard"><b>'+accessRows.filter(x=>x.kind==='wireguard').length+'</b><span>WireGuard ↗</span></button><button data-action="nav" data-view="openvpn"><b>'+accessRows.filter(x=>x.kind==='openvpn').length+'</b><span>OpenVPN ↗</span></button></div></div>',
-      '<div class="panel"><div class="panel-head"><div><h3>Live Sessions</h3><span>'+d.online_sessions+' ACTIVE</span></div><button class="ghost" data-action="nav" data-view="sessions">View all</button></div><div class="session-cards">'+(recent.length?recent.map(x=>'<div><span class="avatar-mini">'+htmlEsc((x.username||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(x.username)+'</b><small>'+htmlEsc(x.remote||'local')+'</small></div><time>'+htmlEsc(x.since||'')+'</time></div>').join(''):'<div class="empty compact">نشست فعالی وجود ندارد.</div>')+'</div></div>',
-    '</section>'
+    '<div class="neon-dashboard">',
+      '<section class="neon-stat-grid">',
+        '<article class="neon-stat-card blue"><span class="neon-stat-icon">♙</span><div><small>کاربران فعال</small><b>'+activeAccess+'</b><em>از '+accessRows.length+' کاربر ثبت‌شده</em></div></article>',
+        '<article class="neon-stat-card purple"><span class="neon-stat-icon">◉</span><div><small>حجم ترافیک ثبت‌شده</small><b>'+fmtBytes(networkTotal)+'</b><em>ارسال + دریافت</em></div></article>',
+        '<article class="neon-stat-card cyan"><span class="neon-stat-icon">〽</span><div><small>ترافیک لحظه‌ای</small><b>'+Number(m.network?.rx_mbps||m.network?.mbps||0).toFixed(1)+' Mbps</b><em>Network runtime</em></div></article>',
+        '<article class="neon-stat-card green"><span class="neon-stat-icon">▣</span><div><small>سرویس‌های فعال</small><b>'+healthy+'/'+total+'</b><em>'+(healthy===total?'همه سرویس‌ها سالم':'برخی سرویس‌ها نیاز به بررسی دارند')+'</em></div></article>',
+      '</section>',
+      '<section class="neon-dashboard-main">',
+        '<div class="panel neon-chart-panel"><div class="panel-head"><div><h3>نمودار وضعیت سرور</h3><span>۲۴ ساعت گذشته</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div>'+svgHistory(hist)+'</div>',
+        '<div class="panel neon-donut-panel"><div class="panel-head"><div><h3>توزیع کاربران بر اساس پروتکل</h3><span>'+accessRows.length+' USER</span></div></div><div class="neon-donut-wrap">',
+          '<div class="protocol-donut" style="--xray:'+p.xray.toFixed(2)+';--ssh:'+p.ssh.toFixed(2)+';--wg:'+p.wg.toFixed(2)+'"><div><b>'+accessRows.length+'</b><span>کاربر</span></div></div>',
+          '<div class="protocol-legend">',
+            '<div><i style="background:#168cff"></i><span>V2Ray / Xray</span><b>'+counts.xray+'</b></div>',
+            '<div><i style="background:#7743f5"></i><span>SSH</span><b>'+counts.ssh+'</b></div>',
+            '<div><i style="background:#17d996"></i><span>WireGuard</span><b>'+counts.wireguard+'</b></div>',
+            '<div><i style="background:#ff4c62"></i><span>OpenVPN</span><b>'+counts.openvpn+'</b></div>',
+          '</div></div></div>',
+      '</section>',
+      '<section class="panel"><div class="panel-head"><div><h3>وضعیت سرویس‌های اصلی</h3><span>LIVE SYSTEMD STATUS</span></div><button class="ghost" data-action="nav" data-view="services">مدیریت سرویس‌ها</button></div><div class="neon-service-strip">'+svc+'</div></section>',
+    '</div>'
   ].join('');
 }
-
 let accountCache=[];
 function setExpiryPreset(id,days){const el=document.getElementById(id);if(!el)return;if(Number(days)===0){el.value='';return}const base=new Date();base.setHours(12,0,0,0);base.setDate(base.getDate()+Number(days));el.value=base.toISOString().slice(0,10)}
 function shiftExpiry(id,days){const el=document.getElementById(id);if(!el)return;const today=new Date();today.setHours(12,0,0,0);let base=today;if(el.value){const current=new Date(el.value+'T12:00:00');if(!Number.isNaN(current.getTime())&&current>today)base=current}base.setDate(base.getDate()+Number(days));el.value=base.toISOString().slice(0,10)}
