@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops
+from . import system_ops, protocol_ops, protocol_modes, panel_ops, access_ops
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
@@ -147,7 +147,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","ikev2":"ikev2"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -744,6 +744,81 @@ def security(request:Request):
 def protocols(request:Request):
     require_user(request)
     return protocol_ops.catalog()
+
+@app.get("/api/protocols/modes")
+def protocol_modes_get(request:Request):
+    require_user(request)
+    return protocol_modes.connection_modes()
+
+class IKEv2Configure(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    pool:str=Field(default="10.99.0.0/24",min_length=9,max_length=32)
+    dns_servers:list[str]=Field(default_factory=lambda:["1.1.1.1","8.8.8.8"])
+
+@app.post("/api/protocols/modes/ikev2/configure")
+def ikev2_configure(payload:IKEv2Configure,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_modes.configure_ikev2(payload.domain,payload.pool,payload.dns_servers)
+    except protocol_modes.ProtocolModeError as e:
+        raise HTTPException(400,str(e))
+    audit(actor,"ikev2_configure","ikev2",f"domain={payload.domain}; pool={payload.pool}",ip=ip(request))
+    return result
+
+class IKEv2UserCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+@app.post("/api/protocols/modes/ikev2/users")
+def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_modes.create_ikev2_user(payload.name,payload.password or None)
+        delivery=access_ops.ikev2_payload(result["name"],result["server"],result["password"])
+        artifact_id=artifact_save("ikev2",result["name"],result["name"],"ikev2",delivery,{
+            "endpoint":result["server"],"remote_id":result["remote_id"],"authentication":result["authentication"],
+        })
+    except protocol_modes.ProtocolModeError as e:
+        raise HTTPException(400,str(e))
+    result["artifact_id"]=artifact_id
+    audit(actor,"ikev2_user_create",result["name"],ip=ip(request))
+    return result
+
+@app.delete("/api/protocols/modes/ikev2/users/{name}")
+def ikev2_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_modes.remove_ikev2_user(name)
+    except protocol_modes.ProtocolModeError as e:
+        raise HTTPException(400,str(e))
+    delete_access_artifact_by_key("ikev2",name)
+    audit(actor,"ikev2_user_delete",name,ip=ip(request))
+    return result
+
+class StealthConfigure(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    port:int=Field(default=8443,ge=1,le=65535)
+
+@app.post("/api/protocols/modes/stealth/configure")
+def stealth_configure(payload:StealthConfigure,request:Request):
+    actor=require_mutation(request)
+    try: result=protocol_modes.configure_stealth(payload.domain,payload.port)
+    except protocol_modes.ProtocolModeError as e: raise HTTPException(400,str(e))
+    audit(actor,"stealth_configure","stealth",f"{payload.domain}:{payload.port}",ip=ip(request))
+    return result
+
+class WStunnelConfigure(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    port:int=Field(default=9443,ge=1,le=65535)
+    path_prefix:str=Field(default="",max_length=96)
+
+@app.post("/api/protocols/modes/wstunnel/configure")
+def wstunnel_configure(payload:WStunnelConfigure,request:Request):
+    actor=require_mutation(request)
+    try: result=protocol_modes.configure_wstunnel(payload.domain,payload.port,payload.path_prefix or None)
+    except protocol_modes.ProtocolModeError as e: raise HTTPException(400,str(e))
+    audit(actor,"wstunnel_configure","wstunnel",f"{payload.domain}:{payload.port}",ip=ip(request))
+    return result
 
 class XrayQuickInbound(BaseModel):
     protocol:str
@@ -1357,7 +1432,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn"}:
+    if kind in {"ssh","xray","wireguard","openvpn","ikev2"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -1435,7 +1510,18 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
+    for art in artifacts.values():
+        if art.get("kind")!="ikev2":
+            continue
+        key=str(art.get("external_key") or "")
+        if not key: continue
+        rows.append({
+            "id":f"ikev2:{key}","kind":"ikev2","key":key,"name":art.get("display_name") or key,"protocol":"ikev2",
+            "status":"active","online":None,"device_limit":1,"can_export":True,
+            "artifact_id":art.get("id"),"legacy":False,"endpoint":saved_endpoint(art)
+        })
+
+    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3,"ikev2":4}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -1594,9 +1680,12 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="ikev2":
+            protocol_modes.remove_ikev2_user(key)
+            delete_access_artifact_by_key("ikev2",key)
         else:
             raise HTTPException(404,"unsupported access kind")
-    except (system_ops.OperationError,protocol_ops.ProtocolError) as e:
+    except (system_ops.OperationError,protocol_ops.ProtocolError,protocol_modes.ProtocolModeError) as e:
         raise HTTPException(400,str(e))
     audit(actor,"access_revoke",f"{kind}:{key}",ip=ip(request))
     return {"ok":True}
