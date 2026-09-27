@@ -237,7 +237,7 @@ def main():
             page.locator("#wizEndpoint").fill("8.8.8.8")
             page.locator('[data-action="wizard-next"]').click()
             assert "VMESS" in page.locator(".recommended-profile").text_content()
-            assert "TCP" in page.locator(".recommended-profile").text_content()
+            assert "WS" in page.locator(".recommended-profile").text_content()
             assert "NONE" in page.locator(".recommended-profile").text_content()
             assert page.locator("#wizSecurity").count()==0
             page.locator('[data-action="wizard-xray-advanced"]').click()
