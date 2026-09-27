@@ -82,3 +82,22 @@ def test_ssh_domain_rejects_aaaa_pointing_away_from_vps(monkeypatch):
     monkeypatch.setattr(protocol_ops.socket,"getaddrinfo",resolve)
     with pytest.raises(ProtocolError,match="AAAA"):
         validate_endpoint_selection("vpn.example.com","domain",direct=True,check_aaaa=True)
+
+
+def test_port_collision_check_is_transport_aware(monkeypatch):
+    class FakeSocket:
+        def __init__(self, kind):
+            self.kind=kind
+        def bind(self, address):
+            if self.kind==protocol_ops.socket.SOCK_DGRAM:
+                raise OSError("udp occupied")
+        def close(self):
+            pass
+    monkeypatch.setattr(protocol_ops.socket,"socket",lambda family,kind:FakeSocket(kind))
+    assert protocol_ops._port_transport_in_use(443,"udp") is True
+    assert protocol_ops._port_transport_in_use(443,"tcp") is False
+
+
+def test_invalid_port_transport_is_rejected():
+    with pytest.raises(ProtocolError, match="transport"):
+        protocol_ops._port_transport_in_use(443,"sctp")

@@ -587,3 +587,149 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 html[dir="ltr"] .wg-peer-endpoint b{text-align:left}
 @media(max-width:780px){html[dir="ltr"] .sidebar,html[dir="ltr"] body[data-theme="glass"] .sidebar{left:0;right:auto;transform:translateX(-105%)}html[dir="ltr"] body.menu-open .sidebar{transform:translateX(0)}html[dir="ltr"] .workspace,html[dir="ltr"] body[data-theme="glass"] .workspace{margin:0}}
 @media(max-width:780px){.sidebar .sidebar-create b,.sidebar .sidebar-version{display:block}.sidebar .sidebar-create{justify-content:center}.sidebar .node-live{display:inline-block}}
+
+
+/* v0.21 Control Center — modular operations visual system */
+body[data-theme="glass"]{
+  --bg:#060a11;--panel:#0c1420;--panel2:#111c2b;--line:#213149;
+  --text:#f5f8fc;--muted:#91a5ba;--cyan:#44c8ff;--blue:#5b7cff;
+  --violet:#9270ff;--green:#35d49b;--amber:#f4bd61;--red:#ff6f82;
+  --shadow:0 18px 46px rgba(0,0,0,.34);
+  background:
+    radial-gradient(circle at 88% -12%,rgba(42,103,176,.22),transparent 34%),
+    radial-gradient(circle at 12% 110%,rgba(78,48,142,.16),transparent 30%),
+    linear-gradient(180deg,#08101a 0%,#060b13 48%,#070c14 100%);
+}
+body[data-theme="glass"] .noise{opacity:.018}
+body[data-theme="glass"] .ambient{opacity:.12;filter:blur(90px)}
+body[data-theme="glass"] .sidebar{
+  right:14px;top:14px;bottom:14px;width:272px;padding:18px 12px;
+  border:1px solid #1d2d42;border-radius:18px;
+  background:linear-gradient(180deg,rgba(10,18,30,.98),rgba(7,13,23,.985));
+  backdrop-filter:blur(20px);box-shadow:0 24px 70px rgba(0,0,0,.42);
+}
+body[data-theme="glass"] .brand{padding:2px 9px 15px;border-bottom:1px solid rgba(95,125,160,.14)}
+body[data-theme="glass"] .brand-mark{
+  width:42px;height:42px;border-radius:12px;color:#f7fbff;
+  background:linear-gradient(145deg,#2678ff,#695cf4);
+  box-shadow:0 10px 28px rgba(46,115,255,.25)
+}
+body[data-theme="glass"] .brand span{color:#6da8ff}
+body[data-theme="glass"] .server-pill{
+  margin:14px 2px 10px;border-color:#20344d;border-radius:12px;
+  background:#0d1928;box-shadow:none
+}
+body[data-theme="glass"] .sidebar-create{
+  min-height:43px;margin:0 2px 6px;border-radius:11px!important;
+  border:1px solid #315eae!important;
+  background:linear-gradient(135deg,#2f72ee,#645bf0)!important;
+  color:#fff!important;box-shadow:0 10px 28px rgba(50,98,224,.22)!important
+}
+body[data-theme="glass"] .nav-label{
+  margin:14px 10px 6px;color:#607891;font-size:9px;letter-spacing:1.7px
+}
+body[data-theme="glass"] .sidebar nav{gap:3px}
+body[data-theme="glass"] .sidebar nav button{
+  min-height:39px;padding:9px 11px;border-radius:9px;color:#9fb1c5;font-size:12px
+}
+body[data-theme="glass"] .sidebar nav button span{color:#7790ad}
+body[data-theme="glass"] .sidebar nav button:hover{
+  color:#eff6ff;background:#101e30;border-color:#223a57
+}
+body[data-theme="glass"] .sidebar nav button.active{
+  color:#fff;border-color:#315992;background:linear-gradient(90deg,#14243a,#172e52);
+  box-shadow:inset -3px 0 0 #4dbfff,0 7px 22px rgba(0,0,0,.18)
+}
+body[data-theme="glass"] .workspace{margin-right:304px;padding:18px 26px 42px}
+body[data-theme="glass"] .topbar{
+  position:sticky;top:0;z-index:4;margin:0 -4px 18px;padding:10px 4px 13px;
+  background:linear-gradient(180deg,rgba(6,11,19,.96) 72%,rgba(6,11,19,0));
+  backdrop-filter:blur(16px)
+}
+body[data-theme="glass"] .topbar h1{font-size:26px;letter-spacing:-.4px}
+body[data-theme="glass"] .eyebrow{color:#68b9ff}
+body[data-theme="glass"] .environment-chip,
+body[data-theme="glass"] .command-trigger,
+body[data-theme="glass"] .live-chip,
+body[data-theme="glass"] .icon-btn{
+  border-color:#233750;background:#0d1724;box-shadow:none
+}
+body[data-theme="glass"] .live-chip{color:#83e8bf}
+body[data-theme="glass"] .panel,
+body[data-theme="glass"] .access-profile,
+body[data-theme="glass"] .launch-card,
+body[data-theme="glass"] .engine-card,
+body[data-theme="glass"] .settings-card-v2{
+  border-color:#203149!important;
+  background:linear-gradient(180deg,rgba(15,25,39,.96),rgba(10,18,29,.96))!important;
+  border-radius:14px!important;box-shadow:0 12px 34px rgba(0,0,0,.24)!important
+}
+body[data-theme="glass"] .glass-status-hero,
+body[data-theme="glass"] .access-command,
+body[data-theme="glass"] .protocol-command,
+body[data-theme="glass"] .wg-workspace-hero{
+  border:1px solid #28476d!important;border-radius:16px!important;
+  background:
+    radial-gradient(circle at 88% 10%,rgba(74,123,255,.18),transparent 30%),
+    linear-gradient(125deg,#102035,#101a2a 58%,#151b34)!important;
+  box-shadow:0 18px 44px rgba(0,0,0,.28)!important
+}
+body[data-theme="glass"] .glass-status-copy p,
+body[data-theme="glass"] .access-command p,
+body[data-theme="glass"] .protocol-command p,
+body[data-theme="glass"] .wg-workspace-hero p{color:#a9bed2}
+body[data-theme="glass"] .glass-summary-grid>article,
+body[data-theme="glass"] .glass-service-card,
+body[data-theme="glass"] .wg-workspace-metrics>div{
+  border:1px solid #223851!important;border-radius:12px!important;
+  background:#0f1d2d!important;box-shadow:none!important
+}
+body[data-theme="glass"] .glass-summary-grid>article:hover,
+body[data-theme="glass"] .glass-service-card:hover{
+  border-color:#35618f!important;background:#13243a!important;transform:translateY(-1px)
+}
+body[data-theme="glass"] .glass-access-strip>button{
+  border:1px solid #27476b;background:#10233a;color:#eaf5ff;border-radius:10px
+}
+body[data-theme="glass"] .glass-access-strip>button:hover{background:#173254;border-color:#3975ad}
+body[data-theme="glass"] .primary{
+  border-color:#4775ff!important;background:linear-gradient(135deg,#338bff,#645cf2)!important;
+  color:#fff!important;box-shadow:0 8px 22px rgba(57,99,230,.20)!important
+}
+body[data-theme="glass"] .primary:hover{filter:brightness(1.08)}
+body[data-theme="glass"] .ghost{
+  border-color:#2b405b;background:#101a28;color:#dce9f7
+}
+body[data-theme="glass"] .soft{border-color:#30445d;background:#131e2d;color:#b8c9da}
+body[data-theme="glass"] .status-chip.ok{border-color:#245d48;background:#0d251e;color:#74e4b5}
+body[data-theme="glass"] .status-chip.warn{border-color:#654e26;background:#251d0d;color:#f4c879}
+body[data-theme="glass"] .status-chip.bad{border-color:#653441;background:#271218;color:#ff9cab}
+body[data-theme="glass"] .wg-workspace-status{
+  border-color:#31557f;background:#0d1c2c;color:#eef7ff
+}
+body[data-theme="glass"] .wg-workspace-metrics b{color:#eef7ff}
+body[data-theme="glass"] .wg-workspace-peer,
+body[data-theme="glass"] .protocol-client-row,
+body[data-theme="glass"] .engine-inbound{
+  border-color:#233952;background:#0d1a29;border-radius:11px
+}
+body[data-theme="glass"] .wg-workspace-help{
+  border-color:#29445f;background:#0f2030;border-radius:12px
+}
+body[data-theme="glass"] .modal{
+  border-color:#28405e;background:#09131f;border-radius:16px;
+  box-shadow:0 32px 100px rgba(0,0,0,.58)
+}
+body[data-theme="glass"] .form-grid input,
+body[data-theme="glass"] .form-grid textarea,
+body[data-theme="glass"] .form-grid select{
+  border-color:#263b55;background:#07111c
+}
+body[data-theme="glass"] .sidebar-footer{border-color:#1c2a3c}
+body[data-theme="glass"] .sidebar nav::-webkit-scrollbar-thumb{
+  background:#2e5277;background-clip:padding-box
+}
+@media(max-width:780px){
+  body[data-theme="glass"] .sidebar{right:0;top:0;bottom:0;border-radius:0}
+  body[data-theme="glass"] .workspace{margin:0;padding:12px 14px 30px}
+}

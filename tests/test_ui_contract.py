@@ -73,3 +73,20 @@ def test_single_access_owner_in_primary_navigation():
     assert 'data-view="access"' in SHELL
     assert 'data-view="accounts"' not in SHELL
     assert "['SSH Accounts','accounts']" not in JS
+
+
+def test_primary_navigation_has_dedicated_protocol_workspaces():
+    for view in ["ssh","xray","wireguard","openvpn","protocols"]:
+        assert f'data-view="{view}"' in SHELL
+    assert "xrayWorkspace" in JS
+    assert "openvpnWorkspace" in JS
+    assert "ssh:accounts" in JS
+
+
+def test_xray_workspace_exposes_real_policy_controls():
+    for marker in ["QUOTA · EXPIRY · RESET · IP LIMIT · STATUS","protocolClientRow","resetProtocolTraffic"]:
+        assert marker in JS
+
+
+def test_openvpn_workspace_does_not_fake_per_client_quota():
+    assert "Quota/Reset per-client برای OpenVPN" in JS

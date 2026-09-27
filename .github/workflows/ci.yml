@@ -72,6 +72,7 @@ jobs:
           test -f docs/UAT-0.18.1.md
           test -f docs/UAT-0.19.0.md
           test -f docs/UAT-0.20.0.md
+          test -f docs/UAT-0.21.0-RC1.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f scripts/configure-owner.py
           test -f README_FA.md
@@ -152,8 +153,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.20.0"' app/config.py
-          grep -q '^0.20.0$' VERSION
+          grep -q 'VERSION = "0.21.0-rc1"' app/config.py
+          grep -q '^0.21.0-rc1$' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py

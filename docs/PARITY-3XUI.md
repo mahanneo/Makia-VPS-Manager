@@ -8,7 +8,7 @@ Legend:
 - **Foundation**: data/control plane exists but full parity is not complete.
 - **Pending sidecar**: requires a separately managed runtime; Makia does not show it as working yet.
 
-| Capability | Makia v0.9.0-rc1 |
+| Capability | Makia v0.21.0-rc1 |
 |---|---|
 | VLESS | Native |
 | VMess | Native |
@@ -57,6 +57,12 @@ Legend:
 | Clash/JSON subscription auto-negotiation | Pending |
 | Telegram/Discord bot | Pending |
 | PostgreSQL storage | Pending |
+
+## UI / operations note for v0.21.0-rc1
+
+Daily operation is no longer concentrated in one provisioning page. SSH / NPV, Xray / V2Ray, WireGuard and OpenVPN have dedicated workspaces, while All Clients remains the cross-protocol directory. The Protocol Hub owns engine setup, diagnostics, advanced configuration and port allocation visibility.
+
+Port preflight is transport-aware: TCP and UDP may reuse the same numeric port when their listeners are compatible, while same-transport collisions are blocked before service bootstrap or Xray mutation.
 
 ## Release rule
 

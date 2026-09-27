@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.21.0-rc1] - 2026-09-27
+
+### Protocol workspace rearchitecture
+- Split the primary navigation into dedicated SSH / NPV, Xray / V2Ray, WireGuard and OpenVPN workspaces instead of forcing provisioning and daily management into one page.
+- Kept All Clients as a cross-protocol directory while each protocol workspace owns its operational actions, status and creation flow.
+- Xray workspace exposes real per-client quota, expiry, reset cycle, IP/device visibility, active/disabled state, subscriptions, inbound state, diagnostics and advanced configuration.
+- SSH workspace keeps expiry, session and device/IP policy separate and does not claim traffic quota enforcement where host accounting is unavailable.
+- WireGuard remains a peer workspace with persistent enable/disable, handshakes, RX/TX traffic and native/QR delivery.
+- OpenVPN now has a dedicated PKI/client workspace and explicitly avoids presenting fake per-client quota/reset controls until reliable accounting is implemented.
+
+### Port isolation
+- Added transport-aware port collision checks. TCP and UDP reservations are evaluated independently, so HTTPS on TCP/443 may coexist with WireGuard on UDP/443.
+- WireGuard bootstrap now rejects an already occupied UDP port.
+- OpenVPN bootstrap rejects a collision on its selected TCP or UDP transport.
+- Xray inbound and tunnel creation check only the transports they actually bind, preventing both accidental collisions and unnecessary cross-transport blocking.
+- WireGuard status now exposes its configured listen port for the Protocol Hub port allocation view.
+
+### Release status
+- Release candidate. Automated CI plus real-host update/rollback and external client connectivity UAT are required before promotion to Stable.
+
 ## [0.20.0] - 2026-09-27
 
 ### Open access
