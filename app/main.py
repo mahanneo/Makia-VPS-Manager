@@ -1232,6 +1232,8 @@ def openvpn_configure(payload:OpenVPNConfigure,request:Request):
         audit(actor,"openvpn_configure_failed","openvpn",str(e)[:500],ip=ip(request))
         raise HTTPException(400,str(e))
     runtime=result.get("runtime") or {}
+    set_setting("default_openvpn_port",int(runtime.get("port") or payload.port))
+    set_setting("default_openvpn_proto","tcp" if str(runtime.get("proto") or payload.proto).startswith("tcp") else "udp")
     audit(actor,"openvpn_configure","openvpn",f"port={runtime.get('port')}; proto={runtime.get('proto')}",ip=ip(request))
     return result
 
