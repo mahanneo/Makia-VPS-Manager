@@ -455,61 +455,16 @@ body[data-theme="glass"] .login-card input{background:rgba(1,14,29,.58)!importan
 body[data-theme="glass"] .primary-btn{background:linear-gradient(105deg,#48e2ff,#648cff 57%,#a56dff);box-shadow:0 12px 34px rgba(64,174,255,.28)}
 
 
-/* v0.15 licensing, support and locked-state surfaces ---------------------- */
-.license-tier-chip{
-  display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 11px;
-  border:1px solid rgba(126,184,231,.28);border-radius:999px;font-size:9px;font-weight:900;letter-spacing:1px;
-  background:rgba(4,20,37,.46);color:#9bb4ca;white-space:nowrap
-}
-.license-tier-chip.full{color:#6ff2c0;border-color:rgba(75,232,177,.42);background:rgba(14,79,63,.34);box-shadow:0 0 20px rgba(58,223,171,.12)}
-.license-tier-chip.community{color:#ffd08a;border-color:rgba(255,185,94,.40);background:rgba(96,60,15,.28)}
-.launch-card.license-locked{opacity:.88;border-style:dashed;background:linear-gradient(145deg,rgba(19,29,48,.55),rgba(34,24,52,.42))}
-.launch-card.license-locked .access-protocol-icon{filter:grayscale(.65);opacity:.7}
-.launch-action.locked{border-color:rgba(255,186,98,.40);background:rgba(92,59,17,.36);color:#ffd18a}
-.license-lock-panel{
-  min-height:300px;display:grid;grid-template-columns:82px minmax(0,1fr) auto;align-items:center;gap:22px;
-  border-color:rgba(255,185,92,.30)!important;background:linear-gradient(135deg,rgba(66,45,18,.38),rgba(30,24,63,.45))!important
-}
-.license-lock-icon{
-  width:78px;height:78px;border-radius:24px;display:grid;place-items:center;font-size:30px;font-weight:900;
-  border:1px solid rgba(255,199,115,.42);background:linear-gradient(135deg,rgba(179,108,25,.66),rgba(103,65,180,.56));
-  box-shadow:0 0 32px rgba(255,178,76,.14)
-}
-.license-lock-panel h2{margin:7px 0}.license-lock-panel p{color:var(--muted);line-height:1.9;max-width:760px}
-.license-hero{
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;align-items:center;margin-bottom:14px;padding:22px;
-  border:1px solid rgba(90,190,246,.32);border-radius:21px;
-  background:linear-gradient(135deg,rgba(11,51,84,.56),rgba(47,31,91,.46));backdrop-filter:blur(24px);
-  box-shadow:0 20px 58px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.06)
-}
-.license-hero.full{border-color:rgba(57,229,174,.36);background:linear-gradient(135deg,rgba(8,75,62,.42),rgba(31,38,94,.50))}
-.license-hero.community{border-color:rgba(244,177,79,.34)}
-.license-hero h2{font-size:25px;margin:6px 0}.license-hero p{margin:0;color:var(--muted);line-height:1.8}
-.license-install-id{min-width:260px;padding:15px;border:1px solid rgba(87,193,246,.28);border-radius:15px;background:rgba(3,20,36,.52)}
-.license-install-id span{display:block;color:#7090aa;font-size:8px;letter-spacing:1.5px}.license-install-id b{display:block;margin:7px 0 10px;color:#99ecff;font:700 14px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;direction:ltr;text-align:left}
-.license-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-.license-facts{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
-.license-facts>div{padding:12px;border:1px solid rgba(95,181,233,.22);border-radius:12px;background:rgba(5,22,39,.43)}
-.license-facts span{display:block;color:#7996b0;font-size:8px}.license-facts b{display:block;margin-top:4px;font-size:11px;word-break:break-word}
-.license-features{margin-top:13px}
+/* Access and support surfaces */
+.access-tier-chip{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 11px;border:1px solid rgba(75,232,177,.42);border-radius:999px;font-size:9px;font-weight:900;letter-spacing:1px;color:#6ff2c0;background:rgba(14,79,63,.34);white-space:nowrap}
+.support-hero{margin-bottom:14px;padding:22px;border:1px solid rgba(57,229,174,.36);border-radius:21px;background:linear-gradient(135deg,rgba(8,75,62,.42),rgba(31,38,94,.50));box-shadow:0 20px 58px rgba(0,0,0,.24)}
+.support-hero h2{font-size:25px;margin:6px 0}.support-hero p{margin:0;color:var(--muted);line-height:1.8}
+.support-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .support-ticket-list{display:grid;gap:8px}
 .support-ticket-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid rgba(92,177,228,.21);border-radius:12px;background:rgba(4,21,38,.43)}
 .support-ticket-row b{display:block;font-size:10px}.support-ticket-row span{display:block;color:#7690aa;font-size:8px;margin-top:3px}
 .success-note{border-color:rgba(52,223,168,.34)!important;background:rgba(8,73,57,.26)!important;color:#b4f8df!important}
-body[data-license-tier="community"] nav button[data-view="protocols"]::after,
-body[data-license-tier="community"] nav button[data-view="nodes"]::after{
-  content:"◆";margin-inline-start:auto;color:#eeb86c;font-size:8px
-}
-@media(max-width:900px){
-  .license-grid{grid-template-columns:1fr}
-  .license-lock-panel{grid-template-columns:64px 1fr}.license-lock-panel>.primary{grid-column:1/-1}
-  .license-hero{grid-template-columns:1fr}.license-install-id{min-width:0}
-}
-@media(max-width:560px){
-  .license-facts{grid-template-columns:1fr}
-  .license-lock-panel{grid-template-columns:1fr}.license-lock-icon{width:60px;height:60px;border-radius:18px}
-}
-
+@media(max-width:900px){.support-grid{grid-template-columns:1fr}}
 
 /* v0.16 remote support + commercial entitlement */
 .remote-support-banner{

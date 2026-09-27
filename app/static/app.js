@@ -44,37 +44,6 @@ async function ensureSessionContext(force=false){
   }else if(banner){banner.remove()}
   return window.__sessionContext;
 }
-window.__licenseState=null;
-async function ensureLicenseState(force=false){
-  if(window.__licenseState&&!force)return window.__licenseState;
-  window.__licenseState=await api('/api/license/status');
-  syncLicenseShell();
-  return window.__licenseState;
-}
-function hasLicenseFeature(feature){
-  return Boolean((window.__licenseState?.features||[]).includes(feature));
-}
-function fullLicenseActive(){return window.__licenseState?.valid&&window.__licenseState?.tier!=='community'}
-function syncLicenseShell(){
-  const state=window.__licenseState;if(!state)return;
-  document.body.dataset.licenseTier=state.tier||'community';
-  const btn=document.querySelector('nav button[data-view="license"] b');
-  if(btn)btn.textContent=(state.valid?'Full Access':'License & Support');
-}
-function lockedFeaturePanel(feature,titleText){
-  const id=window.__licenseState?.installation_id||'';
-  return [
-    '<section class="license-lock-panel panel">',
-      '<div class="license-lock-icon">◆</div>',
-      '<div><div class="eyebrow">FULL ACCESS REQUIRED</div><h2>'+htmlEsc(titleText||'قابلیت حرفه‌ای')+'</h2>',
-      '<p>این نصب در حالت Community است. ساخت و مدیریت SSH فعال است؛ این بخش بعد از فعال‌سازی License امضاشده باز می‌شود.</p>',
-      '<div class="chips"><span class="status-chip">Installation '+htmlEsc(id)+'</span><span class="status-chip warn">Community</span></div></div>',
-      '<button class="primary action-lg" data-action="nav" data-view="license">درخواست دسترسی کامل</button>',
-    '</section>'
-  ].join('');
-}
-
-
 async function dashboard(renderToken=window.__viewRenderToken){
   title.textContent='Overview';setPageContext('SYSTEMD CONTROL');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی وضعیت سرور…</b></div>';
@@ -82,7 +51,6 @@ async function dashboard(renderToken=window.__viewRenderToken){
     api('/api/overview'),api('/api/metrics/history?hours=24'),api('/api/access'),api('/api/protocols')
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='dashboard')return;
-  window.__licenseState=d.license||window.__licenseState;syncLicenseShell();
   const m=d.metrics,score=healthScore(d);
   const healthy=(d.services||[]).filter(x=>x.active).length,total=(d.services||[]).length;
   const activeAccess=accessRows.filter(x=>x.status==='active').length;
@@ -94,7 +62,7 @@ async function dashboard(renderToken=window.__viewRenderToken){
     '<section class="glass-status-hero">',
       '<div class="glass-status-score"><b>'+healthy+'/'+total+'</b><span>RUNNING</span></div>',
       '<div class="glass-status-copy"><div class="eyebrow">ALLOWLISTED SERVICES</div><h2>کنترل و سلامت سرور</h2><p>وضعیت زنده سرویس‌ها، منابع، ترافیک و دسترسی‌ها در یک نمای شیشه‌ای عملیاتی.</p></div>',
-      '<div class="glass-status-actions"><span class="license-tier-chip '+(d.license?.valid?'full':'community')+'">'+(d.license?.valid?'FULL ACCESS':'COMMUNITY · SSH')+'</span><button class="primary action-lg" data-action="wizard-open">＋ ساخت دسترسی</button><button class="ghost action-lg" data-action="self-test">Self-Test</button></div>',
+      '<div class="glass-status-actions"><span class="access-tier-chip">OPEN ACCESS</span><button class="primary action-lg" data-action="wizard-open">＋ ساخت دسترسی</button><button class="ghost action-lg" data-action="self-test">Self-Test</button></div>',
     '</section>',
     '<section class="glass-summary-grid">',
       '<article><span class="glass-summary-icon">U</span><div><small>کاربران فعال</small><b>'+activeAccess+'</b><em>از '+accessRows.length+' دسترسی</em></div></article>',
@@ -123,10 +91,9 @@ let provisionState=null;
 async function access(renderToken=window.__viewRenderToken){
   title.textContent='Access Center';setPageContext('IDENTITY & DELIVERY');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی دسترسی‌ها…</b></div>';
-  const license=await ensureLicenseState();
   const [rows,stack,sshRows,pcRows,operator]=await Promise.all([
     api('/api/access'),api('/api/protocols'),api('/api/accounts'),
-    hasLicenseFeature('xray')?api('/api/protocol-clients'):Promise.resolve([]),
+    api('/api/protocol-clients'),
     api('/api/settings/operator')
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='access')return;
@@ -139,7 +106,7 @@ async function access(renderToken=window.__viewRenderToken){
       '<p>ساخت، سیاست‌گذاری، خروجی Native و تحویل رمزدار برای تمام دسترسی‌های واقعی سرور؛ بدون دکمه نمایشی.</p>',
       '<div class="hero-actions"><button class="primary action-lg" data-action="wizard-open">＋ ساخت دسترسی جدید</button>',
       '<button class="ghost action-lg" data-action="self-test">بررسی سلامت</button></div></div>',
-      '<div class="access-command-stats"><div><b>'+rows.length+'</b><span>Total</span></div><div><b>'+active+'</b><span>Active</span></div><div><b>'+legacy+'</b><span>Legacy</span></div><div><b>'+(license.valid?'FULL':'SSH')+'</b><span>License</span></div></div>',
+      '<div class="access-command-stats"><div><b>'+rows.length+'</b><span>Total</span></div><div><b>'+active+'</b><span>Active</span></div><div><b>'+legacy+'</b><span>Legacy</span></div><div><b>'+'4'+'</b><span>Protocols</span></div></div>',
     '</section>',
     '<section class="protocol-launch-grid">',
       accessLaunchCard('ssh','SSH','Password / PIN · Expiry · Session / Device',counts.ssh,true),
@@ -166,14 +133,10 @@ async function access(renderToken=window.__viewRenderToken){
 }
 
 function accessLaunchCard(kind,name,desc,count,ready){
-  const feature={xray:'xray',wireguard:'wireguard',openvpn:'openvpn'}[kind];
-  const unlocked=!feature||hasLicenseFeature(feature);
-  let action='';
-  if(!unlocked) action='<button class="launch-action locked" data-action="nav" data-view="license">◆ Full Access</button>';
-  else if(kind==='ssh') action='<button class="launch-action" data-action="wizard-open" data-kind="ssh">Create</button>';
-  else if(ready) action='<button class="launch-action" data-action="wizard-open" data-kind="'+kind+'">Create</button>';
-  else action='<button class="launch-action setup" data-action="protocol-setup" data-kind="'+kind+'">Setup</button>';
-  return '<article class="launch-card '+kind+(unlocked?'':' license-locked')+'"><div class="launch-top"><span class="access-protocol-icon">'+name.slice(0,1)+'</span><span class="launch-count">'+(unlocked?count:'◆')+'</span></div><h3>'+htmlEsc(name)+'</h3><p>'+htmlEsc(unlocked?desc:'نیازمند License Full امضاشده')+'</p>'+action+'</article>';
+  const action=kind==='ssh'||ready
+    ? '<button class="launch-action" data-action="wizard-open" data-kind="'+kind+'">Create</button>'
+    : '<button class="launch-action setup" data-action="protocol-setup" data-kind="'+kind+'">Setup</button>';
+  return '<article class="launch-card '+kind+'"><div class="launch-top"><span class="access-protocol-icon">'+name.slice(0,1)+'</span><span class="launch-count">'+count+'</span></div><h3>'+htmlEsc(name)+'</h3><p>'+htmlEsc(desc)+'</p>'+action+'</article>';
 }
 
 function renderAccessRows(){
@@ -210,7 +173,7 @@ function accessCard(a){
   const shareAllowed=a.can_export&&shareLabel&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
   const shareButton=shareAllowed?'<button class="icon-action shareish" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+label+'">'+shareLabel+'</button>':'';
   const guideButton='<button class="icon-action" data-action="client-guide" data-kind="'+kind+'">Guide</button>';
-  const protectedButton=hasLicenseFeature('protected_delivery')?'<button class="icon-action primaryish" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+label+'">Protected ZIP</button>':'';
+  const protectedButton='<button class="icon-action primaryish" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+label+'">Protected ZIP</button>';
   const exportAction=a.can_export
     ? shareButton+protectedButton+'<button class="icon-action" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">Native</button>'+guideButton
     : (a.kind==='wireguard'
@@ -499,8 +462,6 @@ function showProvisionSuccess(kind,key,name,packagePassword,loginSecret,result){
 }
 
 async function openProtectedExport(kind,key,name){
-  await ensureLicenseState();
-  if(!hasLicenseFeature('protected_delivery')){switchView('license');return}
   const r=await api('/api/accounts/generate-secret?mode=pin6').catch(()=>({secret:''}));
   modalRoot.innerHTML=[
     '<div class="modal-backdrop"><div class="modal export-modal">',
@@ -774,8 +735,6 @@ async function sessions(renderToken=window.__viewRenderToken){
 async function disconnectSession(tty,user){if(!confirm('قطع اتصال '+user+' ؟'))return;try{await api('/api/sessions/disconnect',{method:'POST',body:JSON.stringify({tty,username:user})});await sessions()}catch(e){alert(e.message)}}
 function relativeSeen(v){if(!v)return'Never';const t=Date.parse(v);if(Number.isNaN(t))return v;const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 async function nodes(renderToken=window.__viewRenderToken){
-  await ensureLicenseState();
-  if(!hasLicenseFeature('nodes')){title.textContent='Nodes';setPageContext('FULL ACCESS');content.innerHTML=lockedFeaturePanel('nodes','Multi-node Management');return}
   title.textContent='Nodes';setPageContext('FLEET CONTROL');
   const rows=await api('/api/nodes');if(renderToken!==window.__viewRenderToken||activeView!=='nodes')return;
   content.innerHTML=viewIntro('MULTI-NODE','مدیریت نودها','VPSهای متصل را با Token مستقل، Heartbeat و Telemetry مرکزی مدیریت کن.','<button class="primary action-lg" data-action="node-create">＋ Add Node</button>')+
@@ -803,8 +762,6 @@ function engineCard(icon,name,desc,status,meta,actions=''){
 async function wireguard(renderToken=window.__viewRenderToken){
   title.textContent='WireGuard';setPageContext('PEER WORKSPACE');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن وضعیت WireGuard…</b></div>';
-  await ensureLicenseState();
-  if(!hasLicenseFeature('wireguard')){content.innerHTML=lockedFeaturePanel('wireguard','WireGuard');return}
   const [stack,rows]=await Promise.all([api('/api/protocols'),api('/api/access')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='wireguard')return;
   window.__protocolData=stack;
@@ -834,12 +791,6 @@ async function toggleWireGuardPeer(key,enabled){
 }
 
 async function protocols(renderToken=window.__viewRenderToken){
-  await ensureLicenseState();
-  if(!hasLicenseFeature('xray')&&!hasLicenseFeature('wireguard')&&!hasLicenseFeature('openvpn')){
-    title.textContent='Protocols';setPageContext('LICENSED ENGINES');
-    content.innerHTML=lockedFeaturePanel('protocols','Xray / WireGuard / OpenVPN');
-    return;
-  }
   title.textContent='Protocol Hub';setPageContext('ENGINE CONTROL');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Engineها…</b></div>';
   const [d,clients]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients')]);
@@ -1086,7 +1037,6 @@ async function repairOpenVPNRuntime(){
 
 async function services(renderToken=window.__viewRenderToken){
   title.textContent='Services';setPageContext('SYSTEMD CONTROL');
-  await ensureLicenseState();
   const [d,pstack]=await Promise.all([api('/api/overview'),api('/api/protocols').catch(()=>({}))]);
   if(renderToken!==window.__viewRenderToken||activeView!=='services')return;
   const running=(d.services||[]).filter(x=>x.active).length;
@@ -1098,11 +1048,8 @@ async function services(renderToken=window.__viewRenderToken){
   const row=s=>{
     const protocolKind=s.name==='xray'?'xray':s.name==='openvpn-server@server'?'openvpn':s.name==='wg-quick@wg0'?'wireguard':'';
     const missing=protocolKind&&installed[s.name]===false;
-    const licensed=!protocolKind||hasLicenseFeature(protocolKind);
     let extra='';
-    if(protocolKind&&!licensed){
-      extra='<button class="soft warnish" data-action="nav" data-view="license">◆ Full Access</button>';
-    }else if(s.name==='xray'){
+    if(s.name==='xray'){
       extra=missing
         ? '<button class="soft" data-action="protocol-setup" data-kind="xray">Install Xray</button>'
         : '<button class="ghost" data-action="xray-diagnostics">Diagnose</button>'+(!s.active?'<button class="soft warnish" data-action="xray-repair">Repair</button>':'');
@@ -1113,13 +1060,13 @@ async function services(renderToken=window.__viewRenderToken){
     }else if(s.name==='wg-quick@wg0'&&missing){
       extra='<button class="soft" data-action="protocol-setup" data-kind="wireguard">Setup WireGuard</button>';
     }
-    const controls=(missing||!licensed)?'':[
+    const controls=missing?'':[
       '<button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="start">Start</button>',
       '<button class="primary" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="restart">Restart</button>',
       '<button class="danger" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="stop">Stop</button>'
     ].join('');
-    const stateLabel=!licensed?'License locked':missing?'Not installed':s.active?'Running':'Attention';
-    const stateClass=!licensed?'warn':missing?'warn':s.active?'ok':'bad';
+    const stateLabel=missing?'Not installed':s.active?'Running':'Attention';
+    const stateClass=missing?'warn':s.active?'ok':'bad';
     return '<div class="row"><div><i class="status-dot '+(s.active?'ok':'bad')+'"></i><b>'+htmlEsc(s.label)+'</b><div class="muted">'+htmlEsc(s.name)+'</div></div><div class="muted">'+htmlEsc(s.state)+'</div><div><span class="status-chip '+stateClass+'">'+stateLabel+'</span></div><div class="toolbar">'+extra+controls+'</div></div>';
   };
   content.innerHTML=viewIntro('ALLOWLISTED SERVICES','کنترل سرویس‌ها','Start/Stop/Restart فقط برای سرویس‌های نصب‌شده و Allowlist شده نمایش داده می‌شود؛ Xray و OpenVPN Diagnostics علت Failure را از Runtime واقعی بررسی می‌کنند.','<div class="view-intro-stat"><b>'+running+'/'+d.services.length+'</b><span>RUNNING</span></div>')+
@@ -1138,10 +1085,9 @@ async function security(renderToken=window.__viewRenderToken){
 }
 async function backups(renderToken=window.__viewRenderToken){
   title.textContent='Backups';setPageContext('RECOVERY');
-  await ensureLicenseState();
   const rows=await api('/api/backups');if(renderToken!==window.__viewRenderToken||activeView!=='backups')return;
   const total=rows.reduce((n,b)=>n+Number(b.size||0),0);
-  content.innerHTML=viewIntro('RECOVERY POINTS','مرکز بکاپ','Snapshot محلی برای rollback و Portable Migration Bundle رمزگذاری‌شده برای انتقال VPS.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+(hasLicenseFeature('portable_migration')?'<button class="ghost" data-action="portable-backup">Portable Migration</button>':'<button class="ghost" data-action="nav" data-view="license">◆ Portable Migration</button>')+'<button class="primary" data-action="backup-create">＋ Local Backup</button></div>')+
+  content.innerHTML=viewIntro('RECOVERY POINTS','مرکز بکاپ','Snapshot محلی برای rollback و Portable Migration Bundle رمزگذاری‌شده برای انتقال VPS.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+'<button class="ghost" data-action="portable-backup">Portable Migration</button>'+'<button class="primary" data-action="backup-create">＋ Local Backup</button></div>')+
   '<div class="panel modern-list"><div class="panel-head"><div><h3>Archive</h3><span>'+fmtBytes(total)+' TOTAL</span></div></div><div class="table">'+(rows.length?rows.map(b=>'<div class="row backup-row"><div><b>'+htmlEsc(b.name)+'</b><div class="muted">Makia data snapshot</div></div><div><b>'+fmtBytes(b.size)+'</b><div class="muted">archive size</div></div><div class="muted">'+new Date(b.created_at*1000).toLocaleString()+'</div><div><span class="status-chip">Host-local 0600</span></div></div>').join(''):'<div class="empty">هنوز بکاپی ساخته نشده.</div>')+'</div></div>';
 }
 function openPortableBackup(){
@@ -1177,46 +1123,26 @@ async function guides(renderToken=window.__viewRenderToken){
   ].join('');
 }
 
-async function licenseSupport(renderToken=window.__viewRenderToken){
-  title.textContent='License & Support';setPageContext('ENTITLEMENT & SUPPORT');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی مجوز…</b></div>';
-  const [state,requests,session,grants]=await Promise.all([
-    ensureLicenseState(true),
+async function supportCenter(renderToken=window.__viewRenderToken){
+  title.textContent='Support';setPageContext('HELP & REMOTE SUPPORT');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بارگذاری پشتیبانی…</b></div>';
+  const [requests,session,grants]=await Promise.all([
     api('/api/support/requests').catch(()=>({items:[],support:{}})),
     ensureSessionContext(true).catch(()=>({remote_support:false})),
     api('/api/support/grants').catch(()=>({items:[]}))
   ]);
-  if(renderToken!==window.__viewRenderToken||activeView!=='license')return;
-  const support=state.support||requests.support||{},expires=state.expires_at?new Date(state.expires_at*1000).toLocaleString():'بدون تاریخ انقضا';
-  const featureLabels={xray:'Xray',wireguard:'WireGuard',openvpn:'OpenVPN',protected_delivery:'Protected ZIP',subscriptions:'Subscriptions',backups:'Backups',portable_migration:'Portable Migration',nodes:'Nodes',advanced_services:'Advanced Services',ssh:'SSH',security:'Security',domain:'Domain',updates:'Updates',support:'Support'};
-  const feats=(state.features||[]).map(x=>'<span class="status-chip '+(state.valid?'ok':'')+'">'+htmlEsc(featureLabels[x]||x)+'</span>').join('');
+  if(renderToken!==window.__viewRenderToken||activeView!=='support')return;
+  const support=requests.support||{};
   const rows=(requests.items||[]).slice(0,8).map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip '+(x.delivery_status==='webhook'?'ok':'')+'">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join('');
   content.innerHTML=[
-    '<section class="license-hero '+(state.valid?'full':'community')+'">',
-      '<div><div class="eyebrow">SIGNED ED25519 ENTITLEMENT</div><h2>'+(state.valid?'Full Access فعال است':'Community · SSH Only')+'</h2>',
-      '<p>'+(state.valid?'این License با کلید امضای مالک پروژه تأیید شده است.':'در حالت Community فقط عملیات اصلی SSH باز است. برای Xray، WireGuard، OpenVPN و امکانات حرفه‌ای باید Activation Code معتبر وارد شود.')+'</p></div>',
-      '<div class="license-install-id"><span>INSTALLATION ID</span><b id="installId">'+htmlEsc(state.installation_id)+'</b><button class="ghost" data-action="copy-target" data-target="installId">Copy</button></div>',
-    '</section>',
-    '<section class="license-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>وضعیت License</h3><span>'+(state.valid?'VERIFIED':'COMMUNITY')+'</span></div></div>',
-        '<div class="license-facts"><div><span>Tier</span><b>'+htmlEsc(state.tier||'community')+'</b></div><div><span>Customer</span><b>'+htmlEsc(state.customer||'-')+'</b></div><div><span>License ID</span><b>'+htmlEsc(state.license_id||'-')+'</b></div><div><span>Expiry</span><b>'+htmlEsc(expires)+'</b></div></div>',
-        (state.online_required?'<div class="wizard-note"><b>Online entitlement · '+htmlEsc(state.online_status||'pending')+'</b><span>'+(state.lease_expires_at?('Lease تا '+htmlEsc(new Date(state.lease_expires_at*1000).toLocaleString())):'در انتظار Sync')+(state.lease_sync_error?' · '+htmlEsc(state.lease_sync_error):'')+'</span></div><div class="toolbar"><button class="ghost" data-action="license-sync">Sync License</button></div>':''),
-        '<div class="chips license-features">'+feats+'</div>',
-        (state.error?'<div class="wizard-note danger-note"><b>License error</b><span>'+htmlEsc(state.error)+'</span></div>':''),
-      '</div>',
-      '<div class="panel"><div class="panel-head"><div><h3>فعال‌سازی Full Access</h3><span>OFFLINE SIGNED CODE</span></div></div>',
-        '<label class="single-label">Activation Code<textarea id="licenseCode" class="config-output small" placeholder="MKL1...."></textarea></label>',
-        '<div class="wizard-note"><b>امنیت</b><span>Private signing key روی این VPS یا داخل GitHub قرار نمی‌گیرد. فقط Public Key برای Verify داخل پنل است.</span></div>',
-        '<div class="toolbar"><button class="primary" data-action="license-activate">Activate</button>'+(state.valid?'<button class="danger" data-action="license-remove">Remove License</button>':'')+'</div>',
-      '</div>',
-    '</section>',
-    (!session.remote_support?'<section class="panel remote-support-panel"><div class="panel-head"><div><h3>Remote Support موقت</h3><span>CONSENT · ONE-TIME CODE</span></div></div><div class="remote-support-create"><div><p>فقط در زمان نیاز یک کد موقت بساز. کد پس از اولین Login مصرف می‌شود و Session حداکثر تا زمان انتخاب‌شده فعال می‌ماند.</p><div class="form-grid two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option><option value="120">120 دقیقه</option></select></label><label>Scope<select id="supportGrantScope"><option value="readonly">Read-only</option><option value="operator" selected>Operator</option></select></label></div><button class="primary" data-action="support-grant-create">ساخت کد موقت</button></div><div class="support-grant-list">'+((grants.items||[]).slice(0,5).map(g=>'<div><span>…'+htmlEsc(g.token_last4)+'</span><b>'+htmlEsc(g.scope)+'</b><small>'+htmlEsc(new Date(Number(g.expires_at)*1000).toLocaleString())+'</small>'+(g.active?'<button class="danger" data-action="support-grant-revoke" data-id="'+Number(g.id)+'">Revoke</button>':'<em>Closed</em>')+'</div>').join('')||'<div class="empty compact">کد فعالی وجود ندارد.</div>')+'</div></div></section>':'<section class="wizard-note danger-note"><b>Remote Support Session</b><span>این Login موقت است. تنظیمات هویتی حساس مانند 2FA، API Token و حذف License برای Remote Support مسدود هستند.</span></section>'),
-    '<section class="license-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>درخواست دسترسی / پشتیبانی</h3><span>SUPPORT REQUEST</span></div></div>',
-        '<div class="form-grid two"><label>Subject<input id="supportSubject" maxlength="160" value="درخواست دسترسی Full"></label><label>Installation ID<input value="'+htmlEsc(state.installation_id)+'" readonly></label></div>',
+    '<section class="support-hero"><div><div class="eyebrow">SUPPORT CENTER</div><h2>پشتیبانی Makia</h2><p>برای راهنمایی یا بررسی خطا درخواست ثبت کن. دسترسی موقت پشتیبانی فقط با کدی که خودت می‌سازی فعال می‌شود.</p></div></section>',
+    (!session.remote_support?'<section class="panel remote-support-panel"><div class="panel-head"><div><h3>Remote Support موقت</h3><span>CONSENT · ONE-TIME CODE</span></div></div><div class="remote-support-create"><div><p>فقط در زمان نیاز یک کد موقت بساز. کد پس از اولین Login مصرف می‌شود و Session حداکثر تا زمان انتخاب‌شده فعال می‌ماند.</p><div class="form-grid two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option><option value="120">120 دقیقه</option></select></label><label>Scope<select id="supportGrantScope"><option value="readonly">Read-only</option><option value="operator" selected>Operator</option></select></label></div><button class="primary" data-action="support-grant-create">ساخت کد موقت</button></div><div class="support-grant-list">'+((grants.items||[]).slice(0,5).map(g=>'<div><span>…'+htmlEsc(g.token_last4)+'</span><b>'+htmlEsc(g.scope)+'</b><small>'+htmlEsc(new Date(Number(g.expires_at)*1000).toLocaleString())+'</small>'+(g.active?'<button class="danger" data-action="support-grant-revoke" data-id="'+Number(g.id)+'">Revoke</button>':'<em>Closed</em>')+'</div>').join('')||'<div class="empty compact">کد فعالی وجود ندارد.</div>')+'</div></div></section>':'<section class="wizard-note danger-note"><b>Remote Support Session</b><span>این ورود موقت است. تنظیمات هویتی حساس مانند 2FA و API Token برای Remote Support مسدود هستند.</span></section>'),
+    '<section class="support-grid">',
+      '<div class="panel"><div class="panel-head"><div><h3>درخواست پشتیبانی</h3><span>SUPPORT REQUEST</span></div></div>',
+        '<div class="form-grid two"><label>Subject<input id="supportSubject" maxlength="160" placeholder="موضوع درخواست"></label></div>',
         '<label class="single-label">Message<textarea id="supportMessage" rows="6" placeholder="توضیح درخواست یا مشکل…"></textarea></label>',
         '<div class="toolbar"><button class="primary" data-action="support-submit">ثبت درخواست</button>'+(support.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram @'+htmlEsc(support.telegram_username)+'</button>':'')+'</div>',
-        '<div class="wizard-note"><b>Ticket delivery</b><span>'+(support.webhook_enabled?'Webhook مرکزی فعال است؛ Ticket علاوه بر ثبت محلی ارسال می‌شود.':'Webhook مرکزی تنظیم نشده؛ درخواست محلی ثبت می‌شود و متن آماده برای Telegram/ارسال دستی تولید می‌گردد.')+'</span></div>',
+        '<div class="wizard-note"><b>Ticket delivery</b><span>'+(support.webhook_enabled?'Webhook مرکزی فعال است؛ Ticket علاوه بر ثبت محلی ارسال می‌شود.':'Webhook مرکزی تنظیم نشده؛ درخواست محلی ثبت می‌شود و متن آماده برای ارسال دستی تولید می‌گردد.')+'</span></div>',
       '</div>',
       '<div class="panel"><div class="panel-head"><div><h3>درخواست‌های اخیر</h3><span>LOCAL HISTORY</span></div></div><div class="support-ticket-list">'+(rows||'<div class="empty compact">درخواستی ثبت نشده.</div>')+'</div></div>',
     '</section>'
@@ -1227,31 +1153,19 @@ async function createRemoteSupportGrant(){
   const minutes=Number(document.getElementById('supportGrantMinutes')?.value||30),scope=document.getElementById('supportGrantScope')?.value||'operator';
   try{
     const r=await api('/api/support/grants',{method:'POST',body:JSON.stringify({minutes,scope})});
-    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">ONE-TIME REMOTE SUPPORT</div><h3>کد موقت آماده است</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="support-code-box" id="supportGrantCode">'+htmlEsc(r.code)+'</div><div class="wizard-note"><b>Login URL</b><span id="supportGrantUrl">'+htmlEsc(r.login_url)+'</span></div><div class="wizard-note"><b>Expiry</b><span>'+htmlEsc(new Date(r.expires_at*1000).toLocaleString())+' · '+htmlEsc(r.scope)+'</span></div><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="supportGrantCode">Copy Code</button><button class="ghost" data-action="copy-target" data-target="supportGrantUrl">Copy URL</button><button class="ghost" data-action="modal-close-refresh" data-view="license">Done</button></div></div></div>';
+    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">ONE-TIME REMOTE SUPPORT</div><h3>کد موقت آماده است</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="support-code-box" id="supportGrantCode">'+htmlEsc(r.code)+'</div><div class="wizard-note"><b>Login URL</b><span id="supportGrantUrl">'+htmlEsc(r.login_url)+'</span></div><div class="wizard-note"><b>Expiry</b><span>'+htmlEsc(new Date(r.expires_at*1000).toLocaleString())+' · '+htmlEsc(r.scope)+'</span></div><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="supportGrantCode">Copy Code</button><button class="ghost" data-action="copy-target" data-target="supportGrantUrl">Copy URL</button><button class="ghost" data-action="modal-close-refresh" data-view="support">Done</button></div></div></div>';
   }catch(e){alert('Remote Support: '+e.message)}
 }
 async function revokeRemoteSupportGrant(id){
   if(!confirm('این دسترسی پشتیبانی فوراً لغو شود؟'))return;
   try{await api('/api/support/grants/'+Number(id),{method:'DELETE'});toast('Remote Support revoked');await currentView()}catch(e){alert(e.message)}
 }
-async function syncLicenseNow(){
-  try{window.__licenseState=await api('/api/license/sync',{method:'POST'});toast('License sync completed');syncLicenseShell();await currentView()}catch(e){alert('License sync: '+e.message)}
-}
-
-async function activateLicense(){
-  const code=(document.getElementById('licenseCode')?.value||'').trim();if(!code){alert('Activation Code را وارد کنید.');return}
-  try{window.__licenseState=await api('/api/license/activate',{method:'POST',body:JSON.stringify({code})});toast('Full Access فعال شد');syncLicenseShell();await currentView()}catch(e){alert('License: '+e.message)}
-}
-async function removeLicense(){
-  if(!confirm('License از این نصب حذف شود و پنل به Community / SSH Only برگردد؟'))return;
-  try{window.__licenseState=await api('/api/license',{method:'DELETE'});toast('Community mode فعال شد');syncLicenseShell();await currentView()}catch(e){alert(e.message)}
-}
 async function submitSupportRequest(){
   const subject=(document.getElementById('supportSubject')?.value||'').trim(),message=(document.getElementById('supportMessage')?.value||'').trim();
   if(subject.length<3||message.length<3){alert('Subject و Message را کامل کنید.');return}
   try{
     const r=await api('/api/support/requests',{method:'POST',body:JSON.stringify({subject,message})});
-    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">SUPPORT REQUEST</div><h3>درخواست ثبت شد</h3></div><button class="close-btn" data-action="modal-close">×</button></div><textarea id="supportRequestText" class="config-output small" readonly></textarea><div class="wizard-note"><b>Delivery: '+htmlEsc(r.status||'local')+'</b><span>'+(r.delivered?'درخواست به Endpoint مرکزی هم ارسال شد.':'این متن را می‌توانی برای پشتیبانی ارسال کنی.')+'</span></div><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="supportRequestText">Copy Request</button>'+(r.support?.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(r.support.telegram_url)+'">Open Telegram</button>':'')+'<button class="ghost" data-action="modal-close-refresh" data-view="license">Done</button></div></div></div>';
+    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">SUPPORT REQUEST</div><h3>درخواست ثبت شد</h3></div><button class="close-btn" data-action="modal-close">×</button></div><textarea id="supportRequestText" class="config-output small" readonly></textarea><div class="wizard-note"><b>Delivery: '+htmlEsc(r.status||'local')+'</b><span>'+(r.delivered?'درخواست به Endpoint مرکزی هم ارسال شد.':'این متن را می‌توانی برای پشتیبانی ارسال کنی.')+'</span></div><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="supportRequestText">Copy Request</button>'+(r.support?.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(r.support.telegram_url)+'">Open Telegram</button>':'')+'<button class="ghost" data-action="modal-close-refresh" data-view="support">Done</button></div></div></div>';
     document.getElementById('supportRequestText').value=r.request_text||'';
   }catch(e){alert('Support: '+e.message)}
 }
@@ -1449,7 +1363,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Overview','dashboard'],['Access Center','access'],['WireGuard','wireguard'],['Live Sessions','sessions'],['Protocols','protocols'],['Client Guides','guides'],['Nodes','nodes'],['Services','services'],['Security','security'],['Backups','backups'],['Audit Logs','audit'],['Update Center','updates'],['Settings / 2FA / API Tokens','settings'],['License & Support','license']];
+const commandItems=[['Overview','dashboard'],['Access Center','access'],['WireGuard','wireguard'],['Live Sessions','sessions'],['Protocols','protocols'],['Client Guides','guides'],['Nodes','nodes'],['Services','services'],['Security','security'],['Backups','backups'],['Audit Logs','audit'],['Update Center','updates'],['Settings / 2FA / API Tokens','settings'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -1465,9 +1379,6 @@ function renderCommands(q=''){
 
 async function selectWizardProtocol(kind){
   if(!provisionState)return;
-  await ensureLicenseState();
-  const feature={xray:'xray',wireguard:'wireguard',openvpn:'openvpn'}[kind];
-  if(feature&&!hasLicenseFeature(feature)){closeModal();switchView('license');return}
   if(!wizardProtocolReady(kind)){await openProtocolSetup(kind);return}
   provisionState.protocol=kind;provisionState.step=2;
   if(kind==='ssh'){
@@ -1558,11 +1469,8 @@ async function handleMakiaAction(btn){
   if(action==='portable-backup'){openPortableBackup();return}
   if(action==='portable-backup-download'){await downloadPortableBackup();return}
   if(action==='wg-compat-preset'){const values={opWgPort:443,opWgMtu:1280,opWgKeepalive:15,opWgAllowedIps:'0.0.0.0/0',opWgDns:'1.1.1.1'};for(const [id,v] of Object.entries(values)){const el=document.getElementById(id);if(el)el.value=v}toast('Compatibility preset applied; Save to persist');return}
-  if(action==='license-sync'){await syncLicenseNow();return}
   if(action==='support-grant-create'){await createRemoteSupportGrant();return}
   if(action==='support-grant-revoke'){await revokeRemoteSupportGrant(Number(btn.dataset.id));return}
-  if(action==='license-activate'){await activateLicense();return}
-  if(action==='license-remove'){await removeLicense();return}
   if(action==='support-submit'){await submitSupportRequest();return}
   if(action==='support-telegram'){window.open(btn.dataset.url,'_blank','noopener');return}
   if(action==='settings-tab'){window.__settingsTab=btn.dataset.tab||'general';await currentView();return}
@@ -1607,16 +1515,16 @@ document.addEventListener('change',e=>{
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
 function applyLanguageShell(){
-  const fa={dashboard:'نمای کلی',access:'مرکز دسترسی',wireguard:'وایرگارد',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',license:'مجوز و پشتیبانی'};
-  const en={dashboard:'Overview',access:'Access Center',wireguard:'WireGuard',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocols',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',license:'License & Support'};
+  const fa={dashboard:'نمای کلی',access:'مرکز دسترسی',wireguard:'وایرگارد',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Overview',access:'Access Center',wireguard:'WireGuard',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocols',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,access,wireguard,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,license:licenseSupport};
+const views={dashboard,access,wireguard,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){activeView=v;setPageContext(v==='dashboard'?'OPERATIONS COCKPIT':v==='access'?'IDENTITY & DELIVERY':v==='guides'?'DELIVERY EDUCATION':'MAKIA CONTROL CENTER');document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');return currentView()}
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 document.querySelector('.mobile-menu-toggle')?.addEventListener('click',e=>{const opened=document.body.classList.toggle('menu-open');e.currentTarget.setAttribute('aria-expanded',String(opened))});
-applyLanguageShell();ensureSessionContext().catch(()=>{});ensureLicenseState().catch(()=>{});switchView('dashboard');
+applyLanguageShell();ensureSessionContext().catch(()=>{});switchView('dashboard');
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}

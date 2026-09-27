@@ -4,7 +4,7 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current code baseline:** `v0.19.0`
+> **Current code baseline:** `v0.20.0`
 > CI validates the repository; connectivity on a real VPS still requires external-client UAT.
 
 ## v0.19 WireGuard workspace
@@ -20,16 +20,11 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 - See [v0.18 protocol UAT](docs/UAT-0.18.0.md) for the IP/domain matrix and the remaining live VPS checks.
 - The [v0.18.1 connectivity patch UAT](docs/UAT-0.18.1.md) covers the simplified Xray wizard and OpenVPN forwarding repair.
 
-## v0.16 Owner Control Center & consent-based Remote Support
-- A separate Owner Control Center manages customers, installations, signed licenses, renewals, revocations, support tickets and owner audit history.
-- Commercial licenses use signed online leases: revocation is enforced on sync, while temporary outages use a bounded offline grace period.
-- Renewals are delivered automatically as a higher signed license revision; the customer does not need to paste a new code.
-- Offline licenses remain available for owner/self-hosted installations.
-- Customer admins can create a one-time Remote Support grant (15–120 minutes, Read-only or Operator). There is no master password or permanent backdoor.
-- Sensitive identity and export operations stay local-admin-only even during an Operator support session.
-- Owner Control Center is deployed separately and keeps the Ed25519 private signing key outside the customer package and outside GitHub.
-- Persian deployment guide: `docs/OWNER-CONTROL-CENTER-FA.md`.
-- Remote Support threat model: `docs/REMOTE-SUPPORT-SECURITY-FA.md`.
+## v0.20 open access
+- All protocols, exports, backups and nodes are available after local admin login, without activation or an Owner server.
+- Existing license settings are ignored during upgrade; accounts and client profiles remain in the database.
+- Support requests and one-time Remote Support grants remain in the Support menu. Login, 2FA, CSRF and remote support scope checks still apply.
+- Run `sudo makia-upgrade` on an existing installation. See [v0.20 UAT](docs/UAT-0.20.0.md) for external client checks.
 
 ## v0.14 Glass Aurora & OpenVPN domain reliability
 - Glass Aurora is the new default panel experience, with a glass sidebar/topbar, translucent blue-violet surfaces, responsive service cards, live resource rings and a reorganized operational dashboard.

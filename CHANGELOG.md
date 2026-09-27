@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.0] - 2026-09-27
+
+### Open access
+- Removed license tiers, activation/sync routes and the standalone Owner Control Center source. All protocol and delivery capabilities are available after normal admin login.
+- Replaced License & Support with Support while retaining temporary grants, admin authentication, 2FA and mutation restrictions.
+- Existing installations retain their database, clients and settings. Legacy license values are ignored. Update replaces the application directory with a backed-up release.
+- Added authorization and browser coverage. Real VPN connectivity needs external VPS testing; see docs/UAT-0.20.0.md.
+
 ## [0.19.0] - 2026-09-27
 
 ### WireGuard peer workspace and interface refresh

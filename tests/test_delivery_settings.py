@@ -161,7 +161,6 @@ def test_protected_ssh_package_uses_current_npv_setting(monkeypatch):
     monkeypatch.setattr(main_app,"require_mutation",lambda request:"admin")
     monkeypatch.setattr(main_app,"require_local_admin",lambda request:"admin")
     monkeypatch.setattr(main_app,"require_access_kind",lambda request,kind,mutation=False:"admin")
-    monkeypatch.setattr(main_app,"assert_license_feature",lambda feature:None)
     monkeypatch.setattr(main_app,"_resolve_access_payload",lambda kind,key,request:(original,{"id":1}))
     monkeypatch.setattr(main_app,"operator_settings_snapshot",lambda:{
         "delivery":{"npv_enabled":False,"profile_prefix":"Makia","npv_dns_mode":"UDP","npv_udpgw_port":7300,"npv_transparent_dns":False,"show_qr":True},

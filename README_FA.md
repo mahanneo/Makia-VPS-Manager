@@ -28,28 +28,11 @@ Updater نیز WireGuard موجود را قبل از UAT نهایی بررسی �
 
 **Makia VPS Manager** یک پنل مدیریت VPS برای مدیریت دسترسی‌های SSH، Xray، WireGuard و OpenVPN، تحویل امن کانفیگ، دامنه/HTTPS، بکاپ و مهاجرت سرور است.
 
-> وضعیت فعلی پروژه Release Candidate است. قبل از استفاده Production، UAT واقعی روی VPS مقصد انجام شود.
+## نسخه ۰.۲۰.۰ — استفاده بدون لایسنس
 
-## نسخه v0.16.0-rc1 — Owner Control Center و Remote Support امن
+پس از نصب و ورود مدیر، SSH، Xray، WireGuard، OpenVPN، خروجی رمزدار، بکاپ و نودها در دسترس‌اند. کد فعال‌سازی، سرور Owner و مرحلهٔ صدور کلید حذف شده‌اند. نصب‌های قبلی با `sudo makia-upgrade` به‌روز می‌شوند؛ لایسنس قدیمی نادیده گرفته می‌شود و کاربران و کانفیگ‌ها باقی می‌مانند.
 
-از این نسخه، مدیریت تجاری Makia از یک **Owner Control Center جدا** انجام می‌شود. این سرویس روی VPS مشتری نصب نمی‌شود و Private Key صدور License فقط روی سرور مالک باقی می‌ماند.
-
-قابلیت‌های Owner Control Center:
-- ثبت مشتری و Installation ID
-- صدور Full یا Custom License
-- تمدید بدون نیاز به Paste مجدد Code توسط مشتری
-- Revoke واقعی از طریق Signed Online Lease
-- Inbox مرکزی Ticketها
-- Audit عملیات مالک
-- Password + TOTP برای ورود Owner
-
-برای مشتری، Remote Support نیز فقط با رضایت مدیر محلی فعال می‌شود. مدیر از License & Support یک Code یک‌بارمصرف ۱۵ تا ۱۲۰ دقیقه‌ای می‌سازد و Scope را Read-only یا Operator تعیین می‌کند. هیچ Master Password یا Backdoor دائمی وجود ندارد.
-
-حتی Remote Support Operator اجازه تغییر Password/2FA مدیر، API Token، حذف License، Export Credential یا Portable Backup را ندارد.
-
-راهنماها:
-- [Owner Control Center](docs/OWNER-CONTROL-CENTER-FA.md)
-- [امنیت Remote Support](docs/REMOTE-SUPPORT-SECURITY-FA.md)
+منوی «پشتیبانی» برای ثبت درخواست و ایجاد کد موقت دسترسی پشتیبانی است؛ استفادهٔ عادی به این کد نیاز ندارد. ورود مدیر، 2FA و محدودیت‌های دسترسی موقت حفظ شده‌اند. آزمون واقعی اتصال از بیرون VPS طبق [چک‌لیست ۰.۲۰.۰](docs/UAT-0.20.0.md) انجام شود.
 
 ## نسخه v0.14.0-rc1 — Glass Aurora و OpenVPN با دامنه
 

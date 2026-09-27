@@ -38,7 +38,7 @@ def test_wireguard_endpoint_change_preserves_keys_port_and_lines():
 def test_wireguard_endpoint_update_keeps_peer_and_rebuilds_delivery(monkeypatch):
     config="[Interface]\nPrivateKey = secret\n\n[Peer]\nPublicKey = server\nEndpoint = 8.8.8.8:443\nAllowedIPs = 0.0.0.0/0\n"
     saved=[]
-    monkeypatch.setattr(main_app,"require_feature",lambda *a:"admin")
+    monkeypatch.setattr(main_app,"require_capability",lambda *a:"admin")
     monkeypatch.setattr(main_app,"require_local_admin",lambda *a:"admin")
     monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda kind,key:{"payload_enc":"sealed","display_name":key,"metadata_json":json.dumps({"public_key":"peerkey","address":"10.66.66.2","port":443})})
     monkeypatch.setattr(access_ops,"open_payload",lambda token:{"primary_text":config})
@@ -55,7 +55,7 @@ def test_wireguard_endpoint_update_keeps_peer_and_rebuilds_delivery(monkeypatch)
 
 def test_wireguard_peer_creation_rolls_back_when_artifact_save_fails(monkeypatch):
     scope={"type":"http","method":"POST","path":"/api/protocols/wireguard/peers","headers":[],"query_string":b"","scheme":"http","server":("testserver",80),"client":("127.0.0.1",12345)}
-    monkeypatch.setattr(main_app,"require_feature",lambda *a:"admin")
+    monkeypatch.setattr(main_app,"require_capability",lambda *a:"admin")
     monkeypatch.setattr(main_app.protocol_ops,"validate_endpoint_selection",lambda endpoint,mode,direct: endpoint)
     monkeypatch.setattr(main_app.protocol_ops,"create_wireguard_peer",lambda *a,**kw:{"public_key":"peer-key","config":"config","address":"10.66.66.2"})
     monkeypatch.setattr(main_app.protocol_ops,"wireguard_endpoint_diagnostics",lambda *a:{"endpoint_ok":True})
@@ -94,7 +94,6 @@ def test_access_package_endpoint_returns_downloadable_aes_zip(monkeypatch):
     }
     monkeypatch.setattr(main_app,"require_mutation",lambda request:"admin")
     monkeypatch.setattr(main_app,"require_local_admin",lambda request:"admin")
-    monkeypatch.setattr(main_app,"assert_license_feature",lambda feature:None)
     monkeypatch.setattr(main_app,"_resolve_access_payload",lambda kind,key,request:(payload,{"id":1}))
     monkeypatch.setattr(main_app,"audit",lambda *args,**kwargs:None)
     scope={
