@@ -1929,7 +1929,10 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
     elif transport=="xhttp":
         stream["xhttpSettings"]={"path":path_value,"mode":"auto"}
     elif transport=="mkcp":
-        stream["kcpSettings"]={"seed":path_value.strip("/") or "makia"}
+        # Xray 26.3.27 removed the legacy kcpSettings.header/seed fields.
+        # Guided mKCP therefore uses Core defaults without hidden obfuscation
+        # state, which also keeps exported client links reproducible.
+        stream["kcpSettings"]={}
     reality_meta={}
     if security=="tls":
         sni=(server_name or "").strip().lower()
