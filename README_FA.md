@@ -1,3 +1,19 @@
+## نسخه ۰.۲۶.۰-rc1 — کاندیدای نهایی انتشار عمومی
+
+این نسخه روی ایرادهای واقعی Host و تکمیل تجربه مدیریتی متمرکز است. خطای ساخت Xray با پیام `runuser: cannot set user id: Operation not permitted` بدون حذف `NoNewPrivileges` رفع شده است؛ Login نیز Focus Surface واحد، تغییر زبان واقعی FA/EN و Dark/Light واقعی دارد.
+
+در Xray، Wizard و Backend از یک **Compatibility Matrix مشترک** استفاده می‌کنند تا ترکیب نامعتبر Protocol/Transport/Security اصلاً به مرحله Commit نرسد. CI روی Xray Core 26.3.27 مجموعه Guided شامل VLESS، VMess، Trojan، Shadowsocks، Hysteria2، HTTP و SOCKS و چند Transport را validate می‌کند و VLESS/REALITY علاوه بر syntax، Handshake و Traffic واقعی CI دارد. قابلیت **Advanced JSON** برای تنظیمات خارج از Guided mode حفظ شده است.
+
+OpenVPN دیگر UDP-only نیست: تنظیم واقعی **TCP/UDP، Port، DNS، Keepalive، Redirect Gateway و Client-to-client** با Backup، Restart verification و Rollback اضافه شده و فایل OVPN دانلودشده از Runtime فعلی بازسازی می‌شود. WireGuard نیز Peer/Handshake/Traffic/QR و تنظیمات DNS، Port، MTU، Keepalive، AllowedIPs و CIDR را یکپارچه نمایش می‌دهد.
+
+Support به Help & Diagnostics ساده‌تر تبدیل شده، Remote Support به بخش Advanced منتقل شده، Admin Security نمای HTTPS/2FA/UFW/Fail2ban/SSH/API Tokens دارد، و راهنمای عمومی برای هر چهار خانواده پروتکل دارای نمودارهای تصویری قدم‌به‌قدم است.
+
+> **نکته برای نصب فعلی:** اگر Footer/Login شما هنوز `v0.24.0-rc1` را نشان می‌دهد، UI قدیمی Users طبیعی است. بعد از Merge این RC، `sudo makia-upgrade` را اجرا کنید و Browser را Hard Refresh کنید.
+
+### وضعیت انتشار
+
+`0.26.0-rc1` برای نصب عمومی به‌عنوان **Release Candidate** آماده می‌شود، اما Stable اعلام نمی‌شود تا UAT واقعی Upgrade/Clean Install و تست Client داخل ایران طبق [UAT 0.26](docs/UAT-0.26.0-RC1.md) و [Iran Field Test](docs/IRAN-CONNECTIVITY-FIELD-TEST.md) تکمیل شود.
+
 ## نسخه ۰.۲۵.۰-rc1 — رابط حرفه‌ای و خلوت‌تر
 
 این نسخه منوی Hover/Rail قبلی را کنار می‌گذارد و یک Sidebar ثابت، خوانا و دسته‌بندی‌شده ارائه می‌کند. صفحات روزمره عمداً خلوت‌تر شده‌اند: در صفحه کاربران فقط اطلاعات اصلی دیده می‌شود و QR، فایل Native، Protected ZIP، ویرایش و لغو دسترسی داخل Detail Drawer باز می‌شوند.
