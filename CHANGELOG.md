@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.27.0-rc1] - 2026-09-27
+
+### Connection Modes
+- Added a dedicated runtime-backed Connection Modes workspace for IKEv2, WireGuard, OpenVPN UDP, OpenVPN TCP, Stealth and WStunnel.
+- Added real IKEv2/IPsec provisioning with strongSwan, EAP-MSCHAPv2 credentials, UDP/500 + UDP/4500 readiness, forwarding/NAT and certificate/domain prerequisites.
+- Added Stealth as an explicit UI mode backed by the existing Xray VLESS/REALITY engine; no synthetic protocol or fake connection state is introduced.
+- Added WStunnel 11.0.0 from the official upstream release with SHA256 verification. WStunnel is reverse-proxied by the existing HTTPS/Nginx listener and can carry a retained WireGuard client through WSS.
+- Added encrypted IKEv2 and WStunnel delivery artifacts and unified Access Center visibility.
+- Added transport-aware warnings so OpenVPN UDP/443 cannot silently conflict with WireGuard UDP/443, and OpenVPN TCP/443 cannot silently conflict with HTTPS/Nginx.
+- Package installation for protocol engines remains root-owned by install/update scripts; the hardened web service does not run APT.
+- Rebuilt the host smoke gate after discovering a malformed HTTPS block and added conditional IKEv2/WStunnel runtime checks.
+
+### Release status
+- Release Candidate only. Stable remains blocked on real-host upgrade UAT and real client connectivity tests, including IKEv2 and WStunnel from outside the VPS.
+
 ## [0.26.0-rc1] - 2026-09-27
 
 ### Host bug fixes
