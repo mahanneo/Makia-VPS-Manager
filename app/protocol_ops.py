@@ -296,7 +296,7 @@ def repair_xray_runtime():
         raise ProtocolError(f"cannot parse Xray config: {exc}") from exc
     _rewrite_letsencrypt_certificates(data)
     tmp=_xray_temp_json_path(path,"repair")
-    backup_dir=Path("/var/backups/makia-vps-manager")
+    backup_dir=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
     backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
     backup=backup_dir/f"xray-repair-{int(time.time())}.json"
     shutil.copy2(path,backup)
