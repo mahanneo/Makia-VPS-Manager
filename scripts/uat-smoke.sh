@@ -154,6 +154,7 @@ fi
 
 if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then ok "Stunnel tooling installed"; else bad "Stunnel tooling missing"; fi
 command -v swanctl >/dev/null 2>&1 && ok "StrongSwan swanctl tooling installed" || bad "StrongSwan swanctl tooling missing"
+if [[ -f /usr/lib/ipsec/plugins/libstrongswan-eap-mschapv2.so ]]; then ok "StrongSwan EAP-MSCHAPv2 plugin installed"; else bad "StrongSwan EAP-MSCHAPv2 plugin missing"; fi
 command -v wstunnel >/dev/null 2>&1 && ok "WStunnel tooling installed" || bad "WStunnel tooling missing"
 [[ -f /etc/systemd/system/makia-ikev2-firewall.service ]] && ok "IKEv2 firewall unit installed" || bad "IKEv2 firewall unit missing"
 [[ -f /etc/systemd/system/makia-stealth.service ]] && ok "Stealth service unit installed" || bad "Stealth service unit missing"
