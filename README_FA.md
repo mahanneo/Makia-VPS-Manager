@@ -1,3 +1,17 @@
+## نسخه ۰.۲۶.۰-rc2 — Connection Modes واقعی
+
+در این Release Candidate، بخش **Connection Modes** با شش مسیر واقعی اضافه شده است: **IKEv2، WireGuard، UDP، TCP، Stealth و WStunnel**. این موارد صرفاً کارت نمایشی نیستند و هر گزینه به Runtime واقعی، API واقعی، Port/Listener و Diagnostics متناظر وصل است.
+
+- **IKEv2** با strongSwan و EAP-MSCHAPv2 اجرا می‌شود و UDP/500 و UDP/4500 را استفاده می‌کند.
+- **WireGuard** همان Engine فعلی Makia با Peer، QR، Handshake و Traffic است.
+- **UDP / TCP** دو حالت واقعی OpenVPN Server هستند؛ معماری فعلی یک Server Profile فعال دارد و هم‌زمانی جعلی نمایش داده نمی‌شود.
+- **Stealth**، OpenVPN TCP را داخل TLS واقعی Stunnel قرار می‌دهد.
+- **WStunnel**، WireGuard را از یک WSS tunnel واقعی عبور می‌دهد و binary نسخه 11.0.0 با SHA256 release verification نصب می‌شود.
+
+روی یک IPv4، Nginx HTTPS و چند سرویس TCP نمی‌توانند هم‌زمان مالک TCP/443 باشند. Makia این محدودیت را صریحاً Validate می‌کند؛ WireGuard روی UDP/443 می‌تواند هم‌زمان با HTTPS/TCP 443 فعال باشد، اما Stealth/WStunnel باید Listener آزاد داشته باشند مگر بعداً ingress/multiplexing واقعی اضافه شود.
+
+این نسخه همچنان **Stable نیست**. پس از Upgrade باید `sudo makia-doctor` و `sudo makia-uat-smoke` اجرا شوند و سپس [UAT Connection Modes](docs/UAT-PROTOCOL-MODES.md) و Field Test واقعی داخل ایران انجام شود.
+
 ## نسخه ۰.۲۶.۰-rc1 — کاندیدای نهایی انتشار عمومی
 
 این نسخه روی ایرادهای واقعی Host و تکمیل تجربه مدیریتی متمرکز است. خطای ساخت Xray با پیام `runuser: cannot set user id: Operation not permitted` بدون حذف `NoNewPrivileges` رفع شده است؛ Login نیز Focus Surface واحد، تغییر زبان واقعی FA/EN و Dark/Light واقعی دارد.
