@@ -147,7 +147,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","ikev2":"ikev2","wstunnel":"wstunnel"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -744,6 +744,136 @@ def security(request:Request):
 def protocols(request:Request):
     require_user(request)
     return protocol_ops.catalog()
+
+@app.get("/api/protocols/connection-modes")
+def connection_modes_get(request:Request):
+    require_user(request)
+    return protocol_ops.connection_modes_status()
+
+class IKEv2Bootstrap(BaseModel):
+    endpoint:str=Field(min_length=3,max_length=253)
+    dns_servers:list[str]=Field(default_factory=lambda:["1.1.1.1","8.8.8.8"])
+    pool:str=Field(default="10.77.0.0/24",max_length=64)
+
+@app.post("/api/protocols/ikev2/bootstrap")
+def ikev2_bootstrap(payload:IKEv2Bootstrap,request:Request):
+    actor=require_capability(request,"ikev2",True)
+    try:
+        result=protocol_ops.bootstrap_ikev2(payload.endpoint,payload.dns_servers,payload.pool)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"ikev2_bootstrap_failed","ikev2",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"ikev2_bootstrap","ikev2",f"endpoint={payload.endpoint}; pool={payload.pool}",ip=ip(request))
+    return result
+
+class IKEv2ClientCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+@app.post("/api/protocols/ikev2/clients")
+def ikev2_client_create(payload:IKEv2ClientCreate,request:Request):
+    actor=require_capability(request,"ikev2",True)
+    try:
+        result=protocol_ops.create_ikev2_client(payload.name,payload.password or None)
+        delivery=access_ops.ikev2_payload(result["name"],result["endpoint"],result["password"])
+        artifact_id=artifact_save("ikev2",payload.name,payload.name,"ikev2",delivery,{
+            "endpoint":result["endpoint"],"auth":result["auth"],"ports":result["ports"]
+        })
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    result["artifact_id"]=artifact_id
+    audit(actor,"ikev2_client_create",payload.name,ip=ip(request))
+    return result
+
+class WSTunnelBootstrap(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    local_port:int=Field(default=10080,ge=1024,le=65535)
+
+@app.post("/api/protocols/wstunnel/bootstrap")
+def wstunnel_bootstrap(payload:WSTunnelBootstrap,request:Request):
+    actor=require_capability(request,"wstunnel",True)
+    try:
+        result=protocol_ops.bootstrap_wstunnel(payload.domain,payload.local_port)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"wstunnel_bootstrap_failed","wstunnel",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"wstunnel_bootstrap","wstunnel",f"domain={payload.domain}; local_port={payload.local_port}",ip=ip(request))
+    return result
+
+class WSTunnelBundleCreate(BaseModel):
+    wireguard_peer:str=Field(min_length=1,max_length=48)
+    local_port:int=Field(default=51820,ge=1024,le=65535)
+
+@app.post("/api/protocols/wstunnel/bundles")
+def wstunnel_bundle_create(payload:WSTunnelBundleCreate,request:Request):
+    actor=require_capability(request,"wstunnel",True)
+    artifact=get_access_artifact_by_key("wireguard",payload.wireguard_peer)
+    if not artifact:
+        raise HTTPException(409,"WireGuard peer has no retained client config; reissue the peer first")
+    try:
+        wg_payload=access_ops.open_payload(artifact["payload_enc"])
+        config=str(wg_payload.get("primary_text") or "")
+        bundle=protocol_ops.wstunnel_wireguard_bundle(config,payload.local_port)
+        delivery=access_ops.wstunnel_payload(payload.wireguard_peer,bundle)
+        artifact_id=artifact_save("wstunnel",payload.wireguard_peer,payload.wireguard_peer,"wstunnel",delivery,{
+            "wireguard_peer":payload.wireguard_peer,
+            "endpoint":bundle["domain"],
+            "local_port":bundle["local_port"],
+            "wireguard_port":bundle["wireguard_port"],
+        })
+    except (access_ops.AccessPackageError,protocol_ops.ProtocolError) as e:
+        raise HTTPException(400,str(e))
+    bundle["artifact_id"]=artifact_id
+    audit(actor,"wstunnel_bundle_create",payload.wireguard_peer,f"local_port={payload.local_port}",ip=ip(request))
+    return bundle
+
+class StealthClientCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    port:int=Field(default=8443,ge=1,le=65535)
+    reality_dest:str=Field(default="www.microsoft.com:443",max_length=255)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    reset_days:int=Field(default=0,ge=0,le=3650)
+
+@app.post("/api/protocols/stealth/clients")
+def stealth_client_create(payload:StealthClientCreate,request:Request):
+    actor=require_capability(request,"xray",True)
+    if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
+        raise HTTPException(400,"Xray client name must be unique")
+    try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
+        result=protocol_ops.create_stealth_client(payload.port,payload.name,endpoint,payload.reality_dest)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    qr=qrcode.make(result["share_link"],image_factory=qrcode.image.svg.SvgPathImage)
+    buf=io.BytesIO(); qr.save(buf)
+    result["qr"]="data:image/svg+xml;base64,"+base64.b64encode(buf.getvalue()).decode()
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+    client_id=create_protocol_client(
+        payload.name,"xray","vless",result["tag"],result["credential"],result["share_link"],
+        quota_bytes,expire_at,payload.ip_limit,payload.reset_days
+    )
+    row=get_protocol_client(client_id) or {}
+    sub_id=row.get("subscription_id") or ""
+    origin=public_origin(request)
+    subscription_settings=operator_settings_snapshot()["subscription"]
+    delivery=access_ops.xray_payload(
+        payload.name,"vless",result["share_link"],
+        f"{origin}/sub/{sub_id}?format={subscription_settings['default_format']}" if sub_id and subscription_settings["enabled"] else "",
+        f"{origin}/client/{sub_id}" if sub_id and subscription_settings["client_page_enabled"] else ""
+    )
+    artifact_id=artifact_save("xray",str(client_id),payload.name,"vless",delivery,{
+        "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
+        "transport":"tcp","security":"reality","mode":"stealth",
+        "subscription_id":sub_id,"endpoint":endpoint,"endpoint_mode":payload.endpoint_mode
+    })
+    result.update({"client_id":client_id,"artifact_id":artifact_id,"subscription_id":sub_id,"mode":"stealth"})
+    audit(actor,"stealth_client_create",result["tag"],f"port={payload.port}; endpoint={endpoint}",ip=ip(request))
+    return result
 
 class XrayQuickInbound(BaseModel):
     protocol:str
@@ -1435,7 +1565,32 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
+    ike_state=protocol_ops.ikev2_status()
+    for username in ike_state.get("users") or []:
+        art=artifacts.get(("ikev2",username))
+        rows.append({
+            "id":f"ikev2:{username}","kind":"ikev2","key":username,"name":username,"protocol":"ikev2",
+            "status":"active" if ike_state.get("ready") else "attention","online":None,"device_limit":1,
+            "can_export":bool(art),"artifact_id":art["id"] if art else None,"legacy":not bool(art),
+            "endpoint":saved_endpoint(art) or ike_state.get("endpoint","")
+        })
+
+    ws_state=protocol_ops.wstunnel_status()
+    for art in artifacts.values():
+        if art.get("kind")!="wstunnel":
+            continue
+        key=art["external_key"]
+        try: meta=json.loads(art.get("metadata_json") or "{}")
+        except (ValueError,TypeError): meta={}
+        rows.append({
+            "id":f"wstunnel:{key}","kind":"wstunnel","key":key,
+            "name":art.get("display_name") or key,"protocol":"wstunnel",
+            "status":"active" if ws_state.get("ready") else "attention","online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art.get("id"),"legacy":False,
+            "endpoint":meta.get("endpoint") or ws_state.get("domain","")
+        })
+
+    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3,"ikev2":4,"wstunnel":5}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -1594,6 +1749,11 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="ikev2":
+            protocol_ops.delete_ikev2_client(key)
+            delete_access_artifact_by_key("ikev2",key)
+        elif kind=="wstunnel":
+            delete_access_artifact_by_key("wstunnel",key)
         else:
             raise HTTPException(404,"unsupported access kind")
     except (system_ops.OperationError,protocol_ops.ProtocolError) as e:
