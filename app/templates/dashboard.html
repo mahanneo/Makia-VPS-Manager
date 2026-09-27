@@ -75,7 +75,7 @@
         <details class="account-menu">
           <summary><span class="account-avatar">{{ (current_username or 'A')[:1]|upper }}</span><div><b>{{ current_username or 'admin' }}</b><small>Administrator</small></div><span>⌄</span></summary>
           <div class="account-popover">
-            <button type="button" data-view="settings"><span>⚙</span> تنظیمات حساب</button>
+            <button type="button" data-action="nav" data-view="settings"><span>⚙</span> تنظیمات حساب</button>
             <form action="/logout" method="post"><button type="submit"><span>↪</span> خروج امن</button></form>
           </div>
         </details>
