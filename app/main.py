@@ -1242,6 +1242,19 @@ def wireguard_repair(request:Request):
     audit(actor,"wireguard_repair","wg0",f"backup={result.get('backup')}",ip(request))
     return result
 
+class WireGuardPeerState(BaseModel):
+    enabled:bool
+
+@app.post("/api/access/wireguard/{key}/state")
+def wireguard_peer_state(key:str,payload:WireGuardPeerState,request:Request):
+    actor=require_feature(request,"wireguard",True)
+    try:
+        peer=protocol_ops.set_wireguard_peer_enabled(key,payload.enabled)
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    audit(actor,"wireguard_peer_state",key,f"enabled={peer['enabled']}",ip(request))
+    return {"ok":True,"name":key,"enabled":peer["enabled"]}
+
 @app.get("/api/protocols/endpoint-matrix")
 def protocol_endpoint_matrix_get(request:Request,endpoint:str=""):
     require_user(request)
@@ -1267,13 +1280,21 @@ def wireguard_peer_create(payload:WireGuardPeer,request:Request):
         endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
         result=protocol_ops.create_wireguard_peer(payload.name,endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
         result["diagnostics"]=protocol_ops.wireguard_endpoint_diagnostics(endpoint)
-        delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
-        artifact_id=artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
-            "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
-            "endpoint":result.get("endpoint",""),"endpoint_mode":payload.endpoint_mode,
-            "port":result.get("port"),"dns":result.get("dns",""),
-            "mtu":result.get("mtu"),"keepalive":result.get("keepalive"),"allowed_ips":result.get("allowed_ips","")
-        })
+        try:
+            delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
+            artifact_id=artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
+                "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
+                "endpoint":result.get("endpoint",""),"endpoint_mode":payload.endpoint_mode,
+                "port":result.get("port"),"dns":result.get("dns",""),
+                "mtu":result.get("mtu"),"keepalive":result.get("keepalive"),"allowed_ips":result.get("allowed_ips","")
+            })
+        except Exception:
+            try: protocol_ops.remove_wireguard_peer(result["public_key"])
+            except protocol_ops.ProtocolError as cleanup_exc:
+                raise protocol_ops.ProtocolError(
+                    f"WireGuard export save failed and peer cleanup failed; inspect {result['public_key']}: {cleanup_exc}"
+                ) from cleanup_exc
+            raise
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
     result["artifact_id"]=artifact_id
@@ -1466,6 +1487,7 @@ def access_entries(request:Request):
         })
 
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
+    wg_runtime={p["public_key"]:p for p in protocol_ops._wireguard_peer_runtime()} if license_feature_enabled("wireguard") else {}
     for peer in (protocol_ops.list_wireguard_peers() if license_feature_enabled("wireguard") else []):
         key=peer["name"]
         art=artifacts.get(("wireguard",key))
@@ -1473,10 +1495,13 @@ def access_entries(request:Request):
         except (ValueError,TypeError): wg_meta={}
         rows.append({
             "id":f"wireguard:{key}","kind":"wireguard","key":key,"name":key,"protocol":"wireguard",
-            "status":"active","online":None,"device_limit":1,"can_export":bool(art),
+            "status":"active" if peer.get("enabled",True) else "disabled","online":None,"device_limit":1,"can_export":bool(art),
             "artifact_id":art["id"] if art else None,"legacy":not bool(art),
             "public_key":peer.get("public_key",""),"address":peer.get("allowed_ips",""),
-            "endpoint":wg_meta.get("endpoint","")
+            "endpoint":wg_meta.get("endpoint",""),"enabled":peer.get("enabled",True),
+            "handshake_age":wg_runtime.get(peer["public_key"],{}).get("handshake_age"),
+            "rx":wg_runtime.get(peer["public_key"],{}).get("rx",0),
+            "tx":wg_runtime.get(peer["public_key"],{}).get("tx",0)
         })
 
     known_ovpn={a["external_key"] for a in artifacts.values() if a["kind"]=="openvpn"}

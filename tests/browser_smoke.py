@@ -216,6 +216,25 @@ def main():
             assert page.locator(".diagnostic-score.pass").count()==1
             page.locator('.close-btn[data-action="modal-close"]').click()
 
+            page.locator('aside.sidebar button[data-view="wireguard"]').click()
+            page.locator('.wg-workspace-hero').wait_for()
+            assert page.locator('.wg-workspace-metrics>div').count()==4
+            assert 'ساخت همتا' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
+            page.screenshot(path='/tmp/makia-wg-desktop.png',full_page=True)
+            page.set_viewport_size({"width":390,"height":844})
+            page.locator('.mobile-menu-toggle').click()
+            assert page.locator('.mobile-menu-toggle').get_attribute('aria-expanded')=='true'
+            page.locator('aside.sidebar button[data-view="dashboard"]').click()
+            assert page.locator('.mobile-menu-toggle').get_attribute('aria-expanded')=='false'
+            page.locator('.mobile-menu-toggle').click()
+            page.locator('aside.sidebar button[data-view="wireguard"]').click()
+            page.locator('.wg-workspace-hero').wait_for()
+            assert page.locator('body.menu-open').count()==0
+            page.wait_for_timeout(350)
+            assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'mobile WireGuard page overflows horizontally'
+            page.screenshot(path='/tmp/makia-wg-mobile.png',full_page=True)
+            page.set_viewport_size({"width":1280,"height":800})
+
             for view in ["sessions","protocols","guides","services","nodes","security","backups","audit","updates","settings","license"]:
                 nav=page.locator(f'aside.sidebar nav button[data-view="{view}"]')
                 nav.click()

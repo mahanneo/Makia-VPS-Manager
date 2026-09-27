@@ -11,6 +11,7 @@ import time
 import urllib.parse
 import uuid
 import pwd
+import tempfile
 from pathlib import Path
 
 XRAY_BIN_CANDIDATES=["/usr/local/bin/xray","/usr/bin/xray"]
@@ -604,10 +605,16 @@ def create_wireguard_peer(name, endpoint, iface="wg0", dns="1.1.1.1", mtu=1280, 
     client_private=_run(["wg","genkey"])
     client_public=_run(["wg","pubkey"],input_text=client_private+"\n")
     server_public=_run(["wg","show",iface,"public-key"])
+    block=f"\n# Makia peer: {name}\n[Peer]\nPublicKey = {client_public}\nAllowedIPs = {client_ip}/32\n"
     _run(["wg","set",iface,"peer",client_public,"allowed-ips",f"{client_ip}/32"])
-    with conf.open("a",encoding="utf-8") as fh:
-        fh.write(f"\n# Makia peer: {name}\n[Peer]\nPublicKey = {client_public}\nAllowedIPs = {client_ip}/32\n")
-    os.chmod(conf,0o600)
+    try:
+        _write_wireguard_config(conf,text+block)
+    except OSError as exc:
+        try:
+            _run(["wg","set",iface,"peer",client_public,"remove"])
+        except ProtocolError as cleanup_exc:
+            raise ProtocolError(f"WireGuard config save and runtime cleanup failed for {client_public}: {cleanup_exc}") from cleanup_exc
+        raise ProtocolError(f"WireGuard peer config could not be saved: {exc}") from exc
     client=(
         "[Interface]\n"
         f"PrivateKey = {client_private}\n"
@@ -627,21 +634,73 @@ def list_wireguard_peers(iface="wg0"):
     if not conf.exists():
         return []
     lines=conf.read_text(encoding="utf-8",errors="ignore").splitlines()
-    peers=[]; current=None; pending_name=None
+    peers=[]; current=None; pending_name=None; disabled=False
     for line in lines:
         stripped=line.strip()
         if stripped.startswith("# Makia peer:"):
-            pending_name=stripped.split(":",1)[1].strip()
-        elif stripped=="[Peer]":
             if current: peers.append(current)
-            current={"name":pending_name or "wireguard-peer","public_key":"","allowed_ips":"","interface":iface}
+            current=None
+            pending_name=stripped.split(":",1)[1].strip()
+            disabled=False
+        elif stripped=="# Makia disabled" and pending_name:
+            disabled=True
+        elif stripped=="[Peer]" or (disabled and stripped=="# [Peer]"):
+            if current: peers.append(current)
+            is_disabled=(stripped=="# [Peer]")
+            current={"name":pending_name or "wireguard-peer","public_key":"","allowed_ips":"","interface":iface,"enabled":not is_disabled}
             pending_name=None
-        elif current and "=" in stripped:
+            disabled=False
+        elif current and "=" in stripped and (not stripped.startswith("#") or not current["enabled"]):
+            if not current["enabled"]: stripped=stripped.removeprefix("# ")
             key,value=[x.strip() for x in stripped.split("=",1)]
             if key=="PublicKey": current["public_key"]=value
             elif key=="AllowedIPs": current["allowed_ips"]=value
     if current: peers.append(current)
     return [p for p in peers if p.get("public_key")]
+
+def _write_wireguard_config(path, text):
+    """Replace a wg-quick config without exposing a partially written peer block."""
+    fd,temp=tempfile.mkstemp(prefix=".makia-wg-",dir=path.parent)
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as fh:
+            os.fchmod(fh.fileno(),0o600)
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp,path)
+    finally:
+        if os.path.exists(temp): os.unlink(temp)
+
+def set_wireguard_peer_enabled(name, enabled, iface="wg0"):
+    """Persistently toggle only Makia-owned canonical peer blocks, then update wg."""
+    conf=WG_DIR/f"{iface}.conf"
+    if not conf.exists():
+        raise ProtocolError("WireGuard server config not found")
+    peer=next((p for p in list_wireguard_peers(iface) if p["name"]==name),None)
+    if not peer or not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name):
+        raise ProtocolError("Makia WireGuard peer not found")
+    enabled=bool(enabled)
+    if peer["enabled"]==enabled:
+        return peer
+    key=peer["public_key"]
+    address=peer["allowed_ips"]
+    if not re.fullmatch(r"[A-Za-z0-9+/=_-]{20,100}",key) or not re.fullmatch(r"[0-9./]+",address):
+        raise ProtocolError("Unsupported WireGuard peer block")
+    active=f"# Makia peer: {name}\n[Peer]\nPublicKey = {key}\nAllowedIPs = {address}\n"
+    inactive=f"# Makia peer: {name}\n# Makia disabled\n# [Peer]\n# PublicKey = {key}\n# AllowedIPs = {address}\n"
+    before=conf.read_text(encoding="utf-8")
+    old,new=(inactive,active) if enabled else (active,inactive)
+    if before.count(old)!=1:
+        raise ProtocolError("WireGuard peer block differs from Makia format; no changes applied")
+    updated=before.replace(old,new,1)
+    try:
+        _write_wireguard_config(conf,updated)
+        command=["wg","set",iface,"peer",key,"allowed-ips",address] if enabled else ["wg","set",iface,"peer",key,"remove"]
+        _run(command)
+    except (OSError,ProtocolError) as exc:
+        _write_wireguard_config(conf,before)
+        raise ProtocolError(f"WireGuard peer state update failed; config restored: {exc}") from exc
+    return {**peer,"enabled":enabled}
 
 def remove_wireguard_peer(public_key, iface="wg0"):
     public_key=str(public_key or "").strip()
@@ -650,8 +709,19 @@ def remove_wireguard_peer(public_key, iface="wg0"):
     conf=WG_DIR/f"{iface}.conf"
     if not conf.exists():
         raise ProtocolError("WireGuard server config not found")
-    _run(["wg","set",iface,"peer",public_key,"remove"])
-    lines=conf.read_text(encoding="utf-8",errors="ignore").splitlines()
+    disabled=next((p for p in list_wireguard_peers(iface) if p["public_key"]==public_key and not p["enabled"]),None)
+    if disabled:
+        text=conf.read_text(encoding="utf-8")
+        block=(f"# Makia peer: {disabled['name']}\n# Makia disabled\n# [Peer]\n"
+               f"# PublicKey = {public_key}\n# AllowedIPs = {disabled['allowed_ips']}\n")
+        if text.count(block)!=1:
+            raise ProtocolError("WireGuard disabled peer block differs from Makia format")
+        _write_wireguard_config(conf,text.replace(block,"",1))
+        return {"removed":True,"public_key":public_key,"interface":iface}
+    before=conf.read_text(encoding="utf-8",errors="ignore")
+    if f"PublicKey = {public_key}" not in before:
+        raise ProtocolError("WireGuard public key not found in server config")
+    lines=before.splitlines()
     out=[]; block=[]; in_peer=False
     for line in lines+["[__END__]"]:
         if line.startswith("[") and line.endswith("]"):
@@ -675,8 +745,15 @@ def remove_wireguard_peer(public_key, iface="wg0"):
         if line.startswith("# Makia peer:") and idx+1<len(out) and out[idx+1]!="[Peer]":
             continue
         cleaned.append(line)
-    conf.write_text("\n".join(cleaned).rstrip()+"\n",encoding="utf-8")
-    os.chmod(conf,0o600)
+    after="\n".join(cleaned).rstrip()+"\n"
+    if after==before:
+        raise ProtocolError("WireGuard public key not found in server config")
+    _write_wireguard_config(conf,after)
+    try:
+        _run(["wg","set",iface,"peer",public_key,"remove"])
+    except ProtocolError:
+        _write_wireguard_config(conf,before)
+        raise
     return {"removed":True,"public_key":public_key,"interface":iface}
 
 def _wireguard_server_config(iface="wg0"):
@@ -819,7 +896,7 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     if nat is False: warnings.append("NAT/MASQUERADE برای شبکه WireGuard روی uplink پیدا نشد.")
     peers=_wireguard_peer_runtime(iface)
     recent=sum(1 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)
-    if peers and recent==0:
+    if any(p.get("enabled",True) for p in peers) and recent==0:
         warnings.append("هیچ Handshake تازه‌ای از Peerها دیده نشده است. اگر Client در حال تلاش برای اتصال است، علاوه بر Endpoint/Key، احتمال مسدودبودن UDP در فایروال دیتاسنتر، NAT بالادست یا شبکه/ISP را بررسی کنید؛ سلامت سمت سرور به‌تنهایی دسترسی UDP از اینترنت را اثبات نمی‌کند.")
     endpoint_ok=True
     if endpoint:

@@ -53,6 +53,20 @@ def test_wireguard_endpoint_update_keeps_peer_and_rebuilds_delivery(monkeypatch)
     assert b"vpn.example.com:443" in saved[0][4]["files"]["client.conf"]
     assert saved[0][5]["endpoint"]=="vpn.example.com"
 
+def test_wireguard_peer_creation_rolls_back_when_artifact_save_fails(monkeypatch):
+    scope={"type":"http","method":"POST","path":"/api/protocols/wireguard/peers","headers":[],"query_string":b"","scheme":"http","server":("testserver",80),"client":("127.0.0.1",12345)}
+    monkeypatch.setattr(main_app,"require_feature",lambda *a:"admin")
+    monkeypatch.setattr(main_app.protocol_ops,"validate_endpoint_selection",lambda endpoint,mode,direct: endpoint)
+    monkeypatch.setattr(main_app.protocol_ops,"create_wireguard_peer",lambda *a,**kw:{"public_key":"peer-key","config":"config","address":"10.66.66.2"})
+    monkeypatch.setattr(main_app.protocol_ops,"wireguard_endpoint_diagnostics",lambda *a:{"endpoint_ok":True})
+    monkeypatch.setattr(access_ops,"wireguard_payload",lambda *a:{"files":{}})
+    monkeypatch.setattr(main_app,"artifact_save",lambda *a,**kw:(_ for _ in ()).throw(RuntimeError("database failed")))
+    removed=[]
+    monkeypatch.setattr(main_app.protocol_ops,"remove_wireguard_peer",lambda key:removed.append(key))
+    with pytest.raises(RuntimeError,match="database failed"):
+        main_app.wireguard_peer_create(main_app.WireGuardPeer(name="phone",endpoint="8.8.8.8"),Request(scope))
+    assert removed==["peer-key"]
+
 
 def test_protected_zip_requires_password():
     data=access_ops.protected_zip({"credentials.txt":b"top-secret"},"583921")

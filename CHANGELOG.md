@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.19.0] - 2026-09-27
+
+### WireGuard peer workspace and interface refresh
+- Added a dedicated WireGuard workspace with peer status, last handshake, traffic counters, endpoint and QR/native delivery actions, plus setup and runtime diagnostics.
+- Managed peers can be enabled or disabled persistently in wg0.conf and live runtime without regenerating client credentials; disabled peer addresses remain reserved. The sidebar is readable on mobile through an explicit menu.
+- Hardened peer creation: server config is replaced atomically after runtime setup and runtime peers are removed if config or encrypted delivery persistence fails. State changes restore config on runtime failure.
+- Refreshed the main panel palette, typography and card hierarchy based on a comparison with WG_Panel while retaining Makia branding and implementation.
+- Added unit regression coverage and desktop/mobile browser checks. External UDP connectivity, DNS and client imports must still be verified on the deployed VPS.
+
 ## [0.18.1] - 2026-09-27
 
 ### Protocol connectivity patch

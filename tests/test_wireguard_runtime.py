@@ -1,5 +1,6 @@
 from pathlib import Path
 from app import protocol_ops
+import pytest
 
 def _wg_fixture(tmp_path):
     wg=tmp_path/"wireguard"
@@ -36,6 +37,59 @@ def test_wireguard_peer_profile_accepts_domain_endpoint(tmp_path,monkeypatch):
     result=protocol_ops.create_wireguard_peer("client02","vpn.example.com")
     assert "Endpoint = vpn.example.com:443" in result["config"]
     assert result["endpoint"]=="vpn.example.com"
+
+def test_wireguard_peer_toggle_persists_and_reserves_address(tmp_path,monkeypatch):
+    wg,conf=_wg_fixture(tmp_path)
+    key="A"*43+"="
+    conf.write_text(conf.read_text()+f"\n# Makia peer: phone\n[Peer]\nPublicKey = {key}\nAllowedIPs = 10.66.66.2/32\n")
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    commands=[]
+    monkeypatch.setattr(protocol_ops,"_run",lambda args,*a,**kw:commands.append(args) or "")
+    disabled=protocol_ops.set_wireguard_peer_enabled("phone",False)
+    assert not disabled["enabled"]
+    assert "# [Peer]" in conf.read_text()
+    assert "10.66.66.2" in protocol_ops._wg_used_ips("wg0")
+    assert not protocol_ops.list_wireguard_peers()[0]["enabled"]
+    assert commands[-1]==["wg","set","wg0","peer",key,"remove"]
+    assert protocol_ops.set_wireguard_peer_enabled("phone",False)==disabled
+    assert len(commands)==1
+    enabled=protocol_ops.set_wireguard_peer_enabled("phone",True)
+    assert enabled["enabled"]
+    assert "# [Peer]" not in conf.read_text()
+    assert commands[-1]==["wg","set","wg0","peer",key,"allowed-ips","10.66.66.2/32"]
+    assert conf.stat().st_mode & 0o777==0o600
+
+def test_wireguard_toggle_rolls_back_config_on_runtime_failure(tmp_path,monkeypatch):
+    wg,conf=_wg_fixture(tmp_path)
+    key="A"*43+"="
+    conf.write_text(conf.read_text()+f"\n# Makia peer: phone\n[Peer]\nPublicKey = {key}\nAllowedIPs = 10.66.66.2/32\n")
+    original=conf.read_text()
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**kw:(_ for _ in ()).throw(protocol_ops.ProtocolError("wg failed")))
+    with pytest.raises(protocol_ops.ProtocolError,match="restored"):
+        protocol_ops.set_wireguard_peer_enabled("phone",False)
+    assert conf.read_text()==original
+
+def test_wireguard_disabled_peer_can_be_removed_without_runtime_call(tmp_path,monkeypatch):
+    wg,conf=_wg_fixture(tmp_path)
+    key="A"*43+"="
+    conf.write_text(conf.read_text()+f"\n# Makia peer: phone\n# Makia disabled\n# [Peer]\n# PublicKey = {key}\n# AllowedIPs = 10.66.66.2/32\n")
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**kw:(_ for _ in ()).throw(AssertionError("disabled peer has no runtime state")))
+    assert protocol_ops.remove_wireguard_peer(key)["removed"]
+    assert protocol_ops.list_wireguard_peers()==[]
+    assert "10.66.66.2" not in protocol_ops._wg_used_ips("wg0")
+
+def test_wireguard_remove_restores_config_when_runtime_remove_fails(tmp_path,monkeypatch):
+    wg,conf=_wg_fixture(tmp_path)
+    key="A"*43+"="
+    conf.write_text(conf.read_text()+f"\n# Makia peer: phone\n[Peer]\nPublicKey = {key}\nAllowedIPs = 10.66.66.2/32\n")
+    original=conf.read_text()
+    monkeypatch.setattr(protocol_ops,"WG_DIR",wg)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**kw:(_ for _ in ()).throw(protocol_ops.ProtocolError("wg failed")))
+    with pytest.raises(protocol_ops.ProtocolError,match="wg failed"):
+        protocol_ops.remove_wireguard_peer(key)
+    assert conf.read_text()==original
 
 def test_wireguard_domain_diagnostics_matches_server_ipv4(tmp_path,monkeypatch):
     wg,conf=_wg_fixture(tmp_path)

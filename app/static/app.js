@@ -107,7 +107,7 @@ async function dashboard(renderToken=window.__viewRenderToken){
       '<div class="panel glass-resource-panel"><div class="panel-head"><div><h3>مصرف منابع سرور</h3><span>REAL-TIME</span></div></div><div class="glass-rings">'+ring('CPU',m.cpu,'cyan')+ring('RAM',m.memory,'violet')+ring('Disk',m.disk,'green')+'</div><div class="glass-network-head"><span>ترافیک شبکه</span><b>'+fmtBytes(networkTotal)+'</b></div>'+svgHistory(hist)+'</div>',
     '</section>',
     '<section class="glass-secondary-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>Access Center</h3><span>'+accessRows.length+' MANAGED</span></div><button class="ghost" data-action="nav" data-view="access">Open</button></div><div class="glass-access-strip"><div><b>'+accessRows.filter(x=>x.kind==='ssh').length+'</b><span>SSH</span></div><div><b>'+accessRows.filter(x=>x.kind==='xray').length+'</b><span>Xray</span></div><div><b>'+accessRows.filter(x=>x.kind==='wireguard').length+'</b><span>WireGuard</span></div><div><b>'+accessRows.filter(x=>x.kind==='openvpn').length+'</b><span>OpenVPN</span></div></div></div>',
+      '<div class="panel"><div class="panel-head"><div><h3>Access Center</h3><span>'+accessRows.length+' MANAGED</span></div><button class="ghost" data-action="nav" data-view="access">Open</button></div><div class="glass-access-strip"><div><b>'+accessRows.filter(x=>x.kind==='ssh').length+'</b><span>SSH</span></div><div><b>'+accessRows.filter(x=>x.kind==='xray').length+'</b><span>Xray</span></div><button data-action="nav" data-view="wireguard"><b>'+accessRows.filter(x=>x.kind==='wireguard').length+'</b><span>WireGuard ↗</span></button><div><b>'+accessRows.filter(x=>x.kind==='openvpn').length+'</b><span>OpenVPN</span></div></div></div>',
       '<div class="panel"><div class="panel-head"><div><h3>Live Sessions</h3><span>'+d.online_sessions+' ACTIVE</span></div><button class="ghost" data-action="nav" data-view="sessions">View all</button></div><div class="session-cards">'+(recent.length?recent.map(x=>'<div><span class="avatar-mini">'+htmlEsc((x.username||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(x.username)+'</b><small>'+htmlEsc(x.remote||'local')+'</small></div><time>'+htmlEsc(x.since||'')+'</time></div>').join(''):'<div class="empty compact">نشست فعالی وجود ندارد.</div>')+'</div></div>',
     '</section>'
   ].join('');
@@ -202,6 +202,7 @@ function accessCard(a){
     policy=fmtBytes(a.used_bytes||0)+' / '+quota+' · IP '+Number(a.online||0)+'/'+Number(a.device_limit||1);
   }else if(a.kind==='wireguard'){
     meta=htmlEsc(a.address||'WireGuard peer');policy='Native tunnel profile';
+    if(a.enabled&&a.handshake_age!==null&&a.handshake_age!==undefined)policy+=' · Handshake '+Math.floor(Number(a.handshake_age)/60)+'m ago';
   }else{meta='Certificate profile';policy='OpenVPN PKI access'}
   if(a.endpoint)policy+=' · '+htmlEsc(a.endpoint);
   const delivery=window.__operatorSettings?.delivery||{};
@@ -216,7 +217,7 @@ function accessCard(a){
       ? '<button class="icon-action warnish" data-action="wg-reissue" data-key="'+key+'">Reissue</button>'
       : '<button class="icon-action warnish" data-action="manage-access" data-id="'+id+'">Reset credential</button>');
   const manage=(a.kind==='ssh'||a.kind==='xray')?'<button class="more-action" data-action="manage-access" data-id="'+id+'">Manage</button>':
-    (a.kind==='wireguard'&&a.can_export?'<button class="more-action" data-action="wg-endpoint-update" data-key="'+key+'" data-endpoint="'+htmlEsc(a.endpoint||'')+'">Endpoint</button>':'');
+    (a.kind==='wireguard'?'<button class="more-action" data-action="nav" data-view="wireguard">Manage</button>':'');
   return [
     '<article class="access-profile '+kind+'">',
       '<div class="profile-identity"><div class="profile-avatar">'+htmlEsc(String(a.name||'?').slice(0,1).toUpperCase())+'</div><div><div class="profile-name"><b>'+name+'</b><span class="protocol-pill">'+proto+'</span>',
@@ -799,6 +800,39 @@ function protocolState(installed,active){
 function engineCard(icon,name,desc,status,meta,actions=''){
   return '<article class="engine-card"><div class="engine-card-head"><span class="engine-icon">'+htmlEsc(icon)+'</span>'+status+'</div><h3>'+htmlEsc(name)+'</h3><p>'+htmlEsc(desc)+'</p><div class="engine-meta">'+meta+'</div><div class="engine-actions">'+actions+'</div></article>';
 }
+async function wireguard(renderToken=window.__viewRenderToken){
+  title.textContent='WireGuard';setPageContext('PEER WORKSPACE');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن وضعیت WireGuard…</b></div>';
+  await ensureLicenseState();
+  if(!hasLicenseFeature('wireguard')){content.innerHTML=lockedFeaturePanel('wireguard','WireGuard');return}
+  const [stack,rows]=await Promise.all([api('/api/protocols'),api('/api/access')]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='wireguard')return;
+  window.__protocolData=stack;
+  const peers=rows.filter(x=>x.kind==='wireguard'),service=stack.wireguard||{};
+  const connected=peers.filter(p=>p.enabled&&p.handshake_age!==null&&p.handshake_age!==undefined&&p.handshake_age<180).length;
+  const state=service.config?(service.service_active?'سرویس فعال':'سرویس متوقف'):'نیازمند راه‌اندازی';
+  const peerRows=peers.map(p=>{
+    const key=dataEnc(p.key),name=htmlEsc(p.name),isActive=p.enabled!==false;
+    const age=p.handshake_age===null||p.handshake_age===undefined?'هنوز اتصالی ثبت نشده':(p.handshake_age<180?'متصل · ':'آخرین اتصال · ')+Math.floor(Number(p.handshake_age)/60)+' دقیقه پیش';
+    return '<article class="wg-workspace-peer"><div class="wg-peer-name"><span class="wg-person">'+htmlEsc(p.name.slice(0,1).toUpperCase())+'</span><div><b>'+name+'</b><small>'+htmlEsc(p.address||'')+'</small></div><span class="status-chip '+(isActive?'ok':'warn')+'">'+(isActive?'فعال':'غیرفعال')+'</span></div>'+
+      '<div class="wg-peer-endpoint"><span>Endpoint</span><b dir="ltr">'+htmlEsc(p.endpoint||'نامشخص')+'</b></div>'+
+      '<div class="wg-peer-traffic"><span>'+htmlEsc(isActive?age:'اتصال غیرفعال است')+'</span><b>↓ '+fmtBytes(p.rx||0)+' · ↑ '+fmtBytes(p.tx||0)+'</b></div>'+
+      '<div class="wg-peer-actions">'+(p.can_export?'<button class="soft" data-action="access-share" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">QR / Share</button><button class="soft" data-action="native-export" data-kind="wireguard" data-key="'+key+'">.conf</button><button class="soft" data-action="wg-endpoint-update" data-key="'+key+'" data-endpoint="'+htmlEsc(p.endpoint||'')+'">Endpoint</button>':'<button class="soft" data-action="wg-reissue" data-key="'+key+'">ساخت دوباره</button>')+
+      '<button class="'+(isActive?'soft warnish':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(isActive?'0':'1')+'">'+(isActive?'غیرفعال کردن':'فعال کردن')+'</button><button class="danger" data-action="revoke-access" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">حذف</button></div></article>';
+  }).join('');
+  content.innerHTML=[
+    '<section class="wg-workspace-hero"><div><div class="eyebrow">WIREGUARD · WG0</div><h2>مدیریت WireGuard</h2><p>همتاها، آخرین اتصال و ترافیک را در یک‌جا ببینید. برای هر دستگاه تنظیمات مستقل با دامنه یا IP بسازید.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ساخت همتا':'راه‌اندازی WireGuard')+'</button><button class="ghost" data-action="wireguard-diagnostics">بررسی اتصال</button><button class="ghost" data-action="endpoint-matrix">بررسی دامنه / IP</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(service.service_active?'running':'')+'"></span><b>'+state+'</b><small>'+Number(peers.length)+' همتا · '+connected+' اتصال اخیر</small></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>همتاها</span><b>'+peers.length+'</b></div><div><span>فعال</span><b>'+peers.filter(p=>p.enabled!==false).length+'</b></div><div><span>اتصال در ۳ دقیقه اخیر</span><b>'+connected+'</b></div><div><span>رابط‌ها</span><b>'+Number((service.interfaces||[]).length)+'</b></div></section>',
+    '<section class="panel wg-workspace-directory"><div class="panel-head"><div><h3>همتاهای WireGuard</h3><span>HANDSHAKE · TRAFFIC · DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="wg-workspace-list">'+(peerRows||'<div class="empty">هنوز همتایی ساخته نشده است. از «ساخت همتا» شروع کنید.</div>')+'</div></section>',
+    '<section class="wg-workspace-help"><div><b>اتصال با دامنه یا IP</b><p>هنگام ساخت همتا Endpoint را انتخاب کنید. دامنه باید مستقیم به IP سرور اشاره کند و UDP پورت WireGuard در فایروال و ارائه‌دهنده باز باشد.</p></div><button class="ghost" data-action="client-guide" data-kind="wireguard">راهنمای کلاینت ↗</button></section>'
+  ].join('');
+}
+
+async function toggleWireGuardPeer(key,enabled){
+  if(!confirm((enabled?'فعال کردن':'غیرفعال کردن')+' همتای '+key+'؟'))return;
+  try{await api('/api/access/wireguard/'+encodeURIComponent(key)+'/state',{method:'POST',body:JSON.stringify({enabled})});toast(enabled?'همتا فعال شد':'همتا غیرفعال شد');await currentView()}catch(e){alert(e.message)}
+}
+
 async function protocols(renderToken=window.__viewRenderToken){
   await ensureLicenseState();
   if(!hasLicenseFeature('xray')&&!hasLicenseFeature('wireguard')&&!hasLicenseFeature('openvpn')){
@@ -820,7 +854,7 @@ async function protocols(renderToken=window.__viewRenderToken){
     ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Install & Setup</button>'
     : (!w.config
       ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Bootstrap wg0</button>'
-      : '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Peers</button><button class="engine-btn" data-action="wireguard-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="wireguard-repair">Repair Runtime</button>');
+      : '<button class="engine-btn primaryish" data-action="nav" data-view="wireguard">Manage Peers</button><button class="engine-btn" data-action="wireguard-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="wireguard-repair">Repair Runtime</button>');
   const oActions=!o.installed
     ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Install & Setup</button>'
     : (!o.config
@@ -1415,7 +1449,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Overview','dashboard'],['Access Center','access'],['Live Sessions','sessions'],['Protocols','protocols'],['Client Guides','guides'],['Nodes','nodes'],['Services','services'],['Security','security'],['Backups','backups'],['Audit Logs','audit'],['Update Center','updates'],['Settings / 2FA / API Tokens','settings'],['License & Support','license']];
+const commandItems=[['Overview','dashboard'],['Access Center','access'],['WireGuard','wireguard'],['Live Sessions','sessions'],['Protocols','protocols'],['Client Guides','guides'],['Nodes','nodes'],['Services','services'],['Security','security'],['Backups','backups'],['Audit Logs','audit'],['Update Center','updates'],['Settings / 2FA / API Tokens','settings'],['License & Support','license']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -1482,6 +1516,7 @@ async function handleMakiaAction(btn){
   if(action==='manage-access'){manageAccess(dataDec(btn.dataset.id));return}
   if(action==='revoke-access'){await revokeAccess(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='wg-reissue'){await reissueWireGuard(dataDec(btn.dataset.key));return}
+  if(action==='wg-toggle'){await toggleWireGuardPeer(dataDec(btn.dataset.key),btn.dataset.enabled==='1');return}
   if(action==='protocol-setup'){await openProtocolSetup(btn.dataset.kind);return}
   if(action==='protocol-install'){await performProtocolInstall(btn.dataset.kind);return}
   if(action==='protocol-bootstrap'){await performProtocolBootstrap(btn.dataset.kind,btn.dataset.installed==='1');return}
@@ -1572,15 +1607,16 @@ document.addEventListener('change',e=>{
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
 function applyLanguageShell(){
-  const fa={dashboard:'نمای کلی',access:'مرکز دسترسی',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',license:'مجوز و پشتیبانی'};
-  const en={dashboard:'Overview',access:'Access Center',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocols',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',license:'License & Support'};
+  const fa={dashboard:'نمای کلی',access:'مرکز دسترسی',wireguard:'وایرگارد',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',license:'مجوز و پشتیبانی'};
+  const en={dashboard:'Overview',access:'Access Center',wireguard:'WireGuard',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocols',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',license:'License & Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,access,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,license:licenseSupport};
+const views={dashboard,access,wireguard,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,license:licenseSupport};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
-function switchView(v){activeView=v;setPageContext(v==='dashboard'?'OPERATIONS COCKPIT':v==='access'?'IDENTITY & DELIVERY':v==='guides'?'DELIVERY EDUCATION':'MAKIA CONTROL CENTER');document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));return currentView()}
+function switchView(v){activeView=v;setPageContext(v==='dashboard'?'OPERATIONS COCKPIT':v==='access'?'IDENTITY & DELIVERY':v==='guides'?'DELIVERY EDUCATION':'MAKIA CONTROL CENTER');document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');return currentView()}
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
+document.querySelector('.mobile-menu-toggle')?.addEventListener('click',e=>{const opened=document.body.classList.toggle('menu-open');e.currentTarget.setAttribute('aria-expanded',String(opened))});
 applyLanguageShell();ensureSessionContext().catch(()=>{});ensureLicenseState().catch(()=>{});switchView('dashboard');
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
