@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.26.0-rc1] - 2026-09-27
+
+### Host bug fixes
+- Fixed the Xray creation failure `runuser: cannot set user id: Operation not permitted` without weakening Makia's systemd `NoNewPrivileges` hardening. Xray syntax is still validated by Core, while service-user file visibility falls back to explicit UID/GID permission validation when setuid is prohibited.
+- Rebuilt Login input focus styling so Username/Password have one visible focus surface instead of a nested second card.
+- Made Login FA/EN and Dark/Light controls functional and persistent.
+
+### Protocol correctness
+- Added a shared Xray guided compatibility matrix in UI and backend so invalid Protocol/Transport/Security combinations are not offered or committed.
+- Expanded Xray Core CI coverage across VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP and SOCKS with multiple transports; VLESS RAW/REALITY still performs an actual CI client handshake and routed traffic test.
+- Added safe OpenVPN server reconfiguration for TCP/UDP, Port, DNS push, Keepalive, Redirect Gateway and client-to-client policy with backup/runtime verification/rollback.
+- OpenVPN downloads now regenerate from the live server transport/port while preserving each client's endpoint.
+- Expanded WireGuard workspace around real Peer state, handshake, RX/TX, QR/config and its existing DNS/Port/MTU/Keepalive/AllowedIPs/CIDR settings.
+
+### UX finalization
+- Added protocol-specific SVG graphics across provisioning, protocol workspaces and guides.
+- Replaced the old Support dashboard with a concise Help & Diagnostics center; report history and temporary Remote Support are progressive/advanced actions.
+- Rebuilt Admin Security as an actionable posture dashboard for HTTPS, 2FA, UFW, Fail2ban, SSH and API tokens.
+- Rebuilt the public connection guide with first-party visual step diagrams for Xray, WireGuard, OpenVPN and SSH/NPV.
+
+### Release status
+- Public release candidate. Automated CI is required before merge.
+- Promotion to `0.26.0` Stable remains blocked on real-host upgrade/clean-install UAT and real client connectivity tests from inside Iran.
+
 ## [0.25.0-rc1] - 2026-09-27
 
 ### Professional UX rebuild
