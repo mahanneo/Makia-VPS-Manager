@@ -120,7 +120,7 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
         "xray":False,
         "wg_installed":False,"wg_config":False,"wg_active":False,"wg_port":0,
         "ovpn_installed":False,"ovpn_config":False,"ovpn_active":False,"ovpn_port":0,
-        "stunnel":False,
+        "stunnel":False,"ikev2":False,
     }
     def xray_status():
         return {"installed":state["xray"],"service_active":state["xray"],"config_path":"/usr/local/etc/xray/config.json" if state["xray"] else None}
@@ -130,6 +130,10 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
         return {"installed":state["ovpn_installed"],"service_active":state["ovpn_active"],"config":"/etc/openvpn/server/server.conf" if state["ovpn_config"] else None,"port":state["ovpn_port"],"proto":"udp"}
     def st_status():
         return {"installed":state["stunnel"],"service_active":False}
+    def ike_status():
+        return {"installed":state["ikev2"],"service_active":False,"configured":False,"ready":False}
+    def ws_status():
+        return {"installed":True,"service_active":False,"configured":False,"ready":False}
     def install_component(name):
         if name=="xray":
             state["xray"]=True
@@ -143,6 +147,9 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
         if name=="stunnel":
             state["stunnel"]=True
             return st_status()
+        if name=="ikev2":
+            state["ikev2"]=True
+            return ike_status()
         raise AssertionError(name)
     def bootstrap_wg(port,cidr,iface,mtu):
         state.update(wg_config=True,wg_active=True,wg_port=int(port))
@@ -155,6 +162,8 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
     monkeypatch.setattr(protocol_ops,"wireguard_status",wg_status)
     monkeypatch.setattr(protocol_ops,"openvpn_status",ovpn_status)
     monkeypatch.setattr(protocol_ops,"stunnel_status",st_status)
+    monkeypatch.setattr(protocol_ops,"ikev2_status",ike_status)
+    monkeypatch.setattr(protocol_ops,"wstunnel_status",ws_status)
     monkeypatch.setattr(protocol_ops,"install_component",install_component)
     monkeypatch.setattr(protocol_ops,"bootstrap_wireguard",bootstrap_wg)
     monkeypatch.setattr(protocol_ops,"bootstrap_openvpn",bootstrap_ovpn)
@@ -167,6 +176,8 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
     assert result["wireguard"]["service_active"] is True
     assert result["openvpn"]["service_active"] is True
     assert result["stunnel"]["installed"] is True
+    assert result["ikev2"]["installed"] is True
+    assert result["wstunnel"]["installed"] is True
     assert result["ports"]=={"wireguard":443,"openvpn":1194}
 
 
@@ -272,3 +283,88 @@ def test_xray_mkcp_uses_xray_26327_schema_without_removed_seed_header():
     assert "seed" not in stream["kcpSettings"]
     assert "header" not in stream["kcpSettings"]
     assert meta=={}
+
+
+def test_managed_block_is_idempotent():
+    first=protocol_ops._managed_block("config setup\n", "# BEGIN X", "# END X", "alpha=1")
+    second=protocol_ops._managed_block(first, "# BEGIN X", "# END X", "alpha=2")
+    assert second.count("# BEGIN X")==1
+    assert second.count("# END X")==1
+    assert "alpha=1" not in second
+    assert "alpha=2" in second
+
+
+def test_web_component_install_never_runs_apt_without_explicit_root_gate(monkeypatch):
+    monkeypatch.delenv("MAKIA_ALLOW_PACKAGE_INSTALL",raising=False)
+    monkeypatch.setattr(protocol_ops,"_binary",lambda:None)
+    monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{"installed":False})
+    monkeypatch.setattr(protocol_ops,"openvpn_status",lambda:{"installed":False})
+    monkeypatch.setattr(protocol_ops,"stunnel_status",lambda:{"installed":False})
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{"installed":False})
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_run",lambda args,*a,**kw:calls.append(args) or "")
+    with pytest.raises(ProtocolError,match="sudo makia-upgrade"):
+        protocol_ops.install_component("ikev2")
+    assert not any(cmd and cmd[0]=="apt-get" for cmd in calls)
+
+
+def test_wstunnel_bundle_rewrites_wireguard_endpoint(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"wstunnel_status",lambda:{
+        "ready":True,"domain":"vpn.example.com","path_prefix":"makia-secret",
+        "wireguard_port":51820,
+    })
+    config="""[Interface]
+PrivateKey = private
+Address = 10.66.66.2/32
+
+[Peer]
+PublicKey = public
+AllowedIPs = 0.0.0.0/0
+Endpoint = 203.0.113.8:51820
+PersistentKeepalive = 15
+"""
+    bundle=protocol_ops.wstunnel_wireguard_bundle(config,51900)
+    assert "Endpoint = 127.0.0.1:51900" in bundle["wireguard_config"]
+    assert "udp://127.0.0.1:51900:127.0.0.1:51820" in bundle["command"]
+    assert "--http-upgrade-path-prefix makia-secret" in bundle["command"]
+    assert bundle["server_url"]=="wss://vpn.example.com"
+
+
+def test_connection_modes_reflect_openvpn_transport(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{"installed":True,"service_active":True,"port":51820})
+    monkeypatch.setattr(protocol_ops,"openvpn_status",lambda:{"installed":True,"service_active":True,"port":443,"proto":"tcp4-server"})
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{"installed":True,"ready":False})
+    monkeypatch.setattr(protocol_ops,"wstunnel_status",lambda:{"installed":True,"ready":False})
+    monkeypatch.setattr(protocol_ops,"_xray_reality_status",lambda:{"active":True,"ports":[8443],"clients":2})
+    monkeypatch.setattr(protocol_ops,"_binary",lambda:"/usr/local/bin/xray")
+    modes=protocol_ops.connection_modes_status()
+    assert modes["tcp"]["active"] is True
+    assert modes["udp"]["active"] is False
+    assert modes["tcp"]["ports"]==[443]
+    assert modes["stealth"]["active"] is True
+    assert modes["stealth"]["ports"]==[8443]
+
+
+def test_ikev2_status_reads_managed_users(monkeypatch,tmp_path):
+    conf=tmp_path/"ipsec.conf"
+    secrets_file=tmp_path/"ipsec.secrets"
+    env=tmp_path/"ikev2.env"
+    conf.write_text(
+        "config setup\n# BEGIN MAKIA IKEV2\nconn makia-ikev2\n    leftid=@vpn.example.com\n# END MAKIA IKEV2\n",
+        encoding="utf-8",
+    )
+    secrets_file.write_text(
+        '# BEGIN MAKIA IKEV2 SECRETS\n: RSA "/tmp/key.pem"\nalice : EAP "secret"\n# END MAKIA IKEV2 SECRETS\n',
+        encoding="utf-8",
+    )
+    env.write_text("IKEV2_POOL=10.77.0.0/24\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"IKEV2_CONF",conf)
+    monkeypatch.setattr(protocol_ops,"IKEV2_SECRETS",secrets_file)
+    monkeypatch.setattr(protocol_ops,"IKEV2_ENV",env)
+    monkeypatch.setattr(protocol_ops.shutil,"which",lambda name:f"/usr/bin/{name}")
+    monkeypatch.setattr(protocol_ops,"_udp_listeners",lambda:{500,4500})
+    monkeypatch.setattr(protocol_ops,"_systemd_active_any",lambda *names:True)
+    state=protocol_ops.ikev2_status()
+    assert state["ready"] is True
+    assert state["endpoint"]=="vpn.example.com"
+    assert state["users"]==["alice"]
