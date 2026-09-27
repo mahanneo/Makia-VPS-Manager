@@ -95,6 +95,10 @@ def main():
             assert "Inboundها" in page.locator(".sanaei-sidebar").inner_text()
             assert page.locator('.sanaei-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
+            page.locator('.sanaei-sidebar button[data-view="inbounds"]').click()
+            page.locator(".sx-inbound-list").wait_for()
+            page.screenshot(path='/tmp/makia-inbounds.png',full_page=True)
+            page.locator('.sanaei-group-toggle[data-group="protocolclients"]').click()
             page.locator('.sanaei-sidebar button[data-view="ssh"]').click()
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-ssh.png',full_page=True)
@@ -232,7 +236,7 @@ def main():
             page.screenshot(path='/tmp/makia-wg-mobile.png',full_page=True)
             page.set_viewport_size({"width":1280,"height":800})
 
-            for view in ["sessions","protocols","guides","services","nodes","security","backups","audit","updates","settings","support"]:
+            for view in ["inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
                 nav=page.locator(f'.sanaei-sidebar nav button[data-view="{view}"]')
                 nav.click()
                 page.wait_for_timeout(450)
@@ -248,7 +252,8 @@ def main():
             page.locator(".guide-admin-grid").wait_for()
             assert page.locator(".guide-admin-card").count()==4
             assert page.locator('[data-action="client-guide-copy"]').count()==4
-            page.locator('.sanaei-sidebar button[data-view="settings"]').click()
+            page.locator('.sanaei-group-toggle[data-group="settings"]').click()
+            page.locator('[data-action="nav-settings"][data-tab="general"]').click()
             page.locator(".settings-content-v2").wait_for()
 
             page.locator('[data-action="settings-tab"][data-tab="delivery"]').click()
@@ -301,7 +306,7 @@ def main():
                 assert "makia-portable-migration" in manifest
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            for view in ["dashboard","access","sessions","protocols","guides","services","nodes","security","backups","audit","updates","settings","support"]:
+            for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
                 nav=page.locator(f'.sanaei-sidebar nav button[data-view="{view}"]')
                 nav.click()
                 page.wait_for_timeout(450)
@@ -318,7 +323,9 @@ def main():
             page.locator(".port-management-panel").wait_for()
             assert page.locator(".port-table-row").count()>=1
             page.screenshot(path='/tmp/makia-ports.png',full_page=True)
-            page.locator('.sanaei-sidebar button[data-view="settings"]').click()
+            if page.locator('.sanaei-nav-group.open .sanaei-submenu [data-action="nav-settings"][data-tab="general"]').count()==0:
+                page.locator('.sanaei-group-toggle[data-group="settings"]').click()
+            page.locator('[data-action="nav-settings"][data-tab="general"]').click()
             page.locator(".settings-content-v2").wait_for()
             page.screenshot(path='/tmp/makia-settings.png',full_page=True)
             assert page.locator(".license-lock-panel").count()==0
