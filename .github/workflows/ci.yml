@@ -97,6 +97,7 @@ jobs:
           grep -q 'makia-owner-config' scripts/install.sh
           grep -q 'makia-owner-config' scripts/update.sh
           test -f scripts/install-wstunnel.sh
+          test -f scripts/makia-vpn-tls-sync.sh
           test -f scripts/ikev2-network.sh
           test -f systemd/makia-wstunnel.service
           test -f systemd/makia-ikev2-network.service
@@ -104,6 +105,8 @@ jobs:
           grep -q 'strongswan strongswan-pki libcharon-extra-plugins' scripts/update.sh
           grep -q 'makia-install-wstunnel' scripts/install.sh
           grep -q 'makia-install-wstunnel' scripts/update.sh
+          grep -q 'makia-vpn-tls-sync' scripts/install.sh
+          grep -q 'makia-vpn-tls-sync' scripts/update.sh
       - name: UAT v0.11 contract
         run: |
           grep -q 'Protected ZIP' docs/UAT-0.11.0-RC1.md
