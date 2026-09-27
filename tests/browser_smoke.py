@@ -52,6 +52,11 @@ def wait_server(timeout=20):
     raise RuntimeError("test server did not become healthy")
 
 
+def leave_sidebar(page):
+    page.mouse.move(640, 420)
+    page.wait_for_timeout(250)
+
+
 def main():
     client_id,subscription_id=seed()
     env=os.environ.copy()
@@ -96,19 +101,24 @@ def main():
             assert page.locator('.sanaei-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
             page.locator('.sanaei-sidebar button[data-view="inbounds"]').click()
+            leave_sidebar(page)
             page.locator(".sx-inbound-list").wait_for()
             page.screenshot(path='/tmp/makia-inbounds.png',full_page=True)
             page.locator('.sanaei-group-toggle[data-group="protocolclients"]').click()
             page.locator('.sanaei-sidebar button[data-view="ssh"]').click()
+            leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-ssh.png',full_page=True)
             page.locator('.sanaei-sidebar button[data-view="xray"]').click()
+            leave_sidebar(page)
             page.locator(".protocol-client-list").wait_for()
             page.screenshot(path='/tmp/makia-xray.png',full_page=True)
             page.locator('.sanaei-sidebar button[data-view="openvpn"]').click()
+            leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
             page.locator('.sanaei-sidebar button[data-view="support"]').click()
+            leave_sidebar(page)
             page.locator(".support-hero").wait_for()
             assert "پشتیبانی Makia" in page.locator("#content").inner_text()
             page.locator("#supportGrantScope").select_option("readonly")
@@ -127,6 +137,7 @@ def main():
             assert "REMOTE SUPPORT SESSION" in support_page.locator("#remoteSupportBanner").inner_text()
             support_context.close()
             page.locator('.sanaei-sidebar button[data-view="access"]').click()
+            leave_sidebar(page)
             page.locator(".access-profile",has_text="browser-client").wait_for()
 
             row=page.locator(".access-profile",has_text="browser-client")
@@ -211,6 +222,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('.sanaei-sidebar button[data-view="dashboard"]').click()
+            leave_sidebar(page)
             page.locator(".sx-vitals").wait_for()
             page.locator('[data-action="self-test"]').click()
             page.locator(".diagnostics-modal").wait_for()
@@ -218,6 +230,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('.sanaei-sidebar button[data-view="wireguard"]').click()
+            leave_sidebar(page)
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('.wg-workspace-metrics>div').count()==4
             assert 'ساخت همتا' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
@@ -229,6 +242,7 @@ def main():
             assert page.locator('.mobile-menu-toggle').get_attribute('aria-expanded')=='false'
             page.locator('.mobile-menu-toggle').click()
             page.locator('.sanaei-sidebar button[data-view="wireguard"]').click()
+            leave_sidebar(page)
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('body.menu-open').count()==0
             page.wait_for_timeout(350)
@@ -239,6 +253,7 @@ def main():
             for view in ["inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
                 nav=page.locator(f'.sanaei-sidebar nav button[data-view="{view}"]')
                 nav.click()
+                leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
                 assert "active" in (nav.get_attribute("class") or ""), f"{view} sidebar item not active"
@@ -249,6 +264,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('.sanaei-sidebar button[data-view="guides"]').click()
+            leave_sidebar(page)
             page.locator(".guide-admin-grid").wait_for()
             assert page.locator(".guide-admin-card").count()==4
             assert page.locator('[data-action="client-guide-copy"]').count()==4
@@ -309,17 +325,21 @@ def main():
             for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
                 nav=page.locator(f'.sanaei-sidebar nav button[data-view="{view}"]')
                 nav.click()
+                leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
 
             page.locator('.sanaei-sidebar button[data-view="access"]').click()
+            leave_sidebar(page)
             page.locator(".sx-table-wrap").wait_for()
             assert page.locator("#accessSegments button").count()==5
             assert page.locator(".license-lock-panel").count()==0
             page.locator('.sanaei-sidebar button[data-view="services"]').click()
+            leave_sidebar(page)
             page.locator(".service-control-list").wait_for()
             page.screenshot(path='/tmp/makia-services.png',full_page=True)
             page.locator('.sanaei-sidebar button[data-view="protocols"]').click()
+            leave_sidebar(page)
             page.locator(".port-management-panel").wait_for()
             assert page.locator(".port-table-row").count()>=1
             page.screenshot(path='/tmp/makia-ports.png',full_page=True)
