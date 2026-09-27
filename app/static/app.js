@@ -364,7 +364,7 @@ function wizardPolicyFields(s){
     const spec=xrayProfileSpec(s.xrayProtocol),pre=xrayPrerequisiteMessage(s);
     const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>فقط ترکیب‌های معتبر برای '+htmlEsc(spec.label)+' نمایش داده می‌شوند.</p></div>';
     if(s.simpleMode)return intro+
-      '<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(spec.label)+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip '+(pre?'warn':'ok')+'">'+(pre?'نیاز به Domain':'Recommended')+'</span></div>'+
+      '<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(spec.label.toUpperCase())+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip '+(pre?'warn':'ok')+'">'+(pre?'نیاز به Domain':'Recommended')+'</span></div>'+
       (pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'')+
       '<div class="pro-info-card"><div><b>حالت ساده</b><span>Preset سازگار پروتکل اعمال شده و گزینه نامعتبر قابل انتخاب نیست.</span></div><small>برای Quota، Expiry، IP Limit یا Transport/Security سازگار وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
     const transports=spec.transports.map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
