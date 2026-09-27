@@ -236,6 +236,9 @@ from app import protocol_ops
 d=protocol_ops._openvpn_server_runtime()
 proto=str(d.get("proto") or "")
 needs=proto not in {"udp4","tcp4-server"} or not d.get("service_active") or not d.get("listener")
+up=protocol_ops.OVPN_DIR/"makia-up.sh"
+if up.exists() and "iptables -I FORWARD" not in up.read_text(encoding="utf-8",errors="ignore"):
+    needs=True
 if needs:
     result=protocol_ops.repair_openvpn_ipv4_runtime()
     d=result["runtime"]

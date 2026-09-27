@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+APP=/opt/makia-vps-manager
+
 PASS=0
 WARN=0
 FAIL=0

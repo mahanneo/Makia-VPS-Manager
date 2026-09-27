@@ -1027,9 +1027,47 @@ def _openvpn_server_runtime():
                         break
     return result
 
+def _openvpn_forward_scripts(uplink):
+    """Permit tunnel routing even when the host firewall denies forwarded packets."""
+    up=OVPN_DIR/"makia-up.sh"
+    down=OVPN_DIR/"makia-down.sh"
+    up.write_text(
+        "#!/bin/sh\n"
+        'iptables -C FORWARD -i "$dev" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$dev" -j ACCEPT\n'
+        'iptables -C FORWARD -o "$dev" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o "$dev" -j ACCEPT\n'
+        f"iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE 2>/dev/null || "
+        f"iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE\n",
+        encoding="utf-8"
+    )
+    down.write_text(
+        "#!/bin/sh\n"
+        'iptables -D FORWARD -i "$dev" -j ACCEPT 2>/dev/null || true\n'
+        'iptables -D FORWARD -o "$dev" -j ACCEPT 2>/dev/null || true\n'
+        f"iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
+        encoding="utf-8"
+    )
+    os.chmod(up,0o700); os.chmod(down,0o700)
+    return up,down
+
+def _openvpn_forwarding_runtime():
+    try:
+        output=_run(["ip","-o","-4","addr","show"],timeout=8)
+        match=re.search(r"(?m)^\d+:\s+(\S+)\s+inet\s+10\.8\.0\.1/24\b",output)
+        iface=match.group(1).split("@",1)[0] if match else ""
+        uplink=_default_iface()
+    except Exception:
+        return {"interface":"","forward_in":None,"forward_out":None,"nat":None}
+    if not iface:
+        return {"interface":"","forward_in":None,"forward_out":None,"nat":None}
+    return {"interface":iface,
+            "forward_in":_iptables_check(["-C","FORWARD","-i",iface,"-j","ACCEPT"]),
+            "forward_out":_iptables_check(["-C","FORWARD","-o",iface,"-j","ACCEPT"]),
+            "nat":_iptables_check(["-t","nat","-C","POSTROUTING","-s","10.8.0.0/24","-o",uplink,"-j","MASQUERADE"])}
+
 def openvpn_endpoint_diagnostics(endpoint):
     endpoint=_validate_endpoint_host(endpoint,"OpenVPN endpoint")
     runtime=_openvpn_server_runtime()
+    forwarding=_openvpn_forwarding_runtime() if runtime.get("service_active") else {"interface":"","forward_in":None,"forward_out":None,"nat":None}
     resolved4=[]
     resolved6=[]
     is_ip=False
@@ -1062,6 +1100,10 @@ def openvpn_endpoint_diagnostics(endpoint):
         warnings.append("سرویس OpenVPN فعال نیست.")
     if runtime.get("port") and not runtime.get("listener"):
         warnings.append("برای Port تنظیم‌شده Listener فعال OpenVPN دیده نشد.")
+    if forwarding["forward_in"] is False or forwarding["forward_out"] is False:
+        warnings.append("قانون FORWARD تونل OpenVPN کامل نیست؛ کلاینت ممکن است وصل شود اما اینترنت نداشته باشد.")
+    if forwarding["nat"] is False:
+        warnings.append("قانون NAT/MASQUERADE تونل OpenVPN دیده نشد؛ اینترنت کلاینت برقرار نمی‌شود.")
     if int(runtime.get("port") or 0)==443 and str(runtime.get("proto") or "").startswith("tcp"):
         warnings.append("OpenVPN روی TCP/443 با HTTPS/Nginx همان IP تداخل دارد مگر Port-sharing یا IP جدا داشته باشید. UDP/443 می‌تواند هم‌زمان با HTTPS/TCP 443 استفاده شود.")
     cert_info={}
@@ -1083,6 +1125,7 @@ def openvpn_endpoint_diagnostics(endpoint):
         "dns_matches_server":matches,
         "service_active":runtime.get("service_active",False),
         "listener":runtime.get("listener",False),
+        "forwarding":forwarding,
         "port":runtime.get("port"),
         "proto":runtime.get("proto"),
         "certificate":cert_info,
@@ -1097,6 +1140,8 @@ def bootstrap_openvpn(port=1194, proto="udp"):
     requested_proto=str(proto or "udp").lower()
     if requested_proto not in {"udp","tcp","udp4","tcp4"}:
         raise ProtocolError("invalid OpenVPN protocol")
+    if (OVPN_DIR/"server/server.conf").exists():
+        raise ProtocolError("OpenVPN server already exists; use Repair Runtime to preserve existing client certificates")
     server_proto=_openvpn_proto(requested_proto,server=True)
     if not _installed("openvpn"):
         install_component("openvpn")
@@ -1135,11 +1180,7 @@ def bootstrap_openvpn(port=1194, proto="udp"):
     ]:
         shutil.copy2(src,dst)
     uplink=_default_iface()
-    up=OVPN_DIR/"makia-up.sh"
-    down=OVPN_DIR/"makia-down.sh"
-    up.write_text(f"#!/bin/sh\niptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE\n",encoding="utf-8")
-    down.write_text(f"#!/bin/sh\niptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE 2>/dev/null || true\n",encoding="utf-8")
-    os.chmod(up,0o700); os.chmod(down,0o700)
+    up,down=_openvpn_forward_scripts(uplink)
     server_conf=server_dir/"server.conf"
     server_conf.write_text(
         f"port {port}\nproto {server_proto}\nlocal 0.0.0.0\ndev tun\n"
@@ -1176,19 +1217,35 @@ def repair_openvpn_ipv4_runtime():
         updated=re.sub(r"(?m)^(proto\s+\S+\s*)$",r"\1\nlocal 0.0.0.0",updated,count=1)
     backup=server_conf.with_name(f"server.conf.makia-{int(time.time())}.bak")
     shutil.copy2(server_conf,backup)
-    if updated!=original:
-        server_conf.write_text(updated,encoding="utf-8")
+    up=OVPN_DIR/"makia-up.sh"
+    down=OVPN_DIR/"makia-down.sh"
+    managed=f"up {up}" in original and f"down {down}" in original
+    scripts={p:(p.read_bytes(),p.stat().st_mode & 0o777) if p.exists() else None for p in (up,down)} if managed else {}
+    script_backups={}
     try:
+        if updated!=original:
+            server_conf.write_text(updated,encoding="utf-8")
+        if managed:
+            for p,saved in scripts.items():
+                if saved is not None:
+                    script_backup=p.with_name(f"{p.name}.makia-{int(time.time())}.bak")
+                    shutil.copy2(p,script_backup)
+                    script_backups[str(p)]=str(script_backup)
+            _openvpn_forward_scripts(_default_iface())
         _run(["systemctl","restart","openvpn-server@server"],timeout=30)
         if not _active("openvpn-server@server"):
             raise ProtocolError("OpenVPN did not become active after IPv4 normalization")
     except Exception:
         shutil.copy2(backup,server_conf)
+        for p,saved in scripts.items():
+            if saved is None: p.unlink(missing_ok=True)
+            else:
+                p.write_bytes(saved[0]); os.chmod(p,saved[1])
         try: _run(["systemctl","restart","openvpn-server@server"],timeout=30)
         except Exception: pass
         raise
     runtime=_openvpn_server_runtime()
-    return {"ok":True,"backup":str(backup),"runtime":runtime}
+    return {"ok":True,"backup":str(backup),"script_backups":script_backups,"runtime":runtime}
 
 def _openvpn_remote_block(endpoint,port):
     endpoint=_validate_endpoint_host(endpoint,"OpenVPN endpoint")

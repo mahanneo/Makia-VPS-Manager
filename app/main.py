@@ -282,7 +282,7 @@ def operator_settings_snapshot():
             "ssh_devices":_setting_int("default_ssh_devices",1,1,50),
             "xray_protocol":get_setting("default_xray_protocol","vless"),
             "xray_port":_setting_int("default_xray_port",2087,1,65535),
-            "xray_transport":get_setting("default_xray_transport","xhttp"),
+            "xray_transport":get_setting("default_xray_transport","tcp"),
             "xray_security":get_setting("default_xray_security","reality"),
             "xray_path":get_setting("default_xray_path","/makia"),
             "xray_sni":get_setting("default_xray_sni","www.microsoft.com"),
@@ -1965,7 +1965,7 @@ class OperatorSettings(BaseModel):
     ssh_devices:int=Field(default=1,ge=1,le=50)
     xray_protocol:str="vless"
     xray_port:int=Field(default=2087,ge=1,le=65535)
-    xray_transport:str="xhttp"
+    xray_transport:str="tcp"
     xray_security:str="reality"
     xray_path:str=Field(default="/makia",max_length=256)
     xray_sni:str=Field(default="www.microsoft.com",max_length=253)

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.1] - 2026-09-27
+
+### Protocol connectivity patch
+- Access Center defaults to a simple VLESS/RAW/REALITY Xray profile with no quota/expiry. Choosing a different Xray protocol applies a compatible simple transport/security preset; advanced settings remain optional. New Xray profiles skip already assigned inbound ports in the wizard.
+- OpenVPN bootstrap now permits forwarding in both directions for its tunnel as well as NAT, and its diagnostic view reports missing forwarding/NAT. The managed runtime repair updates old Makia gateway scripts with backup and rollback; upgrade applies that repair when the old script lacks forwarding. Re-running bootstrap on an existing server is blocked to preserve its PKI.
+- Fixed `makia-doctor` aborting on a missing APP variable when checking WireGuard. CI now exercises an actual Xray client handshake and HTTP traffic in addition to config syntax.
+- Host UAT is still required for DNS, firewall/provider UDP access, client imports and live internet routing. Existing imported profiles are not changed by this update.
+
 ## [0.18.0] - 2026-09-26
 
 ### Explicit IP / domain delivery
