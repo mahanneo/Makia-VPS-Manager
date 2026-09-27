@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import http.client
+import ssl
 import threading
 import time
 import uuid
@@ -34,6 +35,16 @@ def main():
     root=Path("/tmp/makia-xray-matrix")
     root.mkdir(parents=True,exist_ok=True)
     cert_path,key_path=make_test_certificate(root)
+    class Cover(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200);self.end_headers();self.wfile.write(b"cover")
+        def log_message(self,*args): pass
+    cover=ThreadingHTTPServer(("127.0.0.1",0),Cover)
+    cover_tls=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    cover_tls.load_cert_chain(str(cert_path),str(key_path))
+    cover.socket=cover_tls.wrap_socket(cover.socket,server_side=True)
+    cover_thread=threading.Thread(target=cover.serve_forever,daemon=True)
+    cover_thread.start()
     original_tls=protocol_ops._xray_materialize_tls
     protocol_ops._xray_materialize_tls=lambda domain:(cert_path,key_path)
     try:
@@ -56,7 +67,7 @@ def main():
         # Default simple profile: exercise a real client handshake and routed HTTP request.
         simple_id=str(uuid.uuid4())
         simple_stream,simple_meta=protocol_ops._build_xray_stream(
-            binary,"vless","tcp","reality","/","www.microsoft.com","www.microsoft.com:443",
+            binary,"vless","tcp","reality","/","test.example.com",f"127.0.0.1:{cover.server_port}",
         )
         data["inbounds"].append({
             "tag":"makia-ci-simple","listen":"127.0.0.1","port":21008,"protocol":"vless",
@@ -128,6 +139,7 @@ def main():
         assert reality_meta["short_id"]
         print("Xray 26.3.27 guided protocol matrix PASS: VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP, SOCKS5")
     finally:
+        cover.shutdown();cover.server_close()
         protocol_ops._xray_materialize_tls=original_tls
 
 

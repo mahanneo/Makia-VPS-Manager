@@ -198,7 +198,7 @@ def main():
             page.locator('[data-shell-action="create-access"]').click()
             page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
             page.locator("#wizXrayProtocol").select_option("vmess")
-            page.locator("#wizEndpoint").fill("vpn.example.com")
+            page.locator("#wizEndpoint").fill("8.8.8.8")
             page.locator('[data-action="wizard-next"]').click()
             assert "VMESS" in page.locator(".wizard-note").text_content()
             assert "TCP" in page.locator(".wizard-note").text_content()
