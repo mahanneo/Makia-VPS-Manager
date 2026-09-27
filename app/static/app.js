@@ -1276,7 +1276,7 @@ async function settings(renderToken=window.__viewRenderToken){
     ].join('');
   }
 
-  content.innerHTML='<div class="settings-shell-v2"><aside class="settings-nav-v2"><div class="settings-nav-title"><b>Settings V2</b><span>REAL BACKEND ONLY</span></div>'+nav+'</aside><div class="settings-content-v2">'+body+'</div></div>';
+  content.innerHTML='<div class="sx-page"><section class="sx-page-head"><div><h1>تنظیمات</h1><p>تنظیمات پنل، امنیت، پروتکل‌ها و Recovery</p></div><div class="sx-head-actions"><span class="sx-state-pill"><i></i>v'+htmlEsc(window.MAKIA_VERSION||'')+'</span></div></section><div class="settings-tabs-sx">'+nav+'</div><div class="settings-content-v2">'+body+'</div></div>';
 }
 
 async function saveGeneral(){try{const r=await api('/api/settings/general',{method:'PUT',body:JSON.stringify({language:generalLang.value,panel_domain:generalDomain.value.trim(),theme:generalTheme.value,density:generalDensity.value})});window.PANEL_DOMAIN=r.panel_domain||'';toast('Settings saved');if(r.language!==window.MAKIA_LANG||r.theme!==window.MAKIA_THEME||r.density!==window.MAKIA_DENSITY){setTimeout(()=>location.reload(),450);return}await settings()}catch(e){alert(e.message)}}
