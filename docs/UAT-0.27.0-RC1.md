@@ -39,7 +39,7 @@ sudo makia-uat-smoke
 پیش‌نیاز:
 - Domain معتبر.
 - Certificate معتبر Let's Encrypt.
-- UDP/500 و UDP/4500 در Provider firewall/UFW قابل دسترسی.
+- UDP/500 و UDP/4500 در Provider firewall/UFW قابل دسترسی؛ برای Clientهای بدون NAT، IP protocol 50 / ESP نیز مجاز باشد.
 
 Checks:
 - Configure IKEv2 بدون Certificate باید با پیام واضح Fail شود.
