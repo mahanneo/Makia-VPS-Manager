@@ -53,7 +53,8 @@ def wait_server(timeout=20):
 
 
 def leave_sidebar(page):
-    page.mouse.move(640, 420)
+    vp=page.viewport_size or {"width":1280,"height":800}
+    page.mouse.move(max(12,min(vp["width"]-20,vp["width"]//2)),max(12,min(vp["height"]-20,vp["height"]//2)))
     page.wait_for_timeout(250)
 
 
@@ -270,6 +271,7 @@ def main():
             assert page.locator('[data-action="client-guide-copy"]').count()==4
             page.locator('.sanaei-group-toggle[data-group="settings"]').click()
             page.locator('[data-action="nav-settings"][data-tab="general"]').click()
+            leave_sidebar(page)
             page.locator(".settings-content-v2").wait_for()
 
             page.locator('[data-action="settings-tab"][data-tab="delivery"]').click()
