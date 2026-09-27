@@ -80,7 +80,9 @@ def main():
             assert portal.locator("#wireguard").count()==1
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
-            assert "چطور کانفیگ Makia را اضافه کنم؟" in portal.locator("body").inner_text()
+            assert "اتصال بدون حدس و خطا" in portal.locator("body").inner_text()
+            assert portal.locator(".visual-steps").count()==4
+            assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
 
             page=browser.new_page(accept_downloads=True)
@@ -88,6 +90,17 @@ def main():
             page.on("pageerror",lambda exc: page_errors.append(str(exc)))
             page.goto(BASE_URL+"/login",wait_until="networkidle")
             page.screenshot(path='/tmp/makia-login.png',full_page=True)
+            # Login controls must be real controls, not decorative buttons.
+            assert page.locator('body.pro-login[data-theme="dark"], body.pro-login[data-theme="light"]').count()==1
+            before_theme=page.locator("body").get_attribute("data-theme")
+            page.locator("#loginThemeToggle").click()
+            assert page.locator("body").get_attribute("data-theme")!=before_theme
+            page.locator("#loginLangToggle").click()
+            assert page.locator("html").get_attribute("lang")=="en"
+            page.locator("#loginLangToggle").click()
+            assert page.locator("html").get_attribute("lang")=="fa"
+            page.locator("#loginUsername").focus()
+            assert page.locator(".pro-login-field:focus-within").count()==1
             page.locator('input[name="username"]').fill("admin")
             page.locator('input[name="password"]').fill(PASSWORD)
             page.locator('button[type="submit"]').click()
@@ -117,10 +130,17 @@ def main():
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
+            page.locator('[data-action="openvpn-configure"]').first.click()
+            page.locator(".engine-config-modal").wait_for()
+            assert page.locator('input[name="ovpnTransport"]').count()==2
+            assert page.locator("#ovpnCfgPort").count()==1
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.locator('.pro-sidebar button[data-view="support"]').click()
             leave_sidebar(page)
-            page.locator(".support-hero").wait_for()
-            assert "پشتیبانی Makia" in page.locator("#content").inner_text()
+            page.locator(".support-v26").wait_for()
+            assert "راهنما و پشتیبانی" in page.locator("#content").inner_text()
+            support_advanced=page.locator("details.support-advanced",has_text="دسترسی موقت پشتیبانی")
+            support_advanced.locator("summary").click()
             page.locator("#supportGrantScope").select_option("readonly")
             page.locator('[data-action="support-grant-create"]').click()
             page.locator(".support-code-box").wait_for()
@@ -223,7 +243,7 @@ def main():
             page.locator("#wizEndpoint").fill("8.8.8.8")
             page.locator('[data-action="wizard-next"]').click()
             assert "VMESS" in page.locator(".recommended-profile").text_content()
-            assert "TCP" in page.locator(".recommended-profile").text_content()
+            assert "WS" in page.locator(".recommended-profile").text_content()
             assert "NONE" in page.locator(".recommended-profile").text_content()
             assert page.locator("#wizSecurity").count()==0
             page.locator('[data-action="wizard-xray-advanced"]').click()
@@ -243,7 +263,7 @@ def main():
             leave_sidebar(page)
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('.wg-workspace-metrics>div').count()==4
-            assert 'ساخت همتا' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
+            assert 'ساخت Peer' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
             page.screenshot(path='/tmp/makia-wg-desktop.png',full_page=True)
             page.set_viewport_size({"width":390,"height":844})
             page.locator('.mobile-menu-toggle').click()
@@ -319,6 +339,9 @@ def main():
                 page.locator(f'[data-action="settings-tab"][data-tab="{tab}"]').click()
                 page.wait_for_timeout(180)
                 assert page.locator(".settings-content-v2").inner_text().strip(), f"settings tab {tab} empty"
+                if tab=="security":
+                    assert page.locator(".security-posture-grid article").count()==6
+                    page.screenshot(path='/tmp/makia-security.png',full_page=True)
 
             page.locator('[data-action="settings-tab"][data-tab="recovery"]').click()
             page.locator('[data-action="portable-backup"]').click()
