@@ -139,6 +139,21 @@ def _write_env(path,values):
             raise ProtocolModeError("invalid service setting")
     return _atomic_text(path,"".join(f"{k}={v}\n" for k,v in values.items()),0o600)
 
+def _ufw_allow_esp_if_active():
+    if not shutil.which("ufw"):
+        return {"active":False,"changed":False}
+    p=subprocess.run(["ufw","status"],text=True,capture_output=True,timeout=8,check=False)
+    text=(p.stdout or p.stderr or "").lower()
+    if p.returncode!=0 or "status: active" not in text:
+        return {"active":False,"changed":False}
+    p=subprocess.run(
+        ["ufw","allow","proto","esp","from","any","to","any"],
+        text=True,capture_output=True,timeout=15,check=False,
+    )
+    if p.returncode!=0:
+        raise ProtocolModeError((p.stderr or p.stdout or "unable to allow ESP in UFW").strip()[:600])
+    return {"active":True,"changed":True,"rule":"proto esp"}
+
 def _strongswan_service():
     for name in ("strongswan","strongswan-swanctl","strongswan-starter"):
         if _active(name): return name
@@ -244,6 +259,7 @@ pools {{
         _run(["systemctl","enable","--now","makia-ikev2-firewall"],30)
         protocol_ops._ufw_allow_if_active(500,"udp","IKEv2")
         protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T")
+        _ufw_allow_esp_if_active()
         status=ikev2_status()
         if not status.get("ready"):
             raise ProtocolModeError("IKEv2 did not reach READY state after configuration")
