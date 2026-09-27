@@ -1421,6 +1421,7 @@ async function handleMakiaAction(btn){
   if(action==='access-share'){await openAccessShare(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='access-detail'){openAccessDetail(dataDec(btn.dataset.id));return}
   if(action==='manage-access'){manageAccess(dataDec(btn.dataset.id));return}
   if(action==='revoke-access'){await revokeAccess(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='wg-reissue'){await reissueWireGuard(dataDec(btn.dataset.key));return}
@@ -1490,11 +1491,10 @@ document.addEventListener('click',e=>{
     if(a==='command')openCommandPalette();
     else if(a==='refresh')currentView();
     else if(a==='create-access')openProvisionWizard();
-    else if(a==='sidebar-pin'){
-      const pinned=document.body.classList.toggle('sidebar-pinned');
-      try{localStorage.setItem('makia-sidebar-pinned',String(pinned))}catch{}
-    }else if(a==='sidebar-group'){
-      shell.closest('.sanaei-nav-group')?.classList.toggle('open');
+    else if(a==='sidebar-open')document.body.classList.add('menu-open');
+    else if(a==='sidebar-close')document.body.classList.remove('menu-open');
+    else if(a==='sidebar-group'){
+      shell.closest('.pro-nav-group')?.classList.toggle('open');
     }
     return;
   }
@@ -1517,32 +1517,60 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
-function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'وایرگارد',openvpn:'OpenVPN',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',guides:'راهنما',nodes:'نودها',security:'امنیت',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',guides:'Docs',nodes:'Nodes',security:'Security',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
-  const dict=window.MAKIA_LANG==='en'?en:fa;document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
-  document.querySelectorAll('nav.sanaei-nav > button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
+async function connectivityLab(renderToken=window.__viewRenderToken){
+  title.textContent='Connectivity Lab';setPageContext('CONNECTIVITY READINESS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Runtime و Endpointها…</b></div>';
+  const safe=async(url)=>{try{return await api(url)}catch(e){return {error:e.message||String(e)}}};
+  const [stack,matrix,self,xray,wg,ovpn]=await Promise.all([
+    safe('/api/protocols'),safe('/api/protocols/endpoint-matrix'),safe('/api/diagnostics/self-test'),
+    safe('/api/protocols/xray/diagnostics'),safe('/api/protocols/wireguard/diagnostics'),safe('/api/protocols/openvpn/diagnostics')
+  ]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='connectivity')return;
+  const ssh=stack?.ssh||{};
+  const state=(ok)=>'<span class="status-chip '+(ok?'ok':'warn')+'">'+(ok?'Server ready':'Check required')+'</span>';
+  const field='<span class="field-badge">نیاز به تست از داخل ایران</span>';
+  const cards=[
+    ['SSH / NPV',Boolean(ssh.service_active),'TCP',ssh.port||22,'سرویس SSH و Policy Engine'],
+    ['Xray / V2Ray',Boolean(xray.service_active&&xray.root_validation!==false&&xray.service_validation!==false),'TCP/UDP','Inbound-based','Core + config validation'],
+    ['WireGuard',Boolean(wg.runtime_ok||wg.service_active),'UDP',wg.port||stack?.wireguard?.port||'—','Listener / NAT / Forward'],
+    ['OpenVPN',Boolean(ovpn.service_active&&ovpn.listener),String(ovpn.proto||stack?.openvpn?.proto||'').toUpperCase()||'UDP',ovpn.port||stack?.openvpn?.port||'—','PKI + listener']
+  ];
+  const rows=(matrix.rows||[]).map(r=>'<div class="lab-port-row"><b>'+htmlEsc(r.label||r.id)+'</b><span>'+htmlEsc((r.ports||[]).join(', ')||'—')+'</span><span>'+htmlEsc(r.transport||'—')+'</span><span class="'+(r.runtime?'ok-text':'bad-text')+'">'+(r.runtime?'Active':'Inactive')+'</span></div>').join('');
+  content.innerHTML=[
+    '<div class="pro-page connectivity-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">NETWORK READINESS</span><h1>Connectivity Lab</h1><p>سلامت سمت سرور را دقیق بررسی می‌کند؛ نتیجه شبکه ایران فقط با Client واقعی داخل ایران معتبر است.</p></div><div class="pro-head-actions"><button class="ghost" data-action="endpoint-matrix">Endpoint Matrix</button><button class="primary" data-action="self-test">اجرای Self-Test</button></div></section>',
+      '<div class="iran-boundary"><b>مهم:</b><span>Server Ready به معنی «تأیید اتصال از داخل ایران» نیست. فیلترینگ، اپراتور، شهر، IPv4/IPv6 و مسیر بین‌الملل می‌توانند نتیجه را تغییر دهند. Stable فقط بعد از Field Test واقعی علامت می‌خورد.</span></div>',
+      '<section class="connectivity-grid">'+cards.map(x=>'<article class="connectivity-card"><div class="connectivity-title"><div><b>'+x[0]+'</b><small>'+x[4]+'</small></div>'+state(x[1])+'</div><div class="connectivity-meta"><div><span>Transport</span><b>'+htmlEsc(x[2])+'</b></div><div><span>Port</span><b>'+htmlEsc(String(x[3]))+'</b></div></div>'+field+'</article>').join('')+'</section>',
+      '<section class="pro-directory"><div class="pro-directory-toolbar"><div><h3>Port / Runtime matrix</h3><small>Transport-aware server validation</small></div></div><div class="lab-port-head"><span>Service</span><span>Port</span><span>Transport</span><span>Runtime</span></div><div class="lab-port-list">'+(rows||'<div class="empty">Matrix data unavailable.</div>')+'</div></section>',
+      '<section class="field-test-card"><div><span class="pro-kicker">IRAN FIELD GATE</span><h3>تست واقعی قبل از Stable</h3><p>برای هر پروتکل باید از حداقل یک اتصال Mobile و یک اتصال Fixed داخل ایران، اتصال واقعی، DNS، Handshake، دریافت اینترنت و Reconnect آزمایش شود.</p></div><ol><li>SSH/NPV: Login و قطع/وصل مجدد</li><li>Xray: VLESS/REALITY و سایر Profileهای مورد استفاده</li><li>WireGuard: Handshake + Route اینترنت</li><li>OpenVPN: TLS/PKI + Route اینترنت</li></ol></section>',
+      '<div class="lab-self-summary"><span>Self-Test</span><b class="'+(self.ok?'ok-text':'bad-text')+'">'+htmlEsc(self.summary||'Unavailable')+'</b><small>'+(self.error?htmlEsc(self.error):Number(self.critical||0)+' critical · '+Number(self.warnings||0)+' warning')+'</small></div>',
+    '</div>'
+  ].join('');
 }
-const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,support:supportCenter};
+
+function applyLanguageShell(){
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const dict=window.MAKIA_LANG==='en'?en:fa;
+  document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
+  document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
+  document.querySelectorAll('nav.pro-nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
+}
+const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,sessions,services,protocols,nodes,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
-  document.querySelectorAll('.sanaei-nav-group').forEach(g=>{
-    const name=g.querySelector('.sanaei-group-toggle')?.dataset.group;
-    if((name==='settings'&&v==='settings')||(name==='protocolclients'&&['ssh','xray','wireguard','openvpn'].includes(v)))g.classList.add('open');
+  document.querySelectorAll('.pro-nav-group').forEach(g=>{
+    const name=g.dataset.groupRoot;
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
-  document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');
   return currentView();
 }
-document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>{
-  if(b.dataset.settingsTab)window.__settingsTab=b.dataset.settingsTab;
-  switchView(b.dataset.view);
-}));
-document.querySelector('.mobile-menu-toggle')?.addEventListener('click',e=>{const opened=document.body.classList.toggle('menu-open');e.currentTarget.setAttribute('aria-expanded',String(opened))});
-try{if(localStorage.getItem('makia-sidebar-pinned')==='true')document.body.classList.add('sidebar-pinned')}catch{}
+document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 applyLanguageShell();ensureSessionContext().catch(()=>{});switchView('dashboard');
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
