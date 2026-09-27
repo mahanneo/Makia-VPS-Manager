@@ -24,7 +24,7 @@ ACTUAL="$(sha256sum "$TMP/$NAME" | awk '{print $1}')"
 [[ "$ACTUAL" == "$EXPECTED" ]] || { echo "wstunnel checksum mismatch" >&2; exit 4; }
 
 tar -xzf "$TMP/$NAME" -C "$TMP"
-BIN="$(find "$TMP" -type f -name wstunnel -perm -u+x | head -n1)"
+BIN="$(find "$TMP" -type f -name wstunnel | head -n1)"
 [[ -n "$BIN" ]] || { echo "wstunnel binary not found in release archive" >&2; exit 5; }
 install -m 0755 "$BIN" "$DEST"
 "$DEST" --version
