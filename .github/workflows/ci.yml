@@ -35,6 +35,11 @@ jobs:
         run: |
           WSTUNNEL_DEST=/tmp/wstunnel-test bash scripts/install-wstunnel.sh
           /tmp/wstunnel-test --version | grep -q '11.0.0'
+          /tmp/wstunnel-test server --help | grep -q -- '--restrict-to'
+          /tmp/wstunnel-test server --help | grep -q -- '--restrict-http-upgrade-path-prefix'
+          /tmp/wstunnel-test server --help | grep -q -- '--tls-certificate'
+          /tmp/wstunnel-test server --help | grep -q -- '--tls-private-key'
+          /tmp/wstunnel-test client --help | grep -q -- '--http-upgrade-path-prefix'
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
