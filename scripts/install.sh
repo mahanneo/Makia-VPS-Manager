@@ -42,7 +42,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban
+apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban wireguard openvpn easy-rsa iptables stunnel4
 
 install -d -m 0750 "$APP"
 if [[ ! -d "$DATA" && -d "$OLD_APP/data" ]]; then
@@ -124,6 +124,30 @@ bantime = 1h
 EOF
 systemctl enable --now fail2ban
 
+echo "Provisioning Makia full protocol stack (Xray, WireGuard, OpenVPN, Stunnel)..."
+(
+  cd "$APP"
+  MAKIA_DATA_DIR="$DATA" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+from app.db import set_setting
+
+result=protocol_ops.ensure_full_protocol_stack()
+wg=result["wireguard"]
+ov=result["openvpn"]
+if wg.get("port"):
+    set_setting("default_wireguard_port",int(wg["port"]))
+if ov.get("port"):
+    set_setting("default_openvpn_port",int(ov["port"]))
+if ov.get("proto"):
+    set_setting("default_openvpn_proto","tcp" if str(ov["proto"]).startswith("tcp") else "udp")
+print("Full protocol stack READY")
+print("  Xray: active")
+print("  WireGuard: UDP/%s" % (wg.get("port") or "?"))
+print("  OpenVPN: %s/%s" % (str(ov.get("proto") or "udp").upper(), ov.get("port") or "?"))
+print("  Stunnel: installed")
+PY
+)
+
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
@@ -135,4 +159,6 @@ printf 'Username: admin\n'
 printf 'Bootstrap password: %s\n' "$ADMIN_PASSWORD"
 printf '\nIMPORTANT: change the administrator password immediately.\n'
 printf 'For public exposure, enable HTTPS and review Security Center first.\n'
+printf 'Protocol stack: Xray + WireGuard + OpenVPN are preinstalled and bootstrapped.\n'
+printf 'You can create users immediately after login.\n'
 printf 'Run makia-doctor for host diagnostics.\n\n'
