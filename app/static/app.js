@@ -1491,8 +1491,8 @@ document.addEventListener('click',e=>{
     if(a==='command')openCommandPalette();
     else if(a==='refresh')currentView();
     else if(a==='create-access')openProvisionWizard();
-    else if(a==='sidebar-open')document.body.classList.add('menu-open');
-    else if(a==='sidebar-close')document.body.classList.remove('menu-open');
+    else if(a==='sidebar-open'){document.body.classList.add('menu-open');shell.setAttribute('aria-expanded','true')}
+    else if(a==='sidebar-close'){document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false')}
     else if(a==='sidebar-group'){
       shell.closest('.pro-nav-group')?.classList.toggle('open');
     }
@@ -1569,6 +1569,7 @@ function switchView(v){
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
+  document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');
   return currentView();
 }
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
