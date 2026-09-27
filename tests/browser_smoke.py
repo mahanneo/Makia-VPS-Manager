@@ -264,14 +264,11 @@ def main():
             page.screenshot(path='/tmp/makia-connectivity.png',full_page=True)
 
             for view in ["inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
-                nav=page.locator(f'.pro-sidebar nav button[data-view="{view}"]')
-                if nav.count():
-                    nav.click()
-                else:
-                    page.evaluate(f"switchView('{view}')")
+                page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
+                nav=page.locator(f'.pro-sidebar nav button[data-view="{view}"]')
                 if nav.count():
                     assert "active" in (nav.get_attribute("class") or ""), f"{view} sidebar item not active"
 
@@ -339,11 +336,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
-                nav=page.locator(f'.pro-sidebar nav button[data-view="{view}"]')
-                if nav.count():
-                    nav.click()
-                else:
-                    page.evaluate(f"switchView('{view}')")
+                page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
