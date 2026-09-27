@@ -213,7 +213,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.evaluate("window.__protocolData.xray.installed=true")
-            page.locator('.pro-sidebar .sidebar-create').click()
+            page.locator('.pro-sidebar .pro-create-access').click()
             page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
             page.locator("#wizXrayProtocol").select_option("vmess")
             page.locator("#wizEndpoint").fill("8.8.8.8")
