@@ -1210,6 +1210,31 @@ def openvpn_repair(request:Request):
     audit(actor,"openvpn_repair","openvpn",f"backup={result.get('backup')}",ip(request))
     return result
 
+class OpenVPNConfigure(BaseModel):
+    port:int=Field(default=1194,ge=1,le=65535)
+    proto:str="udp"
+    dns_servers:list[str]=Field(default_factory=lambda:["1.1.1.1","8.8.8.8"])
+    keepalive_ping:int=Field(default=10,ge=1,le=3600)
+    keepalive_timeout:int=Field(default=120,ge=10,le=7200)
+    redirect_gateway:bool=True
+    client_to_client:bool=False
+
+@app.post("/api/protocols/openvpn/configure")
+def openvpn_configure(payload:OpenVPNConfigure,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.reconfigure_openvpn_server(
+            payload.port,payload.proto,payload.dns_servers,
+            payload.keepalive_ping,payload.keepalive_timeout,
+            payload.redirect_gateway,payload.client_to_client,
+        )
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"openvpn_configure_failed","openvpn",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    runtime=result.get("runtime") or {}
+    audit(actor,"openvpn_configure","openvpn",f"port={runtime.get('port')}; proto={runtime.get('proto')}",ip=ip(request))
+    return result
+
 class OpenVPNClient(BaseModel):
     name:str=Field(min_length=1,max_length=48)
     endpoint:str=Field(min_length=1,max_length=255)
@@ -1295,9 +1320,22 @@ def _current_delivery_payload(kind,key,payload,request):
                 summary["host"],username,password,int(summary.get("port") or 22),ssh_npv_options(username)
             )
     elif kind=="openvpn":
-        # Stored exports carry the client's chosen IP/domain. Regenerating from
-        # the panel domain would silently replace that choice on every download.
-        result=payload
+        # Preserve the endpoint selected for this client, but regenerate the
+        # profile from the current server runtime so TCP/UDP or port changes do
+        # not leave users with stale .ovpn files.
+        artifact=get_access_artifact_by_key("openvpn",str(key))
+        endpoint=""
+        if artifact:
+            try:
+                endpoint=str(json.loads(artifact.get("metadata_json") or "{}").get("endpoint") or "")
+            except (TypeError,ValueError):
+                endpoint=""
+        endpoint=endpoint or public_host(request)
+        try:
+            rendered=protocol_ops.render_openvpn_client(str(key),endpoint)
+            result=access_ops.openvpn_payload(str(key),rendered["config"])
+        except protocol_ops.ProtocolError:
+            result=payload
     elif kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
