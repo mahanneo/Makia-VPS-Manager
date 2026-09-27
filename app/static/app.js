@@ -1,3 +1,4 @@
+// Historical compatibility: the stored theme key "glass" remains supported; Glass Aurora is rendered as the v0.21 Control Center visual system.
 const content=document.querySelector('#content'),title=document.querySelector('#pageTitle'),modalRoot=document.querySelector('#modalRoot');let activeView='dashboard';
 const pageContext=document.querySelector('#pageContext');
 function htmlEsc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
