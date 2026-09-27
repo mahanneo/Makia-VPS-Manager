@@ -625,42 +625,21 @@ async function runSelfTest(){
 }
 
 async function accounts(renderToken=window.__viewRenderToken){
-  title.textContent='SSH / NPV';setPageContext('SSH ACCOUNT WORKSPACE');
-  content.innerHTML='<div class="empty">در حال بارگذاری حساب‌ها…</div>';
-  const [rows,defs]=await Promise.all([api('/api/accounts'),api('/api/accounts/new-defaults')]);
+  title.textContent='کاربران SSH';setPageContext('SSH USER MANAGEMENT');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بارگذاری کاربران SSH…</b></div>';
+  const rows=await api('/api/accounts');
   if(renderToken!==window.__viewRenderToken||!['accounts','ssh'].includes(activeView))return;
   accountCache=rows;
-  content.innerHTML=`
-  <div class="account-hero panel">
-    <div><div class="eyebrow">SSH ACCESS · REAL POLICY ENFORCEMENT</div><h2>مدیریت حرفه‌ای اکانت SSH</h2><p class="muted">Session Limit و Device/IP Limit دو سیاست جدا هستند و هر دو توسط Policy Enforcer اعمال می‌شوند. حجم برای SSH به‌عنوان محدودیت واقعی نمایش داده نمی‌شود؛ Traffic Quota واقعی در Protocol Clients اعمال می‌شود.</p></div>
-    <div class="risk-card"><span>RECOMMENDED</span><b>PIN 6</b><small>PIN 4 اختیاری است؛ برای اینترنت عمومی PIN 6 بهتر است.</small></div>
-  </div>
-  <div class="panel">
-    <div class="panel-head"><h3>ساخت اکانت</h3><span>FAST PROVISIONING</span></div>
-    <div class="form-grid">
-      <label>نام کاربری<div class="input-action"><input id="cUser" value="${defs.username||''}" placeholder="user001"><button class="soft" type="button" onclick="suggestUsername()">Auto</button></div></label>
-      <label>رمز / PIN<div class="input-action"><input id="cPass" type="text" inputmode="text" placeholder="Generate or type"><button class="soft" type="button" onclick="toggleSecret('cPass')">👁</button></div>
-        <div class="password-tools"><button class="soft" onclick="setPass('cPass',4)">PIN 4</button><button class="soft recommended" onclick="setPass('cPass',6)">PIN 6</button><button class="soft" onclick="setPass('cPass','easy8')">Easy 8</button><button class="soft" onclick="setPass('cPass','strong')">Strong</button></div>
-      </label>
-      <label>مدت / تاریخ پایان<input id="cExpire" type="date"><div class="password-tools duration-tools"><button class="soft" onclick="setExpiryPreset('cExpire',1)">1 روز</button><button class="soft" onclick="setExpiryPreset('cExpire',3)">3 روز</button><button class="soft" onclick="setExpiryPreset('cExpire',7)">7 روز</button><button class="soft" onclick="setExpiryPreset('cExpire',15)">15 روز</button><button class="soft recommended" onclick="setExpiryPreset('cExpire',30)">30 روز</button><button class="soft" onclick="setExpiryPreset('cExpire',60)">60 روز</button><button class="soft" onclick="setExpiryPreset('cExpire',90)">90 روز</button><button class="soft" onclick="setExpiryPreset('cExpire',0)">بدون انقضا</button></div></label>
-      <label>پلن<input id="cPlan" placeholder="30D / VIP / Trial"></label>
-      <label>تعداد اتصال همزمان<div class="number-stepper"><button class="soft" onclick="stepNumber('cLimit',-1)">−</button><input id="cLimit" type="number" min="1" max="50" value="1"><button class="soft" onclick="stepNumber('cLimit',1)">+</button></div><span class="muted">تعداد Sessionهای همزمان همین Username</span></label>
-      <label>تعداد دستگاه / IP<div class="number-stepper"><button class="soft" onclick="stepNumber('cDevice',-1)">−</button><input id="cDevice" type="number" min="1" max="50" value="1"><button class="soft" onclick="stepNumber('cDevice',1)">+</button></div><span class="muted">تعداد IP مبدأ همزمان؛ مستقل از Session Limit</span></label>
-    </div>
-    <div class="form-grid two" style="margin-top:12px"><label>یادداشت داخلی<textarea id="cNote" placeholder="نام مشتری، سفارش، توضیح و..."></textarea></label>
-      <div class="provision-preview"><span>POLICY ENGINE</span><b>Expiry + Session + Device/IP</b><small>انقضا باعث Lock حساب و قطع Session می‌شود. IP اضافه و Session اضافه نیز به‌صورت دوره‌ای قطع می‌شوند.</small></div>
-    </div>
-    <div class="toolbar" style="margin-top:16px"><button class="primary wide-btn" onclick="createAccount()">+ ساخت و نمایش اطلاعات</button><button class="ghost" onclick="clearAccountForm()">پاک کردن فرم</button></div>
-  </div>
-  <div class="panel">
-    <div class="panel-head account-tools"><div><h3>کاربران مدیریت‌شده</h3><span id="accountCount">${rows.length} USERS</span></div>
-      <div class="filterbar"><input id="accountSearch" placeholder="جستجو نام کاربری / پلن / یادداشت" oninput="renderAccountRows()"><select id="accountFilter" onchange="renderAccountRows()"><option value="all">همه</option><option value="online">آنلاین</option><option value="active">فعال</option><option value="expiring">≤ 7 روز</option><option value="expired">منقضی</option><option value="locked">قفل</option></select></div>
-    </div>
-    <div class="toolbar bulkbar"><button class="soft" onclick="toggleAllAccounts()">انتخاب همه</button><button class="ghost" onclick="bulkAccounts('lock')">قفل</button><button class="ghost" onclick="bulkAccounts('unlock')">بازکردن</button><button class="ghost" onclick="bulkExtendPreset(7)">+7 روز</button><button class="ghost" onclick="bulkExtendPreset(30)">+30 روز</button><button class="ghost" onclick="bulkExtendPreset(90)">+90 روز</button><button class="ghost" onclick="bulkExtend()">تمدید سفارشی</button><button class="danger" onclick="bulkAccounts('disconnect')">قطع اتصال</button></div>
-    <div id="accountRows" class="table"></div>
-  </div>`;
-  setExpiryPreset('cExpire',30);
-  await setPass('cPass',6);
+  const active=rows.filter(a=>a.enabled&&!a.expired).length;
+  const inactive=rows.length-active;
+  const online=rows.reduce((n,a)=>n+Number(a.online||0),0);
+  content.innerHTML=[
+    '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon ssh">SSH</span><div><h2>SSH</h2><p>مدیریت کاربران SSH / NPV و سیاست‌های اتصال</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="nav" data-view="settings">تنظیمات SSH</button><button class="primary" data-action="wizard-open" data-kind="ssh">＋ ایجاد کاربر جدید</button></div></section>',
+    '<section class="protocol-stat-grid"><div class="protocol-stat"><span class="icon">♙</span><div><span>کل کاربران</span><b>'+rows.length+'</b></div></div><div class="protocol-stat green"><span class="icon">◔</span><div><span>کاربران فعال</span><b>'+active+'</b></div></div><div class="protocol-stat red"><span class="icon">♧</span><div><span>غیرفعال / منقضی</span><b>'+inactive+'</b></div></div></section>',
+    '<section class="panel protocol-directory"><div class="panel-head account-tools"><div><h3>مدیریت کاربران SSH</h3><span id="accountCount">'+rows.length+' USERS · '+online+' ONLINE SESSION</span></div><div class="filterbar"><input id="accountSearch" placeholder="جستجو نام کاربری / پلن / یادداشت" oninput="renderAccountRows()"><select id="accountFilter" onchange="renderAccountRows()"><option value="all">همه</option><option value="online">آنلاین</option><option value="active">فعال</option><option value="expiring">≤ 7 روز</option><option value="expired">منقضی</option><option value="locked">غیرفعال</option></select></div></div>',
+    '<div class="toolbar bulkbar"><button class="soft" onclick="toggleAllAccounts()">انتخاب همه</button><button class="ghost" onclick="bulkAccounts(\'lock\')">غیرفعال</button><button class="ghost" onclick="bulkAccounts(\'unlock\')">فعال</button><button class="ghost" onclick="bulkExtendPreset(7)">+7 روز</button><button class="ghost" onclick="bulkExtendPreset(30)">+30 روز</button><button class="ghost" onclick="bulkExtendPreset(90)">+90 روز</button><button class="danger" onclick="bulkAccounts(\'disconnect\')">قطع اتصال</button></div>',
+    '<div id="accountRows" class="table"></div></section>'
+  ].join('');
   renderAccountRows();
 }
 function toggleSecret(id){const el=document.getElementById(id);if(el)el.type=el.type==='password'?'text':'password'}
