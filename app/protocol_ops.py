@@ -818,6 +818,13 @@ def catalog():
     }
 
 def install_component(component):
+    # Host package/service installation belongs to the root installer/updater.
+    # The web backend intentionally runs with NoNewPrivileges and
+    # RestrictSUIDSGID; invoking APT or upstream installers from that sandbox
+    # can fail on privilege drops (for example _apt UID 42) and is not a safe
+    # package-management boundary.
+    if _process_no_new_privileges():
+        raise ProtocolError("Host component installation is disabled inside the hardened web service; run sudo makia-upgrade")
     packages={
         "wireguard":["wireguard","iptables"],
         "openvpn":["openvpn","easy-rsa","iptables"],
