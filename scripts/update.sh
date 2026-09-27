@@ -135,7 +135,12 @@ for item in \
   "etc/systemd/system/makia-policy-enforcer.service" \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
-  "etc/nginx/sites-available/makia-vps-manager"; do
+  "etc/systemd/system/makia-ikev2-firewall.service" \
+  "etc/systemd/system/makia-wstunnel.service" \
+  "etc/makia-vps-manager/ikev2.env" \
+  "etc/makia-vps-manager/wstunnel.env" \
+  "etc/nginx/sites-available/makia-vps-manager" \
+  "etc/nginx/makia-vps-manager.d/wstunnel.conf"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
 tar -C / -czf "$RELEASE_BACKUP" "${SNAPSHOT[@]}"
@@ -159,11 +164,37 @@ SRC="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d -name 'Makia-VPS-Manager-*' |
 NEED_HOST_PACKAGES=0
 command -v fail2ban-client >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 command -v certbot >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
+command -v ipsec >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
+command -v pki >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' python3-certbot-nginx 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
+dpkg-query -W -f='${Status}' libcharon-extra-plugins 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
-  echo "Ensuring host security/TLS packages outside the hardened web-service sandbox..."
+  echo "Ensuring host security/TLS/VPN packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban certbot python3-certbot-nginx
+  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
+fi
+
+WSTUNNEL_VERSION="11.0.0"
+install_wstunnel(){
+  local machine arch asset base wt_tmp
+  machine="$(uname -m)"
+  case "$machine" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) echo "Unsupported CPU for managed wstunnel: $machine"; return 1 ;;
+  esac
+  asset="wstunnel_${WSTUNNEL_VERSION}_linux_${arch}.tar.gz"
+  base="https://github.com/erebe/wstunnel/releases/download/v${WSTUNNEL_VERSION}"
+  wt_tmp="$(mktemp -d)"
+  curl -fsSL --retry 3 "$base/checksums.txt" -o "$wt_tmp/checksums.txt"
+  curl -fsSL --retry 3 "$base/$asset" -o "$wt_tmp/$asset"
+  (cd "$wt_tmp" && grep -E "[[:space:]]${asset}$" checksums.txt | sha256sum -c -)
+  tar -xzf "$wt_tmp/$asset" -C "$wt_tmp"
+  install -m 0755 "$wt_tmp/wstunnel" /usr/local/bin/wstunnel
+  rm -rf "$wt_tmp"
+}
+if ! /usr/local/bin/wstunnel --version 2>/dev/null | grep -q "11.0.0"; then
+  install_wstunnel
 fi
 
 ROLLBACK_ARMED=1
@@ -178,6 +209,7 @@ find "$APP/app" -type f -exec chmod 0640 {} +
 "$APP/.venv/bin/pip" install -r "$APP/requirements.txt"
 
 install -d -m 0755 /etc/fail2ban/jail.d
+install -d -m 0755 /etc/nginx/makia-vps-manager.d
 cat >/etc/fail2ban/jail.d/makia-sshd.local <<'EOF'
 [sshd]
 enabled = true
@@ -191,10 +223,88 @@ install -m 0644 "$SRC/systemd/makia-vps-manager.service" /etc/systemd/system/mak
 install -m 0644 "$SRC/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+cat >/usr/local/sbin/makia-ikev2-firewall <<'EOF'
+#!/bin/sh
+set -eu
+MODE="${1:-up}"
+ENV=/etc/makia-vps-manager/ikev2.env
+POOL="10.77.0.0/24"
+if [ -r "$ENV" ]; then
+  value="$(sed -n 's/^IKEV2_POOL=//p' "$ENV" | head -n1)"
+  [ -n "$value" ] && POOL="$value"
+fi
+UPLINK="$(ip -4 route show default | awk '/default/{print $5; exit}')"
+[ -n "$UPLINK" ] || exit 1
+if [ "$MODE" = "up" ]; then
+  sysctl -w net.ipv4.ip_forward=1 >/dev/null
+  iptables -C FORWARD -s "$POOL" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -s "$POOL" -j ACCEPT
+  iptables -C FORWARD -d "$POOL" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -d "$POOL" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  iptables -t nat -C POSTROUTING -s "$POOL" -o "$UPLINK" -m policy --dir out --pol ipsec -j ACCEPT 2>/dev/null || iptables -t nat -I POSTROUTING 1 -s "$POOL" -o "$UPLINK" -m policy --dir out --pol ipsec -j ACCEPT
+  iptables -t nat -C POSTROUTING -s "$POOL" -o "$UPLINK" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$POOL" -o "$UPLINK" -j MASQUERADE
+else
+  iptables -D FORWARD -s "$POOL" -j ACCEPT 2>/dev/null || true
+  iptables -D FORWARD -d "$POOL" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+  iptables -t nat -D POSTROUTING -s "$POOL" -o "$UPLINK" -m policy --dir out --pol ipsec -j ACCEPT 2>/dev/null || true
+  iptables -t nat -D POSTROUTING -s "$POOL" -o "$UPLINK" -j MASQUERADE 2>/dev/null || true
+fi
+EOF
+chmod 0755 /usr/local/sbin/makia-ikev2-firewall
+
+cat >/etc/systemd/system/makia-ikev2-firewall.service <<'EOF'
+[Unit]
+Description=Makia IKEv2 forwarding and NAT
+After=network-online.target strongswan-starter.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/makia-vps-manager/ikev2.env
+ExecStart=/usr/local/sbin/makia-ikev2-firewall up
+ExecStop=/usr/local/sbin/makia-ikev2-firewall down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat >/etc/systemd/system/makia-wstunnel.service <<'EOF'
+[Unit]
+Description=Makia WStunnel WebSocket transport
+After=network-online.target nginx.service wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nobody
+EnvironmentFile=/etc/makia-vps-manager/wstunnel.env
+ExecStart=/usr/local/bin/wstunnel server --log-lvl=INFO --restrict-http-upgrade-path-prefix ${WSTUNNEL_PATH_PREFIX} --restrict-to 127.0.0.1:${WSTUNNEL_WG_PORT} ws://127.0.0.1:${WSTUNNEL_LOCAL_PORT}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
   echo "Preserving active Makia Nginx/Certbot configuration."
+fi
+if ! grep -Fq 'include /etc/nginx/makia-vps-manager.d/*.conf;' /etc/nginx/sites-available/makia-vps-manager; then
+  SITE=/etc/nginx/sites-available/makia-vps-manager python3 - <<'PY'
+import os,re
+from pathlib import Path
+path=Path(os.environ["SITE"])
+text=path.read_text(encoding="utf-8")
+marker=re.search(r"(?m)^\s*location\s+/\s*\{",text)
+if not marker:
+    raise SystemExit("Unable to locate Makia Nginx root location")
+text=text[:marker.start()]+"    include /etc/nginx/makia-vps-manager.d/*.conf;\n\n"+text[marker.start():]
+path.write_text(text,encoding="utf-8")
+PY
 fi
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
 install -m 0755 "$SRC/scripts/update.sh" /usr/local/sbin/makia-update
@@ -210,11 +320,17 @@ install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-co
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
+if [[ -f /etc/makia-vps-manager/ikev2.env ]]; then
+  systemctl enable --now makia-ikev2-firewall
+fi
+if [[ -f /etc/makia-vps-manager/wstunnel.env ]]; then
+  systemctl enable --now makia-wstunnel
+fi
 
 echo "Ensuring the complete Makia protocol stack is installed and ready..."
 (
   cd "$APP"
-  MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+  MAKIA_ALLOW_PACKAGE_INSTALL=1 MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
 from app import protocol_ops
 from app.db import set_setting
 
