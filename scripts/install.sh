@@ -42,7 +42,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban wireguard openvpn easy-rsa iptables stunnel4 certbot python3-certbot-nginx
+apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban wireguard openvpn easy-rsa iptables stunnel4 certbot python3-certbot-nginx strongswan strongswan-swanctl charon-systemd strongswan-pki libcharon-extra-plugins
 
 install -d -m 0750 "$APP"
 if [[ ! -d "$DATA" && -d "$OLD_APP/data" ]]; then
@@ -86,6 +86,9 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-vps-manager.service" /etc/systemd/sys
 install -m 0644 "$SOURCE_DIR/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-ikev2-firewall.service" /etc/systemd/system/makia-ikev2-firewall.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-stealth.service" /etc/systemd/system/makia-stealth.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
@@ -100,6 +103,9 @@ install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 install -m 0755 "$SOURCE_DIR/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
 install -m 0755 "$SOURCE_DIR/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SOURCE_DIR/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
+install -d -m 0755 /usr/local/lib/makia-vps-manager
+install -m 0755 "$SOURCE_DIR/scripts/ikev2-firewall.sh" /usr/local/lib/makia-vps-manager/ikev2-firewall.sh
+bash "$SOURCE_DIR/scripts/install-wstunnel.sh"
 install -m 0755 "$SOURCE_DIR/upgrade.sh" /usr/local/sbin/makia-upgrade
 ln -sfn /usr/local/sbin/makia-update /usr/local/sbin/dragon-update
 ln -sfn /usr/local/sbin/makia-backup /usr/local/sbin/dragon-backup
