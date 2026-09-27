@@ -40,6 +40,7 @@ def main():
         data=protocol_ops._ensure_xray_stats(
             protocol_ops._xray_default_config(Path("/tmp/makia-xray-config.json"))
         )
+        data["log"]["loglevel"]="debug"
 
         # VLESS + XHTTP + REALITY
         reality_stream,reality_meta=protocol_ops._build_xray_stream(
@@ -143,7 +144,7 @@ def verify_simple_connection(binary,server_config,root,client_id,meta):
     thread.start()
     client_config=root/"client.json"
     client_config.write_text(json.dumps({
-        "log":{"loglevel":"warning"},
+        "log":{"loglevel":"debug"},
         "inbounds":[{"listen":"127.0.0.1","port":21010,"protocol":"http","settings":{}}],
         "outbounds":[{"protocol":"vless","settings":{"vnext":[{
             "address":"127.0.0.1","port":21008,
