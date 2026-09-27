@@ -53,7 +53,8 @@ def test_stealth_requires_openvpn_tcp(monkeypatch,tmp_path):
 def test_wstunnel_rejects_short_path_secret(monkeypatch,tmp_path):
     service=tmp_path/"makia-wstunnel.service"
     service.write_text("[Service]\n",encoding="utf-8")
-    monkeypatch.setattr(protocol_modes.Path,"exists",lambda self: True if str(self)=="/etc/systemd/system/makia-wstunnel.service" else type(self).exists(self))
+    original_exists=protocol_modes.Path.exists
+    monkeypatch.setattr(protocol_modes.Path,"exists",lambda self: True if str(self)=="/etc/systemd/system/makia-wstunnel.service" else original_exists(self))
     monkeypatch.setattr(protocol_modes.shutil,"which",lambda name:"/usr/local/bin/wstunnel" if name=="wstunnel" else f"/usr/bin/{name}")
     monkeypatch.setattr(protocol_modes,"_letsencrypt",lambda domain:(domain,tmp_path/"cert",tmp_path/"chain",tmp_path/"fullchain",tmp_path/"key"))
     monkeypatch.setattr(protocol_modes,"_openvpn_tcp_runtime",lambda:{"port":1194,"proto":"tcp4-server","service_active":True,"listener":True})
