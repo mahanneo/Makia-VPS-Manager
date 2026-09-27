@@ -174,7 +174,8 @@ jobs:
       - name: Open access contract
         run: |
           grep -q 'VERSION = "0.26.0-rc2"' app/config.py
-          grep -q '^0.26.0-rc2
+          grep -Fxq '0.26.0-rc2' VERSION
+          grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
           grep -q '/support/login' app/main.py
