@@ -57,6 +57,12 @@ def _listeners(proto="tcp"):
 
 def _letsencrypt(domain):
     domain=protocol_ops._validate_endpoint_host(domain,"domain")
+    try:
+        ipaddress.ip_address(domain)
+    except ValueError:
+        pass
+    else:
+        raise ProtocolModeError("A DNS hostname with a valid HTTPS certificate is required for this mode")
     base=Path("/etc/letsencrypt/live")/domain
     cert,chain,fullchain,key=base/"cert.pem",base/"chain.pem",base/"fullchain.pem",base/"privkey.pem"
     if not cert.exists() or not fullchain.exists() or not key.exists():
