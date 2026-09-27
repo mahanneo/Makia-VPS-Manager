@@ -86,10 +86,12 @@ def main():
             page.locator('button[type="submit"]').click()
             page.wait_for_url(BASE_URL+"/")
             assert page.locator('body[data-theme="glass"]').count()==1
-            page.locator(".glass-status-hero").wait_for()
-            assert page.locator(".glass-summary-grid article").count()==4
-            assert page.locator(".glass-service-card").count()>=8
-            assert "OPEN ACCESS" in page.locator(".access-tier-chip").inner_text()
+            page.locator(".neon-stat-grid").wait_for()
+            assert page.locator(".neon-stat-card").count()==4
+            assert page.locator(".neon-service-pill").count()>=4
+            assert page.locator(".protocol-donut").count()==1
+            assert page.locator(".sidebar .nav-subgroup").count()==1
+            assert "مدیریت کاربران" in page.locator(".sidebar").inner_text()
             page.locator('aside.sidebar button[data-view="support"]').click()
             page.locator(".support-hero").wait_for()
             assert "پشتیبانی Makia" in page.locator("#content").inner_text()
@@ -193,7 +195,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('aside.sidebar button[data-view="dashboard"]').click()
-            page.locator(".glass-status-hero").wait_for()
+            page.locator(".neon-stat-grid").wait_for()
             page.locator('[data-action="self-test"]').click()
             page.locator(".diagnostics-modal").wait_for()
             assert page.locator(".diagnostic-score.pass").count()==1
