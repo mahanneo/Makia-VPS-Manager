@@ -261,3 +261,14 @@ def test_openvpn_reconfigure_switches_transport_and_policy(monkeypatch,tmp_path)
     assert 'push "dhcp-option DNS 1.1.1.1"' in text
     assert "keepalive 15 90" in text
     assert "client-to-client" in text
+
+
+def test_xray_mkcp_uses_xray_26327_schema_without_removed_seed_header():
+    stream,meta=protocol_ops._build_xray_stream(
+        "/unused/xray","vless","kcp","none","legacy-seed","",""
+    )
+    assert stream["method"]=="mkcp"
+    assert stream["kcpSettings"]=={}
+    assert "seed" not in stream["kcpSettings"]
+    assert "header" not in stream["kcpSettings"]
+    assert meta=={}
