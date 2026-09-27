@@ -76,11 +76,46 @@ def _xray_secure_runtime_file(path,mode=0o600):
     return user
 
 def _xray_test_config_as_service(binary,path):
+    """Validate Xray config without breaking under systemd NoNewPrivileges/RestrictSUIDSGID.
+
+    Older Makia builds always invoked runuser from the web service. When the service
+    itself is sandboxed with NoNewPrivileges/RestrictSUIDSGID, runuser cannot call
+    setuid and returns 'Operation not permitted' even though Xray can read its own
+    config and start normally. In that environment we validate syntax as root and
+    separately verify ownership/readability. The subsequent systemctl restart is the
+    authoritative runtime check.
+    """
     args=[binary,"run","-test","-format=json","-config",str(path)]
     user=_xray_service_user()
-    if os.geteuid()==0 and user not in {"","root"} and shutil.which("runuser"):
-        args=["runuser","-u",user,"--",*args]
-    return _run(args,timeout=30)
+    if os.geteuid()!=0 or user in {"","root"}:
+        return _run(args,timeout=30)
+    no_new_privs=False
+    try:
+        status=Path("/proc/self/status").read_text(encoding="utf-8",errors="ignore")
+        no_new_privs=bool(re.search(r"(?m)^NoNewPrivs:\s*1\s*$",status))
+    except OSError:
+        pass
+    if shutil.which("runuser") and not no_new_privs:
+        try:
+            return _run(["runuser","-u",user,"--",*args],timeout=30)
+        except ProtocolError as exc:
+            message=str(exc).lower()
+            if "operation not permitted" not in message and "cannot set user id" not in message:
+                raise
+    # Sandboxed Makia service: do not fail a valid config merely because setuid is denied.
+    # Ownership is managed by _xray_secure_runtime_file and the real Xray service restart
+    # below proves whether the service user can actually consume the configuration.
+    try:
+        info=pwd.getpwnam(user)
+        st=os.stat(path)
+        owner_read=st.st_uid==info.pw_uid and bool(st.st_mode & 0o400)
+        group_read=st.st_gid==info.pw_gid and bool(st.st_mode & 0o040)
+        world_read=bool(st.st_mode & 0o004)
+        if not (owner_read or group_read or world_read):
+            raise ProtocolError(f"Xray config is not readable by service user {user}")
+    except KeyError as exc:
+        raise ProtocolError(f"Xray service user {user} does not exist") from exc
+    return _xray_test_config(binary,path)
 
 def _xray_materialize_tls(domain):
     domain=_validate_endpoint_host(domain,"TLS domain")
@@ -1282,6 +1317,88 @@ def bootstrap_openvpn(port=1194, proto="udp"):
     _run(["systemctl","enable","--now","openvpn-server@server"],timeout=30)
     firewall=_ufw_allow_if_active(port,"udp" if server_proto.startswith("udp") else "tcp","OpenVPN")
     return {"server":"server","port":port,"proto":"udp" if server_proto.startswith("udp") else "tcp","server_proto":server_proto,"firewall":firewall}
+
+def reconfigure_openvpn_server(port=1194,proto="udp",dns1="1.1.1.1",dns2="8.8.8.8",redirect_gateway=True,client_to_client=False,keepalive_interval=10,keepalive_timeout=120):
+    """Safely update the managed OpenVPN server while preserving PKI and clients."""
+    server_conf=OVPN_DIR/"server/server.conf"
+    if not server_conf.exists():
+        raise ProtocolError("OpenVPN server is not bootstrapped")
+    port=_validate_port(port)
+    server_proto=_openvpn_proto(proto,server=True)
+    transport="tcp" if server_proto.startswith("tcp") else "udp"
+    runtime=_openvpn_server_runtime()
+    old_port=int(runtime.get("port") or 0)
+    old_transport="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+    if (port!=old_port or transport!=old_transport) and _port_transport_in_use(port,transport):
+        raise ProtocolError(f"{transport.upper()} port {port} is already in use")
+    for value,label in [(dns1,"primary DNS"),(dns2,"secondary DNS")]:
+        try: ipaddress.ip_address(str(value).strip())
+        except ValueError as exc: raise ProtocolError(f"invalid {label}") from exc
+    keepalive_interval=max(1,min(int(keepalive_interval),3600))
+    keepalive_timeout=max(10,min(int(keepalive_timeout),7200))
+    original=server_conf.read_text(encoding="utf-8",errors="ignore")
+    updated=original
+    def set_line(text,key,value):
+        pattern=rf"(?m)^{re.escape(key)}\s+.*$"
+        return re.sub(pattern,f"{key} {value}",text,count=1) if re.search(pattern,text) else text+f"\n{key} {value}\n"
+    updated=set_line(updated,"port",port)
+    updated=set_line(updated,"proto",server_proto)
+    updated=set_line(updated,"keepalive",f"{keepalive_interval} {keepalive_timeout}")
+    updated=re.sub(r'(?m)^push\s+"dhcp-option DNS [^"]+"\s*\n?',"",updated)
+    updated=re.sub(r'(?m)^push\s+"redirect-gateway[^"]*"\s*\n?',"",updated)
+    updated=re.sub(r"(?m)^client-to-client\s*\n?","",updated)
+    anchor='push "dhcp-option DNS %s"\npush "dhcp-option DNS %s"\n' % (dns1,dns2)
+    if redirect_gateway:
+        anchor='push "redirect-gateway def1 bypass-dhcp"\n'+anchor
+    if client_to_client:
+        anchor+='client-to-client\n'
+    updated=updated.rstrip()+"\n"+anchor
+    backup=server_conf.with_name(f"server.conf.makia-reconfigure-{int(time.time())}.bak")
+    shutil.copy2(server_conf,backup)
+    try:
+        server_conf.write_text(updated,encoding="utf-8")
+        _run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        after=_openvpn_server_runtime()
+        if not after.get("service_active") or not after.get("listener"):
+            raise ProtocolError("OpenVPN did not become healthy after configuration change")
+        _ufw_allow_if_active(port,transport,"OpenVPN")
+    except Exception:
+        shutil.copy2(backup,server_conf)
+        try: _run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        except Exception: pass
+        raise
+    return {"ok":True,"backup":str(backup),"runtime":_openvpn_server_runtime(),"dns":[dns1,dns2],"redirect_gateway":bool(redirect_gateway),"client_to_client":bool(client_to_client),"keepalive":[keepalive_interval,keepalive_timeout]}
+
+
+def reconfigure_wireguard_server(port=443,mtu=1280,iface="wg0"):
+    """Change safe server-level WireGuard knobs while preserving peer keys."""
+    conf=WG_DIR/f"{iface}.conf"
+    if not conf.exists():
+        raise ProtocolError("WireGuard server is not bootstrapped")
+    port=_validate_port(port)
+    mtu=_validate_wireguard_mtu(mtu)
+    current=_wireguard_server_config(iface)
+    old_port=int(current.get("port") or 0)
+    if port!=old_port and _port_transport_in_use(port,"udp"):
+        raise ProtocolError(f"UDP port {port} is already in use")
+    original=conf.read_text(encoding="utf-8",errors="ignore")
+    updated=_wireguard_set_interface_directive(original,"ListenPort",f"ListenPort = {port}")
+    updated=_wireguard_set_interface_directive(updated,"MTU",f"MTU = {mtu}")
+    backup=conf.with_name(f"{iface}.conf.makia-reconfigure-{int(time.time())}.bak")
+    shutil.copy2(conf,backup)
+    try:
+        _write_wireguard_config(conf,updated)
+        _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
+        diag=wireguard_endpoint_diagnostics("",iface)
+        if not diag.get("runtime_ok"):
+            raise ProtocolError("WireGuard did not become healthy after configuration change")
+        _ufw_allow_if_active(port,"udp","WireGuard")
+    except Exception:
+        shutil.copy2(backup,conf)
+        try: _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
+        except Exception: pass
+        raise
+    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
 
 def repair_openvpn_ipv4_runtime():
     server_conf=OVPN_DIR/"server/server.conf"
