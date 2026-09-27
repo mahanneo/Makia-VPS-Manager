@@ -200,6 +200,30 @@ install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
 
+echo "Ensuring the complete Makia protocol stack is installed and ready..."
+(
+  cd "$APP"
+  MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+from app.db import set_setting
+
+result=protocol_ops.ensure_full_protocol_stack()
+wg=result["wireguard"]
+ov=result["openvpn"]
+if wg.get("port"):
+    set_setting("default_wireguard_port",int(wg["port"]))
+if ov.get("port"):
+    set_setting("default_openvpn_port",int(ov["port"]))
+if ov.get("proto"):
+    set_setting("default_openvpn_proto","tcp" if str(ov["proto"]).startswith("tcp") else "udp")
+print("Protocol stack READY: Xray, WireGuard UDP/%s, OpenVPN %s/%s" % (
+    wg.get("port") or "?",
+    str(ov.get("proto") or "udp").upper(),
+    ov.get("port") or "?",
+))
+PY
+)
+
 # Repair the historical root-only Xray config/TLS permission mismatch before
 # the post-update UAT gate. This preserves credentials and rolls back the
 # Xray config internally if the repair itself cannot validate.
