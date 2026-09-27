@@ -1117,6 +1117,21 @@ def wireguard_repair(request:Request):
     audit(actor,"wireguard_repair","wg0",f"backup={result.get('backup')}",ip(request))
     return result
 
+class WireGuardServerConfig(BaseModel):
+    port:int=Field(default=443,ge=1,le=65535)
+    mtu:int=Field(default=1280,ge=576,le=1500)
+
+@app.post("/api/protocols/wireguard/config")
+def wireguard_server_config(payload:WireGuardServerConfig,request:Request):
+    actor=require_capability(request,"wireguard",True)
+    require_local_admin(request)
+    try:
+        result=protocol_ops.reconfigure_wireguard_server(payload.port,payload.mtu)
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    audit(actor,"wireguard_server_config","wg0",f"port={payload.port}; mtu={payload.mtu}",ip(request))
+    return result
+
 class WireGuardPeerState(BaseModel):
     enabled:bool
 
@@ -1208,6 +1223,33 @@ def openvpn_repair(request:Request):
         audit(actor,"openvpn_repair_failed","openvpn",str(e)[:500],ip(request))
         raise HTTPException(400,str(e))
     audit(actor,"openvpn_repair","openvpn",f"backup={result.get('backup')}",ip(request))
+    return result
+
+class OpenVPNServerConfig(BaseModel):
+    port:int=Field(default=1194,ge=1,le=65535)
+    proto:str="udp"
+    dns1:str="1.1.1.1"
+    dns2:str="8.8.8.8"
+    redirect_gateway:bool=True
+    client_to_client:bool=False
+    keepalive_interval:int=Field(default=10,ge=1,le=3600)
+    keepalive_timeout:int=Field(default=120,ge=10,le=7200)
+
+@app.post("/api/protocols/openvpn/config")
+def openvpn_server_config(payload:OpenVPNServerConfig,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    require_local_admin(request)
+    if payload.proto not in {"udp","tcp"}:
+        raise HTTPException(400,"OpenVPN proto must be udp or tcp")
+    try:
+        result=protocol_ops.reconfigure_openvpn_server(
+            payload.port,payload.proto,payload.dns1,payload.dns2,
+            payload.redirect_gateway,payload.client_to_client,
+            payload.keepalive_interval,payload.keepalive_timeout
+        )
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    audit(actor,"openvpn_server_config","server",f"proto={payload.proto}; port={payload.port}",ip(request))
     return result
 
 class OpenVPNClient(BaseModel):
