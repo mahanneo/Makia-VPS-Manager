@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.26.0-rc2] - 2026-09-27
+
+### Connection modes
+- Added a real six-mode Protocol Hub: IKEv2, WireGuard, OpenVPN UDP, OpenVPN TCP, Stealth and WStunnel.
+- IKEv2 is backed by strongSwan with EAP-MSCHAPv2 users, UDP/500 + UDP/4500, certificate reuse, NAT/forwarding and host diagnostics.
+- Stealth is a real OpenVPN TCP-over-TLS mode using Stunnel; it requires a valid panel certificate and a distinct public TCP listener.
+- WStunnel is a real WireGuard-over-WSS mode using pinned wstunnel 11.0.0 with checksum verification, a hardened systemd service and restricted UDP forwarding.
+- OpenVPN UDP/TCP cards switch the real single active OpenVPN server transport; Makia does not fake simultaneous ownership of the same TCP port.
+- Added certificate-renewal handling for IKEv2, Stealth and WStunnel.
+
+### Hardening / recovery
+- Host packages and external engine installation are kept out of the hardened web-service sandbox; missing host tooling instructs the operator to run `sudo makia-upgrade`.
+- Rebuilt the host smoke script after detecting malformed/duplicated HTTPS-gate content and added runtime checks for the new modes.
+- Uninstall removes Makia service/helper ownership while intentionally preserving protocol credentials/configuration under `/etc`.
+
+### Release status
+- Release Candidate only. Stable remains blocked on real VPS upgrade/host UAT and real client testing from inside Iran for every mode intended for publication.
+
 ## [0.26.0-rc1] - 2026-09-27
 
 ### Host bug fixes
