@@ -1,1 +1,22 @@
-<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071b34"><title>{{app_name}} - 2FA</title><link rel="stylesheet" href="/static/app.css?v={{version}}"></head><body class="login-body" data-theme="glass"><div class="login-orb orb-a"></div><div class="login-orb orb-b"></div><main class="login-card"><div class="brand-mark login-mark">M</div><div class="eyebrow centered">TWO-FACTOR AUTHENTICATION</div><h1>MAKIA <span>2FA</span></h1><p>کد ۶ رقمی برنامه Authenticator را وارد کنید.</p>{% if error %}<div class="alert">{{error}}</div>{% endif %}<form method="post" action="/login/2fa"><input type="hidden" name="token" value="{{token}}"><label>Authenticator code<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required placeholder="123456"></label><button class="primary-btn" type="submit">تایید و ورود</button></form><div class="login-meta"><span>Time-based OTP</span><span>v{{version}}</span></div></main></body></html>
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#031229"><title>{{app_name}} - 2FA</title>
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css?v={{version}}">
+</head>
+<body class="login-body neon-login-body" data-theme="glass">
+  <div class="login-landscape" aria-hidden="true"><div class="mountain mountain-a"></div><div class="mountain mountain-b"></div><div class="mountain mountain-c"></div><div class="lake-glow"></div></div>
+  <main class="login-shell-card">
+    <div class="login-logo-wrap"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
+    <div class="login-copy"><h1>تأیید دو مرحله‌ای</h1><p>کد ۶ رقمی Authenticator را وارد کنید</p></div>
+    {% if error %}<div class="alert">{{error}}</div>{% endif %}
+    <form method="post" action="/login/2fa" class="neon-login-form">
+      <input type="hidden" name="token" value="{{token}}">
+      <label><span>Authenticator Code</span><div class="login-input-wrap"><i>◇</i><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required placeholder="123456"></div></label>
+      <button class="login-submit" type="submit">تأیید و ورود <b>←</b></button>
+    </form>
+    <div class="login-footer"><span>Time-based OTP</span><span>v{{version}}</span></div>
+  </main>
+</body></html>
