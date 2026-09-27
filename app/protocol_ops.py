@@ -636,6 +636,21 @@ def _ikev2_certificate_paths(domain):
     return cert,key
 
 
+def _ikev2_private_key_kind(path):
+    """Return the strongSwan ipsec.secrets key token for Certbot's key."""
+    try:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        from cryptography.hazmat.primitives.asymmetric import rsa, ec
+        key=load_pem_private_key(Path(path).read_bytes(),password=None)
+    except Exception as exc:
+        raise ProtocolError(f"unable to read IKEv2 private key: {exc}") from exc
+    if isinstance(key,rsa.RSAPrivateKey):
+        return "RSA"
+    if isinstance(key,ec.EllipticCurvePrivateKey):
+        return "ECDSA"
+    raise ProtocolError("IKEv2 certificate private key must be RSA or ECDSA")
+
+
 def bootstrap_ikev2(endpoint,dns_servers=None,pool="10.77.0.0/24"):
     if not shutil.which("ipsec") or not shutil.which("pki"):
         raise ProtocolError("strongSwan packages are missing; run sudo makia-upgrade and retry")
@@ -658,6 +673,7 @@ def bootstrap_ikev2(endpoint,dns_servers=None,pool="10.77.0.0/24"):
             raise ProtocolError("IKEv2 guided mode currently supports IPv4 DNS servers")
         dns.append(addr.compressed)
     cert,key=_ikev2_certificate_paths(endpoint)
+    key_kind=_ikev2_private_key_kind(key)
     conf_old=IKEV2_CONF.read_text(encoding="utf-8",errors="ignore") if IKEV2_CONF.exists() else "config setup\n"
     secrets_old=IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore") if IKEV2_SECRETS.exists() else ""
     env_old=IKEV2_ENV.read_bytes() if IKEV2_ENV.exists() else None
@@ -687,7 +703,7 @@ def bootstrap_ikev2(endpoint,dns_servers=None,pool="10.77.0.0/24"):
     rightdns={",".join(dns)}
     eap_identity=%identity
 """
-    secret_lines=[f': RSA "{key}"']+existing_users
+    secret_lines=[f': {key_kind} "{key}"']+existing_users
     IKEV2_CONF.parent.mkdir(parents=True,exist_ok=True)
     IKEV2_ENV.parent.mkdir(parents=True,exist_ok=True)
     backup_dir=_backup_dir()
@@ -869,7 +885,9 @@ def wstunnel_wireguard_bundle(config,local_port=51820):
     if count!=1:
         raise ProtocolError("WireGuard config must contain exactly one Endpoint")
     domain=state["domain"]; prefix=state["path_prefix"]; wg_port=int(state["wireguard_port"])
-    forward=f"udp://127.0.0.1:{local_port}:127.0.0.1:{wg_port}"
+    # WireGuard is long-lived. Disable wstunnel's default UDP idle timeout
+    # exactly as upstream recommends for WireGuard-over-wstunnel.
+    forward=f"udp://127.0.0.1:{local_port}:127.0.0.1:{wg_port}?timeout_sec=0"
     command=f'wstunnel client --http-upgrade-path-prefix {prefix} -L "{forward}" wss://{domain}'
     return {
         "protocol":"wstunnel","domain":domain,"path_prefix":prefix,
