@@ -231,6 +231,17 @@ async function openProvisionWizard(protocol){
 
 function dateAfterDays(days){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+Number(days));return d.toISOString().slice(0,10)}
 
+function protocolGlyph(kind){
+  const glyphs={
+    ssh:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M12 15h5"/></svg>',
+    xray:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/></svg>',
+    wireguard:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 13 2-4 1 3h3l-3 4"/></svg>',
+    openvpn:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13v7h6v-7M12 14v3"/></svg>',
+    inbound:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg>'
+  };
+  return '<span class="proto-glyph '+htmlEsc(kind)+'">'+(glyphs[kind]||glyphs.inbound)+'</span>';
+}
+
 function wizardProtocolReady(kind){
   const s=window.__protocolData||{};
   if(kind==='ssh')return true;
@@ -246,10 +257,10 @@ function renderProvisionWizard(){
   let body='';
   if(s.step===1){
     const cards=[
-      ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy','S'],
-      ['xray','Xray / V2Ray','انعطاف‌پذیر برای شبکه‌های محدود','VLESS · VMess · Trojan · Hysteria2','X'],
-      ['wireguard','WireGuard','تونل Native سریع','UDP · QR · Native config','W'],
-      ['openvpn','OpenVPN','سازگاری گسترده کلاینت','PKI · OVPN profile','O']
+      ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy'],
+      ['xray','Xray / V2Ray','پروفایل‌های چندگانه و مدیریت پیشرفته','VLESS · VMess · Trojan · Hysteria2'],
+      ['wireguard','WireGuard','تونل Native سریع','Peer · QR · Handshake · Traffic'],
+      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
@@ -851,12 +862,15 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
   const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
   window.__protocolData=stack;window.__operatorSettings=operator;
-  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn');
+  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn'),opt=engine.options||{};
   const active=engine.service_active?clients.length:0;
+  const transport=String(opt.proto||engine.proto||'udp').startsWith('tcp')?'TCP':'UDP';
+  const dns=(opt.dns||[]).join(' · ')||'1.1.1.1';
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon ovpn">O</span><div><h2>OpenVPN</h2><p>مدیریت Clientها، PKI و فایل‌های OVPN</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت جدید':'راه‌اندازی OpenVPN')+'</button></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>کل کلاینت‌ها</span><b>'+clients.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+(clients.length-active)+'</b></div><div><span>Port</span><b>'+htmlEsc(String(engine.port||'—'))+'</b></div></section>',
-    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران OpenVPN</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div><div class="wizard-note"><b>Accounting</b><span>Quota/Reset per-client برای OpenVPN تا زمانی که شمارش قابل اتکای Runtime اضافه نشود به‌صورت نمایشی نشان داده نمی‌شود.</span></div></section>'
+    '<section class="protocol-page-header pro-engine-hero"><div class="protocol-page-title">'+protocolGlyph('openvpn')+'<div><span class="pro-kicker">CERTIFICATE VPN</span><h2>OpenVPN</h2><p>PKI، Client profile، TCP/UDP و سیاست‌های Server در یک Workspace</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-configure">Server settings</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت':'راه‌اندازی OpenVPN')+'</button></div></section>',
+    '<section class="wg-workspace-metrics pro-engine-metrics"><div><span>Clients</span><b>'+clients.length+'</b><small>Certificates</small></div><div><span>Runtime</span><b class="'+(engine.service_active?'ok-text':'bad-text')+'">'+(engine.service_active?'ACTIVE':'DOWN')+'</b><small>openvpn-server@server</small></div><div><span>Transport</span><b>'+transport+' / '+htmlEsc(String(opt.port||engine.port||'—'))+'</b><small>IPv4 locked</small></div><div><span>DNS</span><b>'+htmlEsc(dns)+'</b><small>Pushed to clients</small></div></section>',
+    '<section class="engine-feature-grid"><article><span class="feature-icon">↔</span><div><b>TCP / UDP Switch</b><small>تغییر امن Transport با Backup و Rollback</small></div></article><article><span class="feature-icon">⌁</span><div><b>DNS & Gateway</b><small>DNS push و Redirect Gateway قابل تنظیم</small></div></article><article><span class="feature-icon">♢</span><div><b>PKI Lifecycle</b><small>Certificate مستقل و Revoke واقعی</small></div></article><article><span class="feature-icon">✓</span><div><b>Fresh Exports</b><small>OVPN دانلودی با Runtime فعلی بازسازی می‌شود</small></div></article></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>کلاینت‌های OpenVPN</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><div class="toolbar"><button class="ghost" data-action="openvpn-configure">تنظیمات پیشرفته</button><button class="ghost" data-action="refresh">بروزرسانی</button></div></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div><div class="wizard-note"><b>Traffic accounting</b><span>Quota/Reset per-client تا زمانی که شمارش Runtime قابل اتکا اضافه نشود نمایش داده نمی‌شود؛ کنترل نمایشی و جعلی اضافه نشده است.</span></div></section>'
   ].join('');
 }
 async function protocols(renderToken=window.__viewRenderToken){
@@ -1093,6 +1107,41 @@ async function openOpenVPNDiagnostics(){
 async function repairOpenVPNRuntime(){
   if(!confirm('OpenVPN IPv4 و قوانین FORWARD/NAT مدیریت‌شده اصلاح شوند؟ پیش از تغییر Backup گرفته می‌شود و در خطا Rollback انجام می‌شود. سرویس کوتاه Restart خواهد شد.'))return;
   try{await api('/api/protocols/openvpn/repair',{method:'POST'});toast('OpenVPN runtime repaired');await openOpenVPNDiagnostics()}catch(e){alert('OpenVPN repair: '+e.message)}
+}
+
+async function openOpenVPNConfigure(){
+  try{
+    const stack=await api('/api/protocols'),engine=stack.openvpn||{},o=engine.options||{};
+    const proto=String(o.proto||engine.proto||'udp').startsWith('tcp')?'tcp':'udp';
+    const dns=Array.isArray(o.dns)?o.dns:['1.1.1.1','8.8.8.8'];
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal engine-config-modal">',
+        '<div class="wizard-head"><div><div class="eyebrow">OPENVPN SERVER</div><h3>تنظیمات پیشرفته OpenVPN</h3><p>تغییرها با Backup، Restart و Runtime verification اعمال می‌شوند.</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+        '<div class="engine-mode-switch"><label class="'+(proto==='udp'?'active':'')+'"><input type="radio" name="ovpnTransport" value="udp" '+(proto==='udp'?'checked':'')+'><span>UDP</span><small>Latency کمتر، انتخاب پیش‌فرض</small></label><label class="'+(proto==='tcp'?'active':'')+'"><input type="radio" name="ovpnTransport" value="tcp" '+(proto==='tcp'?'checked':'')+'><span>TCP</span><small>برای شبکه‌هایی که UDP محدود است</small></label></div>',
+        '<div class="wizard-form two"><label>Listen Port<input id="ovpnCfgPort" type="number" min="1" max="65535" value="'+Number(o.port||engine.port||1194)+'"></label><label>Primary DNS<input id="ovpnCfgDns1" value="'+htmlEsc(dns[0]||'1.1.1.1')+'"></label><label>Secondary DNS<input id="ovpnCfgDns2" value="'+htmlEsc(dns[1]||'8.8.8.8')+'"></label><label>Ping interval<input id="ovpnCfgPing" type="number" min="1" max="3600" value="'+Number(o.keepalive_ping||10)+'"></label><label>Restart timeout<input id="ovpnCfgTimeout" type="number" min="10" max="7200" value="'+Number(o.keepalive_timeout||120)+'"></label></div>',
+        '<div class="engine-toggle-list"><label><input id="ovpnCfgRedirect" type="checkbox" '+(o.redirect_gateway!==false?'checked':'')+'><div><b>Redirect Gateway</b><small>تمام اینترنت Client از VPN عبور کند.</small></div></label><label><input id="ovpnCfgClientToClient" type="checkbox" '+(o.client_to_client?'checked':'')+'><div><b>Client-to-client</b><small>کلاینت‌های VPN بتوانند یکدیگر را ببینند؛ پیش‌فرض خاموش.</small></div></label></div>',
+        '<div class="wizard-note"><b>تغییر Transport / Port</b><span>پروفایل‌های OVPN بعدی و دانلود مجدد کاربران با Runtime جدید ساخته می‌شوند. سرویس چند ثانیه Restart می‌شود. TCP/443 با HTTPS همان IP تداخل دارد.</span></div>',
+        '<div class="wizard-footer"><button class="ghost" data-action="modal-close">انصراف</button><button class="ghost" data-action="openvpn-repair">Repair Runtime</button><button class="primary" data-action="openvpn-configure-save">اعمال تنظیمات</button></div>',
+      '</div></div>'
+    ].join('');
+    document.querySelectorAll('input[name="ovpnTransport"]').forEach(x=>x.addEventListener('change',()=>document.querySelectorAll('.engine-mode-switch label').forEach(l=>l.classList.toggle('active',l.contains(x)&&x.checked))));
+  }catch(e){alert('OpenVPN settings: '+e.message)}
+}
+async function saveOpenVPNConfigure(){
+  const payload={
+    port:Number(document.getElementById('ovpnCfgPort')?.value||1194),
+    proto:document.querySelector('input[name="ovpnTransport"]:checked')?.value||'udp',
+    dns_servers:[document.getElementById('ovpnCfgDns1')?.value,document.getElementById('ovpnCfgDns2')?.value].filter(Boolean),
+    keepalive_ping:Number(document.getElementById('ovpnCfgPing')?.value||10),
+    keepalive_timeout:Number(document.getElementById('ovpnCfgTimeout')?.value||120),
+    redirect_gateway:Boolean(document.getElementById('ovpnCfgRedirect')?.checked),
+    client_to_client:Boolean(document.getElementById('ovpnCfgClientToClient')?.checked)
+  };
+  if(!confirm('OpenVPN با '+payload.proto.toUpperCase()+'/'+payload.port+' بازتنظیم و Restart شود؟'))return;
+  try{
+    await api('/api/protocols/openvpn/configure',{method:'POST',body:JSON.stringify(payload)});
+    toast('OpenVPN server updated');closeModal();window.__protocolData=await api('/api/protocols');if(activeView==='openvpn')await openvpnWorkspace(window.__viewRenderToken);
+  }catch(e){alert('OpenVPN configure: '+e.message)}
 }
 
 async function services(renderToken=window.__viewRenderToken){
@@ -1479,6 +1528,8 @@ async function handleMakiaAction(btn){
   if(action==='wg-endpoint-update'){await updateWireGuardEndpoint(dataDec(btn.dataset.key),btn.dataset.endpoint);return}
   if(action==='wireguard-repair'){await repairWireGuardRuntime();return}
   if(action==='openvpn-diagnostics'){await openOpenVPNDiagnostics();return}
+  if(action==='openvpn-configure'){await openOpenVPNConfigure();return}
+  if(action==='openvpn-configure-save'){await saveOpenVPNConfigure();return}
   if(action==='openvpn-repair'){await repairOpenVPNRuntime();return}
   if(action==='xray-diagnostics'){await openXrayDiagnostics();return}
   if(action==='xray-repair'){await repairXrayRuntime();return}
