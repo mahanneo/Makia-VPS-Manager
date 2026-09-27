@@ -20,7 +20,6 @@ def test_shell_has_no_inline_click_handlers():
     assert "onclick=" not in SHELL
     assert 'data-shell-action="create-access"' in SHELL
     assert 'data-shell-action="command"' in SHELL
-    assert 'data-shell-action="refresh"' in SHELL
 
 
 def test_provisioning_wizard_contract():
@@ -40,7 +39,8 @@ def test_dashboard_uses_live_operational_sources():
     assert "api('/api/overview')" in JS
     assert "api('/api/access')" in JS
     assert "api('/api/protocols')" in JS
-    assert "OPERATIONS COCKPIT" in JS
+    assert "System history" in JS
+    assert "sx-vitals" in JS
 
 
 def test_every_literal_data_action_has_dispatch_handler():
@@ -52,7 +52,7 @@ def test_every_literal_data_action_has_dispatch_handler():
 
 def test_every_shell_action_has_dispatch_handler():
     actions=set(re.findall(r'data-shell-action=["\']([a-z0-9-]+)["\']',SHELL))
-    expected={"create-access","command","refresh"}
+    expected={"create-access","command","sidebar-pin","sidebar-group"}
     assert actions==expected
     for action in actions:
         assert f"a==='{action}'" in JS
@@ -90,3 +90,16 @@ def test_xray_workspace_exposes_real_policy_controls():
 
 def test_openvpn_workspace_does_not_fake_per_client_quota():
     assert "Quota/Reset per-client برای OpenVPN" in JS
+
+
+def test_sanaei_style_information_architecture_contract():
+    assert 'class="sanaei-sidebar"' in SHELL
+    assert 'data-view="dashboard"' in SHELL
+    assert 'data-view="inbounds"' in SHELL
+    assert 'data-view="access"' in SHELL
+    assert 'data-group="settings"' in SHELL
+    assert 'data-group="xraytools"' in SHELL
+    assert 'data-group="protocolclients"' in SHELL
+    assert "inboundsWorkspace" in JS
+    assert "sx-inbound-list" in JS
+    assert "makia-sidebar-pinned" in JS
