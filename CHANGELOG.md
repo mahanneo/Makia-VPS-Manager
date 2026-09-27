@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.22.0-rc1] - 2026-09-27
+
+### Full Stack Ready installation
+- Fresh installs now install WireGuard, OpenVPN, Easy-RSA, iptables and Stunnel packages up front, then install the validated Xray Core automatically.
+- Installer bootstraps WireGuard and OpenVPN server runtimes before reporting success. The first admin login is now intended for creating users/clients, not installing protocol engines.
+- Xray starts with a validated empty server config; VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP/SOCKS and tunnel profiles become available immediately through the Xray workspace.
+- WireGuard defaults to UDP/443 and OpenVPN to UDP/1194. If either transport/port is already occupied, deterministic safe fallback ports are selected automatically and saved back to operator defaults.
+- Existing WireGuard/OpenVPN/Xray configurations are preserved and repaired rather than overwritten.
+
+### Upgrade self-healing
+- `makia-upgrade` now provisions any missing Xray, WireGuard, OpenVPN or Stunnel component before the normal runtime repair gates.
+- Existing 0.21 installations where only SSH works can upgrade to this release and receive the missing server-side protocol stack automatically.
+
+### Release gates
+- `makia-uat-smoke` now fails when Xray, WireGuard or OpenVPN is absent instead of silently treating a missing protocol as success.
+- `makia-doctor` treats the primary protocol stack as required and verifies OpenVPN listener state in addition to Xray and WireGuard runtime health.
+- Added unit coverage for automatic port fallback and full-stack provisioning.
+
+### Release status
+- Release candidate pending one clean-install and one upgrade UAT on a real Ubuntu 22.04/24.04 VPS, plus external client connectivity checks.
+
 ## [0.21.0-rc1] - 2026-09-27
 
 ### Protocol workspace rearchitecture
