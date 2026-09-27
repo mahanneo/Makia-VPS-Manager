@@ -1,0 +1,13 @@
+[Unit]
+Description=Makia IKEv2 forwarding and NAT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/makia-vps-manager/ikev2.env
+ExecStart=/usr/local/sbin/makia-ikev2-network
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
