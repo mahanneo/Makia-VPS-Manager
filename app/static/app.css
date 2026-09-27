@@ -952,3 +952,5 @@ body.neon-login-body{min-height:100vh;display:grid;place-items:center;background
 .ok-text{color:#37dda1}.bad-text{color:#ff667a}
 @media(max-width:900px){.service-control-row{grid-template-columns:32px 1fr auto}.service-control-row>.service-switch{display:none}.service-control-row>.toolbar{grid-column:2/4}.protocol-policy-mini{grid-template-columns:1fr 1fr}}
 @media(max-width:540px){.protocol-policy-mini{grid-template-columns:1fr}}
+
+.login-eye{border:0;background:transparent;color:#6f8cae;cursor:pointer;padding:5px;font-size:10px}.login-eye:hover{color:#fff}
