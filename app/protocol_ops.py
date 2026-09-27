@@ -1615,12 +1615,19 @@ def protocol_endpoint_matrix(endpoint):
     wg=wireguard_endpoint_diagnostics(endpoint) if (WG_DIR/"wg0.conf").exists() else {"ok":False,"runtime_ok":False,"warnings":["WireGuard server not bootstrapped"]}
     ov=openvpn_endpoint_diagnostics(endpoint) if (OVPN_DIR/"server/server.conf").exists() else {"ok":False,"warnings":["OpenVPN server not bootstrapped"]}
     ssh=ssh_status()
+    ike=ikev2_status()
+    ws=wstunnel_status()
+    reality=_xray_reality_status()
     x_ports=[int(i.get("port")) for i in (x.get("inbounds") or []) if i.get("port")]
+    endpoint_basic_ok=bool(is_ip or (resolved4 and dns_match is not False))
     rows=[
-        {"id":"ssh","label":"SSH","transport":"TCP","ports":[22],"runtime":bool(ssh.get("service_active")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
-        {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":x_ports,"runtime":bool(x.get("service_active") and x_ports),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
+        {"id":"ssh","label":"SSH","transport":"TCP","ports":[22],"runtime":bool(ssh.get("service_active")),"endpoint_ok":endpoint_basic_ok},
+        {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":x_ports,"runtime":bool(x.get("service_active") and x_ports),"endpoint_ok":endpoint_basic_ok},
+        {"id":"stealth","label":"Stealth / REALITY","transport":"TCP","ports":reality.get("ports") or [],"runtime":bool(reality.get("active")),"endpoint_ok":endpoint_basic_ok},
         {"id":"wireguard","label":"WireGuard","transport":"UDP","ports":[wg.get("port")] if wg.get("port") else [],"runtime":bool(wg.get("runtime_ok")),"endpoint_ok":bool(wg.get("endpoint_ok",False))},
         {"id":"openvpn","label":"OpenVPN","transport":str(ov.get("proto") or "").upper(),"ports":[ov.get("port")] if ov.get("port") else [],"runtime":bool(ov.get("service_active") and ov.get("listener")),"endpoint_ok":bool(ov.get("endpoint_is_ip") or (ov.get("resolved_ipv4") and ov.get("dns_matches_server") is not False))},
+        {"id":"ikev2","label":"IKEv2","transport":"UDP","ports":[500,4500],"runtime":bool(ike.get("ready")),"endpoint_ok":bool(not is_ip and endpoint_basic_ok)},
+        {"id":"wstunnel","label":"WStunnel","transport":"WSS / TCP","ports":[443] if ws.get("configured") else [],"runtime":bool(ws.get("ready")),"endpoint_ok":bool(not is_ip and endpoint_basic_ok and (not ws.get("domain") or ws.get("domain")==endpoint))},
     ]
     for row in rows:
         row["ready"]=bool(row["runtime"] and row["endpoint_ok"])
@@ -1628,7 +1635,7 @@ def protocol_endpoint_matrix(endpoint):
         "endpoint":endpoint,"endpoint_is_ip":is_ip,"resolved_ipv4":resolved4,"resolved_ipv6":resolved6,
         "local_ipv4":local4,"dns_matches_server":dns_match,
         "rows":rows,"all_ready":all(r["ready"] for r in rows),
-        "wireguard":wg,"openvpn":ov,
+        "wireguard":wg,"openvpn":ov,"ikev2":ike,"wstunnel":ws,"stealth":reality,
         "note":"این تست Readiness سمت سرور، DNS و Listener را بررسی می‌کند؛ تأیید نهایی اتصال از اینترنت باید با Client واقعی خارج از VPS انجام شود."
     }
 
