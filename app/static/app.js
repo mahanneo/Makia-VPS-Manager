@@ -65,17 +65,17 @@ async function dashboard(renderToken=window.__viewRenderToken){
   const traffic=Number(m.network?.sent||0)+Number(m.network?.recv||0);
   const activeClients=accessRows.filter(a=>a.status==='active').length;
   const endpoint=window.PANEL_DOMAIN||location.hostname;
-  const vital=(icon,label,value,detail,percent,footL,footR)=>'<article class="sx-vital"><div class="sx-vital-head"><span>'+icon+'</span><b>'+htmlEsc(label)+'</b></div><div class="sx-vital-value"><b>'+htmlEsc(value)+'</b><span>'+(typeof percent==="number"?'%':'')+'</span></div><div class="sx-vital-detail">'+htmlEsc(detail)+'</div><div class="sx-meter"><i style="width:'+pct(percent)+'%"></i></div><div class="sx-vital-foot"><span>'+htmlEsc(footL||'')+'</span><span>'+htmlEsc(footR||'')+'</span></div></article>';
+  const vital=(icon,label,value,unit,detail,percent,footL,footR)=>'<article class="sx-vital"><div class="sx-vital-head"><span>'+icon+'</span><b>'+htmlEsc(label)+'</b></div><div class="sx-vital-value"><b>'+htmlEsc(value)+'</b><span>'+htmlEsc(unit||'')+'</span></div><div class="sx-vital-detail">'+htmlEsc(detail)+'</div><div class="sx-meter"><i style="width:'+pct(percent)+'%"></i></div><div class="sx-vital-foot"><span>'+htmlEsc(footL||'')+'</span><span>'+htmlEsc(footR||'')+'</span></div></article>';
   const proto=(label,count)=>'<div class="sx-protocol-row"><div><b>'+label+'</b><span>'+count+' client</span></div><em>'+Math.round((count/Math.max(1,accessRows.length))*100)+'%</em><div class="sx-protocol-bar"><i style="width:'+Math.round(count/maxCount*100)+'%"></i></div></div>';
   content.innerHTML=[
     '<div class="sx-page">',
       '<section class="sx-page-head"><div><h1>داشبورد</h1><p>نمای کلی وضعیت سیستم، Xray، منابع و دسترسی‌ها</p></div><div class="sx-head-actions"><span class="sx-state-pill '+(x.service_active?'':'warn')+'"><i></i>Xray · '+(x.service_active?'Running':'Attention')+(x.version?' · '+htmlEsc(x.version):'')+'</span><button class="primary" data-shell-action="create-access">＋ ساخت کاربر</button></div></section>',
       '<section class="sx-actionbar"><button class="primary" data-action="service-action" data-service="'+dataEnc('xray')+'" data-service-action="restart">↻ Restart Xray</button><button data-action="nav" data-view="audit">▤ Logs</button><button data-action="xray-advanced">⌘ Config</button><span class="sx-sep"></span><button data-action="nav" data-view="backups">↺ Backup</button><button data-action="nav" data-view="updates">⇧ Update</button><button data-action="self-test">Self-Test</button><button data-action="refresh">Refresh</button><span class="sx-version">Makia v'+htmlEsc(window.MAKIA_VERSION||'')+'</span></section>',
       '<section class="sx-vitals">',
-        vital('◴','CPU',Number(m.cpu||0).toFixed(1),'مصرف لحظه‌ای پردازنده',Number(m.cpu||0),'24h metrics',''),
-        vital('▥','Memory',Number(m.memory||0).toFixed(1),'مصرف حافظه سیستم',Number(m.memory||0),'24h metrics',''),
-        vital('▤','Disk',Number(m.disk||0).toFixed(1),'فضای ذخیره‌سازی استفاده‌شده',Number(m.disk||0),'Host storage',''),
-        vital('◉','Services',String(running),'از '+services.length+' سرویس مدیریت‌شده',services.length?running/services.length*100:0,'Running',running+'/'+services.length),
+        vital('◴','CPU',Number(m.cpu||0).toFixed(1),'%','مصرف لحظه‌ای پردازنده',Number(m.cpu||0),'24h metrics',''),
+        vital('▥','Memory',Number(m.memory||0).toFixed(1),'%','مصرف حافظه سیستم',Number(m.memory||0),'24h metrics',''),
+        vital('▤','Disk',Number(m.disk||0).toFixed(1),'%','فضای ذخیره‌سازی استفاده‌شده',Number(m.disk||0),'Host storage',''),
+        vital('◉','Services',String(running),'','از '+services.length+' سرویس مدیریت‌شده',services.length?running/services.length*100:0,'Running',running+'/'+services.length),
       '</section>',
       '<section class="sx-mid-grid">',
         '<article class="sx-card"><div class="sx-card-head"><div><h3>System history</h3><p>CPU و Memory در ۲۴ ساعت گذشته</p></div><span class="status-chip">'+(hist?.length||0)+' samples</span></div>'+svgHistory(hist)+'</article>',
