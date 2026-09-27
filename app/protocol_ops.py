@@ -75,12 +75,107 @@ def _xray_secure_runtime_file(path,mode=0o600):
             raise ProtocolError(f"unable to set Xray runtime file ownership for {user}: {exc}") from exc
     return user
 
+def _process_no_new_privileges():
+    """Return True when this process is forbidden from gaining privileges.
+
+    Makia intentionally runs with systemd NoNewPrivileges. On some Ubuntu
+    builds, runuser/setuid from that service fails with EPERM even while the
+    root process can safely validate and write the Xray configuration.
+    """
+    try:
+        for line in Path("/proc/self/status").read_text(encoding="utf-8",errors="ignore").splitlines():
+            if line.startswith("NoNewPrivs:"):
+                return line.split(":",1)[1].strip()=="1"
+    except OSError:
+        pass
+    return False
+
+
+def _mode_allows(st,uid,gid,bit_user,bit_group,bit_other):
+    if uid==0:
+        return True
+    mode=st.st_mode
+    if st.st_uid==uid:
+        return bool(mode & bit_user)
+    if st.st_gid==gid:
+        return bool(mode & bit_group)
+    return bool(mode & bit_other)
+
+
+def _xray_assert_path_readable(path,user):
+    """Statically prove that the configured Xray service user can traverse/read a path."""
+    target=Path(path)
+    if not target.exists():
+        raise ProtocolError(f"Xray runtime file is missing: {target}")
+    try:
+        info=pwd.getpwnam(user)
+    except KeyError as exc:
+        raise ProtocolError(f"Xray service user does not exist: {user}") from exc
+    uid,gid=info.pw_uid,info.pw_gid
+    # Every parent needs execute/search permission.
+    parents=list(target.parents)
+    for parent in reversed(parents):
+        try:
+            st=parent.stat()
+        except OSError as exc:
+            raise ProtocolError(f"cannot stat Xray runtime directory {parent}: {exc}") from exc
+        if not _mode_allows(st,uid,gid,0o100,0o010,0o001):
+            raise ProtocolError(f"Xray service user {user} cannot traverse {parent}")
+    st=target.stat()
+    if not _mode_allows(st,uid,gid,0o400,0o040,0o004):
+        raise ProtocolError(f"Xray service user {user} cannot read {target}")
+    return True
+
+
+def _xray_referenced_files(path):
+    refs=[]
+    try:
+        data=json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return refs
+    def walk(node):
+        if isinstance(node,dict):
+            for key,value in node.items():
+                if key in {"certificateFile","keyFile"} and isinstance(value,str) and value.startswith("/"):
+                    refs.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node,list):
+            for value in node:
+                walk(value)
+    walk(data)
+    return sorted(set(refs))
+
+
+def _xray_static_service_validation(path,user):
+    _xray_assert_path_readable(path,user)
+    for ref in _xray_referenced_files(path):
+        _xray_assert_path_readable(ref,user)
+    return "static-permission-check"
+
+
 def _xray_test_config_as_service(binary,path):
     args=[binary,"run","-test","-format=json","-config",str(path)]
     user=_xray_service_user()
-    if os.geteuid()==0 and user not in {"","root"} and shutil.which("runuser"):
-        args=["runuser","-u",user,"--",*args]
-    return _run(args,timeout=30)
+    if user in {"","root"} or os.geteuid()!=0:
+        _run(args,timeout=30)
+        return "direct"
+
+    # The root semantic validation is authoritative for the JSON/Core syntax.
+    # Service-user validation here is about file visibility/permissions.
+    # Do not weaken Makia's systemd NoNewPrivileges hardening merely to make
+    # runuser work from inside the web service.
+    if _process_no_new_privileges() or not shutil.which("runuser"):
+        return _xray_static_service_validation(path,user)
+
+    try:
+        _run(["runuser","-u",user,"--",*args],timeout=30)
+        return "runuser"
+    except ProtocolError as exc:
+        msg=str(exc).lower()
+        if "cannot set user id" in msg or ("runuser" in msg and "operation not permitted" in msg) or "setuid" in msg:
+            return _xray_static_service_validation(path,user)
+        raise
 
 def _xray_materialize_tls(domain):
     domain=_validate_endpoint_host(domain,"TLS domain")
@@ -163,9 +258,10 @@ def xray_diagnostics():
         except Exception as exc:
             result["root_error"]=str(exc)[:1200]
         try:
-            _xray_test_config_as_service(binary,config)
+            result["service_validation_mode"]=_xray_test_config_as_service(binary,config)
             result["service_validation"]=True
         except Exception as exc:
+            result["service_validation_mode"]="failed"
             result["service_error"]=str(exc)[:1200]
         try:
             st=os.stat(config)
