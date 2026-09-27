@@ -374,7 +374,7 @@ function wizardPolicyFields(s){
       pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'',
       '<div class="wizard-form two"><label>Transport<select id="wizTransport"'+fixedTransport+'>'+transports+'</select><small>'+htmlEsc(spec.transports.join(' · '))+'</small></label>',
       '<label>Security<select id="wizSecurity"'+fixedSecurity+'>'+securities+'</select><small>'+htmlEsc(spec.security.join(' · ').toUpperCase())+'</small></label>',
-      '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'" '+(s.transport==='tcp'||s.transport==='hysteria'?'disabled':'')+'></label>',
+      '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'" '+(['tcp','kcp','hysteria'].includes(s.transport)?'disabled':'')+'><small>'+(s.transport==='kcp'?'mKCP جدید Seed قدیمی ندارد.':'WS / gRPC / XHTTP path or service')+'</small></label>',
       '<label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'" '+(s.security==='none'?'disabled':'')+'></label>',
       (s.security==='reality'?'<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label>':''),
       '<label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
