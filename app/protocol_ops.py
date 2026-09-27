@@ -1959,6 +1959,38 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
         reality_meta={"public_key":public,"short_id":sid,"server_name":sni}
     return stream,reality_meta
 
+def xray_guided_compatibility():
+    return {
+        "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["reality","tls","none"]},
+        "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+        "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp"],"security":["tls"]},
+        "shadowsocks":{"transports":["tcp"],"security":["none"]},
+        "hysteria2":{"transports":["hysteria"],"security":["tls"]},
+        "http":{"transports":["tcp"],"security":["none"]},
+        "socks":{"transports":["tcp"],"security":["none"]},
+    }
+
+
+def _validate_xray_guided_combo(protocol,transport,security):
+    protocol=str(protocol or "").lower()
+    transport=str(transport or "tcp").lower()
+    security=str(security or "none").lower()
+    aliases={"raw":"tcp","websocket":"ws","mkcp":"kcp"}
+    transport=aliases.get(transport,transport)
+    spec=xray_guided_compatibility().get(protocol)
+    if not spec:
+        raise ProtocolError("unsupported Xray quick protocol")
+    if protocol=="hysteria2":
+        return "hysteria","tls"
+    if transport not in spec["transports"]:
+        raise ProtocolError(f"{protocol.upper()} does not support {transport.upper()} in Makia guided mode")
+    if security not in spec["security"]:
+        raise ProtocolError(f"{protocol.upper()} does not support security={security} in Makia guided mode")
+    if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
+        raise ProtocolError("VLESS REALITY guided mode supports TCP/RAW, gRPC or XHTTP")
+    return transport,security
+
+
 def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", security="none", path_value="/", server_name="", reality_dest=""):
     protocol=(protocol or "").lower()
     if protocol not in {"vless","vmess","trojan","shadowsocks","hysteria2","http","socks"}:
@@ -1967,7 +1999,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid client name")
     endpoint=_validate_endpoint_host(endpoint)
-    security=(security or "none").lower()
+    transport,security=_validate_xray_guided_combo(protocol,transport,security)
     if protocol in {"vless","trojan"} and security=="none" and not _endpoint_is_private(endpoint):
         raise ProtocolError(f"{protocol.upper()} with security=none is not valid for a public endpoint in this guided mode; choose REALITY or TLS")
     binary=_binary()
