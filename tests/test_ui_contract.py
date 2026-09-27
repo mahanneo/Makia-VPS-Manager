@@ -163,3 +163,22 @@ def test_mkcp_ui_does_not_expose_removed_seed_control():
     assert "Path / Service / Seed" not in JS
     assert "mKCP جدید Seed قدیمی ندارد." in JS
     assert "kcpSettings" not in JS
+
+
+def test_protocol_hub_exposes_six_real_connection_modes():
+    for marker in [
+        "Connection Modes",
+        "ikev2-setup",
+        "ikev2-user",
+        "openvpn-mode",
+        "stealth-setup",
+        "wstunnel-setup",
+        "/api/protocols/modes",
+        "/api/protocols/ikev2/bootstrap",
+        "/api/protocols/ikev2/users",
+        "/api/protocols/stealth/bootstrap",
+        "/api/protocols/wstunnel/bootstrap",
+    ]:
+        assert marker in JS
+    assert "هر Mode به Backend واقعی متصل است" in JS
+    assert "OpenVPN Server فعال" in JS
