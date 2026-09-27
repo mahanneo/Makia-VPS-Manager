@@ -119,3 +119,41 @@ def test_connectivity_lab_does_not_fake_iran_validation():
     assert "نیاز به تست از داخل ایران" in JS
     assert "Server Ready به معنی" in JS
     assert "IRAN FIELD GATE" in JS
+
+
+def test_v026_login_controls_are_functional_and_single_surface():
+    login=(ROOT/"app/templates/login.html").read_text(encoding="utf-8")
+    assert 'id="loginLangToggle"' in login
+    assert 'id="loginThemeToggle"' in login
+    assert "makia-login-lang" in login
+    assert "makia-login-theme" in login
+    assert 'class="pro-login-field"' in login
+    assert "pro-login-field input:focus" in (ROOT/"app/static/app.css").read_text(encoding="utf-8")
+
+
+def test_xray_guided_ui_has_compatibility_matrix():
+    for marker in ["XRAY_PROFILE_MATRIX","normalizeXrayProfile","xrayPrerequisiteMessage","hysteria2","shadowsocks"]:
+        assert marker in JS
+    assert "ترکیب Transport / Security برای این پروتکل معتبر نیست" in JS
+
+
+def test_openvpn_exposes_real_tcp_udp_advanced_server_controls():
+    assert "openvpn-configure-save" in JS
+    assert "/api/protocols/openvpn/configure" in JS
+    assert 'name="ovpnTransport"' in JS
+    assert "redirect_gateway" in JS
+    assert "client_to_client" in JS
+
+
+def test_support_and_security_are_progressively_disclosed():
+    assert "HELP & DIAGNOSTICS" in JS
+    assert "Connectivity Lab" in JS
+    assert "support-advanced" in JS
+    assert "security-posture-grid" in JS
+    assert "Admin Security" in JS
+
+
+def test_visual_guide_has_protocol_step_illustrations():
+    guide=(ROOT/"app/templates/client_guide.html").read_text(encoding="utf-8")
+    assert guide.count('class="visual-steps"')==4
+    assert guide.count("<svg")>=12
