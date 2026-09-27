@@ -170,6 +170,8 @@ def test_protocol_hub_exposes_six_real_connection_modes():
         "Connection Modes",
         "ikev2-setup",
         "ikev2-user",
+        "ikev2-users",
+        "ikev2-user-delete",
         "openvpn-mode",
         "stealth-setup",
         "wstunnel-setup",
