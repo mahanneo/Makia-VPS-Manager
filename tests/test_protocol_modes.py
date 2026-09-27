@@ -73,3 +73,24 @@ def test_ikev2_payload_contains_native_credentials():
     assert "Remote ID: vpn.example.com" in text
     assert "Username: phone01" in text
     assert "Password: StrongPass-2026" in text
+
+
+def test_ikev2_requires_eap_mschapv2_plugin(monkeypatch,tmp_path):
+    monkeypatch.setattr(protocol_modes.shutil,"which",lambda name:"/usr/sbin/swanctl" if name=="swanctl" else f"/usr/bin/{name}")
+    monkeypatch.setattr(protocol_modes,"EAP_MSCHAPV2_PLUGIN",tmp_path/"missing-eap-mschapv2.so")
+    with pytest.raises(protocol_modes.ProtocolModeError,match="EAP-MSCHAPv2 plugin"):
+        protocol_modes.configure_ikev2("vpn.example.com")
+
+
+def test_snapshot_restore_round_trip(tmp_path):
+    existing=tmp_path/"existing.conf"
+    absent=tmp_path/"absent.conf"
+    existing.write_text("before\n",encoding="utf-8")
+    existing.chmod(0o640)
+    snap=protocol_modes._snapshot_paths([existing,absent])
+    existing.write_text("after\n",encoding="utf-8")
+    absent.write_text("created\n",encoding="utf-8")
+    protocol_modes._restore_paths(snap)
+    assert existing.read_text(encoding="utf-8")=="before\n"
+    assert (existing.stat().st_mode & 0o777)==0o640
+    assert not absent.exists()
