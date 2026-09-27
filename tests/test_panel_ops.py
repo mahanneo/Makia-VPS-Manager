@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from app import panel_ops
@@ -52,6 +54,7 @@ def test_issue_certificate_applies_domain_and_verifies_https(monkeypatch,tmp_pat
     calls=[]
     monkeypatch.setattr(panel_ops,"_run",lambda args,timeout=120:calls.append(list(args)) or "")
     monkeypatch.setattr(panel_ops.shutil,"which",lambda name:f"/usr/bin/{name}")
+    monkeypatch.setattr(panel_ops,"_certbot_nginx_plugin_ready",lambda:True)
     states=iter([
         {"resolved_ipv4":["198.51.100.10"],"local_ipv4":["198.51.100.10"],"dns_matches_server":True},
         {"domain":"panel.example.com"},
@@ -61,7 +64,7 @@ def test_issue_certificate_applies_domain_and_verifies_https(monkeypatch,tmp_pat
     monkeypatch.setattr(panel_ops,"domain_status",lambda domain:next(states))
     result=panel_ops.issue_certificate("panel.example.com","admin@example.com")
     assert "server_name panel.example.com;" in site.read_text(encoding="utf-8")
-    certbot=[x for x in calls if x and x[0]=="certbot"]
+    certbot=[x for x in calls if x and str(x[0]).endswith("/certbot")]
     assert certbot and "--redirect" in certbot[0]
     assert result["certificate"] is True
     assert result["https_listener"] is True
@@ -73,14 +76,63 @@ def test_issue_certificate_rolls_back_nginx_on_certbot_failure(monkeypatch,tmp_p
     site.write_text(original,encoding="utf-8")
     monkeypatch.setattr(panel_ops,"NGINX_SITE",site)
     monkeypatch.setattr(panel_ops.shutil,"which",lambda name:f"/usr/bin/{name}")
+    monkeypatch.setattr(panel_ops,"_certbot_nginx_plugin_ready",lambda:True)
     monkeypatch.setattr(panel_ops,"domain_status",lambda domain:{
         "resolved_ipv4":["198.51.100.10"],"local_ipv4":["198.51.100.10"],"dns_matches_server":True,
     })
     def run(args,timeout=120):
-        if args and args[0]=="certbot":
+        if args and str(args[0]).endswith("/certbot"):
             raise PanelOperationError("challenge failed")
         return ""
     monkeypatch.setattr(panel_ops,"_run",run)
     with pytest.raises(PanelOperationError,match="challenge failed"):
         panel_ops.issue_certificate("panel.example.com","admin@example.com")
     assert site.read_text(encoding="utf-8")==original
+
+
+def test_issue_certificate_never_runs_apt_inside_web_service(monkeypatch,tmp_path):
+    site=tmp_path/"makia-vps-manager"
+    original="server {\n    listen 80;\n    server_name old.example.com;\n}\n"
+    site.write_text(original,encoding="utf-8")
+    monkeypatch.setattr(panel_ops,"NGINX_SITE",site)
+    monkeypatch.setattr(panel_ops.shutil,"which",lambda name:None if name=="certbot" else f"/usr/bin/{name}")
+    monkeypatch.setattr(panel_ops,"domain_status",lambda domain:{
+        "resolved_ipv4":["198.51.100.10"],"local_ipv4":["198.51.100.10"],"dns_matches_server":True,
+    })
+    calls=[]
+    def run(args,timeout=120):
+        calls.append(list(args))
+        return ""
+    monkeypatch.setattr(panel_ops,"_run",run)
+    with pytest.raises(PanelOperationError,match="sudo makia-upgrade"):
+        panel_ops.issue_certificate("panel.example.com","admin@example.com")
+    assert not any(cmd and cmd[0]=="apt-get" for cmd in calls)
+    assert site.read_text(encoding="utf-8")==original
+
+
+def test_domain_status_reports_certbot_nginx_readiness(monkeypatch):
+    monkeypatch.setattr(panel_ops.shutil,"which",lambda name:f"/usr/bin/{name}")
+    monkeypatch.setattr(panel_ops,"_certbot_nginx_plugin_ready",lambda:True)
+    monkeypatch.setattr(panel_ops,"_local_ipv4_candidates",lambda:["198.51.100.10"])
+    monkeypatch.setattr(panel_ops.socket,"getaddrinfo",lambda *args,**kwargs:[
+        (panel_ops.socket.AF_INET,panel_ops.socket.SOCK_STREAM,6,"",("198.51.100.10",0))
+    ])
+    monkeypatch.setattr(panel_ops,"_listen_ports",lambda:{80})
+    monkeypatch.setattr(panel_ops,"_service_active",lambda name:True)
+    monkeypatch.setattr(panel_ops,"_nginx_config_ok",lambda:True)
+    result=panel_ops.domain_status("panel.example.com")
+    assert result["certbot_installed"] is True
+    assert result["certbot_nginx_ready"] is True
+
+
+def test_certbot_nginx_plugin_probe(monkeypatch):
+    monkeypatch.setattr(panel_ops.shutil,"which",lambda name:"/usr/bin/certbot" if name=="certbot" else f"/usr/bin/{name}")
+    monkeypatch.setattr(panel_ops.subprocess,"run",lambda *args,**kwargs:SimpleNamespace(
+        returncode=0,stdout="Plugins selected:\n* nginx\nDescription: Nginx Web Server plugin\n",stderr=""
+    ))
+    assert panel_ops._certbot_nginx_plugin_ready() is True
+
+    monkeypatch.setattr(panel_ops.subprocess,"run",lambda *args,**kwargs:SimpleNamespace(
+        returncode=0,stdout="Plugins selected:\n* standalone\n",stderr=""
+    ))
+    assert panel_ops._certbot_nginx_plugin_ready() is False
