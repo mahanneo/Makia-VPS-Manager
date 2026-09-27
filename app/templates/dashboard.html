@@ -44,19 +44,19 @@
       <div class="sanaei-nav-group">
         <button class="sanaei-group-toggle" type="button" data-shell-action="sidebar-group" data-group="settings"><span class="menu-symbol">⚙</span><b>تنظیمات</b><em>⌄</em></button>
         <div class="sanaei-submenu" data-group-panel="settings">
-          <button data-view="settings" data-settings-tab="general"><span>•</span><b>عمومی</b></button>
-          <button data-view="settings" data-settings-tab="security"><span>•</span><b>امنیت مدیر</b></button>
-          <button data-view="settings" data-settings-tab="subscription"><span>•</span><b>Subscription</b></button>
-          <button data-view="settings" data-settings-tab="api"><span>•</span><b>API Tokens</b></button>
-          <button data-view="settings" data-settings-tab="recovery"><span>•</span><b>Recovery</b></button>
+          <button data-action="nav-settings" data-tab="general"><span>•</span><b>عمومی</b></button>
+          <button data-action="nav-settings" data-tab="security"><span>•</span><b>امنیت مدیر</b></button>
+          <button data-action="nav-settings" data-tab="subscription"><span>•</span><b>Subscription</b></button>
+          <button data-action="nav-settings" data-tab="api"><span>•</span><b>API Tokens</b></button>
+          <button data-action="nav-settings" data-tab="recovery"><span>•</span><b>Recovery</b></button>
         </div>
       </div>
 
       <div class="sanaei-nav-group">
         <button class="sanaei-group-toggle" type="button" data-shell-action="sidebar-group" data-group="xraytools"><span class="menu-symbol">⌘</span><b>ابزارهای Xray</b><em>⌄</em></button>
         <div class="sanaei-submenu" data-group-panel="xraytools">
-          <button data-view="xray"><span>•</span><b>Clientها</b></button>
-          <button data-view="inbounds"><span>•</span><b>Inboundها</b></button>
+          <button type="button" data-action="xray-diagnostics"><span>•</span><b>Diagnostics</b></button>
+          <button type="button" data-action="nav-settings" data-tab="xray"><span>•</span><b>Xray Defaults</b></button>
           <button type="button" data-action="xray-advanced"><span>•</span><b>Advanced JSON</b></button>
         </div>
       </div>
