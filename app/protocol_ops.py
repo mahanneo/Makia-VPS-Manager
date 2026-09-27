@@ -647,7 +647,34 @@ def list_ikev2_users():
     if not IKEV2_SECRETS.exists():
         return []
     out=[]
-    pattern=re.compile(r'^\\s*([A-Za-z0-9_.-]+)\\s*:\\s*EAP\\s+"[^"]*"\\s*#\\s*makia-eap:([A-Za-z0-9_.-]+)\\s*    if not (_installed("stunnel4") or _installed("stunnel")):
+    pattern=re.compile(r'^\s*([A-Za-z0-9_.-]+)\s*:\s*EAP\s+"[^"]*"\s*#\s*makia-eap:([A-Za-z0-9_.-]+)\s*$')
+    for line in IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore").splitlines():
+        m=pattern.match(line)
+        if m and m.group(1)==m.group(2):
+            out.append({"name":m.group(1)})
+    return sorted(out,key=lambda item:item["name"].lower())
+
+
+def remove_ikev2_user(name):
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,48}",name):
+        raise ProtocolError("invalid IKEv2 username")
+    if not IKEV2_SECRETS.exists():
+        raise ProtocolError("IKEv2 secrets file is missing")
+    text=IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore")
+    marker=re.compile(r"#\s*makia-eap:"+re.escape(name)+r"\s*$")
+    lines=text.splitlines()
+    kept=[line for line in lines if not marker.search(line)]
+    if len(kept)==len(lines):
+        raise ProtocolError("IKEv2 user not found")
+    IKEV2_SECRETS.write_text("\n".join(kept).rstrip()+"\n",encoding="utf-8")
+    os.chmod(IKEV2_SECRETS,0o600)
+    _run(["ipsec","rereadsecrets"],timeout=20)
+    return {"ok":True,"name":name}
+
+
+def bootstrap_stealth(domain, listen_port=8443):
+    if not (_installed("stunnel4") or _installed("stunnel")):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     listen_port=_validate_port(listen_port)
@@ -690,14 +717,14 @@ def list_ikev2_users():
     if not status.get("listener"):
         raise ProtocolError("Stunnel did not expose the requested TCP listener")
     client=(
-        "client = yes\\n"
-        "foreground = yes\\n"
-        "verifyChain = yes\\n"
-        "checkHost = "+domain+"\\n"
-        "CAfile = /etc/ssl/certs/ca-certificates.crt\\n\\n"
-        "[makia-openvpn]\\n"
-        "accept = 127.0.0.1:11940\\n"
-        f"connect = {domain}:{listen_port}\\n"
+        "client = yes\n"
+        "foreground = yes\n"
+        "verifyChain = yes\n"
+        "checkHost = "+domain+"\n"
+        "CAfile = /etc/ssl/certs/ca-certificates.crt\n\n"
+        "[makia-openvpn]\n"
+        "accept = 127.0.0.1:11940\n"
+        f"connect = {domain}:{listen_port}\n"
     )
     return {"ok":True,"status":status,"domain":domain,"client_stunnel_config":client,"openvpn_local_endpoint":"127.0.0.1:11940"}
 
