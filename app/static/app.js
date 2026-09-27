@@ -799,7 +799,7 @@ async function xrayWorkspace(renderToken=window.__viewRenderToken){
   if(renderToken!==window.__viewRenderToken||activeView!=='xray')return;
   window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;
   const engine=stack.xray||{},rows=accessRows.filter(x=>x.kind==='xray');
-  const managed=clients.filter(x=>['vless','vmess','trojan','shadowsocks','hysteria2'].includes(String(x.protocol||'').toLowerCase()));
+  const managed=clients;
   const active=managed.filter(x=>x.enabled&&!x.expired).length;
   const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
   const quota=managed.reduce((sum,x)=>sum+Number(x.quota_bytes||0),0);
@@ -822,10 +822,10 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
   if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
   window.__protocolData=stack;window.__operatorSettings=operator;
   const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn');
-  const server=(engine.servers||[])[0]||{};
+  const serverName=(engine.servers||[])[0]||'server';
   content.innerHTML=[
-    '<section class="wg-workspace-hero"><div><div class="eyebrow">OPENVPN · PKI · NATIVE OVPN</div><h2>فضای مستقل OpenVPN</h2><p>راه‌اندازی سرور، Clientها، فایل OVPN، Domain Diagnostics و عملیات PKI از Xray و SSH جدا شده‌اند.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ساخت Client':'راه‌اندازی OpenVPN')+'</button><button class="ghost" data-action="openvpn-diagnostics">Domain Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair Runtime</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(engine.service_active?'running':'')+'"></span><b>'+(engine.service_active?'OpenVPN Running':engine.installed?'OpenVPN Attention':'OpenVPN not installed')+'</b><small>'+(server.port?htmlEsc(String(server.proto||'udp').toUpperCase()+'/'+server.port):'Server not bootstrapped')+'</small></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>Clientها</span><b>'+clients.length+'</b></div><div><span>Service</span><b>'+(engine.service_active?'ON':'OFF')+'</b></div><div><span>Port</span><b>'+(server.port||'-')+'</b></div><div><span>Transport</span><b>'+htmlEsc(String(server.proto||'-').toUpperCase())+'</b></div></section>',
+    '<section class="wg-workspace-hero"><div><div class="eyebrow">OPENVPN · PKI · NATIVE OVPN</div><h2>فضای مستقل OpenVPN</h2><p>راه‌اندازی سرور، Clientها، فایل OVPN، Domain Diagnostics و عملیات PKI از Xray و SSH جدا شده‌اند.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ساخت Client':'راه‌اندازی OpenVPN')+'</button><button class="ghost" data-action="openvpn-diagnostics">Domain Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair Runtime</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(engine.service_active?'running':'')+'"></span><b>'+(engine.service_active?'OpenVPN Running':engine.installed?'OpenVPN Attention':'OpenVPN not installed')+'</b><small>'+(engine.port?htmlEsc(String(engine.proto||'udp').toUpperCase()+'/'+engine.port):'Server not bootstrapped')+'</small></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>Clientها</span><b>'+clients.length+'</b></div><div><span>Service</span><b>'+(engine.service_active?'ON':'OFF')+'</b></div><div><span>Port</span><b>'+(engine.port||'-')+'</b></div><div><span>Transport</span><b>'+htmlEsc(String(engine.proto||'-').toUpperCase())+'</b></div></section>',
     '<section class="panel"><div class="panel-head"><div><h3>OpenVPN Clients</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div></section>',
     '<section class="wg-workspace-help"><div><b>تفکیک قابلیت واقعی</b><p>در این Release فایل و PKI و Revoke واقعی هستند. Quota/Reset per-client برای OpenVPN تا زمانی که Accounting قابل اتکای Runtime اضافه نشود به‌صورت نمایشی نشان داده نمی‌شود.</p></div><button class="ghost" data-action="client-guide" data-kind="openvpn">راهنمای کلاینت ↗</button></section>'
   ].join('');
