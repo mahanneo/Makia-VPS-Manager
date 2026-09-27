@@ -152,6 +152,9 @@ nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
 
+echo "Running full-stack installation smoke gate..."
+/usr/local/sbin/makia-uat-smoke
+
 SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
 printf '\nMakia VPS Manager installed successfully.\n'
 printf 'Panel: http://%s/\n' "${SERVER_IP:-SERVER_IP}"
