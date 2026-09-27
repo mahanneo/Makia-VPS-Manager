@@ -1219,6 +1219,9 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         raise ProtocolError("invalid OpenVPN protocol")
     if (OVPN_DIR/"server/server.conf").exists():
         raise ProtocolError("OpenVPN server already exists; use Repair Runtime to preserve existing client certificates")
+    transport="tcp" if requested_proto.startswith("tcp") else "udp"
+    if _port_transport_in_use(port,transport):
+        raise ProtocolError(f"{transport.upper()} port {port} is already in use; choose another OpenVPN port")
     server_proto=_openvpn_proto(requested_proto,server=True)
     if not _installed("openvpn"):
         install_component("openvpn")
@@ -1451,17 +1454,23 @@ def revoke_openvpn_client(name):
             shutil.move(str(src),str(archive/src.name))
     return {"revoked":True,"name":name}
 
-def _port_in_use(port):
-    port=int(port)
-    for kind in (socket.SOCK_STREAM,socket.SOCK_DGRAM):
-        s=socket.socket(socket.AF_INET,kind)
-        try:
-            s.bind(("0.0.0.0",port))
-        except OSError:
-            return True
-        finally:
-            s.close()
+def _port_transport_in_use(port, proto):
+    port=_validate_port(port)
+    proto=str(proto or "").lower()
+    if proto not in {"tcp","udp"}:
+        raise ProtocolError("port transport must be tcp or udp")
+    kind=socket.SOCK_STREAM if proto=="tcp" else socket.SOCK_DGRAM
+    s=socket.socket(socket.AF_INET,kind)
+    try:
+        s.bind(("0.0.0.0",port))
+    except OSError:
+        return True
+    finally:
+        s.close()
     return False
+
+def _port_in_use(port):
+    return _port_transport_in_use(port,"tcp") or _port_transport_in_use(port,"udp")
 
 def _ensure_xray_stats(data):
     if not isinstance(data,dict):
@@ -1683,8 +1692,9 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         raise ProtocolError("invalid Xray inbounds collection")
     if any(isinstance(i,dict) and int(i.get("port") or -1)==port for i in inbounds):
         raise ProtocolError("this port is already used by another Xray inbound")
-    if _port_in_use(port):
-        raise ProtocolError("this port is already in use on the server")
+    port_transports={"udp"} if protocol=="hysteria2" or str(transport or "").lower() in {"kcp","mkcp"} else ({"tcp","udp"} if protocol in {"shadowsocks","socks"} else {"tcp"})
+    if any(_port_transport_in_use(port,item) for item in port_transports):
+        raise ProtocolError("this port/transport is already in use on the server")
     tag=f"makia-{protocol}-{port}"
     credential=None
     client_obj=None
@@ -1830,8 +1840,9 @@ def create_xray_tunnel(listen_port, target_host, target_port, network="tcp,udp",
     target_host=_validate_endpoint_host(target_host,"target host")
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid tunnel name")
-    if _port_in_use(listen_port):
-        raise ProtocolError("listen port is already in use")
+    requested_transports={"tcp","udp"} if network=="tcp,udp" else {network}
+    if any(_port_transport_in_use(listen_port,item) for item in requested_transports):
+        raise ProtocolError("listen port/transport is already in use")
     config_path=_config_path() or "/usr/local/etc/xray/config.json"
     path=Path(config_path); path.parent.mkdir(parents=True,exist_ok=True)
     if path.exists():
