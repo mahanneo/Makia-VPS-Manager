@@ -772,6 +772,7 @@ class IKEv2UserCreate(BaseModel):
 @app.post("/api/protocols/modes/ikev2/users")
 def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
     actor=require_mutation(request)
+    result=None
     try:
         result=protocol_modes.create_ikev2_user(payload.name,payload.password or None)
         delivery=access_ops.ikev2_payload(result["name"],result["server"],result["password"])
@@ -780,6 +781,11 @@ def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
         })
     except protocol_modes.ProtocolModeError as e:
         raise HTTPException(400,str(e))
+    except Exception as e:
+        if result and result.get("name"):
+            try: protocol_modes.remove_ikev2_user(result["name"])
+            except Exception: pass
+        raise HTTPException(500,"IKEv2 user delivery persistence failed; runtime credential was rolled back") from e
     result["artifact_id"]=artifact_id
     audit(actor,"ikev2_user_create",result["name"],ip=ip(request))
     return result
