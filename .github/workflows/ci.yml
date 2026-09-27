@@ -78,6 +78,7 @@ jobs:
           test -f docs/UAT-0.24.0-RC1.md
           test -f docs/UAT-0.25.0-RC1.md
           test -f docs/UAT-0.26.0-RC1.md
+          test -f docs/UAT-0.27.0-RC1.md
           test -f docs/IRAN-CONNECTIVITY-FIELD-TEST.md
           test -f scripts/iran-field-preflight.sh
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
@@ -247,6 +248,11 @@ jobs:
           grep -q 'protocol-mode-config' app/static/app.js
           grep -q 'connection-mode-card' app/static/app.css
           grep -q 'strongswan-swanctl charon-systemd' scripts/install.sh
+          grep -q 'libcharon-extauth-plugins' scripts/install.sh
+          grep -q 'libcharon-extauth-plugins' scripts/update.sh
+          grep -q 'VERSION="11.0.0"' scripts/install-wstunnel.sh
+          grep -q 'EAP-MSCHAPv2 plugin installed' scripts/uat-smoke.sh
+          grep -q '0.27.0 Stable فقط' docs/UAT-0.27.0-RC1.md
           grep -q 'install-wstunnel.sh' scripts/install.sh
           grep -q 'install-wstunnel.sh' scripts/update.sh
           grep -q 'StrongSwan swanctl tooling installed' scripts/uat-smoke.sh
