@@ -23,11 +23,12 @@
     {% if error %}<div class="alert">{{error}}</div>{% endif %}
     <form method="post" class="neon-login-form">
       <label><span>نام کاربری</span><div class="login-input-wrap"><i>♙</i><input name="username" autocomplete="username" required placeholder="admin"></div></label>
-      <label><span>رمز عبور</span><div class="login-input-wrap"><i>⌑</i><input name="password" type="password" autocomplete="current-password" required placeholder="••••••••••••"></div></label>
-      <div class="login-options"><label class="remember-check"><input type="checkbox"><span>مرا به خاطر بسپار</span></label><span>اتصال امن و رمزنگاری‌شده</span></div>
+      <label><span>رمز عبور</span><div class="login-input-wrap"><i>⌑</i><input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="••••••••••••"><button class="login-eye" type="button" id="toggleLoginPassword" aria-label="نمایش رمز">◉</button></div></label>
+      <div class="login-options"><span>● نشست امن</span><span>اتصال رمزنگاری‌شده</span></div>
       <button class="login-submit" type="submit">ورود به پنل <b>←</b></button>
     </form>
     <div class="login-footer"><span>Secure Control Center</span><span>v{{version}}</span></div>
   </main>
+<script>document.getElementById("toggleLoginPassword")?.addEventListener("click",()=>{const p=document.getElementById("loginPassword");if(!p)return;p.type=p.type==="password"?"text":"password"});</script>
 </body>
 </html>
