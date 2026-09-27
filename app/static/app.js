@@ -851,7 +851,7 @@ async function protocols(renderToken=window.__viewRenderToken){
     ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Install & Setup</button>'
     : (!o.config
       ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Bootstrap Server</button>'
-      : '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Clients</button><button class="engine-btn" data-action="openvpn-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="openvpn-repair">Repair Runtime</button>');
+      : '<button class="engine-btn primaryish" data-action="nav" data-view="openvpn">Manage Clients</button><button class="engine-btn" data-action="openvpn-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="openvpn-repair">Repair Runtime</button>');
   const stActions=!s.installed
     ? '<button class="engine-btn" data-action="protocol-install" data-kind="stunnel">Install Stunnel</button>'
     : '<button class="engine-btn" data-action="nav" data-view="services">Service Control</button>';
@@ -860,18 +860,23 @@ async function protocols(renderToken=window.__viewRenderToken){
   const inboundHtml=(x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(i.tag||'untagged')+'</b><span>'+htmlEsc(i.protocol||'unknown')+'</span></div><div><b>'+htmlEsc((i.listen||'0.0.0.0')+':'+(i.port??'-'))+'</b><span>'+Number(i.clients||0)+' clients</span></div></div>').join(''):'<div class="empty compact">Inbound قابل‌خواندن پیدا نشد.</div>';
 
   content.innerHTML=[
-    '<section class="protocol-command"><div><div class="eyebrow">ENGINE & TRANSPORT CONTROL</div><h2>Protocol Hub</h2><p>Engineها، Server Bootstrap و تنظیمات پیشرفته اینجا مدیریت می‌شوند؛ ساخت Client فقط در Access Center انجام می‌شود.</p><div class="hero-actions"><button class="primary action-lg" data-action="nav" data-view="access">Open Access Center</button><button class="ghost action-lg" data-action="endpoint-matrix">IP / Domain Readiness</button><button class="ghost action-lg" data-action="protocol-refresh">Refresh Engines</button></div></div>',
+    '<section class="protocol-command"><div><div class="eyebrow">ENGINE & TRANSPORT CONTROL</div><h2>Protocol Hub</h2><p>Engineها، Server Bootstrap، Port Allocation و تنظیمات پیشرفته اینجا مدیریت می‌شوند؛ ساخت Client در فضای مستقل هر پروتکل انجام می‌شود.</p><div class="hero-actions"><button class="primary action-lg" data-action="nav" data-view="access">Open Access Center</button><button class="ghost action-lg" data-action="endpoint-matrix">IP / Domain Readiness</button><button class="ghost action-lg" data-action="protocol-refresh">Refresh Engines</button></div></div>',
     '<div class="protocol-readiness"><b>'+ready+'/'+total+'</b><span>CAPABILITIES READY</span></div></section>',
     '<section class="engine-grid">',
       engineCard('X','Xray Core','VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / Proxy',protocolState(x.installed,x.service_active),'<span>'+htmlEsc(x.version||'Version unavailable')+'</span><span>'+Number((x.inbounds||[]).length)+' inbounds</span>',xActions),
       engineCard('W','WireGuard','Kernel/userspace WireGuard with managed wg0 bootstrap',protocolState(w.installed,w.service_active),'<span>'+Number((w.interfaces||[]).length)+' interfaces</span><span>'+Number(w.peers||0)+' peers</span>',wActions),
       engineCard('O','OpenVPN','PKI-backed OpenVPN server and inline client profiles',protocolState(o.installed,o.service_active),'<span>'+Number((o.servers||[]).length)+' server profiles</span><span>Easy-RSA PKI</span>',oActions),
-      engineCard('S','OpenSSH','System SSH access with Makia expiry/session policy',protocolState(ssh.installed,ssh.service_active),'<span>Linux accounts</span><span>Policy worker</span>','<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage SSH Access</button>'),
+      engineCard('S','OpenSSH','System SSH access with Makia expiry/session policy',protocolState(ssh.installed,ssh.service_active),'<span>Linux accounts</span><span>Policy worker</span>','<button class="engine-btn primaryish" data-action="nav" data-view="ssh">Manage SSH Accounts</button>'),
       engineCard('T','Stunnel','TLS wrapper for selected TCP services',protocolState(s.installed,s.service_active),'<span>Optional sidecar</span>',stActions),
     '</section>',
     '<section class="protocol-detail-grid"><div class="panel"><div class="panel-head"><div><h3>Capability Matrix</h3><span>'+ready+' READY</span></div></div><div class="capability-grid-v11">'+capabilityHtml+'</div></div>',
     '<div class="panel"><div class="panel-head"><div><h3>Xray Inbounds</h3><span>'+Number((x.inbounds||[]).length)+' DETECTED</span></div></div><div class="engine-inbounds">'+inboundHtml+'</div></div></section>',
-    '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="access">Manage in Access Center</button></div><div class="protocol-policy-mini">'+
+    '<section class="panel"><div class="panel-head"><div><h3>Port Allocation</h3><span>TRANSPORT-AWARE SAFETY</span></div><button class="ghost" data-action="endpoint-matrix">Endpoint Matrix</button></div><div class="engine-inbounds">'+
+      (x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>Xray · '+htmlEsc(String(i.protocol||'').toUpperCase())+'</b><span>'+htmlEsc(i.tag||'Inbound')+'</span></div><div><b>:'+Number(i.port||0)+'</b><span>Engine validated</span></div></div>').join('')+
+      (w.port?'<div class="engine-inbound"><div><b>WireGuard</b><span>UDP only</span></div><div><b>:'+Number(w.port)+'</b><span>UDP reservation</span></div></div>':'')+
+      (o.port?'<div class="engine-inbound"><div><b>OpenVPN</b><span>'+htmlEsc(String(o.proto||'udp').toUpperCase())+'</span></div><div><b>:'+Number(o.port)+'</b><span>Server reservation</span></div></div>':'')+
+      '<div class="wizard-note"><b>قاعده تداخل</b><span>پورت فقط با همان Transport تداخل محسوب می‌شود؛ بنابراین TCP/443 پنل می‌تواند هم‌زمان با UDP/443 WireGuard کار کند، اما دو Listener روی UDP/443 اجازه ساخت نمی‌گیرند.</span></div></div></section>',
+    '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="xray">Manage in Xray Workspace</button></div><div class="protocol-policy-mini">'+
       (clients.length?clients.slice(0,8).map(pc=>'<div><div><b>'+htmlEsc(pc.name)+'</b><span>'+htmlEsc(String(pc.protocol||'').toUpperCase())+'</span></div><strong class="'+(pc.enabled&&!pc.expired?'ok-text':'bad-text')+'">'+(pc.enabled&&!pc.expired?'Active':'Attention')+'</strong></div>').join(''):'<div class="empty compact">هنوز Xray Client مدیریت‌شده وجود ندارد.</div>')+
     '</div></section>'
   ].join('');
