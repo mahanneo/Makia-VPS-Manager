@@ -22,6 +22,18 @@ WG_DIR=Path("/etc/wireguard")
 OVPN_DIR=Path("/etc/openvpn")
 OVPN_EASYRSA=OVPN_DIR/"easy-rsa"
 
+
+def _backup_dir():
+    """Return the writable Makia backup root used by protocol mutations.
+
+    Tests and non-standard installations can override the production path via
+    MAKIA_BACKUP_DIR; production keeps the root-only /var/backups location.
+    """
+    root=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
+    root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    return root
+
+
 class ProtocolError(RuntimeError):
     pass
 
@@ -296,8 +308,7 @@ def repair_xray_runtime():
         raise ProtocolError(f"cannot parse Xray config: {exc}") from exc
     _rewrite_letsencrypt_certificates(data)
     tmp=_xray_temp_json_path(path,"repair")
-    backup_dir=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-repair-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
@@ -1064,8 +1075,7 @@ def repair_wireguard_runtime(iface="wg0"):
         raise ProtocolError("WireGuard config is missing Address or ListenPort")
     uplink=_default_iface()
     original=conf.read_text(encoding="utf-8",errors="ignore")
-    backup_dir=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"wireguard-repair-{int(time.time())}.conf"
     shutil.copy2(conf,backup)
     network=cfg["network"]
@@ -1495,8 +1505,7 @@ def reconfigure_openvpn_server(port=1194,proto="udp",dns_servers=None,keepalive_
         raise ProtocolError(f"{requested.upper()} port {port} is already in use")
 
     original=server_conf.read_text(encoding="utf-8",errors="ignore")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"openvpn-config-{int(time.time())}.conf"
     shutil.copy2(server_conf,backup)
 
@@ -2093,8 +2102,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     }
     inbounds.append(inbound)
     tmp=_xray_temp_json_path(path,"create")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=None
     if path.exists():
         backup=backup_dir/f"xray-{int(time.time())}.json"
@@ -2201,7 +2209,7 @@ def create_xray_tunnel(listen_port, target_host, target_port, network="tcp,udp",
         },
     })
     tmp=_xray_temp_json_path(path,"tunnel")
-    backup_dir=Path("/var/backups/makia-vps-manager"); backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=None
     if path.exists():
         backup=backup_dir/f"xray-tunnel-{int(time.time())}.json"
@@ -2245,8 +2253,7 @@ def remove_xray_inbound(inbound_tag):
     data["inbounds"]=[x for x in inbounds if not (isinstance(x,dict) and x.get("tag")==inbound_tag)]
     if len(data["inbounds"])==before:
         raise ProtocolError("Xray inbound not found")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-remove-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp=_xray_temp_json_path(path,"remove")
@@ -2303,8 +2310,7 @@ def disable_xray_client(inbound_tag,email):
             changed=len(settings["accounts"])!=before
     if not changed:
         return {"disabled":False,"reason":"client not found in config"}
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-policy-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp=_xray_temp_json_path(path,"policy")
@@ -2386,8 +2392,7 @@ def enable_xray_client(inbound_tag,email,protocol,credential):
     else:
         raise ProtocolError("automatic re-enable is not supported for this protocol")
 
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-enable-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp=_xray_temp_json_path(path,"enable")
@@ -2492,8 +2497,7 @@ def apply_xray_config(data):
     path=Path(config_path)
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=_xray_temp_json_path(path,"apply")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=None
     if path.exists():
         backup=backup_dir/f"xray-manual-{int(time.time())}.json"
