@@ -596,7 +596,7 @@ def connection_modes_status():
     return {
         "ikev2":{
             "id":"ikev2","label":"IKEv2","transport":"IPsec / UDP","ports":[500,4500],
-            "installed":ike["installed"],"active":ike["ready"],"detail":"Native IPsec with EAP-MSCHAPv2",
+            "installed":bool(ike.get("installed")),"active":bool(ike.get("ready")),"detail":"Native IPsec with EAP-MSCHAPv2",
             "requires":"Domain + valid certificate","status":ike,
         },
         "wireguard":{
@@ -615,13 +615,13 @@ def connection_modes_status():
             "detail":"OpenVPN over TCP","requires":"Free TCP port; TCP/443 conflicts with HTTPS","status":ov,
         },
         "stealth":{
-            "id":"stealth","label":"Stealth","transport":"VLESS / REALITY","ports":reality["ports"],
-            "installed":bool(_binary()),"active":reality["active"],"detail":"Xray REALITY camouflage",
+            "id":"stealth","label":"Stealth","transport":"VLESS / REALITY","ports":reality.get("ports") or [],
+            "installed":bool(_binary()),"active":bool(reality.get("active")),"detail":"Xray REALITY camouflage",
             "requires":"Free TCP port","status":reality,
         },
         "wstunnel":{
-            "id":"wstunnel","label":"WStunnel","transport":"WireGuard over WSS","ports":[443] if ws["configured"] else [],
-            "installed":ws["installed"],"active":ws["ready"],"detail":"WebSocket/TLS wrapper for WireGuard",
+            "id":"wstunnel","label":"WStunnel","transport":"WireGuard over WSS","ports":[443] if ws.get("configured") else [],
+            "installed":bool(ws.get("installed")),"active":bool(ws.get("ready")),"detail":"WebSocket/TLS wrapper for WireGuard",
             "requires":"HTTPS domain + WireGuard","status":ws,
         },
     }
@@ -1652,7 +1652,7 @@ def protocol_endpoint_matrix(endpoint):
     return {
         "endpoint":endpoint,"endpoint_is_ip":is_ip,"resolved_ipv4":resolved4,"resolved_ipv6":resolved6,
         "local_ipv4":local4,"dns_matches_server":dns_match,
-        "rows":rows,"all_ready":all(r["ready"] for r in rows),
+        "rows":rows,"all_ready":all(r["ready"] for r in rows if r["id"] in {"ssh","xray","wireguard","openvpn"}),
         "wireguard":wg,"openvpn":ov,"ikev2":ike,"wstunnel":ws,"stealth":reality,
         "note":"این تست Readiness سمت سرور، DNS و Listener را بررسی می‌کند؛ تأیید نهایی اتصال از اینترنت باید با Client واقعی خارج از VPS انجام شود."
     }
