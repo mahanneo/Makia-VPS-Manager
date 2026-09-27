@@ -1780,3 +1780,35 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 .protocol-mode-card .toolbar{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:980px){.protocol-mode-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.protocol-mode-grid{grid-template-columns:1fr}.protocol-mode-card{border-radius:15px}}
+
+
+/* v0.27 Change Protocol selector */
+.change-protocol-modal{width:min(610px,96vw);padding:20px;background:linear-gradient(180deg,#09111d,#070d16);border-color:#2a3950}
+.change-protocol-head{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:start;margin-bottom:16px}
+.change-protocol-head h3{margin:3px 0 6px;font-size:24px}
+.change-protocol-head p{margin:0;color:var(--muted);font-size:11px;line-height:1.7}
+.change-protocol-mark{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;border:1px solid #38506c;background:#0d1827;color:#b9ecff;font-size:24px}
+.change-protocol-list{display:grid;gap:10px}
+.change-protocol-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:12px;align-items:center;width:100%;padding:14px;border:1px solid #25364d;border-radius:15px;background:#121a26;color:#edf4fb;text-align:left;cursor:pointer;transition:.18s}
+.change-protocol-row:hover{transform:translateY(-1px);border-color:#42607e;background:#172131}
+.change-protocol-row.ready{border-color:rgba(45,212,167,.26)}
+.change-protocol-icon .proto-glyph{width:38px;height:38px}
+.change-protocol-copy{min-width:0}
+.change-protocol-copy b{display:block;font-size:14px}
+.change-protocol-copy small{display:block;margin-top:4px;color:#8f9daf;font-size:10px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.change-protocol-port{color:#aeb9c7;font-size:11px;font-variant-numeric:tabular-nums;direction:ltr}
+.change-protocol-state{padding:5px 7px;border:1px solid #564727;border-radius:999px;color:#e3c37e;background:#1b160b;font-size:8px;letter-spacing:.7px}
+.change-protocol-state.ok{border-color:#275441;color:#9ff0ce;background:#0c1a16}
+.change-protocol-arrow{font-size:25px;color:#9bacbe;line-height:1}
+.change-protocol-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #1b293d}
+.change-protocol-foot span{max-width:430px;color:#73849b;font-size:9px;line-height:1.7}
+@media(max-width:620px){
+  .change-protocol-modal{padding:15px}
+  .change-protocol-head{grid-template-columns:auto 1fr auto}
+  .change-protocol-head p{display:none}
+  .change-protocol-row{grid-template-columns:auto minmax(0,1fr) auto auto;padding:12px}
+  .change-protocol-state{display:none}
+  .change-protocol-copy small{white-space:normal}
+  .change-protocol-foot{align-items:flex-start;flex-direction:column}
+  .change-protocol-foot .ghost{width:100%}
+}
