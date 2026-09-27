@@ -204,6 +204,22 @@ def client_guide_text(kind,protocol=""):
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
         )
+    if kind=="ikev2":
+        return common+(
+            "IKEv2 / strongSwan\n"
+            "1) Server/Remote ID را دقیقاً برابر Domain درج‌شده در credentials.txt بگذارید.\n"
+            "2) Authentication را Username/Password (EAP-MSCHAPv2) انتخاب کنید.\n"
+            "3) iOS/macOS/Windows از IKEv2 داخلی سیستم استفاده می‌کنند؛ Android می‌تواند از strongSwan VPN Client استفاده کند.\n"
+            "4) UDP/500 و UDP/4500 باید در شبکه قابل دسترس باشند.\n"
+        )
+    if kind=="wstunnel":
+        return common+(
+            "WStunnel + WireGuard\n"
+            "1) ابتدا wstunnel client را با فرمان داخل wstunnel-command.txt اجرا کنید.\n"
+            "2) سپس فایل WireGuard داخل بسته را Import و فعال کنید.\n"
+            "3) WireGuard به 127.0.0.1 متصل می‌شود و UDP آن از داخل WSS/443 عبور می‌کند.\n"
+            "4) کلاینت استاندارد WireGuard به‌تنهایی WStunnel را اجرا نمی‌کند؛ companion wstunnel لازم است.\n"
+        )
     return common+(
         "SSH / NPV Tunnel\n"
         "1) برای NPV Tunnel / NapsternetV سازگار، لینک npvt-ssh:// را Import from Clipboard کنید یا QR را اسکن کنید.\n"
@@ -301,6 +317,59 @@ def wireguard_replace_endpoint(config,host):
     if count!=1:
         raise AccessPackageError("WireGuard client Endpoint could not be updated")
     return updated
+
+def ikev2_payload(name,endpoint,password):
+    filename=f"{safe_filename(name)}-ikev2-credentials.txt"
+    text=(
+        "Makia IKEv2 Access\n"
+        f"Server: {endpoint}\n"
+        f"Remote ID: {endpoint}\n"
+        f"Username: {name}\n"
+        f"Password: {password}\n"
+        "Authentication: EAP-MSCHAPv2\n"
+        "Ports: UDP/500, UDP/4500\n"
+    )
+    return {
+        "native_filename":filename,
+        "files":{
+            filename:text.encode("utf-8"),
+            "connection-guide-fa.txt":client_guide_text("ikev2").encode("utf-8"),
+        },
+        "primary_text":text,
+        "summary":{"endpoint":endpoint,"username":name,"protocol":"ikev2"},
+    }
+
+
+def wstunnel_payload(name,bundle):
+    safe=safe_filename(name)
+    wg_name=f"{safe}-wstunnel-wireguard.conf"
+    cmd_name=f"{safe}-wstunnel-command.txt"
+    command=str(bundle.get("command") or "")
+    wg_config=str(bundle.get("wireguard_config") or "")
+    text=(
+        "Makia WStunnel Access\n"
+        f"Server: {bundle.get('server_url') or ''}\n"
+        f"WireGuard local endpoint: 127.0.0.1:{bundle.get('local_port') or ''}\n\n"
+        "Start wstunnel first:\n"
+        f"{command}\n"
+    )
+    return {
+        "native_filename":wg_name,
+        "files":{
+            wg_name:wg_config.encode("utf-8"),
+            cmd_name:(command+"\n").encode("utf-8"),
+            f"{safe}-wstunnel-readme.txt":text.encode("utf-8"),
+            "connection-guide-fa.txt":client_guide_text("wstunnel").encode("utf-8"),
+        },
+        "primary_text":text,
+        "summary":{
+            "protocol":"wstunnel",
+            "server_url":bundle.get("server_url") or "",
+            "wireguard_port":bundle.get("wireguard_port") or 0,
+            "local_port":bundle.get("local_port") or 0,
+        },
+    }
+
 
 def openvpn_payload(name,config):
     filename=f"{safe_filename(name)}.ovpn"
