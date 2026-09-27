@@ -190,7 +190,7 @@ def main():
             native.value.save_as(str(native_path))
             assert "vless://" in native_path.read_text(encoding="utf-8")
 
-            page.locator('[data-shell-action="create-access"]').click()
+            page.locator('.sanaei-sidebar .sidebar-create').click()
             page.locator(".provision-wizard").wait_for()
             assert page.locator(".wizard-protocol").count()==4
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
@@ -208,7 +208,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.evaluate("window.__protocolData.xray.installed=true")
-            page.locator('[data-shell-action="create-access"]').click()
+            page.locator('.sanaei-sidebar .sidebar-create').click()
             page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
             page.locator("#wizXrayProtocol").select_option("vmess")
             page.locator("#wizEndpoint").fill("8.8.8.8")
