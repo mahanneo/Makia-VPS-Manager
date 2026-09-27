@@ -780,6 +780,21 @@ def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
     audit(actor,"ikev2_user_create",payload.name,ip=ip(request))
     return result
 
+@app.get("/api/protocols/ikev2/users")
+def ikev2_users_get(request:Request):
+    require_user(request)
+    return {"users":protocol_ops.list_ikev2_users()}
+
+@app.delete("/api/protocols/ikev2/users/{name}")
+def ikev2_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.remove_ikev2_user(name)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    audit(actor,"ikev2_user_delete",name,ip=ip(request))
+    return result
+
 class StealthBootstrap(BaseModel):
     domain:str=Field(min_length=3,max_length=253)
     port:int=Field(default=8443,ge=1,le=65535)
