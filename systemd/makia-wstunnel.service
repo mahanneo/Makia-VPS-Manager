@@ -1,0 +1,20 @@
+[Unit]
+Description=Makia WStunnel WSS wrapper for OpenVPN
+After=network-online.target openvpn-server@server.service
+Wants=network-online.target
+Requires=openvpn-server@server.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/makia-vps-manager/wstunnel.env
+ExecStart=/usr/local/bin/wstunnel server --restrict-http-upgrade-path-prefix ${WSTUNNEL_PATH_PREFIX} --restrict-to ${WSTUNNEL_RESTRICT_TO} --tls-certificate ${WSTUNNEL_CERT} --tls-private-key ${WSTUNNEL_KEY} ${WSTUNNEL_BIND}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadOnlyPaths=/etc/makia-vps-manager /etc/letsencrypt
+
+[Install]
+WantedBy=multi-user.target

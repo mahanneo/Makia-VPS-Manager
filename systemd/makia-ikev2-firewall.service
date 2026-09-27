@@ -1,0 +1,14 @@
+[Unit]
+Description=Makia IKEv2 forwarding and NAT
+After=network-online.target strongswan.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/makia-vps-manager/ikev2.env
+ExecStart=/usr/local/lib/makia-vps-manager/ikev2-firewall.sh start
+ExecStop=/usr/local/lib/makia-vps-manager/ikev2-firewall.sh stop
+
+[Install]
+WantedBy=multi-user.target
