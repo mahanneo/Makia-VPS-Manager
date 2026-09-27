@@ -1,3 +1,11 @@
+## نسخه رسمی ۰.۲۶.۰
+
+نسخه `0.26.0` خط رسمی فعلی Makia است. این نسخه Login، کاربران، Xray، WireGuard، OpenVPN، Admin Security، Support و راهنماهای تصویری را روی معماری حرفه‌ای جدید یکپارچه می‌کند.
+
+در Xray، Wizard فقط Transport/Securityهای معتبر برای پروتکل انتخابی را نمایش می‌دهد و خطای Hostهای systemd سخت‌گیری‌شده که به `runuser: cannot set user id: Operation not permitted` منجر می‌شد رفع شده است. OpenVPN هر دو Transport **UDP یا TCP** را برای Server Profile فعال پشتیبانی می‌کند و تنظیمات Port، DNS، Keepalive، Redirect Gateway و Client-to-client دارد. WireGuard نیز Peer management، QR/Native، Handshake/Traffic، Diagnostics و تنظیمات Server Port/MTU را دارد.
+
+**مرز اعتبارسنجی:** این نسخه رسمی نرم‌افزار است، اما سازگاری با هر ISP یا شبکه محدودشده تضمین عمومی نیست. تأیید شبکه ایران فقط با Field Test واقعی داخل ایران ثبت می‌شود.
+
 ## نسخه ۰.۲۶.۰-rc1 — Final Hardening
 
 این نسخه خطای واقعی ساخت Xray روی Hostهای systemd سخت‌گیری‌شده را اصلاح می‌کند، Login را بازطراحی می‌کند، FA/EN و Dark/Light را فعال می‌کند، ترکیب‌های Xray را قبل از Submit محدود به حالت‌های معتبر می‌کند و برای WireGuard/OpenVPN تنظیمات پیشرفته واقعی اضافه می‌کند.

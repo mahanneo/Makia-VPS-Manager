@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.26.0] - 2026-09-27
+
+### Official release
+- Promoted the 0.26 hardening line to the official public baseline.
+- Login focus/autofill styling, FA/EN, Dark/Light and password visibility are active.
+- Unified Users uses the compact progressive-disclosure layout.
+- Xray guided security choices now only show combinations valid for the selected protocol.
+- Hardened-systemd Xray creation no longer depends on blocked runuser privilege switching.
+- OpenVPN exposes UDP/TCP server transport and advanced server controls; WireGuard exposes server Port/MTU plus peer/client compatibility controls.
+- Visual guides, modern Admin Security and simplified Support are part of the public release.
+- Automated unit, contract, Xray-core and browser gates are required before merge.
+
+### Compatibility boundary
+- Official software release does not mean every protocol is verified on every ISP.
+- Iran network verification remains a separate real-client field test recorded in `docs/IRAN-CONNECTIVITY-FIELD-TEST.md`.
+
 ## [0.26.0-rc1] - 2026-09-27
 
 ### Host/runtime fixes
