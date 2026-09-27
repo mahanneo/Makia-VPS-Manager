@@ -377,6 +377,16 @@ def main():
             page.screenshot(path='/tmp/makia-services.png',full_page=True)
             page.locator('.pro-sidebar button[data-view="protocols"]').click()
             leave_sidebar(page)
+            page.locator(".protocol-modes-panel").wait_for()
+            assert page.locator(".protocol-mode-card").count()==6
+            mode_text=page.locator(".protocol-modes-panel").inner_text()
+            for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
+                assert label in mode_text
+            assert page.locator('[data-action="ikev2-setup"]').count()==1
+            assert page.locator('[data-action="openvpn-mode"][data-proto="udp"]').count()==1
+            assert page.locator('[data-action="openvpn-mode"][data-proto="tcp"]').count()==1
+            assert page.locator('[data-action="stealth-setup"]').count()==1
+            assert page.locator('[data-action="wstunnel-setup"]').count()==1
             page.locator(".port-management-panel").wait_for()
             assert page.locator(".port-table-row").count()>=1
             page.screenshot(path='/tmp/makia-ports.png',full_page=True)
