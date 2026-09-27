@@ -242,14 +242,18 @@ function wizardProtocolReady(kind){
 
 function renderProvisionWizard(){
   const s=provisionState;if(!s)return;
-  const steps=['Protocol','Identity','Policy','Review'];
+  const steps=[['پروتکل','انتخاب مسیر اتصال'],['مشخصات','اطلاعات کاربر'],['سیاست','محدودیت و شبکه'],['تأیید','ساخت و تحویل']];
   let body='';
   if(s.step===1){
-    body='<div class="wizard-protocols">'+['ssh','xray','wireguard','openvpn'].map(k=>{
-      const names={ssh:'SSH',xray:'Xray',wireguard:'WireGuard',openvpn:'OpenVPN'};
-      const desc={ssh:'PIN / Password + Session policy',xray:'VLESS / VMess / Trojan / …',wireguard:'Native .conf + QR',openvpn:'Inline .ovpn profile'};
-      const ready=wizardProtocolReady(k);
-      return '<button class="wizard-protocol '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+k+'"><span>'+names[k].slice(0,1)+'</span><div><b>'+names[k]+'</b><small>'+desc[k]+'</small></div><em>'+(ready?'READY':'SETUP')+'</em></button>';
+    const cards=[
+      ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy','S'],
+      ['xray','Xray / V2Ray','انعطاف‌پذیر برای شبکه‌های محدود','VLESS · VMess · Trojan · Hysteria2','X'],
+      ['wireguard','WireGuard','تونل Native سریع','UDP · QR · Native config','W'],
+      ['openvpn','OpenVPN','سازگاری گسترده کلاینت','PKI · OVPN profile','O']
+    ];
+    body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
+      const ready=wizardProtocolReady(x[0]);
+      return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+x[4]+'</span><div><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
     }).join('')+'</div>';
   }else if(s.step===2){
     body=wizardIdentityFields(s);
@@ -258,56 +262,48 @@ function renderProvisionWizard(){
   }else{
     body=wizardReview(s);
   }
+  const protocolLabel=s.protocol?({ssh:'SSH',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN'}[s.protocol]||s.protocol):'انتخاب پروتکل';
   const footer=s.step===1
     ? '<button class="ghost" data-action="modal-close">انصراف</button>'
-    : '<button class="ghost" data-action="wizard-prev">قبلی</button>'+(s.step<4?'<button class="primary" data-action="wizard-next">ادامه</button>':'<button class="primary action-lg" data-action="wizard-create">ساخت و آماده‌سازی</button>');
+    : '<button class="ghost" data-action="wizard-prev">مرحله قبل</button>'+(s.step<4?'<button class="primary" data-action="wizard-next">ادامه ←</button>':'<button class="primary action-lg" data-action="wizard-create">ساخت دسترسی</button>');
   modalRoot.innerHTML=[
-    '<div class="modal-backdrop wizard-backdrop"><div class="modal provision-wizard">',
-      '<div class="wizard-head"><div><div class="eyebrow">SMART PROVISIONING</div><h3>ساخت دسترسی جدید</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
-      '<div class="wizard-steps">'+steps.map((x,i)=>'<div class="'+(s.step===i+1?'active':s.step>i+1?'done':'')+'"><i>'+(s.step>i+1?'✓':i+1)+'</i><span>'+x+'</span></div>').join('')+'</div>',
-      '<div class="wizard-body">'+body+'</div>',
-      '<div class="wizard-footer">'+footer+'</div>',
-    '</div></div>'
+    '<div class="modal-backdrop provision-backdrop"><aside class="provision-drawer">',
+      '<header class="provision-header"><div><span class="pro-kicker">NEW ACCESS</span><h3>ساخت دسترسی جدید</h3><p>'+htmlEsc(protocolLabel)+'</p></div><button class="close-btn" data-action="modal-close">×</button></header>',
+      '<div class="provision-progress">'+steps.map((x,i)=>'<div class="'+(s.step===i+1?'active':s.step>i+1?'done':'')+'"><i>'+(s.step>i+1?'✓':i+1)+'</i><span><b>'+x[0]+'</b><small>'+x[1]+'</small></span></div>').join('')+'</div>',
+      '<div class="provision-scroll"><div class="wizard-body">'+body+'</div></div>',
+      '<footer class="wizard-footer">'+footer+'</footer>',
+    '</aside></div>'
   ].join('');
 }
-
 function wizardIdentityFields(s){
   if(s.protocol==='ssh') return [
-    '<div class="wizard-section-title"><h4>هویت کاربر</h4><p>اطلاعاتی که برای ورود SSH استفاده می‌شود.</p></div>',
-    '<div class="wizard-form two"><label>Username<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
-    '<label>Password / PIN<div class="input-action"><input id="wizPassword" value="'+htmlEsc(s.password)+'"><button class="soft" data-action="wizard-secret" data-mode="pin6">Generate</button></div>',
-    '<div class="preset-row"><button data-action="wizard-secret" data-mode="pin4">PIN 4</button><button data-action="wizard-secret" data-mode="pin6">PIN 6</button><button data-action="wizard-secret" data-mode="easy8">Easy 8</button><button data-action="wizard-secret" data-mode="strong">Strong</button></div></label>',
-    wizardEndpointFields(s),
-    '<label>Plan<input id="wizPlan" value="'+htmlEsc(s.plan)+'" placeholder="VIP / Trial / 30D"></label>',
-    '<label>Internal note<input id="wizNote" value="'+htmlEsc(s.note)+'" placeholder="نام مشتری / سفارش"></label></div>'
+    '<div class="wizard-section-title"><span class="pro-kicker">IDENTITY</span><h4>حساب SSH</h4><p>اطلاعات اصلی ورود را وارد کن. تنظیمات کمتر استفاده‌شده داخل «پیشرفته» قرار دارند.</p></div>',
+    '<div class="wizard-form two"><label>نام کاربری<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
+    '<label>رمز / PIN<div class="input-action"><input id="wizPassword" value="'+htmlEsc(s.password)+'"><button class="soft" data-action="wizard-secret" data-mode="pin6">تولید</button></div><div class="preset-row"><button data-action="wizard-secret" data-mode="pin6">PIN 6</button><button data-action="wizard-secret" data-mode="easy8">Easy 8</button><button data-action="wizard-secret" data-mode="strong">Strong</button></div></label>',
+    wizardEndpointFields(s)+'</div>',
+    '<details class="pro-advanced"><summary><span>تنظیمات پیشرفته</span><small>Plan و یادداشت داخلی</small></summary><div class="wizard-form two"><label>Plan<input id="wizPlan" value="'+htmlEsc(s.plan)+'" placeholder="VIP / Trial / 30D"></label><label>یادداشت داخلی<input id="wizNote" value="'+htmlEsc(s.note)+'" placeholder="نام مشتری / سفارش"></label></div></details>'
   ].join('');
   if(s.protocol==='xray') return [
-    '<div class="wizard-section-title"><h4>پروفایل Xray</h4><p>Protocol و Endpoint عمومی را مشخص کن.</p></div>',
+    '<div class="wizard-section-title"><span class="pro-kicker">XRAY PROFILE</span><h4>پروفایل Xray</h4><p>Protocol و Endpoint را مشخص کن؛ Makia تنظیمات سازگار پایه را خودکار انتخاب می‌کند.</p></div>',
     '<div class="wizard-form two"><label>Protocol<select id="wizXrayProtocol">',
     ['vless','vmess','trojan','shadowsocks','hysteria2','http','socks'].map(x=>'<option value="'+x+'" '+(s.xrayProtocol===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join(''),
-    '</select></label><label>Client name<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
+    '</select></label><label>نام Client<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
     wizardEndpointFields(s),
-    '<label>Port<input id="wizPort" type="number" min="1" max="65535" value="'+Number(s.port)+'"></label></div>'
+    '<label>Port<input id="wizPort" type="number" min="1" max="65535" value="'+Number(s.port)+'"></label></div>',
+    '<div class="pro-info-card"><div><b>Preset هوشمند</b><span>'+htmlEsc(s.xrayProtocol.toUpperCase())+' · '+htmlEsc(s.transport.toUpperCase())+' · '+htmlEsc(s.security.toUpperCase())+'</span></div><small>در مرحله بعد در صورت نیاز Transport، TLS/REALITY، حجم و IP Limit را تغییر بده.</small></div>'
   ].join('');
   if(s.protocol==='wireguard') return [
-    '<div class="wizard-section-title"><h4>WireGuard Peer</h4><p>برای هر دستگاه یک Peer مستقل بساز.</p></div>',
-    '<div class="wizard-form two"><label>Peer name<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
-    wizardEndpointFields(s),
-    '<label>DNS<input id="wizDns" value="'+htmlEsc(s.dns)+'"></label>',
-    '<label>MTU<input id="wizWgMtu" type="number" min="576" max="1500" value="'+Number(s.wgMtu||1280)+'"></label>',
-    '<label>Persistent Keepalive<input id="wizWgKeepalive" type="number" min="0" max="3600" value="'+Number(s.wgKeepalive??15)+'"></label>',
-    '<label>Allowed IPs<input id="wizWgAllowedIps" value="'+htmlEsc(s.wgAllowedIps||'0.0.0.0/0')+'"></label></div>',
-    '<div class="wizard-note"><b>Compatibility</b><span>دامنه ثابت برای مهاجرت VPS مناسب‌تر است. UDP/443 + MTU 1280 + Keepalive 15 مشکلات رایج NAT/MTU را کاهش می‌دهد، اما در شبکه‌ای که خود WireGuard فیلتر است تضمین عبور نمی‌دهد.</span></div>'
+    '<div class="wizard-section-title"><span class="pro-kicker">WIREGUARD PEER</span><h4>Peer جدید</h4><p>برای هر دستگاه یک Peer مستقل بساز؛ تنظیمات شبکه پیش‌فرض برای اکثر کلاینت‌ها کافی است.</p></div>',
+    '<div class="wizard-form two"><label>نام Peer<input id="wizName" value="'+htmlEsc(s.name)+'"></label>'+wizardEndpointFields(s)+'</div>',
+    '<details class="pro-advanced"><summary><span>تنظیمات شبکه</span><small>DNS · MTU · Keepalive · Allowed IPs</small></summary><div class="wizard-form two"><label>DNS<input id="wizDns" value="'+htmlEsc(s.dns)+'"></label><label>MTU<input id="wizWgMtu" type="number" min="576" max="1500" value="'+Number(s.wgMtu||1280)+'"></label><label>Persistent Keepalive<input id="wizWgKeepalive" type="number" min="0" max="3600" value="'+Number(s.wgKeepalive??15)+'"></label><label>Allowed IPs<input id="wizWgAllowedIps" value="'+htmlEsc(s.wgAllowedIps||'0.0.0.0/0')+'"></label></div></details>'
   ].join('');
   return [
-    '<div class="wizard-section-title"><h4>OpenVPN Client</h4><p>Certificate مستقل برای این Client ساخته می‌شود.</p></div>',
-    '<div class="wizard-form two"><label>Client name<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
-    wizardEndpointFields(s),
-    '<label>Server port<input id="wizOvpnPort" type="number" value="'+Number(s.ovpnPort)+'" readonly></label>',
-    '<label>Server transport<input value="'+htmlEsc(s.ovpnProto.toUpperCase())+'" readonly></label></div>'
+    '<div class="wizard-section-title"><span class="pro-kicker">OPENVPN CLIENT</span><h4>Client جدید</h4><p>برای این کاربر Certificate مستقل ساخته می‌شود.</p></div>',
+    '<div class="wizard-form two"><label>نام Client<input id="wizName" value="'+htmlEsc(s.name)+'"></label>'+wizardEndpointFields(s),
+    '<label>Port سرور<input id="wizOvpnPort" type="number" value="'+Number(s.ovpnPort)+'" readonly></label>',
+    '<label>Transport<input value="'+htmlEsc(s.ovpnProto.toUpperCase())+'" readonly></label></div>'
   ].join('');
 }
-
 function applySimpleXrayPreset(s){
   const presets={vless:['tcp','reality'],vmess:['tcp','none'],trojan:['tcp','tls'],shadowsocks:['tcp','none'],hysteria2:['tcp','tls'],http:['tcp','none'],socks:['tcp','none']};
   [s.transport,s.security]=presets[s.xrayProtocol]||presets.vless;
@@ -322,46 +318,39 @@ function wizardEndpointFields(s){
 
 function wizardPolicyFields(s){
   if(s.protocol==='ssh') return [
-    '<div class="wizard-section-title"><h4>Policy</h4><p>انقضا، نشست همزمان و تعداد IP/دستگاه را تنظیم کن.</p></div>',
-    '<div class="wizard-form three"><label>Expire date<input id="wizExpireDate" type="date" value="'+htmlEsc(s.expireDate)+'"><div class="preset-row"><button data-action="wizard-expiry" data-days="7">7D</button><button data-action="wizard-expiry" data-days="30">30D</button><button data-action="wizard-expiry" data-days="60">60D</button><button data-action="wizard-expiry" data-days="90">90D</button><button data-action="wizard-expiry" data-days="0">∞</button></div></label>',
-    '<label>Concurrent Sessions<input id="wizSessions" type="number" min="1" max="50" value="'+Number(s.sessions)+'"></label>',
-    '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label></div>',
-    '<div class="wizard-note"><b>Security</b><span>PIN 4 مجاز است، اما برای سرویس عمومی PIN 6 یا Strong توصیه می‌شود.</span></div>'
+    '<div class="wizard-section-title"><span class="pro-kicker">ACCESS POLICY</span><h4>مدت و محدودیت</h4><p>فقط انقضا را تنظیم کن؛ محدودیت‌های نشست و دستگاه اختیاری‌اند.</p></div>',
+    '<div class="wizard-form one"><label>تاریخ انقضا<input id="wizExpireDate" type="date" value="'+htmlEsc(s.expireDate)+'"><div class="preset-row"><button data-action="wizard-expiry" data-days="7">7 روز</button><button data-action="wizard-expiry" data-days="30">30 روز</button><button data-action="wizard-expiry" data-days="60">60 روز</button><button data-action="wizard-expiry" data-days="90">90 روز</button><button data-action="wizard-expiry" data-days="0">بدون انقضا</button></div></label></div>',
+    '<details class="pro-advanced"><summary><span>محدودیت اتصال</span><small>Session و Device/IP limit</small></summary><div class="wizard-form two"><label>نشست همزمان<input id="wizSessions" type="number" min="1" max="50" value="'+Number(s.sessions)+'"></label><label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label></div></details>'
   ].join('');
   if(s.protocol==='xray'){
-    const intro='<div class="wizard-section-title"><h4>Network & Limits</h4><p>Transport، Security و محدودیت‌های Client را تعیین کن.</p></div>';
-    if(s.simpleMode)return intro+'<div class="wizard-note"><b>ساخت ساده</b><span>'+htmlEsc(s.xrayProtocol.toUpperCase())+' با '+htmlEsc(s.transport.toUpperCase())+' و '+htmlEsc(s.security.toUpperCase())+' ساخته می‌شود. محدودیت حجم، زمان و دستگاه اعمال نمی‌شود.'+(s.security==='tls'?' برای TLS، گواهی معتبر همان SNI باید روی سرور موجود باشد.':'')+'</span></div><button class="soft" data-action="wizard-xray-advanced">تنظیمات پیشرفته</button>';
+    const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>Preset پیشنهادی را نگه دار یا تنظیمات تخصصی را باز کن.</p></div>';
+    if(s.simpleMode)return intro+'<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(s.xrayProtocol.toUpperCase())+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip ok">Recommended</span></div><div class="pro-info-card"><div><b>حالت ساده</b><span>بدون محدودیت حجم و زمان؛ مناسب ساخت سریع.</span></div><small>برای Quota، Expiry، IP Limit یا Transport سفارشی وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
     return [intro,
-    '<div class="wizard-form three"><label>Transport<select id="wizTransport">',
+    '<div class="wizard-form two"><label>Transport<select id="wizTransport">',
     ['tcp','ws','grpc','httpupgrade','xhttp','kcp'].map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join(''),
     '</select></label><label>Security<select id="wizSecurity"><option value="none" '+(s.security==='none'?'selected':'')+'>None</option><option value="tls" '+(s.security==='tls'?'selected':'')+'>TLS</option><option value="reality" '+(s.security==='reality'?'selected':'')+'>REALITY</option></select></label>',
-    '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'"></label>',
-    '<label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'"></label>',
-    '<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label>',
-    '<label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
-    '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label>',
-    '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
-    '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div><button class="soft" data-action="wizard-xray-simple">بازگشت به ساخت ساده</button>'
+    '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'"></label><label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'"></label>',
+    '<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label><label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
+    '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label><label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
+    '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div><button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button>'
   ].join('');
   }
-  return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>تنظیمات پایه آماده است</h4><p>برای '+htmlEsc(s.protocol)+' تنظیم اضافی لازم نیست. در مرحله بعد اطلاعات و رمز بسته تحویل را بررسی کن.</p></div>';
+  const labels={wireguard:'WireGuard',openvpn:'OpenVPN'};
+  return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>'+htmlEsc(labels[s.protocol]||s.protocol)+' آماده است</h4><p>تنظیمات سرور و Client آماده‌اند. مرحله بعد خلاصه نهایی و بسته تحویل را نشان می‌دهد.</p></div>';
 }
-
 function wizardReview(s){
   const summary=[];
   summary.push(['Protocol',s.protocol==='xray'?s.xrayProtocol.toUpperCase():s.protocol.toUpperCase()]);
   summary.push(['Name',s.name]);
-  if(s.endpoint)summary.push(['Endpoint ('+(s.endpointMode==='ip'?'IP':'Domain')+')',s.endpoint]);
-  if(s.protocol==='ssh'){summary.push(['Expire',s.expireDate||'No expiry']);summary.push(['Sessions',s.sessions]);summary.push(['Devices',s.devices])}
-  if(s.protocol==='xray'){summary.push(['Port',s.port]);summary.push(['Transport',s.transport]);summary.push(['Security',s.security]);summary.push(['Quota',s.simpleMode?'Unlimited':s.quota?String(s.quota)+' GB':'Unlimited']);summary.push(['Days',s.simpleMode?'Unlimited':s.expireDays||'Unlimited'])}
+  if(s.endpoint)summary.push(['Endpoint',s.endpoint]);
+  if(s.protocol==='ssh'){summary.push(['Expire',s.expireDate||'بدون انقضا']);summary.push(['Sessions',s.sessions]);summary.push(['Devices',s.devices])}
+  if(s.protocol==='xray'){summary.push(['Port',s.port]);summary.push(['Transport',s.transport.toUpperCase()]);summary.push(['Security',s.security.toUpperCase()]);summary.push(['Quota',s.simpleMode?'Unlimited':s.quota?String(s.quota)+' GB':'Unlimited'])}
   return [
-    '<div class="wizard-section-title"><h4>Review & Delivery</h4><p>قبل از ساخت، اطلاعات نهایی را کنترل کن.</p></div>',
-    '<div class="review-grid">'+summary.map(x=>'<div><span>'+htmlEsc(x[0])+'</span><b>'+htmlEsc(x[1])+'</b></div>').join('')+'</div>',
-    '<div class="delivery-box"><div><b>Protected delivery package</b><span>پس از ساخت می‌توانی Native file یا ZIP رمزدار AES-256 را دانلود کنی.</span></div>',
-    '<label>Package PIN<div class="input-action"><input id="wizPackagePassword" value="'+htmlEsc(s.packagePassword)+'" minlength="4"><button class="soft" data-action="wizard-package-pin">Generate</button></div></label></div>'
+    '<div class="wizard-section-title"><span class="pro-kicker">REVIEW</span><h4>تأیید نهایی</h4><p>قبل از ساخت، فقط اطلاعات کلیدی را بررسی کن.</p></div>',
+    '<div class="review-grid pro-review-grid">'+summary.map(x=>'<div><span>'+htmlEsc(x[0])+'</span><b>'+htmlEsc(x[1])+'</b></div>').join('')+'</div>',
+    '<div class="delivery-box pro-delivery-box"><div><b>بسته تحویل امن</b><span>بعد از ساخت، Native config، QR و ZIP رمزدار در دسترس خواهد بود.</span></div><label>PIN بسته<div class="input-action"><input id="wizPackagePassword" value="'+htmlEsc(s.packagePassword)+'" minlength="4"><button class="soft" data-action="wizard-package-pin">تولید</button></div></label></div>'
   ].join('');
 }
-
 function captureWizard(){
   const s=provisionState;if(!s)return;
   const val=id=>document.getElementById(id)?.value;
