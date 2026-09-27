@@ -247,7 +247,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: makia-v023-ui-screenshots
+          name: makia-v024-ui-screenshots
           path: /tmp/makia-*.png
           if-no-files-found: ignore
           retention-days: 7
