@@ -323,7 +323,8 @@ def root(request:Request):
     return templates.TemplateResponse("dashboard.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
-        "theme":get_setting("theme","glass"),"density":get_setting("density","comfortable")
+        "theme":get_setting("theme","glass"),"density":get_setting("density","comfortable"),
+        "current_username":current_user(request) or "admin"
     })
 
 @app.get("/help/connect",response_class=HTMLResponse)
