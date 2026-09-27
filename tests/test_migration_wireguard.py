@@ -62,6 +62,15 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     (wg/"wg0.conf").write_text("[Interface]\nPrivateKey = server-key\n",encoding="utf-8")
     nginx=tmp_path/"makia-nginx.conf"
     nginx.write_text("server { server_name vpn.example.com; }\n",encoding="utf-8")
+    modes=tmp_path/"makia-vps-manager"
+    modes.mkdir()
+    (modes/"wstunnel.env").write_text("WSTUNNEL_BIND=wss://0.0.0.0:9443\n",encoding="utf-8")
+    swanctl=tmp_path/"swanctl"
+    swanctl.mkdir()
+    (swanctl/"swanctl.conf").write_text("include conf.d/*.conf\n",encoding="utf-8")
+    stunnel=tmp_path/"stunnel"
+    stunnel.mkdir()
+    (stunnel/"makia-openvpn.conf").write_text("foreground = yes\n",encoding="utf-8")
 
     monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[{"username":"user001","password_hash":"$6$hash"}])
     files=system_ops.portable_migration_files(
@@ -72,6 +81,9 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
             "letsencrypt":str(tmp_path/"missing-letsencrypt"),
             "xray":str(tmp_path/"missing-xray"),
             "xray_alt":str(tmp_path/"missing-xray-alt"),
+            "protocol_modes_state":str(modes),
+            "swanctl":str(swanctl),
+            "stunnel":str(stunnel),
             "nginx_site":str(nginx),
         },
     )
@@ -80,6 +92,9 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     assert "payload/wireguard.tar.gz" in files
     assert "payload/ssh-users.json" in files
     assert "payload/nginx-site.conf" in files
+    assert "payload/protocol_modes_state.tar.gz" in files
+    assert "payload/swanctl.tar.gz" in files
+    assert "payload/stunnel.tar.gz" in files
     manifest=json.loads(files["manifest.json"])
     assert manifest["format"]=="makia-portable-migration"
     assert manifest["panel_domain"]=="vpn.example.com"
