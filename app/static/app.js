@@ -101,12 +101,17 @@ async function access(renderToken=window.__viewRenderToken){
   if(renderToken!==window.__viewRenderToken||activeView!=='access')return;
   accessCache=rows;accountCache=sshRows;window.__protocolClients=pcRows;window.__protocolData=stack;window.__operatorSettings=operator;
   const active=rows.filter(x=>x.status==='active').length;
-  const counts={ssh:0,xray:0,wireguard:0,openvpn:0};rows.forEach(x=>{if(counts[x.kind]!==undefined)counts[x.kind]++});
+  const attention=rows.length-active;
+  const online=rows.reduce((n,x)=>n+Number(x.online||0),0);
   content.innerHTML=[
-    '<div class="sx-page">',
-      '<section class="sx-page-head"><div><h1>کاربران</h1><p>مدیریت همه Clientها و Access Profileها در یک لیست</p></div><div class="sx-head-actions"><button class="ghost" data-action="self-test">Self-Test</button><button class="primary" data-action="wizard-open">＋ افزودن کاربر</button></div></section>',
-      '<section class="sx-summary-row"><div class="sx-summary"><span>Total clients</span><b>'+rows.length+'</b><small>همه پروتکل‌ها</small></div><div class="sx-summary"><span>Active</span><b>'+active+'</b><small>قابل استفاده</small></div><div class="sx-summary"><span>Xray</span><b>'+counts.xray+'</b><small>VLESS / VMess / …</small></div><div class="sx-summary"><span>VPN + SSH</span><b>'+(counts.ssh+counts.wireguard+counts.openvpn)+'</b><small>SSH / WG / OpenVPN</small></div></section>',
-      '<section class="sx-table-wrap"><div class="sx-table-toolbar"><div><h3>Client list</h3><small id="accessCount">'+rows.length+' PROFILES</small></div><div class="sx-toolbar-right"><div class="sx-client-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><input id="accessSearch" class="sx-search" placeholder="جستجو کاربر…"></div></div><div id="accessRows" class="access-cards"></div></section>',
+    '<div class="pro-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">ACCESS MANAGEMENT</span><h1>کاربران</h1><p>لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">بررسی سلامت</button><button class="primary" data-action="wizard-open">＋ ساخت دسترسی</button></div></section>',
+      '<section class="pro-stat-strip"><div><span>کل کاربران</span><b>'+rows.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>نیازمند توجه</span><b>'+attention+'</b></div><div><span>اتصال زنده</span><b>'+online+'</b></div></section>',
+      '<section class="pro-directory">',
+        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
+        '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
+        '<div id="accessRows" class="pro-user-list"></div>',
+      '</section>',
     '</div>'
   ].join('');
   document.getElementById('accessSearch')?.addEventListener('input',renderAccessRows);
@@ -117,63 +122,73 @@ async function access(renderToken=window.__viewRenderToken){
   });
   window.__accessFilter='all';renderAccessRows();
 }
-function accessLaunchCard(kind,name,desc,count,ready){
-  const action=kind==='ssh'||ready
-    ? '<button class="launch-action" data-action="wizard-open" data-kind="'+kind+'">Create</button>'
-    : '<button class="launch-action setup" data-action="protocol-setup" data-kind="'+kind+'">Setup</button>';
-  return '<article class="launch-card '+kind+'"><div class="launch-top"><span class="access-protocol-icon">'+name.slice(0,1)+'</span><span class="launch-count">'+count+'</span></div><h3>'+htmlEsc(name)+'</h3><p>'+htmlEsc(desc)+'</p>'+action+'</article>';
-}
 
 function renderAccessRows(){
   const root=document.getElementById('accessRows');if(!root)return;
   const q=(document.getElementById('accessSearch')?.value||'').trim().toLowerCase();
   const filter=window.__accessFilter||'all';
   const rows=accessCache.filter(a=>{
-    const hay=(String(a.name||'')+' '+String(a.protocol||'')+' '+String(a.plan||'')).toLowerCase();
+    const hay=(String(a.name||'')+' '+String(a.protocol||'')+' '+String(a.plan||'')+' '+String(a.endpoint||'')).toLowerCase();
     return (!q||hay.includes(q))&&(filter==='all'||a.kind===filter);
   });
-  const counter=document.getElementById('accessCount');if(counter)counter.textContent=rows.length+' / '+accessCache.length+' PROFILES';
-  root.innerHTML=rows.length?rows.map(accessCard).join(''):'<div class="empty">دسترسی مطابق فیلتر پیدا نشد.</div>';
+  root.innerHTML=rows.length?rows.map(accessCard).join(''):'<div class="empty pro-empty">کاربری مطابق فیلتر پیدا نشد.</div>';
 }
 
+function accessUsageText(a){
+  if(a.kind==='xray'){
+    const used=fmtBytes(a.used_bytes||0),quota=a.quota_bytes?fmtBytes(a.quota_bytes):'∞';
+    return used+' / '+quota;
+  }
+  if(a.kind==='wireguard')return fmtBytes(Number(a.rx||0)+Number(a.tx||0));
+  if(a.kind==='ssh')return Number(a.online||0)+' / '+Number(a.connection_limit||1)+' session';
+  return 'PKI';
+}
+function accessExpiryText(a){
+  if(a.kind==='ssh')return a.expire_date||'بدون انقضا';
+  if(a.kind==='xray')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
+  if(a.kind==='wireguard')return a.address||'Peer';
+  return 'Certificate';
+}
 function accessCard(a){
-  const kind=htmlEsc(a.kind),name=htmlEsc(a.name),proto=htmlEsc(String(a.protocol||a.kind).toUpperCase());
-  const key=dataEnc(a.key),id=dataEnc(a.id),label=dataEnc(a.name);
+  const proto=String(a.protocol||a.kind||'').toUpperCase();
   const stateClass=a.status==='active'?'ok':a.status==='expired'?'bad':'warn';
-  let meta='',policy='';
-  if(a.kind==='ssh'){
-    meta=htmlEsc(a.expire_date||'بدون انقضا')+(a.plan?' · '+htmlEsc(a.plan):'');
-    policy='Sessions '+Number(a.online||0)+'/'+Number(a.connection_limit||1)+' · Devices '+Number(a.device_limit||1);
-  }else if(a.kind==='xray'){
-    const quota=a.quota_bytes?fmtBytes(a.quota_bytes):'Unlimited';
-    meta=a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
-    policy=fmtBytes(a.used_bytes||0)+' / '+quota+' · IP '+Number(a.online||0)+'/'+Number(a.device_limit||1);
-  }else if(a.kind==='wireguard'){
-    meta=htmlEsc(a.address||'WireGuard peer');policy='Native tunnel profile';
-    if(a.enabled&&a.handshake_age!==null&&a.handshake_age!==undefined)policy+=' · Handshake '+Math.floor(Number(a.handshake_age)/60)+'m ago';
-  }else{meta='Certificate profile';policy='OpenVPN PKI access'}
-  if(a.endpoint)policy+=' · '+htmlEsc(a.endpoint);
-  const delivery=window.__operatorSettings?.delivery||{};
-  const shareLabel=a.kind==='ssh'?'NPV Import':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
-  const shareAllowed=a.can_export&&shareLabel&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
-  const shareButton=shareAllowed?'<button class="icon-action shareish" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+label+'">'+shareLabel+'</button>':'';
-  const guideButton='<button class="icon-action" data-action="client-guide" data-kind="'+kind+'">Guide</button>';
-  const protectedButton='<button class="icon-action primaryish" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+label+'">Protected ZIP</button>';
-  const exportAction=a.can_export
-    ? shareButton+protectedButton+'<button class="icon-action" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">Native</button>'+guideButton
-    : (a.kind==='wireguard'
-      ? '<button class="icon-action warnish" data-action="wg-reissue" data-key="'+key+'">Reissue</button>'
-      : '<button class="icon-action warnish" data-action="manage-access" data-id="'+id+'">Reset credential</button>');
-  const manage=(a.kind==='ssh'||a.kind==='xray')?'<button class="more-action" data-action="manage-access" data-id="'+id+'">Manage</button>':
-    (a.kind==='wireguard'?'<button class="more-action" data-action="nav" data-view="wireguard">Manage</button>':'');
+  const label=dataEnc(a.name),id=dataEnc(a.id);
   return [
-    '<article class="access-profile '+kind+'">',
-      '<div class="profile-identity"><div class="profile-avatar">'+htmlEsc(String(a.name||'?').slice(0,1).toUpperCase())+'</div><div><div class="profile-name"><b>'+name+'</b><span class="protocol-pill">'+proto+'</span>',
-      '<span class="status-chip '+stateClass+'">'+htmlEsc(a.status)+'</span>'+(a.legacy?'<span class="status-chip">Legacy</span>':'')+'</div><span>'+policy+'</span></div></div>',
-      '<div class="profile-meta"><span>Expiry / Type</span><b>'+meta+'</b></div>',
-      '<div class="profile-delivery">'+exportAction+'</div>',
-      '<div class="profile-actions">'+manage+'<button class="more-action dangerish" data-action="revoke-access" data-kind="'+kind+'" data-key="'+key+'" data-name="'+label+'">Revoke</button></div>',
+    '<article class="pro-user-row">',
+      '<div class="pro-user-id"><span class="pro-user-avatar">'+htmlEsc(String(a.name||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(a.name)+'</b><small>'+htmlEsc(a.endpoint||a.plan||'Managed access')+'</small></div></div>',
+      '<div><span class="pro-protocol-badge '+htmlEsc(a.kind)+'">'+htmlEsc(proto)+'</span></div>',
+      '<div><span class="status-chip '+stateClass+'">'+htmlEsc(a.status||'unknown')+'</span></div>',
+      '<div class="pro-user-usage"><b>'+htmlEsc(accessUsageText(a))+'</b><small>'+htmlEsc(accessExpiryText(a))+'</small></div>',
+      '<div class="pro-row-actions"><button class="pro-more" data-action="access-detail" data-id="'+id+'" aria-label="جزئیات '+label+'">•••</button></div>',
     '</article>'
+  ].join('');
+}
+
+function openAccessDetail(id){
+  const a=accessCache.find(x=>String(x.id)===String(id));if(!a)return;
+  const kind=htmlEsc(a.kind),key=dataEnc(a.key),name=dataEnc(a.name);
+  const delivery=window.__operatorSettings?.delivery||{};
+  const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
+  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
+  const manage=(a.kind==='ssh'||a.kind==='xray')
+    ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
+    : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
+  const deliveryButtons=a.can_export?[
+    canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
+    '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">Native config</button>',
+    '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Protected ZIP</button>',
+    '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">راهنمای اتصال</button>'
+  ].join(''):'<span class="muted">برای این رکورد خروجی قابل تحویل موجود نیست.</span>';
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop detail-backdrop"><aside class="access-detail-drawer">',
+      '<header><div><span class="pro-kicker">ACCESS PROFILE</span><h3>'+htmlEsc(a.name)+'</h3><p>'+htmlEsc(String(a.protocol||a.kind).toUpperCase())+'</p></div><button class="close-btn" data-action="modal-close">×</button></header>',
+      '<div class="access-detail-body">',
+        '<section class="access-detail-summary"><div><span>وضعیت</span><b>'+htmlEsc(a.status||'unknown')+'</b></div><div><span>Endpoint</span><b>'+htmlEsc(a.endpoint||'—')+'</b></div><div><span>مصرف</span><b>'+htmlEsc(accessUsageText(a))+'</b></div><div><span>انقضا / نوع</span><b>'+htmlEsc(accessExpiryText(a))+'</b></div></section>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>مدیریت</h4><p>تنظیمات عملیاتی این دسترسی</p></div></div><div class="detail-actions">'+manage+'</div></section>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>تحویل به کاربر</h4><p>فقط در زمان ارسال کانفیگ از این ابزارها استفاده کن.</p></div></div><div class="detail-actions">'+deliveryButtons+'</div></section>',
+      '</div>',
+      '<footer><button class="danger" data-action="revoke-access" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">لغو دسترسی</button><button class="ghost" data-action="modal-close">بستن</button></footer>',
+    '</aside></div>'
   ].join('');
 }
 
