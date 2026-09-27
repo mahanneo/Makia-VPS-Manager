@@ -1322,22 +1322,27 @@ def _current_delivery_payload(kind,key,payload,request):
                 summary["host"],username,password,int(summary.get("port") or 22),ssh_npv_options(username)
             )
     elif kind=="openvpn":
-        # Preserve the endpoint selected for this client, but regenerate the
-        # profile from the current server runtime so TCP/UDP or port changes do
-        # not leave users with stale .ovpn files.
-        artifact=get_access_artifact_by_key("openvpn",str(key))
-        endpoint=""
+        # Modern OpenVPN artifacts retain the explicitly selected endpoint.
+        # Only those profiles are safe to regenerate from current server
+        # runtime (for example after UDP/TCP or port reconfiguration). Legacy
+        # payloads have no provenance metadata, so preserve them byte-for-byte
+        # instead of guessing an endpoint or requiring a newer DB table.
+        try:
+            artifact=get_access_artifact_by_key("openvpn",str(key))
+        except Exception:
+            artifact=None
         if artifact:
+            endpoint=""
             try:
                 endpoint=str(json.loads(artifact.get("metadata_json") or "{}").get("endpoint") or "")
             except (TypeError,ValueError):
                 endpoint=""
-        endpoint=endpoint or public_host(request)
-        try:
-            rendered=protocol_ops.render_openvpn_client(str(key),endpoint)
-            result=access_ops.openvpn_payload(str(key),rendered["config"])
-        except protocol_ops.ProtocolError:
-            result=payload
+            endpoint=endpoint or public_host(request)
+            try:
+                rendered=protocol_ops.render_openvpn_client(str(key),endpoint)
+                result=access_ops.openvpn_payload(str(key),rendered["config"])
+            except protocol_ops.ProtocolError:
+                result=payload
     elif kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
