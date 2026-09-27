@@ -25,7 +25,7 @@
 
     <section class="client-card guide-section" id="xray">
       <div class="guide-section-head"><span class="guide-icon">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>Xray</h2></div></div>
-      <div class="guide-method-grid">
+      <img class="guide-visual-step" src="/static/guides/xray.svg?v={{version}}" alt="مراحل تصویری اتصال Xray"><div class="guide-method-grid">
         <article><b>روش ۱ — QR مستقیم</b><ol><li>کلاینت سازگار مثل v2rayNG، Hiddify یا NekoBox را باز کن.</li><li>گزینه Scan QR / Add from QR را بزن.</li><li>QR «اتصال مستقیم» را اسکن کن.</li><li>پروفایل ساخته‌شده را انتخاب و Connect کن.</li></ol></article>
         <article><b>روش ۲ — Copy Link</b><ol><li>لینک مستقیم ارسالی را Copy کن.</li><li>در برنامه گزینه Import from Clipboard / Add from Clipboard را انتخاب کن.</li><li>پروفایل Import شده را فعال کن.</li></ol></article>
         <article><b>روش ۳ — Subscription</b><ol><li>Subscription URL یا QR اشتراک را از صفحه کاربر بگیر.</li><li>در بخش Subscription برنامه، Add subscription را بزن.</li><li>URL را Paste یا QR را Scan کن.</li><li>Update/Refresh subscription را اجرا کن.</li></ol></article>
@@ -35,7 +35,7 @@
 
     <section class="client-card guide-section" id="wireguard">
       <div class="guide-section-head"><span class="guide-icon">W</span><div><div class="eyebrow">NATIVE VPN PROFILE</div><h2>WireGuard</h2></div></div>
-      <div class="guide-method-grid">
+      <img class="guide-visual-step" src="/static/guides/wireguard.svg?v={{version}}" alt="مراحل تصویری اتصال WireGuard"><div class="guide-method-grid">
         <article><b>Android / iPhone</b><ol><li>برنامه رسمی WireGuard را باز کن.</li><li>روی + بزن.</li><li>Create from QR code را انتخاب و QR را اسکن کن، یا Import from file را برای فایل <code>.conf</code> بزن.</li><li>Tunnel را روشن کن.</li></ol></article>
         <article><b>Windows / macOS</b><ol><li>WireGuard را نصب و باز کن.</li><li>Import tunnel(s) from file را انتخاب کن.</li><li>فایل <code>.conf</code> را انتخاب کن.</li><li>Activate را بزن.</li></ol></article>
       </div>
@@ -44,7 +44,7 @@
 
     <section class="client-card guide-section" id="openvpn">
       <div class="guide-section-head"><span class="guide-icon">O</span><div><div class="eyebrow">PKI PROFILE</div><h2>OpenVPN</h2></div></div>
-      <div class="guide-method-grid">
+      <img class="guide-visual-step" src="/static/guides/openvpn.svg?v={{version}}" alt="مراحل تصویری اتصال OpenVPN"><div class="guide-method-grid">
         <article><b>OpenVPN Connect</b><ol><li>فایل <code>.ovpn</code> دریافتی را روی دستگاه ذخیره کن.</li><li>OpenVPN Connect را باز کن.</li><li>Upload File / Import Profile را بزن.</li><li>فایل را انتخاب و Add کن.</li><li>پروفایل را Connect کن.</li></ol></article>
       </div>
       <div class="notice">فایل OVPN شامل Certificate و تنظیمات اختصاصی همان کاربر است. اگر Endpoint دامنه است، رکورد A باید مستقیم به VPS اشاره کند و برای سرویس‌های Proxy/CDN معمولی مثل Cloudflare در حالت Proxied مناسب نیست. HTTPS پنل با TLS داخلی OpenVPN متفاوت است.</div>
@@ -52,7 +52,7 @@
 
     <section class="client-card guide-section" id="ssh">
       <div class="guide-section-head"><span class="guide-icon">S</span><div><div class="eyebrow">SSH · NPV TUNNEL / NAPSTERNETV</div><h2>SSH و NPV Tunnel</h2></div></div>
-      <div class="guide-method-grid">
+      <img class="guide-visual-step" src="/static/guides/ssh.svg?v={{version}}" alt="مراحل تصویری اتصال SSH و NPV"><div class="guide-method-grid">
         <article><b>NPV Tunnel / NapsternetV</b><ol><li>لینک <code>npvt-ssh://</code> را Copy کن یا QR مربوط به NPV را باز کن.</li><li>در نسخه سازگار برنامه، Scan QR یا Import from Clipboard را انتخاب کن.</li><li>پروفایل ساخته‌شده را ذخیره و Connect کن.</li></ol></article>
         <article><b>OpenSSH</b><ol><li>Server، Port، Username و Password را از فایل credentials بردار.</li><li>در Termux/Linux/macOS از <code>ssh USER@SERVER -p PORT</code> استفاده کن.</li><li>در Windows می‌توانی Windows Terminal / OpenSSH یا یک کلاینت SSH سازگار استفاده کنی.</li></ol></article>
       </div>
