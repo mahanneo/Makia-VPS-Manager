@@ -1485,6 +1485,12 @@ document.addEventListener('click',e=>{
     if(a==='command')openCommandPalette();
     else if(a==='refresh')currentView();
     else if(a==='create-access')openProvisionWizard();
+    else if(a==='sidebar-pin'){
+      const pinned=document.body.classList.toggle('sidebar-pinned');
+      try{localStorage.setItem('makia-sidebar-pinned',String(pinned))}catch{}
+    }else if(a==='sidebar-group'){
+      shell.closest('.sanaei-nav-group')?.classList.toggle('open');
+    }
     return;
   }
   const btn=e.target.closest('[data-action]');
@@ -1507,16 +1513,31 @@ document.addEventListener('change',e=>{
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
 function applyLanguageShell(){
-  const fa={dashboard:'نمای کلی',access:'همه کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'وایرگارد',openvpn:'OpenVPN',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'مدیریت سرویس‌ها',protocols:'مدیریت پورت‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش‌ها',updates:'بروزرسانی',settings:'تنظیمات پنل',support:'پشتیبانی'};
-  const en={dashboard:'Overview',access:'All Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocol Hub',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'وایرگارد',openvpn:'OpenVPN',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',guides:'راهنما',nodes:'نودها',security:'امنیت',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',guides:'Docs',nodes:'Nodes',security:'Security',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
-  document.querySelectorAll('nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
+  document.querySelectorAll('nav.sanaei-nav > button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
-function switchView(v){activeView=v;setPageContext(v==='dashboard'?'OPERATIONS COCKPIT':v==='access'?'CLIENT DIRECTORY':v==='ssh'?'SSH ACCOUNT WORKSPACE':v==='xray'?'XRAY CLIENT WORKSPACE':v==='wireguard'?'WIREGUARD PEER WORKSPACE':v==='openvpn'?'OPENVPN CLIENT WORKSPACE':v==='guides'?'DELIVERY EDUCATION':'MAKIA CONTROL CENTER');document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');return currentView()}
-document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
+function switchView(v){
+  activeView=v;
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
+  document.querySelectorAll('.sanaei-nav-group').forEach(g=>{
+    const name=g.querySelector('.sanaei-group-toggle')?.dataset.group;
+    if((name==='settings'&&v==='settings')||(name==='xraytools'&&['xray','inbounds'].includes(v)))g.classList.add('open');
+  });
+  document.body.classList.remove('menu-open');
+  document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');
+  return currentView();
+}
+document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.settingsTab)window.__settingsTab=b.dataset.settingsTab;
+  switchView(b.dataset.view);
+}));
 document.querySelector('.mobile-menu-toggle')?.addEventListener('click',e=>{const opened=document.body.classList.toggle('menu-open');e.currentTarget.setAttribute('aria-expanded',String(opened))});
+try{if(localStorage.getItem('makia-sidebar-pinned')==='true')document.body.classList.add('sidebar-pinned')}catch{}
 applyLanguageShell();ensureSessionContext().catch(()=>{});switchView('dashboard');
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
