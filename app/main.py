@@ -745,6 +745,72 @@ def protocols(request:Request):
     require_user(request)
     return protocol_ops.catalog()
 
+@app.get("/api/protocols/modes")
+def protocol_modes_get(request:Request):
+    require_user(request)
+    return protocol_ops.protocol_modes()
+
+class IKEv2Bootstrap(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    cidr:str=Field(default="10.77.0.0/24",max_length=64)
+    dns:str=Field(default="1.1.1.1",max_length=64)
+
+@app.post("/api/protocols/ikev2/bootstrap")
+def ikev2_bootstrap(payload:IKEv2Bootstrap,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.bootstrap_ikev2(payload.domain,payload.cidr,payload.dns)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"ikev2_bootstrap_failed","ikev2",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"ikev2_bootstrap","ikev2",f"domain={payload.domain}; cidr={payload.cidr}",ip=ip(request))
+    return result
+
+class IKEv2UserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+@app.post("/api/protocols/ikev2/users")
+def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.create_ikev2_user(payload.name,payload.password or None)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    audit(actor,"ikev2_user_create",payload.name,ip=ip(request))
+    return result
+
+class StealthBootstrap(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    port:int=Field(default=8443,ge=1,le=65535)
+
+@app.post("/api/protocols/stealth/bootstrap")
+def stealth_bootstrap(payload:StealthBootstrap,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.bootstrap_stealth(payload.domain,payload.port)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"stealth_bootstrap_failed","stealth",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"stealth_bootstrap","stealth",f"domain={payload.domain}; port={payload.port}",ip=ip(request))
+    return result
+
+class WStunnelBootstrap(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    port:int=Field(default=8444,ge=1,le=65535)
+    path_prefix:str=Field(default="",max_length=96)
+
+@app.post("/api/protocols/wstunnel/bootstrap")
+def wstunnel_bootstrap(payload:WStunnelBootstrap,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.bootstrap_wstunnel(payload.domain,payload.port,payload.path_prefix or None)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"wstunnel_bootstrap_failed","wstunnel",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"wstunnel_bootstrap","wstunnel",f"domain={payload.domain}; port={payload.port}",ip=ip(request))
+    return result
+
 class XrayQuickInbound(BaseModel):
     protocol:str
     port:int=Field(ge=1,le=65535)
