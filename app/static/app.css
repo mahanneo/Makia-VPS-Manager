@@ -936,3 +936,19 @@ body.neon-login-body{min-height:100vh;display:grid;place-items:center;background
 .wg-workspace-directory .table,.protocol-directory .protocol-client-list{overflow:auto}
 .makia-neon-shell .access-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.makia-neon-shell .access-profile{padding:10px}
 @media(max-width:820px){.makia-neon-shell .access-cards{grid-template-columns:1fr}.protocol-client-list{overflow:auto}}
+
+/* v0.23 service + port management */
+.port-management-panel{padding:0!important;overflow:auto}.port-management-panel .panel-head{padding:12px 13px;margin:0}
+.port-table-head,.port-table-row{display:grid;grid-template-columns:1.2fr .55fr .85fr .7fr .9fr;align-items:center;gap:9px;min-width:720px}
+.port-table-head{padding:8px 12px;background:#061326;border-top:1px solid #143453;border-bottom:1px solid #143453;color:#607f9f;font-size:8px}
+.port-table-row{padding:9px 12px;border-bottom:1px solid #112f50;font-size:9px}.port-table-row:nth-child(even){background:rgba(8,29,55,.34)}
+.port-table-row b{font-size:9px}.port-table-row span{display:block;color:#6683a3;font-size:8px;margin-top:2px}.transport-badge{display:inline-flex!important;width:max-content;padding:4px 7px;border-radius:5px;background:#0d2a4b;border:1px solid #1e4d7d;color:#78b5f5!important}
+.port-safe-note{margin:10px 12px 12px;padding:9px 10px;border:1px solid #145844;border-radius:7px;background:#07251c;color:#54dca7;font-size:8px}
+.service-control-list{display:grid;gap:6px}.service-control-row{display:grid;grid-template-columns:36px minmax(150px,1fr) 90px 46px minmax(210px,auto);align-items:center;gap:9px;padding:9px;border:1px solid #153759;border-radius:8px;background:#06162a}
+.service-logo-mini{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(145deg,#145bc9,#5b32d3);color:#fff;font-weight:800;font-size:11px}
+.service-control-copy b{display:block;font-size:9px}.service-control-copy span{display:block;font-size:7px;color:#5d7899;margin-top:2px}
+.service-switch{width:36px;height:20px;border-radius:99px;background:#132b46;padding:3px;display:flex;align-items:center}.service-switch i{display:block;width:14px;height:14px;border-radius:50%;background:#67809d;transition:.2s}.service-switch.on{background:#0c67f1}.service-switch.on i{margin-right:auto;background:white;box-shadow:0 0 10px #fff8}
+.protocol-policy-mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.protocol-policy-mini>div{display:flex;justify-content:space-between;align-items:center;padding:9px;border:1px solid #153759;border-radius:8px;background:#06162a}.protocol-policy-mini b{display:block;font-size:9px}.protocol-policy-mini span{font-size:7px;color:#63809f}.protocol-policy-mini strong{font-size:8px}
+.ok-text{color:#37dda1}.bad-text{color:#ff667a}
+@media(max-width:900px){.service-control-row{grid-template-columns:32px 1fr auto}.service-control-row>.service-switch{display:none}.service-control-row>.toolbar{grid-column:2/4}.protocol-policy-mini{grid-template-columns:1fr 1fr}}
+@media(max-width:540px){.protocol-policy-mini{grid-template-columns:1fr}}
