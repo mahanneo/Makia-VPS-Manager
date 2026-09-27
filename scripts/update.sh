@@ -163,9 +163,14 @@ find "$APP/app" -type d -exec chmod 0750 {} +
 find "$APP/app" -type f -exec chmod 0640 {} +
 "$APP/.venv/bin/pip" install -r "$APP/requirements.txt"
 
-if ! command -v fail2ban-client >/dev/null 2>&1; then
+NEED_HOST_PACKAGES=0
+command -v fail2ban-client >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
+command -v certbot >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
+dpkg-query -W -f='${Status}' python3-certbot-nginx 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
+if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
+  echo "Ensuring host security/TLS packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban
+  apt-get install -y fail2ban certbot python3-certbot-nginx
 fi
 install -d -m 0755 /etc/fail2ban/jail.d
 cat >/etc/fail2ban/jail.d/makia-sshd.local <<'EOF'
