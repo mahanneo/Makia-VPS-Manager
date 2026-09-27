@@ -1213,28 +1213,39 @@ async function guides(renderToken=window.__viewRenderToken){
 }
 
 async function supportCenter(renderToken=window.__viewRenderToken){
-  title.textContent='Support';setPageContext('HELP & REMOTE SUPPORT');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بارگذاری پشتیبانی…</b></div>';
-  const [requests,session,grants]=await Promise.all([
+  title.textContent='Help & Support';setPageContext('HELP & DIAGNOSTICS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال آماده‌سازی مرکز راهنما…</b></div>';
+  const [requests,session,grants,self,stack]=await Promise.all([
     api('/api/support/requests').catch(()=>({items:[],support:{}})),
     ensureSessionContext(true).catch(()=>({remote_support:false})),
-    api('/api/support/grants').catch(()=>({items:[]}))
+    api('/api/support/grants').catch(()=>({items:[]})),
+    api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0,summary:'Unavailable'})),
+    api('/api/protocols').catch(()=>({})
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='support')return;
-  const support=requests.support||{};
-  const rows=(requests.items||[]).slice(0,8).map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip '+(x.delivery_status==='webhook'?'ok':'')+'">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join('');
+  const support=requests.support||{},items=requests.items||[];
+  const engines=[
+    ['Xray',Boolean(stack.xray?.service_active),'xray'],
+    ['WireGuard',Boolean(stack.wireguard?.service_active),'wireguard'],
+    ['OpenVPN',Boolean(stack.openvpn?.service_active),'openvpn']
+  ];
+  const recent=items.slice(0,6).map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip '+(x.delivery_status==='webhook'?'ok':'')+'">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join('');
+  const grantsHtml=(grants.items||[]).slice(0,5).map(g=>'<div class="support-grant-row"><div><b>…'+htmlEsc(g.token_last4)+'</b><small>'+htmlEsc(g.scope)+' · '+htmlEsc(new Date(Number(g.expires_at)*1000).toLocaleString())+'</small></div>'+(g.active?'<button class="danger" data-action="support-grant-revoke" data-id="'+Number(g.id)+'">لغو</button>':'<span class="status-chip">Closed</span>')+'</div>').join('');
   content.innerHTML=[
-    '<section class="support-hero"><div><div class="eyebrow">SUPPORT CENTER</div><h2>پشتیبانی Makia</h2><p>برای راهنمایی یا بررسی خطا درخواست ثبت کن. دسترسی موقت پشتیبانی فقط با کدی که خودت می‌سازی فعال می‌شود.</p></div></section>',
-    (!session.remote_support?'<section class="panel remote-support-panel"><div class="panel-head"><div><h3>Remote Support موقت</h3><span>CONSENT · ONE-TIME CODE</span></div></div><div class="remote-support-create"><div><p>فقط در زمان نیاز یک کد موقت بساز. کد پس از اولین Login مصرف می‌شود و Session حداکثر تا زمان انتخاب‌شده فعال می‌ماند.</p><div class="form-grid two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option><option value="120">120 دقیقه</option></select></label><label>Scope<select id="supportGrantScope"><option value="readonly">Read-only</option><option value="operator" selected>Operator</option></select></label></div><button class="primary" data-action="support-grant-create">ساخت کد موقت</button></div><div class="support-grant-list">'+((grants.items||[]).slice(0,5).map(g=>'<div><span>…'+htmlEsc(g.token_last4)+'</span><b>'+htmlEsc(g.scope)+'</b><small>'+htmlEsc(new Date(Number(g.expires_at)*1000).toLocaleString())+'</small>'+(g.active?'<button class="danger" data-action="support-grant-revoke" data-id="'+Number(g.id)+'">Revoke</button>':'<em>Closed</em>')+'</div>').join('')||'<div class="empty compact">کد فعالی وجود ندارد.</div>')+'</div></div></section>':'<section class="wizard-note danger-note"><b>Remote Support Session</b><span>این ورود موقت است. تنظیمات هویتی حساس مانند 2FA و API Token برای Remote Support مسدود هستند.</span></section>'),
-    '<section class="support-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>درخواست پشتیبانی</h3><span>SUPPORT REQUEST</span></div></div>',
-        '<div class="form-grid two"><label>Subject<input id="supportSubject" maxlength="160" placeholder="موضوع درخواست"></label></div>',
-        '<label class="single-label">Message<textarea id="supportMessage" rows="6" placeholder="توضیح درخواست یا مشکل…"></textarea></label>',
-        '<div class="toolbar"><button class="primary" data-action="support-submit">ثبت درخواست</button>'+(support.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram @'+htmlEsc(support.telegram_username)+'</button>':'')+'</div>',
-        '<div class="wizard-note"><b>Ticket delivery</b><span>'+(support.webhook_enabled?'Webhook مرکزی فعال است؛ Ticket علاوه بر ثبت محلی ارسال می‌شود.':'Webhook مرکزی تنظیم نشده؛ درخواست محلی ثبت می‌شود و متن آماده برای ارسال دستی تولید می‌گردد.')+'</span></div>',
-      '</div>',
-      '<div class="panel"><div class="panel-head"><div><h3>درخواست‌های اخیر</h3><span>LOCAL HISTORY</span></div></div><div class="support-ticket-list">'+(rows||'<div class="empty compact">درخواستی ثبت نشده.</div>')+'</div></div>',
-    '</section>'
+    '<div class="pro-page support-v26">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">HELP CENTER</span><h1>راهنما و پشتیبانی</h1><p>اول وضعیت سیستم را ببین، بعد راهنمای اتصال یا مسیر گزارش مشکل را انتخاب کن.</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">اجرای Self-Test</button><button class="primary" data-action="nav" data-view="guides">راهنمای اتصال</button></div></section>',
+      '<section class="support-health-strip"><article class="'+(self.ok?'ok':'warn')+'"><span>●</span><div><b>System check</b><small>'+htmlEsc(self.summary||'Unknown')+' · '+Number(self.critical||0)+' critical · '+Number(self.warnings||0)+' warning</small></div></article>'+engines.map(x=>'<article class="'+(x[1]?'ok':'warn')+'"><span>'+protocolGlyph(x[2])+'</span><div><b>'+x[0]+'</b><small>'+(x[1]?'Runtime active':'Needs attention')+'</small></div></article>').join('')+'</section>',
+      '<section class="support-action-grid">',
+        '<button data-action="nav" data-view="connectivity"><span class="support-action-icon">⌁</span><div><b>Connectivity Lab</b><small>Endpoint، Port، Runtime و تست آماده‌سازی شبکه</small></div><i>←</i></button>',
+        '<button data-action="nav" data-view="guides"><span class="support-action-icon">?</span><div><b>راهنمای تصویری</b><small>مراحل Xray، WireGuard، OpenVPN و SSH/NPV</small></div><i>←</i></button>',
+        '<button data-action="nav" data-view="updates"><span class="support-action-icon">↻</span><div><b>Update Center</b><small>نسخه نصب‌شده و بروزرسانی رسمی</small></div><i>←</i></button>',
+        '<a href="https://github.com/mahanneo/Makia-VPS-Manager/issues" target="_blank" rel="noopener"><span class="support-action-icon">GH</span><div><b>GitHub Issues</b><small>گزارش Bug عمومی و قابل پیگیری</small></div><i>↗</i></a>',
+      '</section>',
+      (support.telegram_url?'<section class="support-channel"><div><span class="pro-kicker">DIRECT SUPPORT</span><h3>ارتباط مستقیم</h3><p>کانال پشتیبانی توسط Owner این نصب تنظیم شده است.</p></div><button class="primary" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram @'+htmlEsc(support.telegram_username||'support')+'</button></section>':''),
+      '<details class="pro-advanced support-advanced"><summary><span>ارسال گزارش مشکل</span><small>ثبت Ticket همراه با توضیح خطا</small></summary><div class="support-report-form"><div class="wizard-form one"><label>موضوع<input id="supportSubject" maxlength="160" placeholder="مثلاً: OpenVPN روی TCP وصل نمی‌شود"></label><label>توضیحات<textarea id="supportMessage" rows="5" placeholder="سیستم‌عامل، Client، پروتکل و متن خطا را بنویس. Credential کامل را ارسال نکن."></textarea></label></div><div class="settings-actions"><button class="primary" data-action="support-submit">ثبت گزارش</button></div></div></details>',
+      (!session.remote_support?'<details class="pro-advanced support-advanced"><summary><span>دسترسی موقت پشتیبانی</span><small>Advanced · فقط با رضایت مدیر</small></summary><div class="remote-support-create"><div><p>در صورت نیاز به بررسی مستقیم، یک کد یک‌بارمصرف با مدت و Scope محدود بساز.</p><div class="wizard-form two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option><option value="120">120 دقیقه</option></select></label><label>Scope<select id="supportGrantScope"><option value="readonly" selected>Read-only</option><option value="operator">Operator</option></select></label></div><button class="primary" data-action="support-grant-create">ساخت کد یک‌بارمصرف</button></div><div class="support-grant-list">'+(grantsHtml||'<div class="empty compact">کد فعالی وجود ندارد.</div>')+'</div></div></details>':'<div class="wizard-note danger-note"><b>Remote Support فعال</b><span>این Session موقت است و عملیات هویتی حساس محدود شده‌اند.</span></div>'),
+      (recent?'<details class="pro-advanced support-advanced"><summary><span>گزارش‌های اخیر</span><small>'+items.length+' مورد ثبت‌شده</small></summary><div class="support-ticket-list">'+recent+'</div></details>':''),
+    '</div>'
   ].join('');
 }
 
