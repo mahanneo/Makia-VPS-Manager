@@ -6,27 +6,9 @@ FAIL=0
 
 ok(){ printf '✓ %s\n' "$1"; }
 bad(){ printf '✗ %s\n' "$1"; FAIL=1; }
-xray_bad(){
-  if [[ "${MAKIA_ALLOW_PREEXISTING_XRAY_FAILURE:-0}" == "1" ]]; then
-    printf '! %s (pre-existing Xray failure; panel diagnostics update allowed)\n' "$1"
-  else
-    bad "$1"
-  fi
-}
-ovpn_bad(){
-  if [[ "${MAKIA_ALLOW_PREEXISTING_OPENVPN_FAILURE:-0}" == "1" ]]; then
-    printf '! %s (pre-existing OpenVPN failure; panel diagnostics update allowed)\n' "$1"
-  else
-    bad "$1"
-  fi
-}
-wg_bad(){
-  if [[ "${MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE:-0}" == "1" ]]; then
-    printf '! %s (pre-existing WireGuard failure; panel diagnostics update allowed)\n' "$1"
-  else
-    bad "$1"
-  fi
-}
+xray_bad(){ bad "$1"; }
+ovpn_bad(){ bad "$1"; }
+wg_bad(){ bad "$1"; }
 
 [[ -d "$APP" ]] || { bad "Makia runtime missing at $APP"; exit 1; }
 
@@ -112,7 +94,11 @@ if command -v xray >/dev/null 2>&1; then
       xray_bad "Xray runtime inactive"
       journalctl -u xray -n 12 --no-pager || true
     fi
+  else
+    xray_bad "Xray config missing"
   fi
+else
+  xray_bad "Xray binary missing"
 fi
 
 if [[ -x /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync ]]; then
@@ -140,6 +126,8 @@ if [[ -f /etc/openvpn/server/server.conf ]]; then
   else
     ovpn_bad "OpenVPN listener missing"
   fi
+else
+  ovpn_bad "OpenVPN server config missing"
 fi
 
 if [[ -f /etc/wireguard/wg0.conf ]]; then
@@ -162,6 +150,14 @@ PY
     systemctl status wg-quick@wg0 --no-pager -l || true
     wg show wg0 || true
   fi
+else
+  wg_bad "WireGuard wg0 config missing"
+fi
+
+if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then
+  ok "Stunnel tooling installed"
+else
+  bad "Stunnel tooling missing"
 fi
 
 if command -v makia-restore-portable >/dev/null 2>&1; then

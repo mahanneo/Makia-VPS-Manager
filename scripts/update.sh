@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root."; exit 1; }
+export DEBIAN_FRONTEND=noninteractive
 
 ENV_FILE=/etc/makia-vps-manager/makia.env
 if [[ -r "$ENV_FILE" ]]; then
@@ -200,6 +201,30 @@ install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
 
+echo "Ensuring the complete Makia protocol stack is installed and ready..."
+(
+  cd "$APP"
+  MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+from app.db import set_setting
+
+result=protocol_ops.ensure_full_protocol_stack()
+wg=result["wireguard"]
+ov=result["openvpn"]
+if wg.get("port"):
+    set_setting("default_wireguard_port",int(wg["port"]))
+if ov.get("port"):
+    set_setting("default_openvpn_port",int(ov["port"]))
+if ov.get("proto"):
+    set_setting("default_openvpn_proto","tcp" if str(ov["proto"]).startswith("tcp") else "udp")
+print("Protocol stack READY: Xray, WireGuard UDP/%s, OpenVPN %s/%s" % (
+    wg.get("port") or "?",
+    str(ov.get("proto") or "udp").upper(),
+    ov.get("port") or "?",
+))
+PY
+)
+
 # Repair the historical root-only Xray config/TLS permission mismatch before
 # the post-update UAT gate. This preserves credentials and rolls back the
 # Xray config internally if the repair itself cannot validate.
@@ -308,17 +333,7 @@ fi
 
 echo
 echo "Running post-update Makia host smoke gate..."
-UAT_ENV=(env)
-if [[ "$XRAY_WAS_PRESENT" -eq 1 && "$XRAY_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet xray 2>/dev/null; then
-  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_XRAY_FAILURE=1)
-fi
-if [[ "$OVPN_WAS_PRESENT" -eq 1 && "$OVPN_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
-  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_OPENVPN_FAILURE=1)
-fi
-if [[ "$WG_WAS_PRESENT" -eq 1 && "$WG_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet wg-quick@wg0 2>/dev/null; then
-  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE=1)
-fi
-if ! "${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke; then
+if ! /usr/local/sbin/makia-uat-smoke; then
   echo "Post-update host smoke failed."
   echo "The updater will restore the previous runtime automatically."
   exit 4

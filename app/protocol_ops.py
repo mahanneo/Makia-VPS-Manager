@@ -1475,6 +1475,88 @@ def _port_transport_in_use(port, proto):
 def _port_in_use(port):
     return _port_transport_in_use(port,"tcp") or _port_transport_in_use(port,"udp")
 
+def _select_available_port(preferred, proto, fallbacks=()):
+    proto=str(proto or "").lower()
+    candidates=[]
+    for value in (preferred,*fallbacks):
+        try: value=_validate_port(value)
+        except Exception: continue
+        if value not in candidates:
+            candidates.append(value)
+    for value in candidates:
+        if not _port_transport_in_use(value,proto):
+            return value
+    raise ProtocolError(f"no free {proto.upper()} port found in candidates: "+", ".join(str(x) for x in candidates))
+
+def ensure_full_protocol_stack():
+    """Install and bootstrap the server-side protocol stack idempotently.
+
+    Fresh Makia installs should finish with Xray, WireGuard and OpenVPN ready.
+    Existing configurations are preserved; missing engines/configs are created
+    and unhealthy managed runtimes are repaired where possible.
+    """
+    result={"xray":None,"wireguard":None,"openvpn":None,"stunnel":None,"ports":{}}
+
+    x=xray_status()
+    if not x.get("installed"):
+        x=install_component("xray")
+    else:
+        config=x.get("config_path")
+        if not config:
+            path=Path("/usr/local/etc/xray/config.json")
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_text(json.dumps(_xray_default_config(path),ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+            os.chmod(path,0o600)
+            _xray_secure_runtime_file(path)
+            _xray_test_config_as_service(_binary(),path)
+        try:
+            _run(["systemctl","enable","--now","xray"],timeout=60)
+        except ProtocolError:
+            pass
+        x=xray_status()
+        if not x.get("service_active"):
+            x=repair_xray_runtime().get("diagnostics") or xray_status()
+    if not x.get("installed") or not x.get("service_active") or not x.get("config_path"):
+        raise ProtocolError("Xray full-stack provisioning did not reach READY state")
+    result["xray"]=x
+
+    wg=wireguard_status()
+    if not wg.get("installed"):
+        install_component("wireguard")
+        wg=wireguard_status()
+    if not wg.get("config"):
+        wg_port=_select_available_port(443,"udp",(51820,51821,8443,2053,2083))
+        bootstrap_wireguard(wg_port,"10.66.66.1/24","wg0",1280)
+    elif not wg.get("service_active"):
+        repair_wireguard_runtime("wg0")
+    wg_diag=wireguard_endpoint_diagnostics("","wg0")
+    if not wg_diag.get("runtime_ok"):
+        raise ProtocolError("WireGuard full-stack provisioning failed: "+"; ".join(wg_diag.get("warnings") or []))
+    result["wireguard"]=wireguard_status()
+    result["ports"]["wireguard"]=int(wg_diag.get("port") or result["wireguard"].get("port") or 0)
+
+    ov=openvpn_status()
+    if not ov.get("installed"):
+        install_component("openvpn")
+        ov=openvpn_status()
+    if not ov.get("config"):
+        ov_port=_select_available_port(1194,"udp",(1195,1196,2443,9443,10443))
+        bootstrap_openvpn(ov_port,"udp")
+    elif not ov.get("service_active"):
+        repair_openvpn_ipv4_runtime()
+    ov_runtime=_openvpn_server_runtime()
+    if not ov_runtime.get("service_active") or not ov_runtime.get("listener"):
+        raise ProtocolError("OpenVPN full-stack provisioning did not reach READY state")
+    result["openvpn"]=openvpn_status()
+    result["ports"]["openvpn"]=int(ov_runtime.get("port") or result["openvpn"].get("port") or 0)
+
+    st=stunnel_status()
+    if not st.get("installed"):
+        st=install_component("stunnel")
+    result["stunnel"]=stunnel_status()
+
+    return result
+
 def _ensure_xray_stats(data):
     if not isinstance(data,dict):
         raise ProtocolError("invalid Xray configuration root")

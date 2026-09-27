@@ -94,10 +94,10 @@ if [[ -n "$XRAY" ]]; then
     rm -f "$TMP_XRAY"
     check_service xray "Xray service" yes
   else
-    warn "Xray" "binary installed, config not found"
+    fail "Xray" "binary installed, config not found"
   fi
 else
-  warn "Xray" "not installed (optional)"
+  fail "Xray" "not installed; run makia-upgrade to provision full stack"
 fi
 
 if command -v wg >/dev/null 2>&1; then
@@ -114,18 +114,34 @@ PY
       fail "WireGuard runtime" "run Protocols → WireGuard → Repair Runtime"
     fi
   elif wg show >/dev/null 2>&1; then
-    ok "WireGuard tooling" "installed; wg0 not bootstrapped"
+    fail "WireGuard" "tooling installed but wg0 is not bootstrapped"
   else
-    warn "WireGuard tooling" "installed but no readable interface"
+    fail "WireGuard" "installed but no readable interface/config"
   fi
 else
-  warn "WireGuard" "not installed (optional)"
+  fail "WireGuard" "not installed; run makia-upgrade to provision full stack"
 fi
 
 if command -v openvpn >/dev/null 2>&1; then
   ok "OpenVPN tooling" "$(openvpn --version 2>/dev/null | head -n1)"
+  if [[ -f /etc/openvpn/server/server.conf ]] && systemctl is-active --quiet openvpn-server@server; then
+    OVPN_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/server.conf 2>/dev/null || true)"
+    if [[ -n "$OVPN_PORT" ]] && ss -H -lntu 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
+      ok "OpenVPN runtime" "active + listener :$OVPN_PORT"
+    else
+      fail "OpenVPN runtime" "service active but listener missing"
+    fi
+  else
+    fail "OpenVPN runtime" "server config/service missing"
+  fi
 else
-  warn "OpenVPN" "not installed (optional)"
+  fail "OpenVPN" "not installed; run makia-upgrade to provision full stack"
+fi
+
+if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then
+  ok "Stunnel tooling" "installed"
+else
+  fail "Stunnel tooling" "not installed"
 fi
 
 printf '\nSummary: %d PASS · %d WARN · %d FAIL\n\n' "$PASS" "$WARN" "$FAIL"
