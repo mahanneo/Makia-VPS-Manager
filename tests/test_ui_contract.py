@@ -182,6 +182,6 @@ def test_connection_modes_have_real_ui_and_backend_contracts():
 
 
 def test_connection_modes_are_in_primary_protocol_navigation():
-    assert 'data-view="modes"' in DASHBOARD
-    assert "Connection Modes" in DASHBOARD
+    assert 'data-view="modes"' in SHELL
+    assert "Connection Modes" in SHELL
     assert "modes:connectionModes" in JS
