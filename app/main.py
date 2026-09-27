@@ -1117,21 +1117,6 @@ def wireguard_repair(request:Request):
     audit(actor,"wireguard_repair","wg0",f"backup={result.get('backup')}",ip(request))
     return result
 
-class WireGuardServerConfig(BaseModel):
-    port:int=Field(default=443,ge=1,le=65535)
-    mtu:int=Field(default=1280,ge=576,le=1500)
-
-@app.post("/api/protocols/wireguard/config")
-def wireguard_server_config(payload:WireGuardServerConfig,request:Request):
-    actor=require_capability(request,"wireguard",True)
-    require_local_admin(request)
-    try:
-        result=protocol_ops.reconfigure_wireguard_server(payload.port,payload.mtu)
-    except protocol_ops.ProtocolError as exc:
-        raise HTTPException(400,str(exc)) from exc
-    audit(actor,"wireguard_server_config","wg0",f"port={payload.port}; mtu={payload.mtu}",ip(request))
-    return result
-
 class WireGuardPeerState(BaseModel):
     enabled:bool
 
@@ -1225,31 +1210,31 @@ def openvpn_repair(request:Request):
     audit(actor,"openvpn_repair","openvpn",f"backup={result.get('backup')}",ip(request))
     return result
 
-class OpenVPNServerConfig(BaseModel):
+class OpenVPNConfigure(BaseModel):
     port:int=Field(default=1194,ge=1,le=65535)
     proto:str="udp"
-    dns1:str="1.1.1.1"
-    dns2:str="8.8.8.8"
+    dns_servers:list[str]=Field(default_factory=lambda:["1.1.1.1","8.8.8.8"])
+    keepalive_ping:int=Field(default=10,ge=1,le=3600)
+    keepalive_timeout:int=Field(default=120,ge=10,le=7200)
     redirect_gateway:bool=True
     client_to_client:bool=False
-    keepalive_interval:int=Field(default=10,ge=1,le=3600)
-    keepalive_timeout:int=Field(default=120,ge=10,le=7200)
 
-@app.post("/api/protocols/openvpn/config")
-def openvpn_server_config(payload:OpenVPNServerConfig,request:Request):
+@app.post("/api/protocols/openvpn/configure")
+def openvpn_configure(payload:OpenVPNConfigure,request:Request):
     actor=require_capability(request,"openvpn",True)
-    require_local_admin(request)
-    if payload.proto not in {"udp","tcp"}:
-        raise HTTPException(400,"OpenVPN proto must be udp or tcp")
     try:
         result=protocol_ops.reconfigure_openvpn_server(
-            payload.port,payload.proto,payload.dns1,payload.dns2,
+            payload.port,payload.proto,payload.dns_servers,
+            payload.keepalive_ping,payload.keepalive_timeout,
             payload.redirect_gateway,payload.client_to_client,
-            payload.keepalive_interval,payload.keepalive_timeout
         )
-    except protocol_ops.ProtocolError as exc:
-        raise HTTPException(400,str(exc)) from exc
-    audit(actor,"openvpn_server_config","server",f"proto={payload.proto}; port={payload.port}",ip(request))
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"openvpn_configure_failed","openvpn",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    runtime=result.get("runtime") or {}
+    set_setting("default_openvpn_port",int(runtime.get("port") or payload.port))
+    set_setting("default_openvpn_proto","tcp" if str(runtime.get("proto") or payload.proto).startswith("tcp") else "udp")
+    audit(actor,"openvpn_configure","openvpn",f"port={runtime.get('port')}; proto={runtime.get('proto')}",ip=ip(request))
     return result
 
 class OpenVPNClient(BaseModel):
@@ -1337,9 +1322,27 @@ def _current_delivery_payload(kind,key,payload,request):
                 summary["host"],username,password,int(summary.get("port") or 22),ssh_npv_options(username)
             )
     elif kind=="openvpn":
-        # Stored exports carry the client's chosen IP/domain. Regenerating from
-        # the panel domain would silently replace that choice on every download.
-        result=payload
+        # Modern OpenVPN artifacts retain the explicitly selected endpoint.
+        # Only those profiles are safe to regenerate from current server
+        # runtime (for example after UDP/TCP or port reconfiguration). Legacy
+        # payloads have no provenance metadata, so preserve them byte-for-byte
+        # instead of guessing an endpoint or requiring a newer DB table.
+        try:
+            artifact=get_access_artifact_by_key("openvpn",str(key))
+        except Exception:
+            artifact=None
+        if artifact:
+            endpoint=""
+            try:
+                endpoint=str(json.loads(artifact.get("metadata_json") or "{}").get("endpoint") or "")
+            except (TypeError,ValueError):
+                endpoint=""
+            endpoint=endpoint or public_host(request)
+            try:
+                rendered=protocol_ops.render_openvpn_client(str(key),endpoint)
+                result=access_ops.openvpn_payload(str(key),rendered["config"])
+            except protocol_ops.ProtocolError:
+                result=payload
     elif kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -1935,7 +1938,7 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
     actor=require_mutation(request)
     allowed_modes={"pin4","pin6","easy8","strong"}
     allowed_protocols={"vless","vmess","trojan","shadowsocks","hysteria2","http","socks"}
-    allowed_transports={"tcp","ws","grpc","httpupgrade","xhttp","kcp"}
+    allowed_transports={"tcp","ws","grpc","httpupgrade","xhttp","kcp","hysteria"}
     allowed_security={"none","tls","reality"}
     dns_mode=(payload.npv_dns_mode or "UDP").upper()
     if dns_mode not in {"UDP","TCP"}: raise HTTPException(400,"NPV DNS mode must be UDP or TCP")
@@ -1943,6 +1946,12 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
     if payload.xray_protocol not in allowed_protocols: raise HTTPException(400,"invalid Xray protocol")
     if payload.xray_transport not in allowed_transports: raise HTTPException(400,"invalid Xray transport")
     if payload.xray_security not in allowed_security: raise HTTPException(400,"invalid Xray security")
+    try:
+        normalized_xray_transport,normalized_xray_security=protocol_ops._validate_xray_guided_combo(
+            payload.xray_protocol,payload.xray_transport,payload.xray_security
+        )
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
     if payload.openvpn_proto not in {"udp","tcp"}: raise HTTPException(400,"OpenVPN proto must be udp or tcp")
     if payload.subscription_default_format not in {"base64","raw"}: raise HTTPException(400,"subscription format must be base64 or raw")
     try:
@@ -1968,8 +1977,8 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
         "default_ssh_devices":payload.ssh_devices,
         "default_xray_protocol":payload.xray_protocol,
         "default_xray_port":payload.xray_port,
-        "default_xray_transport":payload.xray_transport,
-        "default_xray_security":payload.xray_security,
+        "default_xray_transport":normalized_xray_transport,
+        "default_xray_security":normalized_xray_security,
         "default_xray_path":payload.xray_path or "/",
         "default_xray_sni":payload.xray_sni.strip(),
         "default_xray_reality_target":payload.xray_reality_target.strip(),

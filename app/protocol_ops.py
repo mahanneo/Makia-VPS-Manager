@@ -22,6 +22,18 @@ WG_DIR=Path("/etc/wireguard")
 OVPN_DIR=Path("/etc/openvpn")
 OVPN_EASYRSA=OVPN_DIR/"easy-rsa"
 
+
+def _backup_dir():
+    """Return the writable Makia backup root used by protocol mutations.
+
+    Tests and non-standard installations can override the production path via
+    MAKIA_BACKUP_DIR; production keeps the root-only /var/backups location.
+    """
+    root=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
+    root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    return root
+
+
 class ProtocolError(RuntimeError):
     pass
 
@@ -75,47 +87,107 @@ def _xray_secure_runtime_file(path,mode=0o600):
             raise ProtocolError(f"unable to set Xray runtime file ownership for {user}: {exc}") from exc
     return user
 
-def _xray_test_config_as_service(binary,path):
-    """Validate Xray config without breaking under systemd NoNewPrivileges/RestrictSUIDSGID.
+def _process_no_new_privileges():
+    """Return True when this process is forbidden from gaining privileges.
 
-    Older Makia builds always invoked runuser from the web service. When the service
-    itself is sandboxed with NoNewPrivileges/RestrictSUIDSGID, runuser cannot call
-    setuid and returns 'Operation not permitted' even though Xray can read its own
-    config and start normally. In that environment we validate syntax as root and
-    separately verify ownership/readability. The subsequent systemctl restart is the
-    authoritative runtime check.
+    Makia intentionally runs with systemd NoNewPrivileges. On some Ubuntu
+    builds, runuser/setuid from that service fails with EPERM even while the
+    root process can safely validate and write the Xray configuration.
     """
-    args=[binary,"run","-test","-format=json","-config",str(path)]
-    user=_xray_service_user()
-    if os.geteuid()!=0 or user in {"","root"}:
-        return _run(args,timeout=30)
-    no_new_privs=False
     try:
-        status=Path("/proc/self/status").read_text(encoding="utf-8",errors="ignore")
-        no_new_privs=bool(re.search(r"(?m)^NoNewPrivs:\s*1\s*$",status))
+        for line in Path("/proc/self/status").read_text(encoding="utf-8",errors="ignore").splitlines():
+            if line.startswith("NoNewPrivs:"):
+                return line.split(":",1)[1].strip()=="1"
     except OSError:
         pass
-    if shutil.which("runuser") and not no_new_privs:
-        try:
-            return _run(["runuser","-u",user,"--",*args],timeout=30)
-        except ProtocolError as exc:
-            message=str(exc).lower()
-            if "operation not permitted" not in message and "cannot set user id" not in message:
-                raise
-    # Sandboxed Makia service: do not fail a valid config merely because setuid is denied.
-    # Ownership is managed by _xray_secure_runtime_file and the real Xray service restart
-    # below proves whether the service user can actually consume the configuration.
+    return False
+
+
+def _mode_allows(st,uid,gid,bit_user,bit_group,bit_other):
+    if uid==0:
+        return True
+    mode=st.st_mode
+    if st.st_uid==uid:
+        return bool(mode & bit_user)
+    if st.st_gid==gid:
+        return bool(mode & bit_group)
+    return bool(mode & bit_other)
+
+
+def _xray_assert_path_readable(path,user):
+    """Statically prove that the configured Xray service user can traverse/read a path."""
+    target=Path(path)
+    if not target.exists():
+        raise ProtocolError(f"Xray runtime file is missing: {target}")
     try:
         info=pwd.getpwnam(user)
-        st=os.stat(path)
-        owner_read=st.st_uid==info.pw_uid and bool(st.st_mode & 0o400)
-        group_read=st.st_gid==info.pw_gid and bool(st.st_mode & 0o040)
-        world_read=bool(st.st_mode & 0o004)
-        if not (owner_read or group_read or world_read):
-            raise ProtocolError(f"Xray config is not readable by service user {user}")
     except KeyError as exc:
-        raise ProtocolError(f"Xray service user {user} does not exist") from exc
-    return _xray_test_config(binary,path)
+        raise ProtocolError(f"Xray service user does not exist: {user}") from exc
+    uid,gid=info.pw_uid,info.pw_gid
+    # Every parent needs execute/search permission.
+    parents=list(target.parents)
+    for parent in reversed(parents):
+        try:
+            st=parent.stat()
+        except OSError as exc:
+            raise ProtocolError(f"cannot stat Xray runtime directory {parent}: {exc}") from exc
+        if not _mode_allows(st,uid,gid,0o100,0o010,0o001):
+            raise ProtocolError(f"Xray service user {user} cannot traverse {parent}")
+    st=target.stat()
+    if not _mode_allows(st,uid,gid,0o400,0o040,0o004):
+        raise ProtocolError(f"Xray service user {user} cannot read {target}")
+    return True
+
+
+def _xray_referenced_files(path):
+    refs=[]
+    try:
+        data=json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return refs
+    def walk(node):
+        if isinstance(node,dict):
+            for key,value in node.items():
+                if key in {"certificateFile","keyFile"} and isinstance(value,str) and value.startswith("/"):
+                    refs.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node,list):
+            for value in node:
+                walk(value)
+    walk(data)
+    return sorted(set(refs))
+
+
+def _xray_static_service_validation(path,user):
+    _xray_assert_path_readable(path,user)
+    for ref in _xray_referenced_files(path):
+        _xray_assert_path_readable(ref,user)
+    return "static-permission-check"
+
+
+def _xray_test_config_as_service(binary,path):
+    args=[binary,"run","-test","-format=json","-config",str(path)]
+    user=_xray_service_user()
+    if user in {"","root"} or os.geteuid()!=0:
+        _run(args,timeout=30)
+        return "direct"
+
+    # The root semantic validation is authoritative for the JSON/Core syntax.
+    # Service-user validation here is about file visibility/permissions.
+    # Do not weaken Makia's systemd NoNewPrivileges hardening merely to make
+    # runuser work from inside the web service.
+    if _process_no_new_privileges() or not shutil.which("runuser"):
+        return _xray_static_service_validation(path,user)
+
+    try:
+        _run(["runuser","-u",user,"--",*args],timeout=30)
+        return "runuser"
+    except ProtocolError as exc:
+        msg=str(exc).lower()
+        if "cannot set user id" in msg or ("runuser" in msg and "operation not permitted" in msg) or "setuid" in msg:
+            return _xray_static_service_validation(path,user)
+        raise
 
 def _xray_materialize_tls(domain):
     domain=_validate_endpoint_host(domain,"TLS domain")
@@ -198,9 +270,10 @@ def xray_diagnostics():
         except Exception as exc:
             result["root_error"]=str(exc)[:1200]
         try:
-            _xray_test_config_as_service(binary,config)
+            result["service_validation_mode"]=_xray_test_config_as_service(binary,config)
             result["service_validation"]=True
         except Exception as exc:
+            result["service_validation_mode"]="failed"
             result["service_error"]=str(exc)[:1200]
         try:
             st=os.stat(config)
@@ -235,8 +308,7 @@ def repair_xray_runtime():
         raise ProtocolError(f"cannot parse Xray config: {exc}") from exc
     _rewrite_letsencrypt_certificates(data)
     tmp=_xray_temp_json_path(path,"repair")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-repair-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
@@ -353,6 +425,7 @@ def openvpn_status():
         "servers":configs,
         "config":str(server_dir/"server.conf") if (server_dir/"server.conf").exists() else None,
         "port":runtime.get("port"),"proto":runtime.get("proto"),
+        "options":_openvpn_server_options() if (server_dir/"server.conf").exists() else {},
     }
 
 def stunnel_status():
@@ -1002,8 +1075,7 @@ def repair_wireguard_runtime(iface="wg0"):
         raise ProtocolError("WireGuard config is missing Address or ListenPort")
     uplink=_default_iface()
     original=conf.read_text(encoding="utf-8",errors="ignore")
-    backup_dir=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"wireguard-repair-{int(time.time())}.conf"
     shutil.copy2(conf,backup)
     network=cfg["network"]
@@ -1318,88 +1390,6 @@ def bootstrap_openvpn(port=1194, proto="udp"):
     firewall=_ufw_allow_if_active(port,"udp" if server_proto.startswith("udp") else "tcp","OpenVPN")
     return {"server":"server","port":port,"proto":"udp" if server_proto.startswith("udp") else "tcp","server_proto":server_proto,"firewall":firewall}
 
-def reconfigure_openvpn_server(port=1194,proto="udp",dns1="1.1.1.1",dns2="8.8.8.8",redirect_gateway=True,client_to_client=False,keepalive_interval=10,keepalive_timeout=120):
-    """Safely update the managed OpenVPN server while preserving PKI and clients."""
-    server_conf=OVPN_DIR/"server/server.conf"
-    if not server_conf.exists():
-        raise ProtocolError("OpenVPN server is not bootstrapped")
-    port=_validate_port(port)
-    server_proto=_openvpn_proto(proto,server=True)
-    transport="tcp" if server_proto.startswith("tcp") else "udp"
-    runtime=_openvpn_server_runtime()
-    old_port=int(runtime.get("port") or 0)
-    old_transport="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
-    if (port!=old_port or transport!=old_transport) and _port_transport_in_use(port,transport):
-        raise ProtocolError(f"{transport.upper()} port {port} is already in use")
-    for value,label in [(dns1,"primary DNS"),(dns2,"secondary DNS")]:
-        try: ipaddress.ip_address(str(value).strip())
-        except ValueError as exc: raise ProtocolError(f"invalid {label}") from exc
-    keepalive_interval=max(1,min(int(keepalive_interval),3600))
-    keepalive_timeout=max(10,min(int(keepalive_timeout),7200))
-    original=server_conf.read_text(encoding="utf-8",errors="ignore")
-    updated=original
-    def set_line(text,key,value):
-        pattern=rf"(?m)^{re.escape(key)}\s+.*$"
-        return re.sub(pattern,f"{key} {value}",text,count=1) if re.search(pattern,text) else text+f"\n{key} {value}\n"
-    updated=set_line(updated,"port",port)
-    updated=set_line(updated,"proto",server_proto)
-    updated=set_line(updated,"keepalive",f"{keepalive_interval} {keepalive_timeout}")
-    updated=re.sub(r'(?m)^push\s+"dhcp-option DNS [^"]+"\s*\n?',"",updated)
-    updated=re.sub(r'(?m)^push\s+"redirect-gateway[^"]*"\s*\n?',"",updated)
-    updated=re.sub(r"(?m)^client-to-client\s*\n?","",updated)
-    anchor='push "dhcp-option DNS %s"\npush "dhcp-option DNS %s"\n' % (dns1,dns2)
-    if redirect_gateway:
-        anchor='push "redirect-gateway def1 bypass-dhcp"\n'+anchor
-    if client_to_client:
-        anchor+='client-to-client\n'
-    updated=updated.rstrip()+"\n"+anchor
-    backup=server_conf.with_name(f"server.conf.makia-reconfigure-{int(time.time())}.bak")
-    shutil.copy2(server_conf,backup)
-    try:
-        server_conf.write_text(updated,encoding="utf-8")
-        _run(["systemctl","restart","openvpn-server@server"],timeout=30)
-        after=_openvpn_server_runtime()
-        if not after.get("service_active") or not after.get("listener"):
-            raise ProtocolError("OpenVPN did not become healthy after configuration change")
-        _ufw_allow_if_active(port,transport,"OpenVPN")
-    except Exception:
-        shutil.copy2(backup,server_conf)
-        try: _run(["systemctl","restart","openvpn-server@server"],timeout=30)
-        except Exception: pass
-        raise
-    return {"ok":True,"backup":str(backup),"runtime":_openvpn_server_runtime(),"dns":[dns1,dns2],"redirect_gateway":bool(redirect_gateway),"client_to_client":bool(client_to_client),"keepalive":[keepalive_interval,keepalive_timeout]}
-
-
-def reconfigure_wireguard_server(port=443,mtu=1280,iface="wg0"):
-    """Change safe server-level WireGuard knobs while preserving peer keys."""
-    conf=WG_DIR/f"{iface}.conf"
-    if not conf.exists():
-        raise ProtocolError("WireGuard server is not bootstrapped")
-    port=_validate_port(port)
-    mtu=_validate_wireguard_mtu(mtu)
-    current=_wireguard_server_config(iface)
-    old_port=int(current.get("port") or 0)
-    if port!=old_port and _port_transport_in_use(port,"udp"):
-        raise ProtocolError(f"UDP port {port} is already in use")
-    original=conf.read_text(encoding="utf-8",errors="ignore")
-    updated=_wireguard_set_interface_directive(original,"ListenPort",f"ListenPort = {port}")
-    updated=_wireguard_set_interface_directive(updated,"MTU",f"MTU = {mtu}")
-    backup=conf.with_name(f"{iface}.conf.makia-reconfigure-{int(time.time())}.bak")
-    shutil.copy2(conf,backup)
-    try:
-        _write_wireguard_config(conf,updated)
-        _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
-        diag=wireguard_endpoint_diagnostics("",iface)
-        if not diag.get("runtime_ok"):
-            raise ProtocolError("WireGuard did not become healthy after configuration change")
-        _ufw_allow_if_active(port,"udp","WireGuard")
-    except Exception:
-        shutil.copy2(backup,conf)
-        try: _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
-        except Exception: pass
-        raise
-    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
-
 def repair_openvpn_ipv4_runtime():
     server_conf=OVPN_DIR/"server/server.conf"
     if not server_conf.exists():
@@ -1446,6 +1436,120 @@ def repair_openvpn_ipv4_runtime():
         raise
     runtime=_openvpn_server_runtime()
     return {"ok":True,"backup":str(backup),"script_backups":script_backups,"runtime":runtime}
+
+def _openvpn_server_options():
+    server_conf=OVPN_DIR/"server/server.conf"
+    result={
+        "port":1194,"proto":"udp","dns":["1.1.1.1","8.8.8.8"],
+        "keepalive_ping":10,"keepalive_timeout":120,
+        "redirect_gateway":True,"client_to_client":False,
+    }
+    if not server_conf.exists():
+        return result
+    text=server_conf.read_text(encoding="utf-8",errors="ignore")
+    pm=re.search(r"(?m)^port\s+(\d+)\s*$",text)
+    proto_m=re.search(r"(?m)^proto\s+(\S+)\s*$",text)
+    keep_m=re.search(r"(?m)^keepalive\s+(\d+)\s+(\d+)\s*$",text)
+    dns=re.findall(r'(?m)^push\s+"dhcp-option DNS\s+([^"]+)"\s*$',text)
+    result["port"]=int(pm.group(1)) if pm else 1194
+    raw_proto=(proto_m.group(1) if proto_m else "udp4").lower()
+    result["proto"]="tcp" if raw_proto.startswith("tcp") else "udp"
+    if keep_m:
+        result["keepalive_ping"]=int(keep_m.group(1));result["keepalive_timeout"]=int(keep_m.group(2))
+    if dns:
+        result["dns"]=dns[:3]
+    result["redirect_gateway"]=bool(re.search(r'(?m)^push\s+"redirect-gateway\s+def1(?:\s+bypass-dhcp)?"\s*$',text))
+    result["client_to_client"]=bool(re.search(r"(?m)^client-to-client\s*$",text))
+    return result
+
+
+def _validate_openvpn_dns(values):
+    out=[]
+    for value in values or []:
+        raw=str(value or "").strip()
+        if not raw:
+            continue
+        try:
+            addr=ipaddress.ip_address(raw)
+        except ValueError as exc:
+            raise ProtocolError(f"invalid OpenVPN DNS server: {raw}") from exc
+        if addr.version!=4:
+            raise ProtocolError("OpenVPN managed DNS currently requires IPv4 addresses")
+        normalized=addr.compressed
+        if normalized not in out:
+            out.append(normalized)
+    if not out:
+        raise ProtocolError("at least one OpenVPN DNS server is required")
+    return out[:3]
+
+
+def reconfigure_openvpn_server(port=1194,proto="udp",dns_servers=None,keepalive_ping=10,keepalive_timeout=120,redirect_gateway=True,client_to_client=False):
+    """Safely change the managed OpenVPN server while preserving PKI and clients."""
+    server_conf=OVPN_DIR/"server/server.conf"
+    if not server_conf.exists():
+        raise ProtocolError("OpenVPN server config is not available")
+    port=_validate_port(port)
+    requested="tcp" if str(proto or "").lower().startswith("tcp") else "udp"
+    if str(proto or "").lower() not in {"udp","tcp","udp4","tcp4","tcp4-server","udp4"}:
+        raise ProtocolError("OpenVPN transport must be UDP or TCP")
+    dns=_validate_openvpn_dns(dns_servers or ["1.1.1.1","8.8.8.8"])
+    keepalive_ping=max(1,min(int(keepalive_ping),3600))
+    keepalive_timeout=max(10,min(int(keepalive_timeout),7200))
+    if keepalive_timeout<=keepalive_ping:
+        raise ProtocolError("OpenVPN keepalive timeout must be greater than ping interval")
+
+    current=_openvpn_server_runtime()
+    current_transport="tcp" if str(current.get("proto") or "").startswith("tcp") else "udp"
+    current_port=int(current.get("port") or 0)
+    if (port!=current_port or requested!=current_transport) and _port_transport_in_use(port,requested):
+        raise ProtocolError(f"{requested.upper()} port {port} is already in use")
+
+    original=server_conf.read_text(encoding="utf-8",errors="ignore")
+    backup_dir=_backup_dir()
+    backup=backup_dir/f"openvpn-config-{int(time.time())}.conf"
+    shutil.copy2(server_conf,backup)
+
+    updated=original
+    server_proto=_openvpn_proto(requested,server=True)
+    if re.search(r"(?m)^port\s+\d+\s*$",updated):
+        updated=re.sub(r"(?m)^port\s+\d+\s*$",f"port {port}",updated,count=1)
+    else:
+        updated=f"port {port}\n"+updated
+    if re.search(r"(?m)^proto\s+\S+\s*$",updated):
+        updated=re.sub(r"(?m)^proto\s+\S+\s*$",f"proto {server_proto}",updated,count=1)
+    else:
+        updated=f"proto {server_proto}\n"+updated
+
+    # Managed policy lines are regenerated atomically to avoid duplicate pushes.
+    updated=re.sub(r'(?m)^push\s+"dhcp-option DNS\s+[^"]+"\s*\n?',"",updated)
+    updated=re.sub(r'(?m)^push\s+"redirect-gateway\s+def1(?:\s+bypass-dhcp)?"\s*\n?',"",updated)
+    updated=re.sub(r"(?m)^keepalive\s+\d+\s+\d+\s*\n?","",updated)
+    updated=re.sub(r"(?m)^client-to-client\s*\n?","",updated)
+    policy=[]
+    if redirect_gateway:
+        policy.append('push "redirect-gateway def1 bypass-dhcp"')
+    policy.extend(f'push "dhcp-option DNS {item}"' for item in dns)
+    policy.append(f"keepalive {keepalive_ping} {keepalive_timeout}")
+    if client_to_client:
+        policy.append("client-to-client")
+    updated=updated.rstrip()+"\n"+"\n".join(policy)+"\n"
+
+    try:
+        server_conf.write_text(updated,encoding="utf-8")
+        os.chmod(server_conf,0o600)
+        _run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        runtime=_openvpn_server_runtime()
+        actual_transport="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+        if not runtime.get("service_active") or not runtime.get("listener") or int(runtime.get("port") or 0)!=port or actual_transport!=requested:
+            raise ProtocolError("OpenVPN did not reach the requested listener after reconfiguration")
+        firewall=_ufw_allow_if_active(port,requested,"OpenVPN")
+    except Exception:
+        shutil.copy2(backup,server_conf)
+        try:_run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        except Exception:pass
+        raise
+    return {"ok":True,"backup":str(backup),"runtime":runtime,"options":_openvpn_server_options(),"firewall":firewall}
+
 
 def _openvpn_remote_block(endpoint,port):
     endpoint=_validate_endpoint_host(endpoint,"OpenVPN endpoint")
@@ -1834,7 +1938,10 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
     elif transport=="xhttp":
         stream["xhttpSettings"]={"path":path_value,"mode":"auto"}
     elif transport=="mkcp":
-        stream["kcpSettings"]={"seed":path_value.strip("/") or "makia"}
+        # Xray 26.3.27 removed the legacy kcpSettings.header/seed fields.
+        # Guided mKCP therefore uses Core defaults without hidden obfuscation
+        # state, which also keeps exported client links reproducible.
+        stream["kcpSettings"]={}
     reality_meta={}
     if security=="tls":
         sni=(server_name or "").strip().lower()
@@ -1864,6 +1971,38 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
         reality_meta={"public_key":public,"short_id":sid,"server_name":sni}
     return stream,reality_meta
 
+def xray_guided_compatibility():
+    return {
+        "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["reality","tls","none"]},
+        "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+        "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp"],"security":["tls"]},
+        "shadowsocks":{"transports":["tcp"],"security":["none"]},
+        "hysteria2":{"transports":["hysteria"],"security":["tls"]},
+        "http":{"transports":["tcp"],"security":["none"]},
+        "socks":{"transports":["tcp"],"security":["none"]},
+    }
+
+
+def _validate_xray_guided_combo(protocol,transport,security):
+    protocol=str(protocol or "").lower()
+    transport=str(transport or "tcp").lower()
+    security=str(security or "none").lower()
+    aliases={"raw":"tcp","websocket":"ws","mkcp":"kcp"}
+    transport=aliases.get(transport,transport)
+    spec=xray_guided_compatibility().get(protocol)
+    if not spec:
+        raise ProtocolError("unsupported Xray quick protocol")
+    if protocol=="hysteria2":
+        return "hysteria","tls"
+    if transport not in spec["transports"]:
+        raise ProtocolError(f"{protocol.upper()} does not support {transport.upper()} in Makia guided mode")
+    if security not in spec["security"]:
+        raise ProtocolError(f"{protocol.upper()} does not support security={security} in Makia guided mode")
+    if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
+        raise ProtocolError("VLESS REALITY guided mode supports TCP/RAW, gRPC or XHTTP")
+    return transport,security
+
+
 def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", security="none", path_value="/", server_name="", reality_dest=""):
     protocol=(protocol or "").lower()
     if protocol not in {"vless","vmess","trojan","shadowsocks","hysteria2","http","socks"}:
@@ -1872,7 +2011,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid client name")
     endpoint=_validate_endpoint_host(endpoint)
-    security=(security or "none").lower()
+    transport,security=_validate_xray_guided_combo(protocol,transport,security)
     if protocol in {"vless","trojan"} and security=="none" and not _endpoint_is_private(endpoint):
         raise ProtocolError(f"{protocol.upper()} with security=none is not valid for a public endpoint in this guided mode; choose REALITY or TLS")
     binary=_binary()
@@ -1963,8 +2102,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     }
     inbounds.append(inbound)
     tmp=_xray_temp_json_path(path,"create")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=None
     if path.exists():
         backup=backup_dir/f"xray-{int(time.time())}.json"
@@ -2071,7 +2209,7 @@ def create_xray_tunnel(listen_port, target_host, target_port, network="tcp,udp",
         },
     })
     tmp=_xray_temp_json_path(path,"tunnel")
-    backup_dir=Path("/var/backups/makia-vps-manager"); backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=None
     if path.exists():
         backup=backup_dir/f"xray-tunnel-{int(time.time())}.json"
@@ -2115,8 +2253,7 @@ def remove_xray_inbound(inbound_tag):
     data["inbounds"]=[x for x in inbounds if not (isinstance(x,dict) and x.get("tag")==inbound_tag)]
     if len(data["inbounds"])==before:
         raise ProtocolError("Xray inbound not found")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-remove-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp=_xray_temp_json_path(path,"remove")
@@ -2173,8 +2310,7 @@ def disable_xray_client(inbound_tag,email):
             changed=len(settings["accounts"])!=before
     if not changed:
         return {"disabled":False,"reason":"client not found in config"}
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-policy-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp=_xray_temp_json_path(path,"policy")
@@ -2256,8 +2392,7 @@ def enable_xray_client(inbound_tag,email,protocol,credential):
     else:
         raise ProtocolError("automatic re-enable is not supported for this protocol")
 
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=backup_dir/f"xray-enable-{int(time.time())}.json"
     shutil.copy2(path,backup)
     tmp=_xray_temp_json_path(path,"enable")
@@ -2362,8 +2497,7 @@ def apply_xray_config(data):
     path=Path(config_path)
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=_xray_temp_json_path(path,"apply")
-    backup_dir=Path("/var/backups/makia-vps-manager")
-    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup_dir=_backup_dir()
     backup=None
     if path.exists():
         backup=backup_dir/f"xray-manual-{int(time.time())}.json"

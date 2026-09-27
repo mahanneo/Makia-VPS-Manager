@@ -80,23 +80,27 @@ def main():
             assert portal.locator("#wireguard").count()==1
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
-            assert "چطور کانفیگ Makia را اضافه کنم؟" in portal.locator("body").inner_text()
-            assert portal.locator(".guide-visual-step").count()==4
+            assert "اتصال بدون حدس و خطا" in portal.locator("body").inner_text()
+            assert portal.locator(".visual-steps").count()==4
+            assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
 
             page=browser.new_page(accept_downloads=True)
             page_errors=[]
             page.on("pageerror",lambda exc: page_errors.append(str(exc)))
             page.goto(BASE_URL+"/login",wait_until="networkidle")
-            assert page.locator(".login-field-v026").count()==2
+            page.screenshot(path='/tmp/makia-login.png',full_page=True)
+            # Login controls must be real controls, not decorative buttons.
+            assert page.locator('body.pro-login[data-theme="dark"], body.pro-login[data-theme="light"]').count()==1
+            before_theme=page.locator("body").get_attribute("data-theme")
             page.locator("#loginThemeToggle").click()
-            assert page.locator('body[data-theme="light"]').count()==1
+            assert page.locator("body").get_attribute("data-theme")!=before_theme
             page.locator("#loginLangToggle").click()
             assert page.locator("html").get_attribute("lang")=="en"
             page.locator("#loginLangToggle").click()
-            page.locator("#loginThemeToggle").click()
-            assert page.locator('body[data-theme="dark"]').count()==1
-            page.screenshot(path='/tmp/makia-login.png',full_page=True)
+            assert page.locator("html").get_attribute("lang")=="fa"
+            page.locator("#loginUsername").focus()
+            assert page.locator(".pro-login-field:focus-within").count()==1
             page.locator('input[name="username"]').fill("admin")
             page.locator('input[name="password"]').fill(PASSWORD)
             page.locator('button[type="submit"]').click()
@@ -125,16 +129,18 @@ def main():
             page.locator('.pro-sidebar button[data-view="openvpn"]').click()
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
-            page.locator('[data-action="openvpn-server-config"]').click()
-            page.locator(".vpn-config-modal").wait_for()
-            assert page.locator("#ovServerProto option").count()==2
-            page.locator('.vpn-config-modal .close-btn[data-action="modal-close"]').click()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
+            page.locator('[data-action="openvpn-configure"]').first.click()
+            page.locator(".engine-config-modal").wait_for()
+            assert page.locator('input[name="ovpnTransport"]').count()==2
+            assert page.locator("#ovpnCfgPort").count()==1
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.locator('.pro-sidebar button[data-view="support"]').click()
             leave_sidebar(page)
-            page.locator(".support-v026").wait_for()
-            assert "پشتیبانی Makia" in page.locator("#content").inner_text()
-            page.locator(".support-advanced summary").click()
+            page.locator(".support-v26").wait_for()
+            assert "راهنما و پشتیبانی" in page.locator("#content").inner_text()
+            support_advanced=page.locator("details.support-advanced",has_text="دسترسی موقت پشتیبانی")
+            support_advanced.locator("summary").click()
             page.locator("#supportGrantScope").select_option("readonly")
             page.locator('[data-action="support-grant-create"]').click()
             page.locator(".support-code-box").wait_for()
@@ -257,11 +263,7 @@ def main():
             leave_sidebar(page)
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('.wg-workspace-metrics>div').count()==4
-            assert 'ساخت همتا' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
-            page.locator('[data-action="wg-server-config"]').click()
-            page.locator(".vpn-config-modal").wait_for()
-            assert page.locator("#wgServerPort").count()==1
-            page.locator('.vpn-config-modal .close-btn[data-action="modal-close"]').click()
+            assert 'ساخت Peer' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
             page.screenshot(path='/tmp/makia-wg-desktop.png',full_page=True)
             page.set_viewport_size({"width":390,"height":844})
             page.locator('.mobile-menu-toggle').click()
@@ -297,9 +299,8 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.evaluate("switchView('guides')")
-            page.locator(".guide-visual-grid").wait_for()
-            assert page.locator(".guide-visual-card").count()==4
-            assert page.locator(".guide-visual-card img").count()==4
+            page.locator(".guide-admin-grid").wait_for()
+            assert page.locator(".guide-admin-card").count()==4
             assert page.locator('[data-action="client-guide-copy"]').count()==4
             page.locator('.pro-sidebar button[data-view="settings"]').click()
             leave_sidebar(page)
@@ -334,12 +335,16 @@ def main():
             page.locator("#opWgPort").wait_for()
             assert page.locator("#opWgPort").input_value()=="443"
 
+            settings_tabs=page.locator(".settings-tabs-sx")
             for tab in ["general","domain","ssh","xray","vpn","delivery","subscription","security","api","recovery"]:
-                page.locator(f'[data-action="settings-tab"][data-tab="{tab}"]').click()
+                settings_tabs.locator(f'[data-action="settings-tab"][data-tab="{tab}"]').click()
                 page.wait_for_timeout(180)
                 assert page.locator(".settings-content-v2").inner_text().strip(), f"settings tab {tab} empty"
+                if tab=="security":
+                    assert page.locator(".security-posture-grid article").count()==6
+                    page.screenshot(path='/tmp/makia-security.png',full_page=True)
 
-            page.locator('[data-action="settings-tab"][data-tab="recovery"]').click()
+            settings_tabs.locator('[data-action="settings-tab"][data-tab="recovery"]').click()
             page.locator('[data-action="portable-backup"]').click()
             page.locator("#migrationPassword").fill("MigrationPass!2026")
             with page.expect_download() as portable:

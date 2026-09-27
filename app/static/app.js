@@ -231,6 +231,17 @@ async function openProvisionWizard(protocol){
 
 function dateAfterDays(days){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+Number(days));return d.toISOString().slice(0,10)}
 
+function protocolGlyph(kind){
+  const glyphs={
+    ssh:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M12 15h5"/></svg>',
+    xray:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/></svg>',
+    wireguard:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 13 2-4 1 3h3l-3 4"/></svg>',
+    openvpn:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13v7h6v-7M12 14v3"/></svg>',
+    inbound:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg>'
+  };
+  return '<span class="proto-glyph '+htmlEsc(kind)+'">'+(glyphs[kind]||glyphs.inbound)+'</span>';
+}
+
 function wizardProtocolReady(kind){
   const s=window.__protocolData||{};
   if(kind==='ssh')return true;
@@ -246,10 +257,10 @@ function renderProvisionWizard(){
   let body='';
   if(s.step===1){
     const cards=[
-      ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy','S'],
-      ['xray','Xray / V2Ray','انعطاف‌پذیر برای شبکه‌های محدود','VLESS · VMess · Trojan · Hysteria2','X'],
-      ['wireguard','WireGuard','تونل Native سریع','UDP · QR · Native config','W'],
-      ['openvpn','OpenVPN','سازگاری گسترده کلاینت','PKI · OVPN profile','O']
+      ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy'],
+      ['xray','Xray / V2Ray','پروفایل‌های چندگانه و مدیریت پیشرفته','VLESS · VMess · Trojan · Hysteria2'],
+      ['wireguard','WireGuard','تونل Native سریع','Peer · QR · Handshake · Traffic'],
+      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
@@ -304,30 +315,36 @@ function wizardIdentityFields(s){
     '<label>Transport<input value="'+htmlEsc(s.ovpnProto.toUpperCase())+'" readonly></label></div>'
   ].join('');
 }
-function xrayCompatibility(protocol){
-  return {
-    vless:{transports:['tcp','grpc','xhttp','ws','httpupgrade','kcp'],security:['reality','tls','none']},
-    vmess:{transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['none','tls']},
-    trojan:{transports:['tcp','ws','grpc','httpupgrade','xhttp'],security:['tls']},
-    shadowsocks:{transports:['tcp'],security:['none']},
-    hysteria2:{transports:['tcp'],security:['tls']},
-    http:{transports:['tcp'],security:['none']},
-    socks:{transports:['tcp'],security:['none']}
-  }[protocol]||{transports:['tcp'],security:['none']};
+const XRAY_PROFILE_MATRIX={
+  vless:{label:'VLESS',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['reality','tls','none'],preset:['tcp','reality'],requiresDomain:false},
+  vmess:{label:'VMess',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['none','tls'],preset:['ws','none'],requiresDomain:false},
+  trojan:{label:'Trojan',transports:['tcp','ws','grpc','httpupgrade','xhttp'],security:['tls'],preset:['tcp','tls'],requiresDomain:true},
+  shadowsocks:{label:'Shadowsocks',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false},
+  hysteria2:{label:'Hysteria2',transports:['hysteria'],security:['tls'],preset:['hysteria','tls'],requiresDomain:true},
+  http:{label:'HTTP Proxy',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false},
+  socks:{label:'SOCKS5',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false}
+};
+
+function xrayProfileSpec(protocol){return XRAY_PROFILE_MATRIX[protocol]||XRAY_PROFILE_MATRIX.vless}
+
+function normalizeXrayProfile(s,forcePreset=false){
+  const spec=xrayProfileSpec(s.xrayProtocol);
+  if(forcePreset||!spec.transports.includes(s.transport))s.transport=spec.preset[0];
+  if(forcePreset||!spec.security.includes(s.security))s.security=spec.preset[1];
+  if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))s.transport='tcp';
+  if((s.security==='tls'||spec.requiresDomain)&&s.endpointMode==='domain'&&s.endpoint)s.sni=s.endpoint;
+  if(s.xrayProtocol==='hysteria2'){s.transport='hysteria';s.security='tls'}
+  return s;
 }
-function applySimpleXrayPreset(s){
-  const presets={vless:['tcp','reality'],vmess:['ws','none'],trojan:['tcp','tls'],shadowsocks:['tcp','none'],hysteria2:['tcp','tls'],http:['tcp','none'],socks:['tcp','none']};
-  [s.transport,s.security]=presets[s.xrayProtocol]||presets.vless;
-  if(s.security==='tls'&&s.endpointMode==='domain')s.sni=s.endpoint;
-}
-function normalizeXrayWizardCombo(){
-  if(!provisionState||provisionState.protocol!=='xray')return;
-  captureWizard();
-  const compat=xrayCompatibility(provisionState.xrayProtocol);
-  if(!compat.transports.includes(provisionState.transport))provisionState.transport=compat.transports[0];
-  if(!compat.security.includes(provisionState.security))provisionState.security=compat.security[0];
-  if(provisionState.xrayProtocol==='hysteria2')provisionState.security='tls';
-  renderProvisionWizard();
+
+function applySimpleXrayPreset(s){return normalizeXrayProfile(s,true)}
+
+function xrayPrerequisiteMessage(s){
+  const spec=xrayProfileSpec(s.xrayProtocol);
+  if(spec.requiresDomain&&s.endpointMode!=='domain')return spec.label+' برای TLS به Domain معتبر و Certificate نیاز دارد؛ Endpoint را روی Domain بگذار.';
+  if((s.security==='tls')&&s.endpointMode!=='domain')return 'TLS به Domain/SNI دارای Certificate معتبر روی همین VPS نیاز دارد.';
+  if(s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY در Guided mode فقط برای VLESS فعال است.';
+  return '';
 }
 
 function wizardEndpointFields(s){
@@ -343,17 +360,29 @@ function wizardPolicyFields(s){
     '<details class="pro-advanced"><summary><span>محدودیت اتصال</span><small>Session و Device/IP limit</small></summary><div class="wizard-form two"><label>نشست همزمان<input id="wizSessions" type="number" min="1" max="50" value="'+Number(s.sessions)+'"></label><label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label></div></details>'
   ].join('');
   if(s.protocol==='xray'){
-    const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>Preset پیشنهادی را نگه دار یا تنظیمات تخصصی را باز کن.</p></div>';
-    if(s.simpleMode)return intro+'<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(s.xrayProtocol.toUpperCase())+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip ok">Recommended</span></div><div class="pro-info-card"><div><b>حالت ساده</b><span>بدون محدودیت حجم و زمان؛ مناسب ساخت سریع.</span></div><small>برای Quota، Expiry، IP Limit یا Transport سفارشی وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
+    normalizeXrayProfile(s,false);
+    const spec=xrayProfileSpec(s.xrayProtocol),pre=xrayPrerequisiteMessage(s);
+    const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>فقط ترکیب‌های معتبر برای '+htmlEsc(spec.label)+' نمایش داده می‌شوند.</p></div>';
+    if(s.simpleMode)return intro+
+      '<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(spec.label.toUpperCase())+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip '+(pre?'warn':'ok')+'">'+(pre?'نیاز به Domain':'Recommended')+'</span></div>'+
+      (pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'')+
+      '<div class="pro-info-card"><div><b>حالت ساده</b><span>Preset سازگار پروتکل اعمال شده و گزینه نامعتبر قابل انتخاب نیست.</span></div><small>برای Quota، Expiry، IP Limit یا Transport/Security سازگار وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
+    const transports=spec.transports.map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
+    const securities=spec.security.map(x=>'<option value="'+x+'" '+(s.security===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
+    const fixedTransport=spec.transports.length===1?' disabled':'',fixedSecurity=spec.security.length===1?' disabled':'';
     return [intro,
-    '<div class="wizard-form two"><label>Transport<select id="wizTransport">',
-    xrayCompatibility(s.xrayProtocol).transports.map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join(''),
-    '</select></label><label>Security<select id="wizSecurity">'+xrayCompatibility(s.xrayProtocol).security.map(x=>'<option value="'+x+'" '+(s.security===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
-    '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'"></label><label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'"></label>',
-    '<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label><label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
-    '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label><label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
-    '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div><button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button>'
-  ].join('');
+      pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'',
+      '<div class="wizard-form two"><label>Transport<select id="wizTransport"'+fixedTransport+'>'+transports+'</select><small>'+htmlEsc(spec.transports.join(' · '))+'</small></label>',
+      '<label>Security<select id="wizSecurity"'+fixedSecurity+'>'+securities+'</select><small>'+htmlEsc(spec.security.join(' · ').toUpperCase())+'</small></label>',
+      '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'" '+(['tcp','kcp','hysteria'].includes(s.transport)?'disabled':'')+'><small>'+(s.transport==='kcp'?'mKCP جدید Seed قدیمی ندارد.':'WS / gRPC / XHTTP path or service')+'</small></label>',
+      '<label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'" '+(s.security==='none'?'disabled':'')+'></label>',
+      (s.security==='reality'?'<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label>':''),
+      '<label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
+      '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label>',
+      '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
+      '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div>',
+      '<button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button>'
+    ].join('');
   }
   const labels={wireguard:'WireGuard',openvpn:'OpenVPN'};
   return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>'+htmlEsc(labels[s.protocol]||s.protocol)+' آماده است</h4><p>تنظیمات سرور و Client آماده‌اند. مرحله بعد خلاصه نهایی و بسته تحویل را نشان می‌دهد.</p></div>';
@@ -413,11 +442,17 @@ function validateWizardStep(){
     if(s.endpointMode==='domain'&&(isIp||!/^([a-z0-9-]+\.)+[a-z0-9-]+\.?$/i.test(s.endpoint)))return 'در حالت دامنه، یک hostname معتبر وارد کن.';
     if(s.protocol==='xray'&&(!s.port||s.port<1||s.port>65535))return 'Port معتبر وارد کن.';
   }
-  if(s.step===3&&s.protocol==='xray'&&s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY در Wizard فعلی Makia فقط برای VLESS فعال است.';
-  if(s.step===3&&s.protocol==='xray'&&['vless','trojan'].includes(s.xrayProtocol)&&s.security==='none'){
-    const ep=(s.endpoint||'').trim();
-    const privateIp=/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ep)||ep==='localhost'||ep.endsWith('.local');
-    if(!privateIp)return 'برای '+s.xrayProtocol.toUpperCase()+' روی IP/دامنه عمومی، Security را روی REALITY یا TLS بگذار.';
+  if(s.step===3&&s.protocol==='xray'){
+    normalizeXrayProfile(s,false);
+    const pre=xrayPrerequisiteMessage(s);if(pre)return pre;
+    const spec=xrayProfileSpec(s.xrayProtocol);
+    if(!spec.transports.includes(s.transport)||!spec.security.includes(s.security))return 'ترکیب Transport / Security برای این پروتکل معتبر نیست.';
+    if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))return 'REALITY فقط با TCP/RAW، gRPC یا XHTTP در Guided mode فعال است.';
+    if(['vless','trojan'].includes(s.xrayProtocol)&&s.security==='none'){
+      const ep=(s.endpoint||'').trim();
+      const privateIp=/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ep)||ep==='localhost'||ep.endsWith('.local');
+      if(!privateIp)return 'برای '+s.xrayProtocol.toUpperCase()+' روی Endpoint عمومی TLS یا REALITY لازم است.';
+    }
   }
   return '';
 }
@@ -744,20 +779,16 @@ function protocolState(installed,active){
   if(!installed)return'<span class="engine-state missing">Not installed</span>';
   return active?'<span class="engine-state running">Running</span>':'<span class="engine-state attention">Installed</span>';
 }
-function protocolLogo(kind){
-  const labels={xray:'X',wireguard:'W',openvpn:'O',ssh:'S',inbounds:'↳'};
-  return '<span class="protocol-brand-logo '+htmlEsc(kind)+'" aria-hidden="true">'+(labels[kind]||'•')+'</span>';
-}
 function engineCard(icon,name,desc,status,meta,actions=''){
   return '<article class="engine-card"><div class="engine-card-head"><span class="engine-icon">'+htmlEsc(icon)+'</span>'+status+'</div><h3>'+htmlEsc(name)+'</h3><p>'+htmlEsc(desc)+'</p><div class="engine-meta">'+meta+'</div><div class="engine-actions">'+actions+'</div></article>';
 }
 async function wireguard(renderToken=window.__viewRenderToken){
   title.textContent='WireGuard';setPageContext('WIREGUARD USER MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن WireGuard…</b></div>';
-  const [stack,rows]=await Promise.all([api('/api/protocols'),api('/api/access')]);
+  const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='wireguard')return;
-  window.__protocolData=stack;
-  const peers=rows.filter(x=>x.kind==='wireguard'),service=stack.wireguard||{};
+  window.__protocolData=stack;window.__operatorSettings=operator;
+  const peers=rows.filter(x=>x.kind==='wireguard'),service=stack.wireguard||{},defs=operator.defaults||{};
   const active=peers.filter(p=>p.enabled!==false).length;
   const connected=peers.filter(p=>p.enabled&&p.handshake_age!==null&&p.handshake_age!==undefined&&p.handshake_age<180).length;
   const rx=peers.reduce((n,p)=>n+Number(p.rx||0),0),tx=peers.reduce((n,p)=>n+Number(p.tx||0),0);
@@ -768,32 +799,17 @@ async function wireguard(renderToken=window.__viewRenderToken){
       '<button class="'+(enabled?'soft':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(enabled?'0':'1')+'">'+(enabled?'خاموش':'روشن')+'</button><button class="danger" data-action="revoke-access" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">حذف</button></div></div>';
   }).join('');
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title">'+protocolLogo('wireguard')+'<div><h2>WireGuard</h2><p>مدیریت Peerها، Handshake و ترافیک کاربران WireGuard</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="wireguard-diagnostics">Diagnostics</button><button class="ghost" data-action="wg-server-config">⚙ تنظیمات پیشرفته</button><button class="primary" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ساخت همتا جدید':'راه‌اندازی WireGuard')+'</button></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>کل همتاها</span><b>'+peers.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>Handshake اخیر</span><b>'+connected+'</b></div><div><span>ترافیک کل</span><b>'+fmtBytes(rx+tx)+'</b></div></section>',
-    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران WireGuard</h3><span>HANDSHAKE · TRAFFIC · CONFIG</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="neon-table-head"><span>نام همتا</span><span>وضعیت</span><span>ترافیک / Endpoint</span><span>عملیات</span></div><div class="table">'+(peerRows||'<div class="empty">هنوز همتایی ساخته نشده است.</div>')+'</div></section>'
+    '<section class="wg-workspace-hero protocol-page-header pro-engine-hero"><div class="protocol-page-title">'+protocolGlyph('wireguard')+'<div><span class="pro-kicker">NATIVE VPN</span><h2>WireGuard</h2><p>Peer، QR، Handshake، ترافیک و تنظیمات سازگاری Client</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="wireguard-diagnostics">Diagnostics</button><button class="ghost" data-action="nav-settings" data-tab="vpn">Advanced settings</button><button class="primary" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ساخت Peer':'راه‌اندازی WireGuard')+'</button></div></section>',
+    '<section class="wg-workspace-metrics pro-engine-metrics"><div><span>Peers</span><b>'+peers.length+'</b><small>'+active+' active</small></div><div><span>Recent handshake</span><b>'+connected+'</b><small>last 3 minutes</small></div><div><span>Traffic</span><b>'+fmtBytes(rx+tx)+'</b><small>↓ '+fmtBytes(rx)+' · ↑ '+fmtBytes(tx)+'</small></div><div><span>Server</span><b>UDP / '+htmlEsc(String(service.port||defs.wireguard_port||'—'))+'</b><small>MTU '+htmlEsc(String(service.mtu||defs.wireguard_mtu||1280))+'</small></div></section>',
+    '<section class="engine-feature-grid"><article><span class="feature-icon">QR</span><div><b>Native QR / Config</b><small>تحویل مستقیم فایل و QR هر Peer</small></div></article><article><span class="feature-icon">↻</span><div><b>Keepalive</b><small>'+Number(defs.wireguard_keepalive??15)+'s برای NAT traversal</small></div></article><article><span class="feature-icon">DNS</span><div><b>Client DNS</b><small>'+htmlEsc(defs.wireguard_dns||'1.1.1.1')+'</small></div></article><article><span class="feature-icon">⇄</span><div><b>Allowed IPs</b><small>'+htmlEsc(defs.wireguard_allowed_ips||'0.0.0.0/0')+'</small></div></article></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>Peerهای WireGuard</h3><span>HANDSHAKE · TRAFFIC · ENDPOINT · STATE</span></div><div class="toolbar"><button class="ghost" data-action="wireguard-diagnostics">بررسی Endpoint</button><button class="ghost" data-action="refresh">بروزرسانی</button></div></div><div class="neon-table-head"><span>Peer</span><span>وضعیت</span><span>ترافیک / Endpoint</span><span>عملیات</span></div><div class="table">'+(peerRows||'<div class="empty">هنوز Peer ساخته نشده است.</div>')+'</div></section>',
+    '<details class="pro-advanced engine-advanced-summary"><summary><span>تنظیمات پیشرفته WireGuard</span><small>DNS · Port · MTU · Keepalive · Allowed IPs · Tunnel CIDR</small></summary><div class="engine-setting-summary"><div><span>DNS</span><b>'+htmlEsc(defs.wireguard_dns||'1.1.1.1')+'</b></div><div><span>Listen Port</span><b>'+Number(defs.wireguard_port||443)+'/UDP</b></div><div><span>MTU</span><b>'+Number(defs.wireguard_mtu||1280)+'</b></div><div><span>Keepalive</span><b>'+Number(defs.wireguard_keepalive??15)+'s</b></div><div><span>Allowed IPs</span><b>'+htmlEsc(defs.wireguard_allowed_ips||'0.0.0.0/0')+'</b></div><div><span>Tunnel CIDR</span><b>'+htmlEsc(defs.wireguard_cidr||'10.66.66.1/24')+'</b></div></div><div class="settings-actions"><button class="primary" data-action="nav-settings" data-tab="vpn">ویرایش در تنظیمات VPN</button></div></details>'
   ].join('');
 }
+
 async function toggleWireGuardPeer(key,enabled){
   if(!confirm((enabled?'فعال کردن':'غیرفعال کردن')+' همتای '+key+'؟'))return;
   try{await api('/api/access/wireguard/'+encodeURIComponent(key)+'/state',{method:'POST',body:JSON.stringify({enabled})});toast(enabled?'همتا فعال شد':'همتا غیرفعال شد');await currentView()}catch(e){alert(e.message)}
-}
-
-function openWireGuardServerConfig(){
-  const w=window.__protocolData?.wireguard||{};
-  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal vpn-config-modal"><div class="wizard-head"><div>'+protocolLogo('wireguard')+'<div><div class="eyebrow">WIREGUARD SERVER</div><h3>تنظیمات پیشرفته WireGuard</h3></div></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>UDP Port<input id="wgServerPort" type="number" min="1" max="65535" value="'+Number(w.port||443)+'"></label><label>Server MTU<input id="wgServerMtu" type="number" min="576" max="1500" value="'+Number(w.mtu||1280)+'"></label></div><div class="vpn-feature-grid"><div><b>Peer isolation</b><span>هر Peer کلید مستقل دارد.</span></div><div><b>Handshake monitor</b><span>آخرین Handshake و Traffic قابل مشاهده است.</span></div><div><b>Transport-aware port</b><span>UDP از TCP جدا بررسی می‌شود.</span></div><div><b>Safe rollback</b><span>در شکست Restart کانفیگ قبلی برمی‌گردد.</span></div></div><div class="notice">تغییر CIDR سرور بعد از ساخت Peerها عمداً از این فرم حذف شده چون می‌تواند همه Profileهای موجود را خراب کند.</div><div class="wizard-footer"><button class="ghost" data-action="modal-close">انصراف</button><button class="primary" data-action="wg-server-save">ذخیره و Restart</button></div></div></div>';
-}
-async function saveWireGuardServerConfig(){
-  const port=Number(document.getElementById('wgServerPort')?.value||443),mtu=Number(document.getElementById('wgServerMtu')?.value||1280);
-  try{await api('/api/protocols/wireguard/config',{method:'POST',body:JSON.stringify({port,mtu})});toast('WireGuard server updated');closeModal();await currentView()}catch(e){alert('WireGuard: '+e.message)}
-}
-function openOpenVPNServerConfig(){
-  const o=window.__protocolData?.openvpn||{};
-  const proto=String(o.proto||'udp').startsWith('tcp')?'tcp':'udp';
-  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal vpn-config-modal"><div class="wizard-head"><div>'+protocolLogo('openvpn')+'<div><div class="eyebrow">OPENVPN SERVER</div><h3>تنظیمات پیشرفته OpenVPN</h3></div></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>Transport<select id="ovServerProto"><option value="udp" '+(proto==='udp'?'selected':'')+'>UDP / UDP4</option><option value="tcp" '+(proto==='tcp'?'selected':'')+'>TCP / TCP4</option></select></label><label>Port<input id="ovServerPort" type="number" min="1" max="65535" value="'+Number(o.port||1194)+'"></label><label>Primary DNS<input id="ovDns1" value="1.1.1.1"></label><label>Secondary DNS<input id="ovDns2" value="8.8.8.8"></label><label>Keepalive interval<input id="ovKeepaliveI" type="number" min="1" value="10"></label><label>Keepalive timeout<input id="ovKeepaliveT" type="number" min="10" value="120"></label></div><div class="toggle-grid"><label><input id="ovRedirect" type="checkbox" checked> <span><b>Redirect all traffic</b><small>ارسال اینترنت Client از تونل</small></span></label><label><input id="ovClientToClient" type="checkbox"> <span><b>Client-to-client</b><small>اجازه ارتباط Clientهای VPN با یکدیگر</small></span></label></div><div class="notice">UDP و TCP هر دو پشتیبانی می‌شوند، اما یک Server Profile در هر لحظه یک Transport فعال دارد. تغییر Transport، PKI و Client certificateها را حفظ می‌کند و Profileهای خروجی جدید با Transport فعلی ساخته می‌شوند.</div><div class="wizard-footer"><button class="ghost" data-action="modal-close">انصراف</button><button class="primary" data-action="openvpn-server-save">ذخیره و Restart</button></div></div></div>';
-}
-async function saveOpenVPNServerConfig(){
-  const payload={proto:document.getElementById('ovServerProto')?.value||'udp',port:Number(document.getElementById('ovServerPort')?.value||1194),dns1:document.getElementById('ovDns1')?.value||'1.1.1.1',dns2:document.getElementById('ovDns2')?.value||'8.8.8.8',redirect_gateway:Boolean(document.getElementById('ovRedirect')?.checked),client_to_client:Boolean(document.getElementById('ovClientToClient')?.checked),keepalive_interval:Number(document.getElementById('ovKeepaliveI')?.value||10),keepalive_timeout:Number(document.getElementById('ovKeepaliveT')?.value||120)};
-  try{await api('/api/protocols/openvpn/config',{method:'POST',body:JSON.stringify(payload)});toast('OpenVPN server updated');closeModal();await currentView()}catch(e){alert('OpenVPN: '+e.message)}
 }
 
 async function inboundsWorkspace(renderToken=window.__viewRenderToken){
@@ -837,7 +853,7 @@ async function xrayWorkspace(renderToken=window.__viewRenderToken){
   const inactive=managed.length-active;
   const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title">'+protocolLogo('xray')+'<div><h2>V2Ray / Xray</h2><p>VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ ایجاد کاربر جدید':'نصب Xray Core')+'</button></div></section>',
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">V</span><div><h2>V2Ray / Xray</h2><p>VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ ایجاد کاربر جدید':'نصب Xray Core')+'</button></div></section>',
     '<section class="wg-workspace-metrics"><div><span>کل کاربران</span><b>'+managed.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+inactive+'</b></div><div><span>مصرف کل</span><b>'+fmtBytes(used)+'</b></div></section>',
     '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران V2Ray / Xray</h3><span>QUOTA · EXPIRY · RESET · IP LIMIT · STATUS</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز کاربری ساخته نشده است.</div>')+'</div></section>',
     '<section class="panel"><div class="panel-head"><div><h3>خروجی و اشتراک کاربران</h3><span>'+rows.length+' PROFILE</span></div><button class="ghost" data-action="client-guide" data-kind="xray">راهنمای اتصال</button></div><div class="access-cards">'+(rows.length?rows.map(accessCard).join(''):'<div class="empty compact">پروفایل قابل تحویل وجود ندارد.</div>')+'</div></section>'
@@ -849,12 +865,15 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
   const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
   window.__protocolData=stack;window.__operatorSettings=operator;
-  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn');
+  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn'),opt=engine.options||{};
   const active=engine.service_active?clients.length:0;
+  const transport=String(opt.proto||engine.proto||'udp').startsWith('tcp')?'TCP':'UDP';
+  const dns=(opt.dns||[]).join(' · ')||'1.1.1.1';
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title">'+protocolLogo('openvpn')+'<div><h2>OpenVPN</h2><p>مدیریت Clientها، PKI و فایل‌های OVPN</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair</button><button class="ghost" data-action="openvpn-server-config">⚙ تنظیمات پیشرفته</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت جدید':'راه‌اندازی OpenVPN')+'</button></div></section>',
-    '<section class="wg-workspace-metrics"><div><span>کل کلاینت‌ها</span><b>'+clients.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+(clients.length-active)+'</b></div><div><span>Port</span><b>'+htmlEsc(String(engine.port||'—'))+'</b></div></section>',
-    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران OpenVPN</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div><div class="wizard-note"><b>Accounting</b><span>Quota/Reset per-client برای OpenVPN تا زمانی که شمارش قابل اتکای Runtime اضافه نشود به‌صورت نمایشی نشان داده نمی‌شود.</span></div></section>'
+    '<section class="protocol-page-header pro-engine-hero"><div class="protocol-page-title">'+protocolGlyph('openvpn')+'<div><span class="pro-kicker">CERTIFICATE VPN</span><h2>OpenVPN</h2><p>PKI، Client profile، TCP/UDP و سیاست‌های Server در یک Workspace</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-configure">Server settings</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت':'راه‌اندازی OpenVPN')+'</button></div></section>',
+    '<section class="wg-workspace-metrics pro-engine-metrics"><div><span>Clients</span><b>'+clients.length+'</b><small>Certificates</small></div><div><span>Runtime</span><b class="'+(engine.service_active?'ok-text':'bad-text')+'">'+(engine.service_active?'ACTIVE':'DOWN')+'</b><small>openvpn-server@server</small></div><div><span>Transport</span><b>'+transport+' / '+htmlEsc(String(opt.port||engine.port||'—'))+'</b><small>IPv4 locked</small></div><div><span>DNS</span><b>'+htmlEsc(dns)+'</b><small>Pushed to clients</small></div></section>',
+    '<section class="engine-feature-grid"><article><span class="feature-icon">↔</span><div><b>TCP / UDP Switch</b><small>تغییر امن Transport با Backup و Rollback</small></div></article><article><span class="feature-icon">⌁</span><div><b>DNS & Gateway</b><small>DNS push و Redirect Gateway قابل تنظیم</small></div></article><article><span class="feature-icon">♢</span><div><b>PKI Lifecycle</b><small>Certificate مستقل و Revoke واقعی</small></div></article><article><span class="feature-icon">✓</span><div><b>Fresh Exports</b><small>OVPN دانلودی با Runtime فعلی بازسازی می‌شود</small></div></article></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>کلاینت‌های OpenVPN</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><div class="toolbar"><button class="ghost" data-action="openvpn-configure">تنظیمات پیشرفته</button><button class="ghost" data-action="refresh">بروزرسانی</button></div></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div><div class="wizard-note"><b>Traffic accounting</b><span>Quota/Reset per-client برای OpenVPN تا زمانی که شمارش Runtime قابل اتکا اضافه نشود نمایش داده نمی‌شود؛ کنترل نمایشی و جعلی اضافه نشده است.</span></div></section>'
   ].join('');
 }
 async function protocols(renderToken=window.__viewRenderToken){
@@ -898,14 +917,14 @@ async function submitXrayTunnel(){const payload={name:tnName.value.trim(),listen
 
 async function installProtocol(component){if(!confirm('Install '+component+' and required packages?'))return;try{await api('/api/protocols/install',{method:'POST',body:JSON.stringify({component})});toast(component+' installed');await protocols()}catch(e){alert(e.message)}}
 function showXrayInbounds(){document.querySelector('.protocol-grid')?.nextElementSibling?.scrollIntoView({behavior:'smooth'})}
-function createXrayInbound(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY CLIENT + INBOUND</div><h3>ساخت دسترسی Xray</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Protocol<select id="xiProtocol" onchange="syncXrayForm()"><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks</option><option value="hysteria2">Hysteria2</option><option value="http">HTTP Proxy</option><option value="socks">SOCKS5</option></select></label><label>Transport<select id="xiTransport" onchange="syncXrayForm()"><option value="tcp">RAW / TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option><option value="httpupgrade">HTTPUpgrade</option><option value="xhttp">XHTTP</option><option value="kcp">mKCP</option></select></label><label>Security<select id="xiSecurity" onchange="syncXrayForm()"><option value="none">None</option><option value="tls">TLS</option><option value="reality">REALITY</option></select></label><label>Port<input id="xiPort" type="number" min="1" max="65535" value="2087"></label><label>Client name<input id="xiName" value="client01"></label><label>Public domain / IP<input id="xiEndpoint" value="${window.PANEL_DOMAIN||location.hostname}"></label><label id="xiPathWrap">Path / Service / Seed<input id="xiPath" value="/makia"></label><label id="xiSniWrap">Domain / SNI<input id="xiSni" value="${window.PANEL_DOMAIN||''}" placeholder="vpn.example.com"></label><label id="xiRealityWrap">REALITY target<input id="xiRealityDest" value="www.cloudflare.com:443" placeholder="www.example.com:443"></label><label>Traffic quota (GB)<input id="xiQuota" type="number" min="0" step="1" value="50"><div class="password-tools quota-tools"><button class="soft" onclick="xiQuota.value=0">∞</button><button class="soft" onclick="xiQuota.value=10">10</button><button class="soft" onclick="xiQuota.value=20">20</button><button class="soft recommended" onclick="xiQuota.value=50">50</button><button class="soft" onclick="xiQuota.value=100">100</button><button class="soft" onclick="xiQuota.value=200">200</button><button class="soft" onclick="xiQuota.value=500">500</button></div><span class="muted">0 = Unlimited</span></label><label>Expiry days<input id="xiDays" type="number" min="0" max="3650" value="30"><div class="password-tools duration-tools"><button class="soft" onclick="xiDays.value=1">1D</button><button class="soft" onclick="xiDays.value=3">3D</button><button class="soft" onclick="xiDays.value=7">7D</button><button class="soft" onclick="xiDays.value=15">15D</button><button class="soft recommended" onclick="xiDays.value=30">30D</button><button class="soft" onclick="xiDays.value=60">60D</button><button class="soft" onclick="xiDays.value=90">90D</button><button class="soft" onclick="xiDays.value=0">∞</button></div></label><label>Traffic reset cycle<input id="xiResetDays" type="number" min="0" max="3650" value="30"><div class="password-tools"><button class="soft" onclick="xiResetDays.value=0">Never</button><button class="soft" onclick="xiResetDays.value=7">7D</button><button class="soft recommended" onclick="xiResetDays.value=30">30D</button><button class="soft" onclick="xiResetDays.value=60">60D</button><button class="soft" onclick="xiResetDays.value=90">90D</button></div><span class="muted">حجم مصرفی در شروع هر دوره صفر می‌شود.</span></label><label>IP / Device limit<input id="xiIpLimit" type="number" min="1" max="50" value="1"><div class="password-tools"><button class="soft recommended" onclick="xiIpLimit.value=1">1</button><button class="soft" onclick="xiIpLimit.value=2">2</button><button class="soft" onclick="xiIpLimit.value=3">3</button><button class="soft" onclick="xiIpLimit.value=5">5</button><button class="soft" onclick="xiIpLimit.value=10">10</button></div><span class="muted">با Online-IP API هسته Xray مانیتور و توسط Policy Worker enforce می‌شود؛ روی Coreهای فاقد این API فقط وضعیت Unavailable نشان داده می‌شود.</span></label></div><div id="xiCompatNote" class="notice"></div><div class="toolbar"><button class="primary" onclick="submitXrayInbound()">Create, Validate & Restart</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`;syncXrayForm()}
+function createXrayInbound(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY CLIENT + INBOUND</div><h3>ساخت دسترسی Xray</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Protocol<select id="xiProtocol" onchange="syncXrayForm()"><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks</option><option value="hysteria2">Hysteria2</option><option value="http">HTTP Proxy</option><option value="socks">SOCKS5</option></select></label><label>Transport<select id="xiTransport" onchange="syncXrayForm()"><option value="tcp">RAW / TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option><option value="httpupgrade">HTTPUpgrade</option><option value="xhttp">XHTTP</option><option value="kcp">mKCP</option></select></label><label>Security<select id="xiSecurity" onchange="syncXrayForm()"><option value="none">None</option><option value="tls">TLS</option><option value="reality">REALITY</option></select></label><label>Port<input id="xiPort" type="number" min="1" max="65535" value="2087"></label><label>Client name<input id="xiName" value="client01"></label><label>Public domain / IP<input id="xiEndpoint" value="${window.PANEL_DOMAIN||location.hostname}"></label><label id="xiPathWrap">Path / Service<input id="xiPath" value="/makia"></label><label id="xiSniWrap">Domain / SNI<input id="xiSni" value="${window.PANEL_DOMAIN||''}" placeholder="vpn.example.com"></label><label id="xiRealityWrap">REALITY target<input id="xiRealityDest" value="www.cloudflare.com:443" placeholder="www.example.com:443"></label><label>Traffic quota (GB)<input id="xiQuota" type="number" min="0" step="1" value="50"><div class="password-tools quota-tools"><button class="soft" onclick="xiQuota.value=0">∞</button><button class="soft" onclick="xiQuota.value=10">10</button><button class="soft" onclick="xiQuota.value=20">20</button><button class="soft recommended" onclick="xiQuota.value=50">50</button><button class="soft" onclick="xiQuota.value=100">100</button><button class="soft" onclick="xiQuota.value=200">200</button><button class="soft" onclick="xiQuota.value=500">500</button></div><span class="muted">0 = Unlimited</span></label><label>Expiry days<input id="xiDays" type="number" min="0" max="3650" value="30"><div class="password-tools duration-tools"><button class="soft" onclick="xiDays.value=1">1D</button><button class="soft" onclick="xiDays.value=3">3D</button><button class="soft" onclick="xiDays.value=7">7D</button><button class="soft" onclick="xiDays.value=15">15D</button><button class="soft recommended" onclick="xiDays.value=30">30D</button><button class="soft" onclick="xiDays.value=60">60D</button><button class="soft" onclick="xiDays.value=90">90D</button><button class="soft" onclick="xiDays.value=0">∞</button></div></label><label>Traffic reset cycle<input id="xiResetDays" type="number" min="0" max="3650" value="30"><div class="password-tools"><button class="soft" onclick="xiResetDays.value=0">Never</button><button class="soft" onclick="xiResetDays.value=7">7D</button><button class="soft recommended" onclick="xiResetDays.value=30">30D</button><button class="soft" onclick="xiResetDays.value=60">60D</button><button class="soft" onclick="xiResetDays.value=90">90D</button></div><span class="muted">حجم مصرفی در شروع هر دوره صفر می‌شود.</span></label><label>IP / Device limit<input id="xiIpLimit" type="number" min="1" max="50" value="1"><div class="password-tools"><button class="soft recommended" onclick="xiIpLimit.value=1">1</button><button class="soft" onclick="xiIpLimit.value=2">2</button><button class="soft" onclick="xiIpLimit.value=3">3</button><button class="soft" onclick="xiIpLimit.value=5">5</button><button class="soft" onclick="xiIpLimit.value=10">10</button></div><span class="muted">با Online-IP API هسته Xray مانیتور و توسط Policy Worker enforce می‌شود؛ روی Coreهای فاقد این API فقط وضعیت Unavailable نشان داده می‌شود.</span></label></div><div id="xiCompatNote" class="notice"></div><div class="toolbar"><button class="primary" onclick="submitXrayInbound()">Create, Validate & Restart</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`;syncXrayForm()}
 function syncXrayForm(){
   const p=xiProtocol.value;
   if(p==='hysteria2'){xiTransport.value='tcp';xiSecurity.value='tls';xiTransport.disabled=true;xiSecurity.disabled=true}
   else if(['http','socks'].includes(p)){xiTransport.value='tcp';xiSecurity.value='none';xiTransport.disabled=true;xiSecurity.disabled=true}
   else{xiTransport.disabled=false;xiSecurity.disabled=false}
   const t=p==='hysteria2'?'hysteria':xiTransport.value,s=p==='hysteria2'?'tls':xiSecurity.value;
-  const pathNeeded=['ws','grpc','httpupgrade','xhttp','kcp'].includes(t)&&!['http','socks'].includes(p);
+  const pathNeeded=['ws','grpc','httpupgrade','xhttp'].includes(t)&&!['http','socks'].includes(p);
   xiPathWrap.style.display=pathNeeded?'block':'none';
   xiSniWrap.style.display=(s==='tls'||s==='reality')&&!['http','socks'].includes(p)?'block':'none';
   xiRealityWrap.style.display=s==='reality'?'block':'none';
@@ -921,6 +940,7 @@ function syncXrayForm(){
   else if(s==='reality'&&!['tcp','grpc','xhttp'].includes(t)) note='REALITY با این Transport مجاز نیست؛ RAW/TCP، gRPC یا XHTTP انتخاب کن.';
   else if(p==='shadowsocks'&&s!=='none') note='Shadowsocks Quick Profile با TLS/REALITY ترکیب نمی‌شود.';
   else if(p==='shadowsocks') note='Traffic quota مستقل برای Shadowsocks Quick Profile در این نسخه قابل enforce نیست.';
+  else if(t==='kcp') note='mKCP روی Xray 26.3.27 بدون header/seed قدیمی ساخته می‌شود؛ گزینه‌های حذف‌شده‌ی Core در Guided mode نمایش داده نمی‌شوند.';
   else if(s==='tls') note='TLS نیاز به Certificate معتبر همان SNI در Settings → Domain & TLS دارد.';
   else if(s==='reality') note='Makia کلید X25519 و Short ID را سمت سرور تولید می‌کند.';
   else note='Config قبل از Apply توسط خود Xray validate می‌شود و در Failure نسخه قبلی Rollback می‌شود.';
@@ -1093,6 +1113,41 @@ async function repairOpenVPNRuntime(){
   try{await api('/api/protocols/openvpn/repair',{method:'POST'});toast('OpenVPN runtime repaired');await openOpenVPNDiagnostics()}catch(e){alert('OpenVPN repair: '+e.message)}
 }
 
+async function openOpenVPNConfigure(){
+  try{
+    const stack=await api('/api/protocols'),engine=stack.openvpn||{},o=engine.options||{};
+    const proto=String(o.proto||engine.proto||'udp').startsWith('tcp')?'tcp':'udp';
+    const dns=Array.isArray(o.dns)?o.dns:['1.1.1.1','8.8.8.8'];
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal engine-config-modal">',
+        '<div class="wizard-head"><div><div class="eyebrow">OPENVPN SERVER</div><h3>تنظیمات پیشرفته OpenVPN</h3><p>تغییرها با Backup، Restart و Runtime verification اعمال می‌شوند.</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+        '<div class="engine-mode-switch"><label class="'+(proto==='udp'?'active':'')+'"><input type="radio" name="ovpnTransport" value="udp" '+(proto==='udp'?'checked':'')+'><span>UDP</span><small>Latency کمتر، انتخاب پیش‌فرض</small></label><label class="'+(proto==='tcp'?'active':'')+'"><input type="radio" name="ovpnTransport" value="tcp" '+(proto==='tcp'?'checked':'')+'><span>TCP</span><small>برای شبکه‌هایی که UDP محدود است</small></label></div>',
+        '<div class="wizard-form two"><label>Listen Port<input id="ovpnCfgPort" type="number" min="1" max="65535" value="'+Number(o.port||engine.port||1194)+'"></label><label>Primary DNS<input id="ovpnCfgDns1" value="'+htmlEsc(dns[0]||'1.1.1.1')+'"></label><label>Secondary DNS<input id="ovpnCfgDns2" value="'+htmlEsc(dns[1]||'8.8.8.8')+'"></label><label>Ping interval<input id="ovpnCfgPing" type="number" min="1" max="3600" value="'+Number(o.keepalive_ping||10)+'"></label><label>Restart timeout<input id="ovpnCfgTimeout" type="number" min="10" max="7200" value="'+Number(o.keepalive_timeout||120)+'"></label></div>',
+        '<div class="engine-toggle-list"><label><input id="ovpnCfgRedirect" type="checkbox" '+(o.redirect_gateway!==false?'checked':'')+'><div><b>Redirect Gateway</b><small>تمام اینترنت Client از VPN عبور کند.</small></div></label><label><input id="ovpnCfgClientToClient" type="checkbox" '+(o.client_to_client?'checked':'')+'><div><b>Client-to-client</b><small>کلاینت‌های VPN بتوانند یکدیگر را ببینند؛ پیش‌فرض خاموش.</small></div></label></div>',
+        '<div class="wizard-note"><b>تغییر Transport / Port</b><span>پروفایل‌های OVPN بعدی و دانلود مجدد کاربران با Runtime جدید ساخته می‌شوند. سرویس چند ثانیه Restart می‌شود. TCP/443 با HTTPS همان IP تداخل دارد.</span></div>',
+        '<div class="wizard-footer"><button class="ghost" data-action="modal-close">انصراف</button><button class="ghost" data-action="openvpn-repair">Repair Runtime</button><button class="primary" data-action="openvpn-configure-save">اعمال تنظیمات</button></div>',
+      '</div></div>'
+    ].join('');
+    document.querySelectorAll('input[name="ovpnTransport"]').forEach(x=>x.addEventListener('change',()=>document.querySelectorAll('.engine-mode-switch label').forEach(l=>l.classList.toggle('active',l.contains(x)&&x.checked))));
+  }catch(e){alert('OpenVPN settings: '+e.message)}
+}
+async function saveOpenVPNConfigure(){
+  const payload={
+    port:Number(document.getElementById('ovpnCfgPort')?.value||1194),
+    proto:document.querySelector('input[name="ovpnTransport"]:checked')?.value||'udp',
+    dns_servers:[document.getElementById('ovpnCfgDns1')?.value,document.getElementById('ovpnCfgDns2')?.value].filter(Boolean),
+    keepalive_ping:Number(document.getElementById('ovpnCfgPing')?.value||10),
+    keepalive_timeout:Number(document.getElementById('ovpnCfgTimeout')?.value||120),
+    redirect_gateway:Boolean(document.getElementById('ovpnCfgRedirect')?.checked),
+    client_to_client:Boolean(document.getElementById('ovpnCfgClientToClient')?.checked)
+  };
+  if(!confirm('OpenVPN با '+payload.proto.toUpperCase()+'/'+payload.port+' بازتنظیم و Restart شود؟'))return;
+  try{
+    await api('/api/protocols/openvpn/configure',{method:'POST',body:JSON.stringify(payload)});
+    toast('OpenVPN server updated');closeModal();window.__protocolData=await api('/api/protocols');if(activeView==='openvpn')await openvpnWorkspace(window.__viewRenderToken);
+  }catch(e){alert('OpenVPN configure: '+e.message)}
+}
+
 async function services(renderToken=window.__viewRenderToken){
   title.textContent='مدیریت سرویس‌ها';setPageContext('SERVICE MANAGEMENT');
   const [d,pstack]=await Promise.all([api('/api/overview'),api('/api/protocols').catch(()=>({}))]);
@@ -1113,30 +1168,13 @@ async function services(renderToken=window.__viewRenderToken){
 }
 async function svc(n,a){try{await api('/api/services/'+n+'/'+a,{method:'POST'});await services()}catch(e){alert(e.message)}}
 async function security(renderToken=window.__viewRenderToken){
-  title.textContent='Admin Security';setPageContext('ADMIN SECURITY');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی امنیت مدیریت…</b></div>';
-  const [sec,two,general,self]=await Promise.all([
-    api('/api/security'),api('/api/admin/2fa/status'),
-    api('/api/settings/general').catch(()=>({})),api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0}))
-  ]);
+  title.textContent='Security Center';setPageContext('DEFENSE LAYER');
+  const [sec,two]=await Promise.all([api('/api/security'),api('/api/admin/2fa/status')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='security')return;
-  const https=location.protocol==='https:';
-  const items=[
-    ['Firewall','UFW',Boolean(sec.ufw?.active),'کنترل Portهای ورودی'],
-    ['Brute-force','Fail2ban',Boolean(sec.fail2ban?.active),'محافظت SSH و Login'],
-    ['Admin MFA','TOTP / 2FA',Boolean(two.enabled),'ورود دومرحله‌ای مدیریت'],
-    ['Panel TLS','HTTPS',https,'رمزگذاری نشست مدیریت'],
-    ['Runtime gate','Self-Test',Boolean(self.ok),'سلامت Backend و Crypto']
-  ];
-  const score=items.filter(x=>x[2]).length;
-  content.innerHTML=[
-    '<div class="pro-page security-v026">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">ADMIN HARDENING</span><h1>Admin Security</h1><p>کنترل‌های امنیتی مهم مدیریت، بدون شلوغی تنظیمات پراکنده.</p></div><div class="security-score '+(score>=4?'ok':'warn')+'"><b>'+score+'/'+items.length+'</b><span>Security controls</span></div></section>',
-      '<section class="security-modern-grid">'+items.map(x=>'<article><div class="security-icon">'+(x[2]?'✓':'!')+'</div><div><b>'+x[0]+'</b><span>'+x[1]+'</span><small>'+x[3]+'</small></div><em class="'+(x[2]?'ok':'warn')+'">'+(x[2]?'Active':'Attention')+'</em></article>').join('')+'</section>',
-      '<section class="panel security-actions-v026"><div><h3>اقدام‌های پیشنهادی</h3><p>تنظیمات حساس فقط برای مدیر Local قابل تغییر هستند و در Audit ثبت می‌شوند.</p></div><div class="toolbar"><button class="primary" data-action="nav-settings" data-view="settings" data-tab="security">'+(two.enabled?'مدیریت 2FA':'فعال‌سازی 2FA')+'</button><button class="ghost" data-action="self-test">Self-Test</button><button class="ghost" data-action="nav" data-view="audit">Audit Logs</button><button class="ghost" data-action="nav-settings" data-view="settings" data-tab="api">API Tokens</button></div></section>',
-      '<section class="security-note"><b>Production checklist</b><span>'+(https?'HTTPS فعال است.':'پنل اکنون بدون HTTPS باز شده؛ برای انتشار عمومی، Domain + TLS را در تنظیمات فعال کن.')+' Session timeout، 2FA، Fail2ban و محدودیت CIDR مدیریت را نیز بررسی کن.</span></section>',
-    '</div>'
-  ].join('');
+  const card=(name,x)=>'<div class="security-control"><div><b>'+htmlEsc(name)+'</b><span>'+htmlEsc(x.installed?(x.active?'Active':'Installed / attention'):'Not installed')+'</span></div><i class="'+(x.active?'ok':'warn')+'">'+(x.active?'✓':'!')+'</i></div>';
+  const score=[sec.ufw.active,sec.fail2ban.active,sec.ssh.active,two.enabled].filter(Boolean).length;
+  content.innerHTML=viewIntro('DEFENSE LAYER','وضعیت امنیت','کنترل‌های اصلی Host و ورود مدیر را یکجا بررسی کن.','<div class="view-intro-stat"><b>'+score+'/4</b><span>CONTROLS</span></div>')+
+  '<div class="panel"><div class="security-control-grid">'+card('UFW Firewall',sec.ufw)+card('Fail2ban',sec.fail2ban)+card('OpenSSH',sec.ssh)+'<div class="security-control"><div><b>Admin 2FA</b><span>'+(two.enabled?'Authenticator enabled':'Setup recommended')+'</span></div><i class="'+(two.enabled?'ok':'warn')+'">'+(two.enabled?'✓':'!')+'</i></div></div><div class="wizard-note"><b>SSH PIN</b><span>PIN چهاررقمی برای کاربران اختیاری است؛ Fail2ban و محدودسازی شبکه برای سرویس عمومی توصیه می‌شود.</span></div><div class="toolbar" style="margin-top:14px"><button class="primary" data-action="nav" data-view="settings">'+(two.enabled?'Manage 2FA':'Enable 2FA')+'</button><button class="ghost" data-action="self-test">Run Self-Test</button></div></div>';
 }
 async function backups(renderToken=window.__viewRenderToken){
   title.textContent='Backups';setPageContext('RECOVERY');
@@ -1163,47 +1201,58 @@ async function auditView(renderToken=window.__viewRenderToken){
 }
 async function updates(renderToken=window.__viewRenderToken){title.textContent='Update Center';setPageContext('RELEASE MANAGEMENT');content.innerHTML='<div class="empty">در حال بررسی نسخه…</div>';let s;try{s=await api('/api/update/status')}catch(e){s={current:window.MAKIA_VERSION,latest:null,error:e.message}}if(renderToken!==window.__viewRenderToken||activeView!=='updates')return;const available=s.update_available;content.innerHTML=`<div class="panel update-hero"><div><div class="eyebrow">RELEASE CHANNEL · MAIN</div><h2>${available?'نسخه جدید آماده است':'Makia به‌روز است'}</h2><p class="muted">${s.error?'بررسی آنلاین نسخه ناموفق بود: '+s.error:'نسخه نصب‌شده با VERSION مخزن اصلی مقایسه شد.'}</p></div><div class="version-stack"><span>Installed</span><b>v${s.current||window.MAKIA_VERSION}</b><span>Latest</span><b class="${available?'accent':''}">${s.latest?'v'+s.latest:'Unavailable'}</b></div></div><div class="two-col"><div class="panel"><div class="panel-head"><h3>Safe update workflow</h3><span>CLI VERIFIED PATH</span></div><div class="timeline"><div><b>1</b><span>Pre-update backup</span></div><div><b>2</b><span>Download main</span></div><div><b>3</b><span>Dependencies + service files</span></div><div><b>4</b><span>Restart + health check</span></div></div><div class="command-box">sudo makia-upgrade <button class="soft" onclick="copyText('sudo makia-upgrade')">Copy</button></div></div><div class="panel"><div class="panel-head"><h3>Release status</h3><span>${available?'ACTION AVAILABLE':'NO ACTION'}</span></div><div class="quick-grid"><div class="quick-card"><b>${s.current||'-'}</b><span>Current</span></div><div class="quick-card"><b>${s.latest||'-'}</b><span>Latest on GitHub</span></div></div><div class="notice">مسیر امن فعلی CLI است. v0.15 از Release Archive خصوصی و Bearer Token از فایل root-only /etc/makia-vps-manager/makia.env هم پشتیبانی می‌کند؛ بنابراین بعد از مهاجرت می‌توان مخزن را Private کرد.</div></div></div>`}
 async function guides(renderToken=window.__viewRenderToken){
-  title.textContent='راهنمای اتصال';setPageContext('CLIENT ONBOARDING');
+  title.textContent='Client Guides';setPageContext('DELIVERY EDUCATION');
   if(renderToken!==window.__viewRenderToken||activeView!=='guides')return;
   const cards=[
-    ['xray','Xray / V2Ray','/static/guides/xray.svg','QR · Share Link · Subscription','VLESS، VMess، Trojan، Shadowsocks و Hysteria2'],
-    ['wireguard','WireGuard','/static/guides/wireguard.svg','QR · Native .conf','برنامه رسمی WireGuard روی Android، iOS، Windows و macOS'],
-    ['openvpn','OpenVPN','/static/guides/openvpn.svg','.ovpn profile','Import در OpenVPN Connect؛ Transport از Server Profile می‌آید'],
-    ['ssh','SSH / NPV','/static/guides/ssh.svg','NPV QR · SSH credentials','Import در NPV یا اتصال دستی SSH']
+    ['xray','Xray','VLESS / VMess / Trojan / Shadowsocks / Hysteria2','QR مستقیم، Import from Clipboard و Subscription برای v2rayNG / Hiddify / NekoBox و کلاینت‌های سازگار.'],
+    ['wireguard','WireGuard','.conf / QR','Import فایل Native یا اسکن QR با برنامه رسمی WireGuard.'],
+    ['openvpn','OpenVPN','.ovpn','Import فایل OVPN با OpenVPN Connect روی موبایل و دسکتاپ.'],
+    ['ssh','SSH / NPV','npvt-ssh / Credentials','Import لینک/QR در NPV Tunnel سازگار یا ورود دستی SSH با Server/User/Password.']
   ];
   content.innerHTML=[
-    '<div class="pro-page">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">VISUAL CLIENT GUIDE</span><h1>راهنمای اتصال</h1><p>آموزش تصویری و مرحله‌ای برای کاربری که هیچ تجربه‌ای از VPN Client ندارد.</p></div><div class="pro-head-actions"><a class="primary link-btn" target="_blank" rel="noopener" href="/help/connect">باز کردن صفحه عمومی</a></div></section>',
-      '<section class="guide-visual-grid">'+cards.map(x=>'<article class="guide-visual-card"><img src="'+x[2]+'" alt="'+x[1]+' connection steps"><div><span class="pro-kicker">'+x[3]+'</span><h3>'+x[1]+'</h3><p>'+x[4]+'</p><div class="toolbar"><button class="primary" data-action="client-guide" data-kind="'+x[0]+'">راهنمای کامل</button><button class="ghost" data-action="client-guide-copy" data-kind="'+x[0]+'">کپی لینک</button></div></div></article>').join('')+'</section>',
-    '</div>'
+    viewIntro('CLIENT ONBOARDING','راهنمای اتصال کاربران','این صفحه لینک عمومی و قابل‌ارسال راهنماها را می‌سازد؛ Credential کاربران داخل لینک راهنما قرار نمی‌گیرد.','<a class="primary link-btn" target="_blank" rel="noopener" href="/help/connect">باز کردن راهنمای عمومی</a>'),
+    '<section class="guide-admin-grid">'+cards.map(x=>'<article class="guide-admin-card"><div class="guide-admin-head">'+protocolGlyph(x[0])+'<div><b>'+x[1]+'</b><small>'+x[2]+'</small></div></div><p>'+x[3]+'</p><div class="toolbar"><button class="primary" data-action="client-guide" data-kind="'+x[0]+'">راهنمای تصویری</button><button class="ghost" data-action="client-guide-copy" data-kind="'+x[0]+'">کپی لینک راهنما</button></div></article>').join('')+'</section>',
+    '<section class="panel"><div class="panel-head"><div><h3>روش پیشنهادی تحویل</h3><span>LESS SUPPORT TICKETS</span></div></div><div class="guide-flow"><div><b>1</b><span>از Access Center QR/Link/File همان کاربر را بفرست.</span></div><div><b>2</b><span>لینک Guide همان پروتکل را همراه آن ارسال کن.</span></div><div><b>3</b><span>برای Xray، Client Page و Subscription روش ساده‌تر برای کاربر نهایی هستند.</span></div><div><b>4</b><span>در صورت خطا، کاربر فقط نام برنامه، سیستم‌عامل و متن Error را بفرستد؛ Credential را در گروه عمومی نفرستد.</span></div></div></section>'
   ].join('');
 }
+
 async function supportCenter(renderToken=window.__viewRenderToken){
-  title.textContent='پشتیبانی';setPageContext('SUPPORT');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال آماده‌سازی مرکز پشتیبانی…</b></div>';
-  const [requests,session,grants,self]=await Promise.all([
+  title.textContent='Help & Support';setPageContext('HELP & DIAGNOSTICS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال آماده‌سازی مرکز راهنما…</b></div>';
+  const [requests,session,grants,self,stack]=await Promise.all([
     api('/api/support/requests').catch(()=>({items:[],support:{}})),
     ensureSessionContext(true).catch(()=>({remote_support:false})),
     api('/api/support/grants').catch(()=>({items:[]})),
-    api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0}))
+    api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0,summary:'Unavailable'})),
+    api('/api/protocols').catch(()=>({}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='support')return;
-  const support=requests.support||{},recent=(requests.items||[]).slice(0,5);
+  const support=requests.support||{},items=requests.items||[];
+  const engines=[
+    ['Xray',Boolean(stack.xray?.service_active),'xray'],
+    ['WireGuard',Boolean(stack.wireguard?.service_active),'wireguard'],
+    ['OpenVPN',Boolean(stack.openvpn?.service_active),'openvpn']
+  ];
+  const recent=items.slice(0,6).map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip '+(x.delivery_status==='webhook'?'ok':'')+'">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join('');
+  const grantsHtml=(grants.items||[]).slice(0,5).map(g=>'<div class="support-grant-row"><div><b>…'+htmlEsc(g.token_last4)+'</b><small>'+htmlEsc(g.scope)+' · '+htmlEsc(new Date(Number(g.expires_at)*1000).toLocaleString())+'</small></div>'+(g.active?'<button class="danger" data-action="support-grant-revoke" data-id="'+Number(g.id)+'">لغو</button>':'<span class="status-chip">Closed</span>')+'</div>').join('');
   content.innerHTML=[
-    '<div class="pro-page support-v026">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">HELP CENTER</span><h1>پشتیبانی Makia</h1><p>راهنما، Diagnostics و ثبت درخواست؛ ابزار Remote Support فقط در بخش پیشرفته قرار دارد.</p></div><div class="pro-head-actions"><span class="status-chip '+(self.ok?'ok':'warn')+'">'+(self.ok?'System healthy':'Needs attention')+'</span></div></section>',
-      '<section class="support-quick-grid">',
-        '<button data-action="self-test"><span>✓</span><div><b>بررسی سلامت</b><small>Self-Test و Diagnostics داخلی</small></div></button>',
-        '<button data-action="nav" data-view="guides"><span>?</span><div><b>راهنمای تصویری</b><small>آموزش اتصال همه پروتکل‌ها</small></div></button>',
-        '<button data-action="nav" data-view="audit"><span>▤</span><div><b>گزارش خطاها</b><small>Audit و رخدادهای مدیریتی</small></div></button>',
-        '<button data-action="nav" data-view="connectivity"><span>◉</span><div><b>Connectivity Lab</b><small>بررسی Runtime و Portها</small></div></button>',
+    '<div class="pro-page support-v26">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">HELP CENTER</span><h1>راهنما و پشتیبانی</h1><p>اول وضعیت سیستم را ببین، بعد راهنمای اتصال یا مسیر گزارش مشکل را انتخاب کن.</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">اجرای Self-Test</button><button class="primary" data-action="nav" data-view="guides">راهنمای اتصال</button></div></section>',
+      '<section class="support-health-strip"><article class="'+(self.ok?'ok':'warn')+'"><span>●</span><div><b>System check</b><small>'+htmlEsc(self.summary||'Unknown')+' · '+Number(self.critical||0)+' critical · '+Number(self.warnings||0)+' warning</small></div></article>'+engines.map(x=>'<article class="'+(x[1]?'ok':'warn')+'"><span>'+protocolGlyph(x[2])+'</span><div><b>'+x[0]+'</b><small>'+(x[1]?'Runtime active':'Needs attention')+'</small></div></article>').join('')+'</section>',
+      '<section class="support-action-grid">',
+        '<button data-action="nav" data-view="connectivity"><span class="support-action-icon">⌁</span><div><b>Connectivity Lab</b><small>Endpoint، Port، Runtime و تست آماده‌سازی شبکه</small></div><i>←</i></button>',
+        '<button data-action="nav" data-view="guides"><span class="support-action-icon">?</span><div><b>راهنمای تصویری</b><small>مراحل Xray، WireGuard، OpenVPN و SSH/NPV</small></div><i>←</i></button>',
+        '<button data-action="nav" data-view="updates"><span class="support-action-icon">↻</span><div><b>Update Center</b><small>نسخه نصب‌شده و بروزرسانی رسمی</small></div><i>←</i></button>',
+        '<a href="https://github.com/mahanneo/Makia-VPS-Manager/issues" target="_blank" rel="noopener"><span class="support-action-icon">GH</span><div><b>GitHub Issues</b><small>گزارش Bug عمومی و قابل پیگیری</small></div><i>↗</i></a>',
       '</section>',
-      '<section class="support-main-grid"><article class="panel"><div class="panel-head"><div><h3>ثبت درخواست</h3><span>SUPPORT TICKET</span></div></div><label class="single-label">موضوع<input id="supportSubject" maxlength="160" placeholder="مثلاً: خطا در ساخت Xray"></label><label class="single-label">توضیحات<textarea id="supportMessage" rows="5" placeholder="نسخه، پروتکل، متن خطا و کاری که انجام دادی…"></textarea></label><div class="toolbar"><button class="primary" data-action="support-submit">ارسال درخواست</button>'+(support.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram</button>':'')+'</div></article>',
-      '<article class="panel"><div class="panel-head"><div><h3>درخواست‌های اخیر</h3><span>'+recent.length+' TICKETS</span></div></div><div class="support-ticket-list">'+(recent.length?recent.map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join(''):'<div class="empty compact">هنوز درخواستی ثبت نشده است.</div>')+'</div></article></section>',
-      '<details class="support-advanced"><summary><div><b>Remote Support پیشرفته</b><span>فقط هنگام نیاز و با رضایت مدیر</span></div><em>باز کردن</em></summary><div class="support-advanced-body">'+(!session.remote_support?'<div class="form-grid two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option></select></label><label>سطح دسترسی<select id="supportGrantScope"><option value="readonly" selected>Read-only</option><option value="operator">Operator</option></select></label></div><p>کد یک‌بارمصرف است و هر عملیات در Audit ثبت می‌شود.</p><button class="danger" data-action="support-grant-create">ساخت کد موقت</button>':'<div class="security-note"><b>Remote Support فعال است</b><span>برای پایان جلسه از Banner بالای پنل استفاده کن.</span></div>')+'</div></details>',
+      (support.telegram_url?'<section class="support-channel"><div><span class="pro-kicker">DIRECT SUPPORT</span><h3>ارتباط مستقیم</h3><p>کانال پشتیبانی توسط Owner این نصب تنظیم شده است.</p></div><button class="primary" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram @'+htmlEsc(support.telegram_username||'support')+'</button></section>':''),
+      '<details class="pro-advanced support-advanced"><summary><span>ارسال گزارش مشکل</span><small>ثبت Ticket همراه با توضیح خطا</small></summary><div class="support-report-form"><div class="wizard-form one"><label>موضوع<input id="supportSubject" maxlength="160" placeholder="مثلاً: OpenVPN روی TCP وصل نمی‌شود"></label><label>توضیحات<textarea id="supportMessage" rows="5" placeholder="سیستم‌عامل، Client، پروتکل و متن خطا را بنویس. Credential کامل را ارسال نکن."></textarea></label></div><div class="settings-actions"><button class="primary" data-action="support-submit">ثبت گزارش</button></div></div></details>',
+      (!session.remote_support?'<details class="pro-advanced support-advanced"><summary><span>دسترسی موقت پشتیبانی</span><small>Advanced · فقط با رضایت مدیر</small></summary><div class="remote-support-create"><div><p>در صورت نیاز به بررسی مستقیم، یک کد یک‌بارمصرف با مدت و Scope محدود بساز.</p><div class="wizard-form two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option><option value="120">120 دقیقه</option></select></label><label>Scope<select id="supportGrantScope"><option value="readonly" selected>Read-only</option><option value="operator">Operator</option></select></label></div><button class="primary" data-action="support-grant-create">ساخت کد یک‌بارمصرف</button></div><div class="support-grant-list">'+(grantsHtml||'<div class="empty compact">کد فعالی وجود ندارد.</div>')+'</div></div></details>':'<div class="wizard-note danger-note"><b>Remote Support فعال</b><span>این Session موقت است و عملیات هویتی حساس محدود شده‌اند.</span></div>'),
+      (recent?'<details class="pro-advanced support-advanced"><summary><span>گزارش‌های اخیر</span><small>'+items.length+' مورد ثبت‌شده</small></summary><div class="support-ticket-list">'+recent+'</div></details>':''),
     '</div>'
   ].join('');
 }
+
 async function createRemoteSupportGrant(){
   const minutes=Number(document.getElementById('supportGrantMinutes')?.value||30),scope=document.getElementById('supportGrantScope')?.value||'operator';
   try{
@@ -1227,12 +1276,13 @@ async function submitSupportRequest(){
 
 async function settings(renderToken=window.__viewRenderToken){
   title.textContent='Settings';setPageContext('PANEL CONFIGURATION');
-  const [general,two,tokens,operator,backupRows]=await Promise.all([
+  const [general,two,tokens,operator,backupRows,sec]=await Promise.all([
     api('/api/settings/general'),
     api('/api/admin/2fa/status').catch(()=>({enabled:false,configured:false,restricted:true})),
     api('/api/admin/tokens').catch(()=>[]),
     api('/api/settings/operator'),
-    api('/api/backups').catch(()=>[])
+    api('/api/backups').catch(()=>[]),
+    api('/api/security').catch(()=>({ufw:{installed:false,active:false},fail2ban:{installed:false,active:false},ssh:{installed:true,active:true}}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='settings')return;
   window.PANEL_DOMAIN=general.panel_domain||'';window.__operatorSettings=operator;
@@ -1261,9 +1311,9 @@ async function settings(renderToken=window.__viewRenderToken){
   }else if(tab==='domain'){
     body=[
       '<section class="settings-section-head"><div><div class="eyebrow">PUBLIC PANEL EDGE</div><h2>Panel Domain / Nginx / HTTPS</h2><p>Domain، Nginx و Let\'s Encrypt با validation و rollback واقعی مدیریت می‌شوند.</p></div></section>',
-      '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Configured domain</span><b>'+htmlEsc(general.panel_domain||'IP Mode')+'</b></div><div><span>DNS IPv4</span><b>'+htmlEsc(ds.resolved_ipv4?.length?ds.resolved_ipv4.join(', '):'Not resolved')+'</b></div><div><span>Certificate</span><b class="'+(ds.certificate&&Number(ds.certificate_days_left??99)>14?'ok-text':'warn-text')+'">'+(ds.certificate?('Installed'+(ds.certificate_days_left!==null&&ds.certificate_days_left!==undefined?' · '+Number(ds.certificate_days_left)+'d':'')):'Not installed')+'</b></div><div><span>Certbot</span><b>'+(ds.certbot_installed?'Ready':'Will install on demand')+'</b></div></div>',
+      '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Configured domain</span><b>'+htmlEsc(general.panel_domain||'IP Mode')+'</b></div><div><span>DNS IPv4</span><b class="'+(ds.dns_matches_server===false?'warn-text':'')+'">'+htmlEsc(ds.resolved_ipv4?.length?ds.resolved_ipv4.join(', '):'Not resolved')+'</b></div><div><span>DNS → this VPS</span><b class="'+(ds.dns_matches_server===false?'warn-text':ds.dns_matches_server===true?'ok-text':'')+'">'+(ds.dns_matches_server===true?'MATCH':ds.dns_matches_server===false?'MISMATCH':'UNVERIFIED')+'</b></div><div><span>Certificate</span><b class="'+(ds.certificate&&Number(ds.certificate_days_left??-1)>14?'ok-text':'warn-text')+'">'+(ds.certificate?('Installed'+(ds.certificate_days_left!==null&&ds.certificate_days_left!==undefined?' · '+Number(ds.certificate_days_left)+'d':'')):'Not installed')+'</b></div><div><span>Nginx</span><b class="'+(ds.nginx_active&&ds.nginx_config_ok?'ok-text':'warn-text')+'">'+(ds.nginx_active&&ds.nginx_config_ok?'ACTIVE / VALID':'CHECK REQUIRED')+'</b></div><div><span>Listeners</span><b>'+(ds.http_listener?'80✓':'80—')+' · '+(ds.https_listener?'443✓':'443—')+'</b></div><div><span>Certbot</span><b>'+(ds.certbot_installed?'Ready':'Will install on demand')+'</b></div></div>',
       '<div class="settings-form-grid two"><label>Panel Domain<input id="domainName" value="'+htmlEsc(general.panel_domain||'')+'" placeholder="panel.example.com"></label><label>Let\'s Encrypt email<input id="tlsEmail" type="email" placeholder="admin@example.com"></label></div>',
-      '<div class="wizard-note"><b>DNS gate</b><span>قبل از صدور HTTPS، رکورد A دامنه باید به همین VPS اشاره کند. Apply Nginx قبل از reload با nginx -t بررسی و در خطا rollback می‌شود.</span></div>',
+      '<div class="wizard-note"><b>DNS gate</b><span>Issue / Renew ابتدا DNS را با IPv4 همین VPS تطبیق می‌دهد، Domain را روی Nginx اعمال می‌کند، سپس Certbot را اجرا می‌کند؛ nginx -t و Listener 443 تأیید می‌شوند و در خطا تنظیم Nginx rollback می‌شود.</span></div>',
       '<div class="settings-actions"><button class="ghost" data-action="settings-domain-apply">Apply domain to Nginx</button><button class="primary" data-action="settings-cert-issue">Issue / Renew HTTPS</button></div></div>'
     ].join('');
   }else if(tab==='ssh'){
@@ -1275,13 +1325,14 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save SSH defaults</button></div></div>'
     ].join('');
   }else if(tab==='xray'){
+    const xspec=xrayProfileSpec(defs.xray_protocol||'vless'),xtransport=xspec.transports.includes(defs.xray_transport)?defs.xray_transport:xspec.preset[0],xsecurity=xspec.security.includes(defs.xray_security)?defs.xray_security:xspec.preset[1];
     body=[
       '<section class="settings-section-head"><div><div class="eyebrow">PROVISIONING DEFAULTS</div><h2>Xray Defaults</h2><p>Defaultهای واقعی ساخت Client برای VLESS / VMess / Trojan / Shadowsocks / Hysteria2.</p></div></section>',
       '<div class="settings-card-v2"><div class="settings-form-grid">',
       '<label>Protocol<select id="opXrayProtocol">'+['vless','vmess','trojan','shadowsocks','hysteria2','http','socks'].map(x=>'<option value="'+x+'" '+(defs.xray_protocol===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
       '<label>Port<input id="opXrayPort" type="number" min="1" max="65535" value="'+Number(defs.xray_port||2087)+'"></label>',
-      '<label>Transport<select id="opXrayTransport">'+['tcp','ws','grpc','httpupgrade','xhttp','kcp'].map(x=>'<option value="'+x+'" '+(defs.xray_transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
-      '<label>Security<select id="opXraySecurity"><option value="reality" '+(defs.xray_security==='reality'?'selected':'')+'>REALITY</option><option value="tls" '+(defs.xray_security==='tls'?'selected':'')+'>TLS</option><option value="none" '+(defs.xray_security==='none'?'selected':'')+'>None</option></select></label>',
+      '<label>Transport<select id="opXrayTransport">'+xspec.transports.map(x=>'<option value="'+x+'" '+(xtransport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
+      '<label>Security<select id="opXraySecurity">'+xspec.security.map(x=>'<option value="'+x+'" '+(xsecurity===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
       '<label>Path / Service<input id="opXrayPath" value="'+htmlEsc(defs.xray_path||'/makia')+'"></label><label>SNI<input id="opXraySni" value="'+htmlEsc(defs.xray_sni||'www.microsoft.com')+'"></label><label>REALITY target<input id="opXrayTarget" value="'+htmlEsc(defs.xray_reality_target||'www.microsoft.com:443')+'"></label>',
       '<label>Quota GB<input id="opXrayQuota" type="number" min="0" value="'+Number(defs.xray_quota_gb??50)+'"></label><label>Expiry days<input id="opXrayDays" type="number" min="0" max="3650" value="'+Number(defs.xray_expire_days??30)+'"></label><label>IP limit<input id="opXrayIp" type="number" min="1" max="50" value="'+Number(defs.xray_ip_limit||1)+'"></label><label>Traffic reset days<input id="opXrayReset" type="number" min="0" max="3650" value="'+Number(defs.xray_reset_days??30)+'"></label></div>',
       '<div class="wizard-note"><b>Full Xray Core mode</b><span>Wizard بالا یک subset امن و ساختاریافته است. برای هر inbound/outbound/routing/fallback یا transport دیگری که Xray Core نصب‌شده پشتیبانی می‌کند از Advanced JSON استفاده کن؛ قبل از Apply با خود Xray validate و در خطا rollback می‌شود.</span></div>',
@@ -1318,11 +1369,26 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save subscription settings</button></div></div>'
     ].join('');
   }else if(tab==='security'){
+    const certValid=Boolean(ds.certificate)&&Number(ds.certificate_days_left??-1)>=0;
+    const httpsReady=location.protocol==='https:'&&certValid;
+    const activeTokens=tokens.filter(t=>t.active).length;
+    const posture=[
+      ['HTTPS',httpsReady,httpsReady?'TLS فعال روی همین Session':certValid?'Certificate نصب است اما این Session هنوز HTTPS نیست':'گواهی معتبر نصب نشده است'],
+      ['Admin 2FA',Boolean(two.enabled),two.enabled?'TOTP فعال':'فعال‌سازی توصیه می‌شود'],
+      ['UFW Firewall',Boolean(sec.ufw?.active),sec.ufw?.active?'Firewall active':sec.ufw?.installed?'Installed / inactive':'Not installed'],
+      ['Fail2ban',Boolean(sec.fail2ban?.active),sec.fail2ban?.active?'Brute-force protection active':sec.fail2ban?.installed?'Installed / inactive':'Not installed'],
+      ['OpenSSH',Boolean(sec.ssh?.active),sec.ssh?.active?'SSH daemon active':'SSH service needs attention'],
+      ['API exposure',activeTokens===0,activeTokens?activeTokens+' active token':'No active token']
+    ];
+    const healthy=posture.filter(x=>x[1]).length;
     body=[
-      '<section class="settings-section-head"><div><div class="eyebrow">ADMIN SECURITY</div><h2>Admin Security</h2><p>'+(two.restricted?'این بخش هویتی فقط برای مدیر محلی قابل تغییر است.':'Session lifetime، رمز عبور مدیر و TOTP واقعی.')+'</p></div></section>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Admin session</b><span>Signed cookie lifetime</span></div></div><div class="settings-form-grid two"><label>Session max age (minutes)<input id="opSessionMinutes" type="number" min="5" max="43200" value="'+Number(operator.session_max_age_minutes||720)+'"></label><div class="settings-inline-note"><b>'+Math.round(Number(operator.session_max_age_minutes||720)/60*10)/10+' hours</b><span>روی login بعدی اعمال می‌شود.</span></div></div><div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save session policy</button></div></div>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Administrator password</b><span>Minimum 12 characters</span></div></div><div class="settings-form-grid two"><label>Current password<input id="oldP" type="password"></label><label>New password<input id="newP" type="password" minlength="12"></label></div><div class="settings-actions"><button class="primary" data-action="settings-password-change">Change password</button></div></div>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Two-Factor Authentication</b><span>TOTP authenticator</span></div><span class="status-chip '+(two.enabled?'ok':'warn')+'">'+(two.enabled?'Enabled':'Optional')+'</span></div><div class="security-feature-row"><div><b>'+(two.enabled?'2FA is active':'Add a second factor')+'</b><span>'+(two.enabled?'Password + 6-digit TOTP is required at login.':'Google Authenticator, Microsoft Authenticator or compatible TOTP app.')+'</span></div><button class="'+(two.enabled?'danger':'primary')+'" data-action="'+(two.enabled?'settings-2fa-disable':'settings-2fa-setup')+'">'+(two.enabled?'Disable 2FA':'Enable 2FA')+'</button></div></div>'
+      '<section class="settings-section-head security-head-v26"><div><div class="eyebrow">ADMIN SECURITY</div><h2>Admin Security</h2><p>وضعیت ورود مدیر، HTTPS، Firewall، 2FA و Tokenها در یک نمای عملیاتی.</p></div><div class="security-posture-score '+(healthy>=5?'good':healthy>=3?'warn':'bad')+'"><b>'+healthy+'/'+posture.length+'</b><span>controls ready</span></div></section>',
+      (!httpsReady?'<div class="security-critical-banner"><b>پنل در حال حاضر Secure نیست</b><span>اسکرین‌شات Host با HTTP/IP باز شده است. برای استفاده عمومی Domain + HTTPS را فعال کن.</span><button class="primary" data-action="settings-tab" data-tab="domain">تنظیم HTTPS</button></div>':''),
+      '<div class="security-posture-grid">'+posture.map(x=>'<article class="'+(x[1]?'ok':'warn')+'"><i>'+(x[1]?'✓':'!')+'</i><div><b>'+x[0]+'</b><small>'+htmlEsc(x[2])+'</small></div></article>').join('')+'</div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Admin session</b><span>Signed session lifetime</span></div><span class="status-chip">'+Math.round(Number(operator.session_max_age_minutes||720)/60*10)/10+'h</span></div><div class="settings-form-grid two"><label>Session max age (minutes)<input id="opSessionMinutes" type="number" min="5" max="43200" value="'+Number(operator.session_max_age_minutes||720)+'"></label><div class="settings-inline-note"><b>Shorter is safer</b><span>برای پنل عمومی Session کوتاه‌تر و 2FA توصیه می‌شود.</span></div></div><div class="settings-actions"><button class="primary" data-action="settings-operator-save">ذخیره Session Policy</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Administrator password</b><span>حداقل 12 کاراکتر و ترجیحاً یکتا</span></div></div><div class="settings-form-grid two"><label>رمز فعلی<input id="oldP" type="password" autocomplete="current-password"></label><label>رمز جدید<input id="newP" type="password" minlength="12" autocomplete="new-password"></label></div><div class="security-password-hint"><span>پیشنهاد:</span> حروف بزرگ/کوچک + عدد + نماد و عدم استفاده مجدد از رمزهای قبلی.</div><div class="settings-actions"><button class="primary" data-action="settings-password-change">تغییر رمز مدیر</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Two-Factor Authentication</b><span>TOTP authenticator</span></div><span class="status-chip '+(two.enabled?'ok':'warn')+'">'+(two.enabled?'Enabled':'Recommended')+'</span></div><div class="security-feature-row"><div><b>'+(two.enabled?'2FA فعال است':'لایه دوم ورود را فعال کن')+'</b><span>'+(two.enabled?'برای ورود Password + کد ۶ رقمی لازم است.':'Google/Microsoft Authenticator، 1Password و سایر TOTP appها سازگارند.')+'</span></div><button class="'+(two.enabled?'danger':'primary')+'" data-action="'+(two.enabled?'settings-2fa-disable':'settings-2fa-setup')+'">'+(two.enabled?'غیرفعال‌سازی 2FA':'فعال‌سازی 2FA')+'</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Security operations</b><span>ابزارهای سریع بررسی و سخت‌سازی</span></div></div><div class="settings-shortcuts"><button data-action="nav" data-view="security"><b>Host Security</b><span>UFW · Fail2ban · SSH</span></button><button data-action="self-test"><b>Self-Test</b><span>Crypto · DB · Services</span></button><button data-action="settings-tab" data-tab="api"><b>API Tokens</b><span>'+activeTokens+' active</span></button><button data-action="nav" data-view="audit"><b>Audit Logs</b><span>ردپای عملیات مدیر</span></button></div></div>'
     ].join('');
   }else if(tab==='api'){
     body=[
@@ -1491,13 +1557,11 @@ async function handleMakiaAction(btn){
   if(action==='protocol-refresh'){await currentView();return}
   if(action==='endpoint-matrix'){await openEndpointMatrix();return}
   if(action==='wireguard-diagnostics'){await openWireGuardDiagnostics();return}
-  if(action==='wg-server-config'){openWireGuardServerConfig();return}
-  if(action==='wg-server-save'){await saveWireGuardServerConfig();return}
   if(action==='wg-endpoint-update'){await updateWireGuardEndpoint(dataDec(btn.dataset.key),btn.dataset.endpoint);return}
   if(action==='wireguard-repair'){await repairWireGuardRuntime();return}
   if(action==='openvpn-diagnostics'){await openOpenVPNDiagnostics();return}
-  if(action==='openvpn-server-config'){openOpenVPNServerConfig();return}
-  if(action==='openvpn-server-save'){await saveOpenVPNServerConfig();return}
+  if(action==='openvpn-configure'){await openOpenVPNConfigure();return}
+  if(action==='openvpn-configure-save'){await saveOpenVPNConfigure();return}
   if(action==='openvpn-repair'){await repairOpenVPNRuntime();return}
   if(action==='xray-diagnostics'){await openXrayDiagnostics();return}
   if(action==='xray-repair'){await repairXrayRuntime();return}
@@ -1575,9 +1639,20 @@ document.addEventListener('change',e=>{
   }
   if(e.target.id==='wizXrayProtocol'&&provisionState){
     captureWizard();
-    if(provisionState.simpleMode){applySimpleXrayPreset(provisionState);renderProvisionWizard()}else normalizeXrayWizardCombo();
+    normalizeXrayProfile(provisionState,provisionState.simpleMode);
+    renderProvisionWizard();
   }
-  if((e.target.id==='wizTransport'||e.target.id==='wizSecurity')&&provisionState&&!provisionState.simpleMode)normalizeXrayWizardCombo();
+  if((e.target.id==='wizTransport'||e.target.id==='wizSecurity')&&provisionState){
+    captureWizard();
+    normalizeXrayProfile(provisionState,false);
+    renderProvisionWizard();
+  }
+  if(e.target.id==='opXrayProtocol'){
+    const spec=xrayProfileSpec(e.target.value),t=document.getElementById('opXrayTransport'),s=document.getElementById('opXraySecurity');
+    if(t)t.innerHTML=spec.transports.map(x=>'<option value="'+x+'">'+x.toUpperCase()+'</option>').join('');
+    if(s)s.innerHTML=spec.security.map(x=>'<option value="'+x+'">'+x.toUpperCase()+'</option>').join('');
+    if(t)t.value=spec.preset[0];if(s)s.value=spec.preset[1];
+  }
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
@@ -1603,10 +1678,10 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
   content.innerHTML=[
     '<div class="pro-page connectivity-page">',
       '<section class="pro-page-head"><div><span class="pro-kicker">NETWORK READINESS</span><h1>Connectivity Lab</h1><p>سلامت سمت سرور را دقیق بررسی می‌کند؛ نتیجه شبکه ایران فقط با Client واقعی داخل ایران معتبر است.</p></div><div class="pro-head-actions"><button class="ghost" data-action="endpoint-matrix">Endpoint Matrix</button><button class="primary" data-action="self-test">اجرای Self-Test</button></div></section>',
-      '<div class="iran-boundary"><b>مهم:</b><span>Server Ready به معنی «تأیید اتصال از داخل ایران» نیست. فیلترینگ، اپراتور، شهر، IPv4/IPv6 و مسیر بین‌الملل می‌توانند نتیجه را تغییر دهند. تأیید سازگاری شبکه ایران فقط بعد از Field Test واقعی علامت می‌خورد.</span></div>',
+      '<div class="iran-boundary"><b>مهم:</b><span>Server Ready به معنی «تأیید اتصال از داخل ایران» نیست. فیلترینگ، اپراتور، شهر، IPv4/IPv6 و مسیر بین‌الملل می‌توانند نتیجه را تغییر دهند. Stable فقط بعد از Field Test واقعی علامت می‌خورد.</span></div>',
       '<section class="connectivity-grid">'+cards.map(x=>'<article class="connectivity-card"><div class="connectivity-title"><div><b>'+x[0]+'</b><small>'+x[4]+'</small></div>'+state(x[1])+'</div><div class="connectivity-meta"><div><span>Transport</span><b>'+htmlEsc(x[2])+'</b></div><div><span>Port</span><b>'+htmlEsc(String(x[3]))+'</b></div></div>'+field+'</article>').join('')+'</section>',
       '<section class="pro-directory"><div class="pro-directory-toolbar"><div><h3>Port / Runtime matrix</h3><small>Transport-aware server validation</small></div></div><div class="lab-port-head"><span>Service</span><span>Port</span><span>Transport</span><span>Runtime</span></div><div class="lab-port-list">'+(rows||'<div class="empty">Matrix data unavailable.</div>')+'</div></section>',
-      '<section class="field-test-card"><div><span class="pro-kicker">IRAN FIELD GATE</span><h3>تست واقعی برای تأیید شبکه ایران</h3><p>برای هر پروتکل باید از حداقل یک اتصال Mobile و یک اتصال Fixed داخل ایران، اتصال واقعی، DNS، Handshake، دریافت اینترنت و Reconnect آزمایش شود.</p></div><ol><li>SSH/NPV: Login و قطع/وصل مجدد</li><li>Xray: VLESS/REALITY و سایر Profileهای مورد استفاده</li><li>WireGuard: Handshake + Route اینترنت</li><li>OpenVPN: TLS/PKI + Route اینترنت</li></ol></section>',
+      '<section class="field-test-card"><div><span class="pro-kicker">IRAN FIELD GATE</span><h3>تست واقعی قبل از Stable</h3><p>برای هر پروتکل باید از حداقل یک اتصال Mobile و یک اتصال Fixed داخل ایران، اتصال واقعی، DNS، Handshake، دریافت اینترنت و Reconnect آزمایش شود.</p></div><ol><li>SSH/NPV: Login و قطع/وصل مجدد</li><li>Xray: VLESS/REALITY و سایر Profileهای مورد استفاده</li><li>WireGuard: Handshake + Route اینترنت</li><li>OpenVPN: TLS/PKI + Route اینترنت</li></ol></section>',
       '<div class="lab-self-summary"><span>Self-Test</span><b class="'+(self.ok?'ok-text':'bad-text')+'">'+htmlEsc(self.summary||'Unavailable')+'</b><small>'+(self.error?htmlEsc(self.error):Number(self.critical||0)+' critical · '+Number(self.warnings||0)+' warning')+'</small></div>',
     '</div>'
   ].join('');

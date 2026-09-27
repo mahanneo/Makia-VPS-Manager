@@ -48,6 +48,7 @@ def main():
     original_tls=protocol_ops._xray_materialize_tls
     protocol_ops._xray_materialize_tls=lambda domain:(cert_path,key_path)
     try:
+        validate_guided_matrix(binary,root,cert_path,key_path)
         data=protocol_ops._ensure_xray_stats(
             protocol_ops._xray_default_config(Path("/tmp/makia-xray-config.json"))
         )
@@ -82,6 +83,36 @@ def main():
             "settings":{"clients":[{"id":str(uuid.uuid4()),"email":"ci-vmess","level":0}]},
             "streamSettings":vmess_stream,
         })
+
+        # Additional guided transport/security combinations: the UI only
+        # offers combinations that this exact Xray Core can validate.
+        extra_profiles=[
+            ("vless","grpc","reality","/grpc","www.microsoft.com","www.microsoft.com:443",21011),
+            ("vless","ws","tls","/vless-ws","test.example.com","",21012),
+            ("vless","httpupgrade","tls","/vless-up","test.example.com","",21013),
+            ("vless","kcp","none","makia-kcp","","",21014),
+            ("vmess","grpc","tls","/vm-grpc","test.example.com","",21015),
+            ("vmess","xhttp","none","/vm-xhttp","","",21016),
+        ]
+        for idx,(proto,transport,security,path_value,sni,target_dest,port) in enumerate(extra_profiles):
+            stream,_=protocol_ops._build_xray_stream(binary,proto,transport,security,path_value,sni,target_dest)
+            cid=str(uuid.uuid4())
+            settings={"clients":[{"id":cid,"email":f"ci-extra-{idx}","level":0}]}
+            if proto=="vless":
+                settings["decryption"]="none"
+            data["inbounds"].append({
+                "tag":f"makia-ci-extra-{idx}","listen":"127.0.0.1","port":port,"protocol":proto,
+                "settings":settings,"streamSettings":stream,
+            })
+
+        # Trojan WebSocket/gRPC + TLS.
+        for idx,transport in enumerate(("ws","grpc"),start=18):
+            stream,_=protocol_ops._build_xray_stream(binary,"trojan",transport,"tls","/trojan","test.example.com","")
+            data["inbounds"].append({
+                "tag":f"makia-ci-trojan-{transport}","listen":"127.0.0.1","port":21000+idx,"protocol":"trojan",
+                "settings":{"clients":[{"password":f"ci-trojan-{transport}","email":f"ci-trojan-{transport}","level":0}]},
+                "streamSettings":stream,
+            })
 
         # Trojan + TLS using a real generated certificate.
         trojan_stream,_=protocol_ops._build_xray_stream(binary,"trojan","tcp","tls","/","test.example.com","")
@@ -137,10 +168,115 @@ def main():
 
         assert reality_meta["public_key"]
         assert reality_meta["short_id"]
-        print("Xray 26.3.27 guided protocol matrix PASS: VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP, SOCKS5")
+        print("Xray 26.3.27 guided matrix PASS: VLESS RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP; VMess WS/gRPC/XHTTP; Trojan TCP/WS/gRPC; Shadowsocks; Hysteria2; HTTP; SOCKS5")
     finally:
         cover.shutdown();cover.server_close()
         protocol_ops._xray_materialize_tls=original_tls
+
+
+def validate_guided_matrix(binary,root,cert_path,key_path):
+    """Validate every guided transport/security pair against the pinned Core.
+
+    The public compatibility table is intentionally broader than a Cartesian
+    product for VLESS: REALITY is only valid with RAW, gRPC and XHTTP. Every
+    pair the UI/backend can actually commit is syntax-checked by Xray 26.3.27.
+    """
+    expected={
+        "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["reality","tls","none"]},
+        "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+        "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp"],"security":["tls"]},
+        "shadowsocks":{"transports":["tcp"],"security":["none"]},
+        "hysteria2":{"transports":["hysteria"],"security":["tls"]},
+        "http":{"transports":["tcp"],"security":["none"]},
+        "socks":{"transports":["tcp"],"security":["none"]},
+    }
+    assert protocol_ops.xray_guided_compatibility()==expected
+
+    checked=[]
+    rejected=[]
+    port=23000
+    for protocol,spec in expected.items():
+        for transport in spec["transports"]:
+            for security in spec["security"]:
+                label=f"{protocol}/{transport}/{security}"
+                if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
+                    try:
+                        protocol_ops._validate_xray_guided_combo(protocol,transport,security)
+                    except protocol_ops.ProtocolError:
+                        rejected.append(label)
+                        continue
+                    raise AssertionError(f"guided matrix accepted invalid REALITY pair: {label}")
+
+                normalized_transport,normalized_security=protocol_ops._validate_xray_guided_combo(
+                    protocol,transport,security
+                )
+                data=protocol_ops._xray_default_config(root/f"matrix-{port}.json")
+                cid=str(uuid.uuid4())
+
+                if protocol=="hysteria2":
+                    stream={
+                        "method":"hysteria","security":"tls",
+                        "hysteriaSettings":{"version":2},
+                        "tlsSettings":{
+                            "serverName":"test.example.com","alpn":["h3"],
+                            "certificates":[{"certificateFile":str(cert_path),"keyFile":str(key_path)}],
+                        },
+                    }
+                    inbound_protocol="hysteria"
+                    settings={"version":2,"users":[{"auth":"matrix-hy2","email":f"matrix-{port}","level":0}]}
+                elif protocol=="http":
+                    stream={"method":"raw","security":"none"}
+                    inbound_protocol="http"
+                    settings={"accounts":[{"user":"matrix","pass":"matrix-secret"}]}
+                elif protocol=="socks":
+                    stream={"method":"raw","security":"none"}
+                    inbound_protocol="socks"
+                    settings={"auth":"password","accounts":[{"user":"matrix","pass":"matrix-secret"}],"udp":True,"ip":"127.0.0.1"}
+                else:
+                    sni="www.microsoft.com" if security=="reality" else ("test.example.com" if security=="tls" else "")
+                    target="www.microsoft.com:443" if security=="reality" else ""
+                    stream,_=protocol_ops._build_xray_stream(
+                        binary,protocol,normalized_transport,normalized_security,
+                        "/matrix",sni,target,
+                    )
+                    inbound_protocol=protocol
+                    if protocol in {"vless","vmess"}:
+                        client={"id":cid,"email":f"matrix-{port}","level":0}
+                        settings={"clients":[client]}
+                        if protocol=="vless":
+                            settings["decryption"]="none"
+                            if security=="reality" and stream.get("method")=="raw":
+                                client["flow"]="xtls-rprx-vision"
+                    elif protocol=="trojan":
+                        settings={"clients":[{"password":"matrix-trojan","email":f"matrix-{port}","level":0}]}
+                    elif protocol=="shadowsocks":
+                        settings={"method":"aes-128-gcm","password":"matrix-shadow","network":"tcp,udp"}
+                    else:
+                        raise AssertionError(f"unhandled guided protocol: {protocol}")
+
+                data["inbounds"]=[{
+                    "tag":f"matrix-{port}",
+                    "listen":"127.0.0.1",
+                    "port":port,
+                    "protocol":inbound_protocol,
+                    "settings":settings,
+                    "streamSettings":stream,
+                }]
+                target_path=protocol_ops._xray_temp_json_path(root/f"matrix-{port}.json","core")
+                target_path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+                try:
+                    protocol_ops._xray_test_config(binary,target_path)
+                except Exception as exc:
+                    raise AssertionError(f"Xray 26.3.27 rejected guided pair {label}: {exc}") from exc
+                finally:
+                    target_path.unlink(missing_ok=True)
+                checked.append(label)
+                port+=1
+
+    assert set(rejected)=={
+        "vless/ws/reality","vless/httpupgrade/reality","vless/kcp/reality",
+    }
+    print(f"Xray guided compatibility exhaustive PASS: {len(checked)} valid pairs; {len(rejected)} invalid REALITY pairs rejected")
 
 
 def verify_simple_connection(binary,server_config,root,client_id,meta):

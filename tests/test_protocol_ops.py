@@ -170,48 +170,105 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
     assert result["ports"]=={"wireguard":443,"openvpn":1194}
 
 
+@pytest.mark.parametrize("protocol,transport,security,expected",[
+    ("vless","tcp","reality",("tcp","reality")),
+    ("vless","grpc","reality",("grpc","reality")),
+    ("vless","xhttp","reality",("xhttp","reality")),
+    ("vmess","ws","none",("ws","none")),
+    ("vmess","grpc","tls",("grpc","tls")),
+    ("trojan","tcp","tls",("tcp","tls")),
+    ("shadowsocks","tcp","none",("tcp","none")),
+    ("hysteria2","tcp","none",("hysteria","tls")),
+    ("http","tcp","none",("tcp","none")),
+    ("socks","tcp","none",("tcp","none")),
+])
+def test_xray_guided_compatibility_accepts_tested_profiles(protocol,transport,security,expected):
+    assert protocol_ops._validate_xray_guided_combo(protocol,transport,security)==expected
+
+
+@pytest.mark.parametrize("protocol,transport,security",[
+    ("vmess","tcp","reality"),
+    ("trojan","tcp","none"),
+    ("trojan","kcp","tls"),
+    ("shadowsocks","ws","none"),
+    ("http","grpc","none"),
+    ("socks","tcp","tls"),
+    ("vless","ws","reality"),
+])
+def test_xray_guided_compatibility_rejects_invalid_profiles(protocol,transport,security):
+    with pytest.raises(ProtocolError):
+        protocol_ops._validate_xray_guided_combo(protocol,transport,security)
+
+
+def test_xray_service_validation_skips_runuser_under_no_new_privileges(monkeypatch,tmp_path):
+    cfg=tmp_path/"config.json"
+    cfg.write_text('{"inbounds":[],"outbounds":[]}',encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"_xray_service_user",lambda:"nobody")
+    monkeypatch.setattr(protocol_ops,"_process_no_new_privileges",lambda:True)
+    monkeypatch.setattr(protocol_ops,"_xray_static_service_validation",lambda path,user:"static-permission-check")
+    monkeypatch.setattr(protocol_ops.os,"geteuid",lambda:0)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:pytest.fail("runuser must not run under NoNewPrivileges"))
+    assert protocol_ops._xray_test_config_as_service("/usr/local/bin/xray",cfg)=="static-permission-check"
+
+
 def test_xray_service_validation_falls_back_when_runuser_setuid_is_blocked(monkeypatch,tmp_path):
     cfg=tmp_path/"config.json"
-    cfg.write_text("{}",encoding="utf-8")
-    monkeypatch.setattr(protocol_ops,"_xray_service_user",lambda:"xray")
-    monkeypatch.setattr(protocol_ops.os,"geteuid",lambda:0)
+    cfg.write_text('{"inbounds":[],"outbounds":[]}',encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"_xray_service_user",lambda:"nobody")
+    monkeypatch.setattr(protocol_ops,"_process_no_new_privileges",lambda:False)
     monkeypatch.setattr(protocol_ops.shutil,"which",lambda name:"/usr/sbin/runuser" if name=="runuser" else None)
-    class Pw:
-        pw_uid=1001
-        pw_gid=1001
-    monkeypatch.setattr(protocol_ops.pwd,"getpwnam",lambda user:Pw())
-    real_stat=protocol_ops.os.stat
-    class St:
-        st_uid=1001
-        st_gid=1001
-        st_mode=0o100600
-    monkeypatch.setattr(protocol_ops.os,"stat",lambda path:St() if str(path)==str(cfg) else real_stat(path))
-    real_read=protocol_ops.Path.read_text
-    def fake_read(self,*args,**kwargs):
-        if str(self)=="/proc/self/status":
-            return "Name:\tpython\nNoNewPrivs:\t1\n"
-        return real_read(self,*args,**kwargs)
-    monkeypatch.setattr(protocol_ops.Path,"read_text",fake_read)
-    calls=[]
-    monkeypatch.setattr(protocol_ops,"_xray_test_config",lambda binary,path:calls.append((binary,str(path))) or "ok")
-    assert protocol_ops._xray_test_config_as_service("/usr/local/bin/xray",cfg)=="ok"
-    assert calls==[("/usr/local/bin/xray",str(cfg))]
+    monkeypatch.setattr(protocol_ops.os,"geteuid",lambda:0)
+    monkeypatch.setattr(protocol_ops,"_xray_static_service_validation",lambda path,user:"static-permission-check")
+    def blocked(*args,**kwargs):
+        raise ProtocolError("runuser: cannot set user id: Operation not permitted")
+    monkeypatch.setattr(protocol_ops,"_run",blocked)
+    assert protocol_ops._xray_test_config_as_service("/usr/local/bin/xray",cfg)=="static-permission-check"
 
 
-def test_openvpn_reconfigure_accepts_tcp_and_preserves_runtime(monkeypatch,tmp_path):
-    server_dir=tmp_path/"server"
-    server_dir.mkdir()
-    conf=server_dir/"server.conf"
-    conf.write_text('port 1194\nproto udp4\nkeepalive 10 120\npush "redirect-gateway def1 bypass-dhcp"\npush "dhcp-option DNS 1.1.1.1"\n',encoding="utf-8")
-    monkeypatch.setattr(protocol_ops,"OVPN_DIR",tmp_path)
-    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{"port":443,"proto":"tcp4-server","service_active":True,"listener":True})
+def test_openvpn_reconfigure_switches_transport_and_policy(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"
+    server.mkdir(parents=True)
+    conf=server/"server.conf"
+    conf.write_text(
+        'port 1194\nproto udp4\nlocal 0.0.0.0\ndev tun\n'
+        'server 10.8.0.0 255.255.255.0\n'
+        'push "redirect-gateway def1 bypass-dhcp"\n'
+        'push "dhcp-option DNS 1.1.1.1"\n'
+        'keepalive 10 120\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
     monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
-    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**k:"")
-    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *a,**k:{"ok":True})
-    result=protocol_ops.reconfigure_openvpn_server(443,"tcp","9.9.9.9","1.1.1.1",True,True,15,90)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda port,proto,label:{"active":True,"changed":True})
+    def runtime():
+        text=conf.read_text(encoding="utf-8")
+        import re
+        port=int(re.search(r"(?m)^port\s+(\d+)",text).group(1))
+        proto=re.search(r"(?m)^proto\s+(\S+)",text).group(1)
+        return {"service_active":True,"listener":True,"port":port,"proto":proto}
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",runtime)
+    result=protocol_ops.reconfigure_openvpn_server(
+        2443,"tcp",["9.9.9.9","1.1.1.1"],15,90,True,True
+    )
     text=conf.read_text(encoding="utf-8")
-    assert "port 443" in text
+    assert result["ok"] is True
+    assert "port 2443" in text
     assert "proto tcp4-server" in text
     assert 'push "dhcp-option DNS 9.9.9.9"' in text
+    assert 'push "dhcp-option DNS 1.1.1.1"' in text
+    assert "keepalive 15 90" in text
     assert "client-to-client" in text
-    assert result["ok"] is True
+
+
+def test_xray_mkcp_uses_xray_26327_schema_without_removed_seed_header():
+    stream,meta=protocol_ops._build_xray_stream(
+        "/unused/xray","vless","kcp","none","legacy-seed","",""
+    )
+    assert stream["method"]=="mkcp"
+    assert stream["kcpSettings"]=={}
+    assert "seed" not in stream["kcpSettings"]
+    assert "header" not in stream["kcpSettings"]
+    assert meta=={}

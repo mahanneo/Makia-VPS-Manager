@@ -1,84 +1,203 @@
-# Makia VPS Manager 0.26.0-rc1 — Final Hardening UAT
+# Makia VPS Manager 0.26.0-rc1 — Finalization UAT
 
-این نسخه برای رفع خطاهای واقعی Host و تکمیل UX قبل از Release رسمی آماده شده است.
+این Release Candidate برای جمع‌بندی ایرادهای گزارش‌شده روی Host واقعی و آماده‌سازی انتشار عمومی ساخته شده است. نسخه‌ای که در اسکرین‌شات Host دیده شد `0.24.0-rc1` بود؛ بنابراین UAT باید **Upgrade مستقیم 0.24.0-rc1 → 0.26.0-rc1** را هم پوشش دهد.
 
-## 1. Login
+> این سند Stable gate است. CI یا تست داخل VPS به‌تنهایی اثبات نمی‌کند که یک پروتکل در همه شبکه‌های ایران قابل اتصال است.
 
-- Username و Password فقط یک Focus Surface داشته باشند و Chrome autofill کادر دوم نسازد.
-- FA/EN واقعاً زبان را عوض کند و جهت RTL/LTR درست شود.
-- Dark/Light واقعاً Theme ورود را عوض کند و پس از Reload حفظ شود.
-- Password visibility کار کند.
-- روی Raw IP و Domain صفحه بدون Horizontal overflow نمایش داده شود.
+## 1. Upgrade from 0.24.0-rc1
 
-## 2. Installed-version verification
+روی Host فعلی:
 
-- پس از Upgrade، Footer/Login و API باید 0.26.0-rc1 نشان دهند.
-- Browser hard reload انجام شود.
-- Service worker cache باید makia-shell-v0260rc1 باشد.
+```bash
+sudo makia-upgrade
+sudo makia-doctor
+sudo makia-uat-smoke
+```
 
-## 3. Xray root-cause regression
+انتظار:
+- `VERSION` برابر `0.26.0-rc1`.
+- کاربران، PKI، WireGuard keys، Xray config و تنظیمات قبلی حفظ شوند.
+- Backend، Nginx، Xray، WireGuard، OpenVPN، Fail2ban و سرویس‌های Makia فعال بمانند.
+- Service Worker cache باید به `makia-shell-v0260rc1` تغییر کند.
+- بعد از Upgrade یک Hard Refresh انجام شود.
+- در صورت شکست Upgrade یا runtime، rollback موجود باید قابل استفاده باشد.
 
-Host دارای systemd hardening با NoNewPrivileges=true و RestrictSUIDSGID=true باید بتواند Xray Profile بسازد.
-خطای runuser: cannot set user id: Operation not permitted نباید تکرار شود.
+## 2. Login regression
 
-Profileهای منتشرشده: VLESS/REALITY، VMess، Trojan/TLS، Shadowsocks، Hysteria2/TLS، HTTP Proxy و SOCKS5.
-برای هر Profile: Create، Core validation، Xray restart، QR/Share، Native export، Protected ZIP و Revoke بررسی شود.
-Wizard فقط ترکیب‌های سازگار Transport/Security را نمایش دهد.
+Desktop و Mobile:
 
-## 4. OpenVPN
+- با کلیک روی Username یا Password فقط **یک Focus Surface** دیده شود؛ Input نباید کادر دوم داخل کادر اصلی بسازد.
+- Password Show/Hide کار کند.
+- کلید FA/EN واقعاً متن، `lang` و `dir` را تغییر دهد.
+- Theme toggle واقعاً Dark/Light را تغییر دهد و بعد از Reload حفظ شود.
+- Autofill مرورگر نباید Border/Background دوم بسازد.
+- Login با رمز درست موفق و با رمز غلط ناموفق باشد.
+- در صورت تنظیم Domain عمومی، HTTPS باید فعال شود؛ استفاده عمومی روی HTTP/IP هشدار امنیتی دارد.
+- `makia-uat-smoke` برای Domain تنظیم‌شده باید Certificate، Listener واقعی TCP/443 و درخواست `https://DOMAIN/healthz` را PASS کند.
 
-- Server Advanced Settings باز شود.
-- UDP و TCP هر دو قابل انتخاب باشند.
-- تغییر Port/Transport با backup و rollback-safe restart انجام شود.
-- DNS اول/دوم، Keepalive، Redirect Gateway و Client-to-client قابل تنظیم باشند.
-- PKI و Certificateهای Client هنگام تغییر Server Transport حفظ شوند.
-- Profile جدید با Transport فعال Server ساخته شود.
-- معماری این Release یک OpenVPN Server Profile فعال دارد؛ UDP و TCP قابل انتخاب‌اند اما دو instance همزمان ادعا نمی‌شود.
+## 3. Users / Access Center
 
-## 5. WireGuard
+پس از Upgrade نباید UI قدیمی v0.24 دیده شود.
 
-- Advanced Settings شامل Server UDP Port و MTU باشد.
-- Peer keys هنگام تغییر Server settings حفظ شوند.
-- Port collision بر اساس UDP بررسی شود.
-- Restart failure باید rollback کند.
-- Peer create همچنان DNS / MTU / Keepalive / AllowedIPs / QR / Native export را پوشش دهد.
+انتظار:
+- صفحه Users از `.pro-user-row` استفاده کند.
+- Row فقط Identity، Protocol، Status، Usage/Expiry و More را نشان دهد.
+- QR / Native / Protected ZIP / Manage / Revoke داخل Detail Drawer باشند.
+- Filterهای Xray / SSH / WireGuard / OpenVPN کار کنند.
+- Search کار کند.
+- Drawer روی Sidebar قرار گیرد و Sidebar کلیک‌های Drawer را Block نکند.
 
-## 6. Users
+## 4. Create Access
 
-- Users باید UI جدید v0.25+ را نشان دهد، نه layout قدیمی.
-- Row فقط Identity / Protocol / Status / Usage / More داشته باشد.
-- عملیات Delivery و Revoke داخل Detail Drawer باشند.
+- Provisioning به‌صورت Right Drawer باز شود.
+- 4 Protocol Card با Icon مستقل: SSH، Xray، WireGuard، OpenVPN.
+- Advanced fields فقط وقتی لازم است نمایش داده شوند.
+- Review قبل از Commit نمایش داده شود.
+- Protected package PIN قابل Generate باشد.
 
-## 7. Guides
+## 5. Xray root-cause regression
 
-- Public guide باید برای Xray، WireGuard، OpenVPN و SSH/NPV تصویر داشته باشد.
-- Admin Guide Center نیز 4 کارت تصویری داشته باشد.
-- تصاویر نباید Credential داشته باشند.
+ایراد گزارش‌شده:
+`runuser: cannot set user id: Operation not permitted`
 
-## 8. Support
+این خطا نباید از Web Service برگردد.
 
-- صفحه Support باید Health / Guides / Logs / Connectivity را در Quick Actions نشان دهد.
-- Ticket form ساده باشد.
-- Remote Support به‌صورت Advanced disclosure باشد.
-- Default scope روی Read-only باشد.
-- One-time code و Audit behavior قبلی حفظ شود.
+الزام‌ها:
+- systemd hardening مانند `NoNewPrivileges=true` نباید برای رفع خطا حذف شود.
+- Root Xray syntax validation باید انجام شود.
+- وقتی Makia تحت NoNewPrivileges اجرا می‌شود، Service-user readability باید بدون setuid/runuser ممنوعه Validate شود.
+- اگر runuser فقط به دلیل EPERM/setuid محدود شد، static permission validation اجرا شود.
+- سایر خطاهای واقعی Xray نباید swallow شوند.
 
-## 9. Admin Security
+## 6. Xray guided matrix
 
-- UFW، Fail2ban، 2FA، HTTPS، Self-Test، Audit و API Tokens از یک Security Center قابل مشاهده/دسترسی باشند.
+نسخه Core مورد انتظار: Xray `26.3.27`.
 
-## 10. Release gate
+UI فقط ترکیب‌های Guided معتبر را ارائه کند و Backend هم همان Matrix را enforce کند:
 
-برای تبدیل این RC به Stable/Official همه موارد زیر الزامی‌اند:
-- Unit/contract CI PASS
-- Xray Core smoke PASS
-- Browser smoke PASS
-- Upgrade روی VPS واقعی PASS
-- sudo makia-doctor PASS
-- sudo makia-uat-smoke PASS
-- ساخت Xray روی Host واقعی بدون runuser error
-- OpenVPN UDP و TCP روی Host واقعی تست شوند
-- WireGuard handshake واقعی تست شود
-- Iran Field Test از حداقل یک Mobile و یک Fixed network انجام شود
+| Protocol | Guided transports | Security |
+|---|---|---|
+| VLESS | TCP/RAW, WS, gRPC, HTTPUpgrade, XHTTP, mKCP | REALITY / TLS / None |
+| VMess | TCP/RAW, WS, gRPC, HTTPUpgrade, XHTTP, mKCP | None / TLS |
+| Trojan | TCP/RAW, WS, gRPC, HTTPUpgrade, XHTTP | TLS |
+| Shadowsocks | TCP | None |
+| Hysteria2 | Hysteria/UDP | TLS |
+| HTTP | TCP | None |
+| SOCKS5 | TCP | None |
 
-تا قبل از این Gateها نسخه Stable نام‌گذاری نمی‌شود.
+Checks:
+- invalid REALITY combinations cannot be selected/committed.
+- Trojan/Hysteria2 without required Domain/TLS material fail early with clear prerequisite instead of a low-level error.
+- Xray Core smoke validates generated configs.
+- At least VLESS RAW/REALITY must execute a real CI client handshake + routed traffic.
+- Advanced JSON remains available for features outside Guided mode and must validate before Apply.
+
+## 7. OpenVPN
+
+OpenVPN must not be presented as UDP-only.
+
+Checks:
+- Workspace shows real live transport and port.
+- Server Settings exposes both UDP and TCP.
+- Change UDP → TCP on a free port:
+  - backup existing config
+  - rewrite proto/port
+  - restart service
+  - listener appears on requested transport
+  - UFW rule is updated when UFW is active
+  - on failure old config is restored
+- Change TCP → UDP similarly.
+- DNS push values editable.
+- Keepalive ping/timeout editable.
+- Redirect Gateway toggle works.
+- Client-to-client toggle works and defaults conservatively.
+- Existing PKI/clients are preserved.
+- Re-downloaded `.ovpn` profile uses **current** live transport/port.
+- TCP/443 collision with HTTPS on same IP is rejected/warned; UDP/443 is transport-distinct.
+
+## 8. WireGuard
+
+Checks:
+- Peer create/delete.
+- Enable/disable persists.
+- Native `.conf` and QR export.
+- Last handshake visible.
+- RX/TX traffic visible.
+- Server UDP port, DNS, MTU, Persistent Keepalive, AllowedIPs and Tunnel CIDR visible/configurable through VPN settings.
+- Diagnostics verifies listener, ip_forward, FORWARD and NAT.
+- No fake per-peer expiry/firewall feature is shown unless real enforcement exists.
+
+## 9. Support
+
+Expected primary Support page:
+- system health
+- Xray/WireGuard/OpenVPN runtime cards
+- Connectivity Lab
+- Visual Guides
+- Update Center
+- GitHub Issues
+- configured Telegram channel only when configured
+
+The following should be progressively disclosed, not dominate the page:
+- Send support report
+- Temporary Remote Support
+- Recent reports
+
+Remote Support must remain one-time, time-limited and scoped.
+
+## 10. Visual guides
+
+`/help/connect` must include visual step diagrams for:
+- Xray
+- WireGuard
+- OpenVPN
+- SSH/NPV
+
+Each section should explain Import/QR/File and Connect steps. User-provided credentials must never be embedded in public documentation.
+
+## 11. Admin Security
+
+The Security tab should report:
+- HTTPS readiness
+- Admin 2FA
+- UFW
+- Fail2ban
+- OpenSSH
+- active API token exposure
+
+Checks:
+- HTTP/IP mode produces a visible security warning.
+- Domain/HTTPS path is one click away.
+- Session lifetime setting works.
+- Password change enforces server-side policy.
+- TOTP setup/disable works.
+- API tokens remain scoped and revocable.
+- Audit log remains accessible.
+
+## 12. Clean-install public release gate
+
+On fresh Ubuntu 22.04 and/or 24.04:
+- install command completes.
+- full protocol stack is provisioned.
+- first login works.
+- all automated host smoke gates pass.
+- no license/activation dependency exists.
+- README install/update/recovery instructions are sufficient for a third party.
+
+## 13. Iran connectivity field gate
+
+Use `docs/IRAN-CONNECTIVITY-FIELD-TEST.md`.
+
+A real Client inside Iran must record results on at least:
+- one Mobile ISP
+- one Fixed/Wi-Fi path
+
+For each published protocol/profile test:
+- import
+- handshake
+- DNS
+- browsing
+- meaningful traffic
+- reconnect
+
+**Do not promote 0.26.0-rc1 to 0.26.0 Stable until this Host + Iran field gate is complete.**

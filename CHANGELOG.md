@@ -1,49 +1,28 @@
 # Changelog
 
-## [0.26.0] - 2026-09-27
-
-### Official release
-- Promoted the 0.26 hardening line to the official public baseline.
-- Login focus/autofill styling, FA/EN, Dark/Light and password visibility are active.
-- Unified Users uses the compact progressive-disclosure layout.
-- Xray guided security choices now only show combinations valid for the selected protocol.
-- Hardened-systemd Xray creation no longer depends on blocked runuser privilege switching.
-- OpenVPN exposes UDP/TCP server transport and advanced server controls; WireGuard exposes server Port/MTU plus peer/client compatibility controls.
-- Visual guides, modern Admin Security and simplified Support are part of the public release.
-- Automated unit, contract, Xray-core and browser gates are required before merge.
-
-### Compatibility boundary
-- Official software release does not mean every protocol is verified on every ISP.
-- Iran network verification remains a separate real-client field test recorded in `docs/IRAN-CONNECTIVITY-FIELD-TEST.md`.
-
 ## [0.26.0-rc1] - 2026-09-27
 
-### Host/runtime fixes
-- Fixed Xray creation under hardened systemd services where `runuser` could fail with `cannot set user id: Operation not permitted` because Makia itself runs with NoNewPrivileges/RestrictSUIDSGID.
-- Xray service-user validation now preserves the systemd sandbox instead of weakening it; config readability and the real Xray restart remain the runtime gate.
+### Host bug fixes
+- Fixed the Xray creation failure `runuser: cannot set user id: Operation not permitted` without weakening Makia's systemd `NoNewPrivileges` hardening. Xray syntax is still validated by Core, while service-user file visibility falls back to explicit UID/GID permission validation when setuid is prohibited.
+- Rebuilt Login input focus styling so Username/Password have one visible focus surface instead of a nested second card.
+- Made Login FA/EN and Dark/Light controls functional and persistent.
 
-### Login
-- Rebuilt login fields to remove the nested focus/autofill card effect.
-- FA/EN and Dark/Light controls now work and persist locally.
-- Password visibility remains supported.
+### Protocol correctness
+- Added a shared Xray guided compatibility matrix in UI and backend so invalid Protocol/Transport/Security combinations are not offered or committed.
+- Expanded Xray Core CI coverage across VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP and SOCKS with multiple transports; VLESS RAW/REALITY still performs an actual CI client handshake and routed traffic test.
+- Added safe OpenVPN server reconfiguration for TCP/UDP, Port, DNS push, Keepalive, Redirect Gateway and client-to-client policy with backup/runtime verification/rollback.
+- OpenVPN downloads now regenerate from the live server transport/port while preserving each client's endpoint.
+- Expanded WireGuard workspace around real Peer state, handshake, RX/TX, QR/config and its existing DNS/Port/MTU/Keepalive/AllowedIPs/CIDR settings.
 
-### Xray
-- Added a protocol compatibility matrix so the provisioning wizard only offers valid guided Transport/Security combinations.
-- Guided profiles remain VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP Proxy and SOCKS5.
-
-### WireGuard / OpenVPN
-- Added protocol-specific visual branding and advanced server settings.
-- WireGuard server settings: UDP port and MTU with backup/restart/rollback.
-- OpenVPN server settings: UDP/TCP, port, DNS, keepalive, redirect-gateway and client-to-client with PKI preservation and rollback.
-- OpenVPN intentionally remains one active server profile/transport at a time; simultaneous UDP+TCP instances are not falsely advertised.
-
-### Security / Support / Guides
-- Rebuilt Admin Security around UFW, Fail2ban, 2FA, HTTPS, Self-Test, Audit and API tokens.
-- Simplified Support into health, guides, logs, connectivity and tickets; Remote Support moved under Advanced and defaults to read-only.
-- Added visual connection guides for Xray, WireGuard, OpenVPN and SSH/NPV.
+### UX finalization
+- Added protocol-specific SVG graphics across provisioning, protocol workspaces and guides.
+- Replaced the old Support dashboard with a concise Help & Diagnostics center; report history and temporary Remote Support are progressive/advanced actions.
+- Rebuilt Admin Security as an actionable posture dashboard for HTTPS, 2FA, UFW, Fail2ban, SSH and API tokens.
+- Rebuilt the public connection guide with first-party visual step diagrams for Xray, WireGuard, OpenVPN and SSH/NPV.
 
 ### Release status
-- Release candidate. Stable/Official remains blocked on real VPS upgrade/UAT and inside-Iran field validation.
+- Public release candidate. Automated CI is required before merge.
+- Promotion to `0.26.0` Stable remains blocked on real-host upgrade/clean-install UAT and real client connectivity tests from inside Iran.
 
 ## [0.25.0-rc1] - 2026-09-27
 

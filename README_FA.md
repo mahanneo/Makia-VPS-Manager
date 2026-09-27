@@ -1,20 +1,18 @@
-## نسخه رسمی ۰.۲۶.۰
+## نسخه ۰.۲۶.۰-rc1 — کاندیدای نهایی انتشار عمومی
 
-نسخه `0.26.0` خط رسمی فعلی Makia است. این نسخه Login، کاربران، Xray، WireGuard، OpenVPN، Admin Security، Support و راهنماهای تصویری را روی معماری حرفه‌ای جدید یکپارچه می‌کند.
+این نسخه روی ایرادهای واقعی Host و تکمیل تجربه مدیریتی متمرکز است. خطای ساخت Xray با پیام `runuser: cannot set user id: Operation not permitted` بدون حذف `NoNewPrivileges` رفع شده است؛ Login نیز Focus Surface واحد، تغییر زبان واقعی FA/EN و Dark/Light واقعی دارد.
 
-در Xray، Wizard فقط Transport/Securityهای معتبر برای پروتکل انتخابی را نمایش می‌دهد و خطای Hostهای systemd سخت‌گیری‌شده که به `runuser: cannot set user id: Operation not permitted` منجر می‌شد رفع شده است. OpenVPN هر دو Transport **UDP یا TCP** را برای Server Profile فعال پشتیبانی می‌کند و تنظیمات Port، DNS، Keepalive، Redirect Gateway و Client-to-client دارد. WireGuard نیز Peer management، QR/Native، Handshake/Traffic، Diagnostics و تنظیمات Server Port/MTU را دارد.
+در Xray، Wizard و Backend از یک **Compatibility Matrix مشترک** استفاده می‌کنند تا ترکیب نامعتبر Protocol/Transport/Security اصلاً به مرحله Commit نرسد. CI روی Xray Core 26.3.27 مجموعه Guided شامل VLESS، VMess، Trojan، Shadowsocks، Hysteria2، HTTP و SOCKS و چند Transport را validate می‌کند و VLESS/REALITY علاوه بر syntax، Handshake و Traffic واقعی CI دارد. قابلیت **Advanced JSON** برای تنظیمات خارج از Guided mode حفظ شده است.
 
-**مرز اعتبارسنجی:** این نسخه رسمی نرم‌افزار است، اما سازگاری با هر ISP یا شبکه محدودشده تضمین عمومی نیست. تأیید شبکه ایران فقط با Field Test واقعی داخل ایران ثبت می‌شود.
+OpenVPN دیگر UDP-only نیست: تنظیم واقعی **TCP/UDP، Port، DNS، Keepalive، Redirect Gateway و Client-to-client** با Backup، Restart verification و Rollback اضافه شده و فایل OVPN دانلودشده از Runtime فعلی بازسازی می‌شود. WireGuard نیز Peer/Handshake/Traffic/QR و تنظیمات DNS، Port، MTU، Keepalive، AllowedIPs و CIDR را یکپارچه نمایش می‌دهد.
 
-## نسخه ۰.۲۶.۰-rc1 — Final Hardening
+Support به Help & Diagnostics ساده‌تر تبدیل شده، Remote Support به بخش Advanced منتقل شده، Admin Security نمای HTTPS/2FA/UFW/Fail2ban/SSH/API Tokens دارد، و راهنمای عمومی برای هر چهار خانواده پروتکل دارای نمودارهای تصویری قدم‌به‌قدم است.
 
-این نسخه خطای واقعی ساخت Xray روی Hostهای systemd سخت‌گیری‌شده را اصلاح می‌کند، Login را بازطراحی می‌کند، FA/EN و Dark/Light را فعال می‌کند، ترکیب‌های Xray را قبل از Submit محدود به حالت‌های معتبر می‌کند و برای WireGuard/OpenVPN تنظیمات پیشرفته واقعی اضافه می‌کند.
+> **نکته برای نصب فعلی:** اگر Footer/Login شما هنوز `v0.24.0-rc1` را نشان می‌دهد، UI قدیمی Users طبیعی است. بعد از Merge این RC، `sudo makia-upgrade` را اجرا کنید و Browser را Hard Refresh کنید.
 
-OpenVPN در این نسخه از هر دو Transport **UDP و TCP** پشتیبانی می‌کند و مدیر می‌تواند Transport، Port، DNS، Keepalive، Redirect Gateway و Client-to-client را تغییر دهد. معماری فعلی یک OpenVPN Server Profile فعال دارد و ادعای اجرای هم‌زمان دو Instance UDP/TCP نمی‌کند.
+### وضعیت انتشار
 
-راهنمای عمومی برای چهار خانواده Xray، WireGuard، OpenVPN و SSH/NPV دارای تصویر مرحله‌ای شده است. Admin Security و Support Center نیز برای استفاده عمومی ساده‌تر و حرفه‌ای‌تر شده‌اند.
-
-**وضعیت انتشار:** RC. تبدیل به Stable/Official فقط بعد از UAT روی VPS واقعی، تست Upgrade، تست OpenVPN TCP/UDP، WireGuard Handshake و Field Test واقعی داخل شبکه ایران انجام می‌شود.
+`0.26.0-rc1` برای نصب عمومی به‌عنوان **Release Candidate** آماده می‌شود، اما Stable اعلام نمی‌شود تا UAT واقعی Upgrade/Clean Install و تست Client داخل ایران طبق [UAT 0.26](docs/UAT-0.26.0-RC1.md) و [Iran Field Test](docs/IRAN-CONNECTIVITY-FIELD-TEST.md) تکمیل شود.
 
 ## نسخه ۰.۲۵.۰-rc1 — رابط حرفه‌ای و خلوت‌تر
 
