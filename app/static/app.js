@@ -1113,13 +1113,30 @@ async function services(renderToken=window.__viewRenderToken){
 }
 async function svc(n,a){try{await api('/api/services/'+n+'/'+a,{method:'POST'});await services()}catch(e){alert(e.message)}}
 async function security(renderToken=window.__viewRenderToken){
-  title.textContent='Security Center';setPageContext('DEFENSE LAYER');
-  const [sec,two]=await Promise.all([api('/api/security'),api('/api/admin/2fa/status')]);
+  title.textContent='Admin Security';setPageContext('ADMIN SECURITY');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی امنیت مدیریت…</b></div>';
+  const [sec,two,general,self]=await Promise.all([
+    api('/api/security'),api('/api/admin/2fa/status'),
+    api('/api/settings/general').catch(()=>({})),api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0}))
+  ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='security')return;
-  const card=(name,x)=>'<div class="security-control"><div><b>'+htmlEsc(name)+'</b><span>'+htmlEsc(x.installed?(x.active?'Active':'Installed / attention'):'Not installed')+'</span></div><i class="'+(x.active?'ok':'warn')+'">'+(x.active?'✓':'!')+'</i></div>';
-  const score=[sec.ufw.active,sec.fail2ban.active,sec.ssh.active,two.enabled].filter(Boolean).length;
-  content.innerHTML=viewIntro('DEFENSE LAYER','وضعیت امنیت','کنترل‌های اصلی Host و ورود مدیر را یکجا بررسی کن.','<div class="view-intro-stat"><b>'+score+'/4</b><span>CONTROLS</span></div>')+
-  '<div class="panel"><div class="security-control-grid">'+card('UFW Firewall',sec.ufw)+card('Fail2ban',sec.fail2ban)+card('OpenSSH',sec.ssh)+'<div class="security-control"><div><b>Admin 2FA</b><span>'+(two.enabled?'Authenticator enabled':'Setup recommended')+'</span></div><i class="'+(two.enabled?'ok':'warn')+'">'+(two.enabled?'✓':'!')+'</i></div></div><div class="wizard-note"><b>SSH PIN</b><span>PIN چهاررقمی برای کاربران اختیاری است؛ Fail2ban و محدودسازی شبکه برای سرویس عمومی توصیه می‌شود.</span></div><div class="toolbar" style="margin-top:14px"><button class="primary" data-action="nav" data-view="settings">'+(two.enabled?'Manage 2FA':'Enable 2FA')+'</button><button class="ghost" data-action="self-test">Run Self-Test</button></div></div>';
+  const https=location.protocol==='https:';
+  const items=[
+    ['Firewall','UFW',Boolean(sec.ufw?.active),'کنترل Portهای ورودی'],
+    ['Brute-force','Fail2ban',Boolean(sec.fail2ban?.active),'محافظت SSH و Login'],
+    ['Admin MFA','TOTP / 2FA',Boolean(two.enabled),'ورود دومرحله‌ای مدیریت'],
+    ['Panel TLS','HTTPS',https,'رمزگذاری نشست مدیریت'],
+    ['Runtime gate','Self-Test',Boolean(self.ok),'سلامت Backend و Crypto']
+  ];
+  const score=items.filter(x=>x[2]).length;
+  content.innerHTML=[
+    '<div class="pro-page security-v026">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">ADMIN HARDENING</span><h1>Admin Security</h1><p>کنترل‌های امنیتی مهم مدیریت، بدون شلوغی تنظیمات پراکنده.</p></div><div class="security-score '+(score>=4?'ok':'warn')+'"><b>'+score+'/'+items.length+'</b><span>Security controls</span></div></section>',
+      '<section class="security-modern-grid">'+items.map(x=>'<article><div class="security-icon">'+(x[2]?'✓':'!')+'</div><div><b>'+x[0]+'</b><span>'+x[1]+'</span><small>'+x[3]+'</small></div><em class="'+(x[2]?'ok':'warn')+'">'+(x[2]?'Active':'Attention')+'</em></article>').join('')+'</section>',
+      '<section class="panel security-actions-v026"><div><h3>اقدام‌های پیشنهادی</h3><p>تنظیمات حساس فقط برای مدیر Local قابل تغییر هستند و در Audit ثبت می‌شوند.</p></div><div class="toolbar"><button class="primary" data-action="nav-settings" data-view="settings" data-tab="security">'+(two.enabled?'مدیریت 2FA':'فعال‌سازی 2FA')+'</button><button class="ghost" data-action="self-test">Self-Test</button><button class="ghost" data-action="nav" data-view="audit">Audit Logs</button><button class="ghost" data-action="nav-settings" data-view="settings" data-tab="api">API Tokens</button></div></section>',
+      '<section class="security-note"><b>Production checklist</b><span>'+(https?'HTTPS فعال است.':'پنل اکنون بدون HTTPS باز شده؛ برای انتشار عمومی، Domain + TLS را در تنظیمات فعال کن.')+' Session timeout، 2FA، Fail2ban و محدودیت CIDR مدیریت را نیز بررسی کن.</span></section>',
+    '</div>'
+  ].join('');
 }
 async function backups(renderToken=window.__viewRenderToken){
   title.textContent='Backups';setPageContext('RECOVERY');
@@ -1146,47 +1163,47 @@ async function auditView(renderToken=window.__viewRenderToken){
 }
 async function updates(renderToken=window.__viewRenderToken){title.textContent='Update Center';setPageContext('RELEASE MANAGEMENT');content.innerHTML='<div class="empty">در حال بررسی نسخه…</div>';let s;try{s=await api('/api/update/status')}catch(e){s={current:window.MAKIA_VERSION,latest:null,error:e.message}}if(renderToken!==window.__viewRenderToken||activeView!=='updates')return;const available=s.update_available;content.innerHTML=`<div class="panel update-hero"><div><div class="eyebrow">RELEASE CHANNEL · MAIN</div><h2>${available?'نسخه جدید آماده است':'Makia به‌روز است'}</h2><p class="muted">${s.error?'بررسی آنلاین نسخه ناموفق بود: '+s.error:'نسخه نصب‌شده با VERSION مخزن اصلی مقایسه شد.'}</p></div><div class="version-stack"><span>Installed</span><b>v${s.current||window.MAKIA_VERSION}</b><span>Latest</span><b class="${available?'accent':''}">${s.latest?'v'+s.latest:'Unavailable'}</b></div></div><div class="two-col"><div class="panel"><div class="panel-head"><h3>Safe update workflow</h3><span>CLI VERIFIED PATH</span></div><div class="timeline"><div><b>1</b><span>Pre-update backup</span></div><div><b>2</b><span>Download main</span></div><div><b>3</b><span>Dependencies + service files</span></div><div><b>4</b><span>Restart + health check</span></div></div><div class="command-box">sudo makia-upgrade <button class="soft" onclick="copyText('sudo makia-upgrade')">Copy</button></div></div><div class="panel"><div class="panel-head"><h3>Release status</h3><span>${available?'ACTION AVAILABLE':'NO ACTION'}</span></div><div class="quick-grid"><div class="quick-card"><b>${s.current||'-'}</b><span>Current</span></div><div class="quick-card"><b>${s.latest||'-'}</b><span>Latest on GitHub</span></div></div><div class="notice">مسیر امن فعلی CLI است. v0.15 از Release Archive خصوصی و Bearer Token از فایل root-only /etc/makia-vps-manager/makia.env هم پشتیبانی می‌کند؛ بنابراین بعد از مهاجرت می‌توان مخزن را Private کرد.</div></div></div>`}
 async function guides(renderToken=window.__viewRenderToken){
-  title.textContent='Client Guides';setPageContext('DELIVERY EDUCATION');
+  title.textContent='راهنمای اتصال';setPageContext('CLIENT ONBOARDING');
   if(renderToken!==window.__viewRenderToken||activeView!=='guides')return;
   const cards=[
-    ['xray','Xray','VLESS / VMess / Trojan / Shadowsocks / Hysteria2','QR مستقیم، Import from Clipboard و Subscription برای v2rayNG / Hiddify / NekoBox و کلاینت‌های سازگار.'],
-    ['wireguard','WireGuard','.conf / QR','Import فایل Native یا اسکن QR با برنامه رسمی WireGuard.'],
-    ['openvpn','OpenVPN','.ovpn','Import فایل OVPN با OpenVPN Connect روی موبایل و دسکتاپ.'],
-    ['ssh','SSH / NPV','npvt-ssh / Credentials','Import لینک/QR در NPV Tunnel سازگار یا ورود دستی SSH با Server/User/Password.']
+    ['xray','Xray / V2Ray','/static/guides/xray.svg','QR · Share Link · Subscription','VLESS، VMess، Trojan، Shadowsocks و Hysteria2'],
+    ['wireguard','WireGuard','/static/guides/wireguard.svg','QR · Native .conf','برنامه رسمی WireGuard روی Android، iOS، Windows و macOS'],
+    ['openvpn','OpenVPN','/static/guides/openvpn.svg','.ovpn profile','Import در OpenVPN Connect؛ Transport از Server Profile می‌آید'],
+    ['ssh','SSH / NPV','/static/guides/ssh.svg','NPV QR · SSH credentials','Import در NPV یا اتصال دستی SSH']
   ];
   content.innerHTML=[
-    viewIntro('CLIENT ONBOARDING','راهنمای اتصال کاربران','این صفحه لینک عمومی و قابل‌ارسال راهنماها را می‌سازد؛ Credential کاربران داخل لینک راهنما قرار نمی‌گیرد.','<a class="primary link-btn" target="_blank" rel="noopener" href="/help/connect">باز کردن راهنمای عمومی</a>'),
-    '<section class="guide-admin-grid">'+cards.map(x=>'<article class="guide-admin-card"><div class="guide-admin-head"><span>'+x[1].slice(0,1)+'</span><div><b>'+x[1]+'</b><small>'+x[2]+'</small></div></div><p>'+x[3]+'</p><div class="toolbar"><button class="primary" data-action="client-guide" data-kind="'+x[0]+'">Open guide</button><button class="ghost" data-action="client-guide-copy" data-kind="'+x[0]+'">Copy guide link</button></div></article>').join('')+'</section>',
-    '<section class="panel"><div class="panel-head"><div><h3>روش پیشنهادی تحویل</h3><span>LESS SUPPORT TICKETS</span></div></div><div class="guide-flow"><div><b>1</b><span>از Access Center QR/Link/File همان کاربر را بفرست.</span></div><div><b>2</b><span>لینک Guide همان پروتکل را همراه آن ارسال کن.</span></div><div><b>3</b><span>برای Xray، Client Page و Subscription روش ساده‌تر برای کاربر نهایی هستند.</span></div><div><b>4</b><span>در صورت خطا، کاربر فقط نام برنامه، سیستم‌عامل و متن Error را بفرستد؛ Credential را در گروه عمومی نفرستد.</span></div></div></section>'
+    '<div class="pro-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">VISUAL CLIENT GUIDE</span><h1>راهنمای اتصال</h1><p>آموزش تصویری و مرحله‌ای برای کاربری که هیچ تجربه‌ای از VPN Client ندارد.</p></div><div class="pro-head-actions"><a class="primary link-btn" target="_blank" rel="noopener" href="/help/connect">باز کردن صفحه عمومی</a></div></section>',
+      '<section class="guide-visual-grid">'+cards.map(x=>'<article class="guide-visual-card"><img src="'+x[2]+'" alt="'+x[1]+' connection steps"><div><span class="pro-kicker">'+x[3]+'</span><h3>'+x[1]+'</h3><p>'+x[4]+'</p><div class="toolbar"><button class="primary" data-action="client-guide" data-kind="'+x[0]+'">راهنمای کامل</button><button class="ghost" data-action="client-guide-copy" data-kind="'+x[0]+'">کپی لینک</button></div></div></article>').join('')+'</section>',
+    '</div>'
   ].join('');
 }
-
 async function supportCenter(renderToken=window.__viewRenderToken){
-  title.textContent='Support';setPageContext('HELP & REMOTE SUPPORT');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بارگذاری پشتیبانی…</b></div>';
-  const [requests,session,grants]=await Promise.all([
+  title.textContent='پشتیبانی';setPageContext('SUPPORT');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال آماده‌سازی مرکز پشتیبانی…</b></div>';
+  const [requests,session,grants,self]=await Promise.all([
     api('/api/support/requests').catch(()=>({items:[],support:{}})),
     ensureSessionContext(true).catch(()=>({remote_support:false})),
-    api('/api/support/grants').catch(()=>({items:[]}))
+    api('/api/support/grants').catch(()=>({items:[]})),
+    api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='support')return;
-  const support=requests.support||{};
-  const rows=(requests.items||[]).slice(0,8).map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip '+(x.delivery_status==='webhook'?'ok':'')+'">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join('');
+  const support=requests.support||{},recent=(requests.items||[]).slice(0,5);
   content.innerHTML=[
-    '<section class="support-hero"><div><div class="eyebrow">SUPPORT CENTER</div><h2>پشتیبانی Makia</h2><p>برای راهنمایی یا بررسی خطا درخواست ثبت کن. دسترسی موقت پشتیبانی فقط با کدی که خودت می‌سازی فعال می‌شود.</p></div></section>',
-    (!session.remote_support?'<section class="panel remote-support-panel"><div class="panel-head"><div><h3>Remote Support موقت</h3><span>CONSENT · ONE-TIME CODE</span></div></div><div class="remote-support-create"><div><p>فقط در زمان نیاز یک کد موقت بساز. کد پس از اولین Login مصرف می‌شود و Session حداکثر تا زمان انتخاب‌شده فعال می‌ماند.</p><div class="form-grid two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option><option value="120">120 دقیقه</option></select></label><label>Scope<select id="supportGrantScope"><option value="readonly">Read-only</option><option value="operator" selected>Operator</option></select></label></div><button class="primary" data-action="support-grant-create">ساخت کد موقت</button></div><div class="support-grant-list">'+((grants.items||[]).slice(0,5).map(g=>'<div><span>…'+htmlEsc(g.token_last4)+'</span><b>'+htmlEsc(g.scope)+'</b><small>'+htmlEsc(new Date(Number(g.expires_at)*1000).toLocaleString())+'</small>'+(g.active?'<button class="danger" data-action="support-grant-revoke" data-id="'+Number(g.id)+'">Revoke</button>':'<em>Closed</em>')+'</div>').join('')||'<div class="empty compact">کد فعالی وجود ندارد.</div>')+'</div></div></section>':'<section class="wizard-note danger-note"><b>Remote Support Session</b><span>این ورود موقت است. تنظیمات هویتی حساس مانند 2FA و API Token برای Remote Support مسدود هستند.</span></section>'),
-    '<section class="support-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>درخواست پشتیبانی</h3><span>SUPPORT REQUEST</span></div></div>',
-        '<div class="form-grid two"><label>Subject<input id="supportSubject" maxlength="160" placeholder="موضوع درخواست"></label></div>',
-        '<label class="single-label">Message<textarea id="supportMessage" rows="6" placeholder="توضیح درخواست یا مشکل…"></textarea></label>',
-        '<div class="toolbar"><button class="primary" data-action="support-submit">ثبت درخواست</button>'+(support.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram @'+htmlEsc(support.telegram_username)+'</button>':'')+'</div>',
-        '<div class="wizard-note"><b>Ticket delivery</b><span>'+(support.webhook_enabled?'Webhook مرکزی فعال است؛ Ticket علاوه بر ثبت محلی ارسال می‌شود.':'Webhook مرکزی تنظیم نشده؛ درخواست محلی ثبت می‌شود و متن آماده برای ارسال دستی تولید می‌گردد.')+'</span></div>',
-      '</div>',
-      '<div class="panel"><div class="panel-head"><div><h3>درخواست‌های اخیر</h3><span>LOCAL HISTORY</span></div></div><div class="support-ticket-list">'+(rows||'<div class="empty compact">درخواستی ثبت نشده.</div>')+'</div></div>',
-    '</section>'
+    '<div class="pro-page support-v026">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">HELP CENTER</span><h1>پشتیبانی Makia</h1><p>راهنما، Diagnostics و ثبت درخواست؛ ابزار Remote Support فقط در بخش پیشرفته قرار دارد.</p></div><div class="pro-head-actions"><span class="status-chip '+(self.ok?'ok':'warn')+'">'+(self.ok?'System healthy':'Needs attention')+'</span></div></section>',
+      '<section class="support-quick-grid">',
+        '<button data-action="self-test"><span>✓</span><div><b>بررسی سلامت</b><small>Self-Test و Diagnostics داخلی</small></div></button>',
+        '<button data-action="nav" data-view="guides"><span>?</span><div><b>راهنمای تصویری</b><small>آموزش اتصال همه پروتکل‌ها</small></div></button>',
+        '<button data-action="nav" data-view="audit"><span>▤</span><div><b>گزارش خطاها</b><small>Audit و رخدادهای مدیریتی</small></div></button>',
+        '<button data-action="nav" data-view="connectivity"><span>◉</span><div><b>Connectivity Lab</b><small>بررسی Runtime و Portها</small></div></button>',
+      '</section>',
+      '<section class="support-main-grid"><article class="panel"><div class="panel-head"><div><h3>ثبت درخواست</h3><span>SUPPORT TICKET</span></div></div><label class="single-label">موضوع<input id="supportSubject" maxlength="160" placeholder="مثلاً: خطا در ساخت Xray"></label><label class="single-label">توضیحات<textarea id="supportMessage" rows="5" placeholder="نسخه، پروتکل، متن خطا و کاری که انجام دادی…"></textarea></label><div class="toolbar"><button class="primary" data-action="support-submit">ارسال درخواست</button>'+(support.telegram_url?'<button class="ghost" data-action="support-telegram" data-url="'+htmlEsc(support.telegram_url)+'">Telegram</button>':'')+'</div></article>',
+      '<article class="panel"><div class="panel-head"><div><h3>درخواست‌های اخیر</h3><span>'+recent.length+' TICKETS</span></div></div><div class="support-ticket-list">'+(recent.length?recent.map(x=>'<div class="support-ticket-row"><div><b>#'+Number(x.id)+' · '+htmlEsc(x.subject)+'</b><span>'+htmlEsc(x.created_at||'')+'</span></div><span class="status-chip">'+htmlEsc(x.delivery_status||'local')+'</span></div>').join(''):'<div class="empty compact">هنوز درخواستی ثبت نشده است.</div>')+'</div></article></section>',
+      '<details class="support-advanced"><summary><div><b>Remote Support پیشرفته</b><span>فقط هنگام نیاز و با رضایت مدیر</span></div><em>باز کردن</em></summary><div class="support-advanced-body">'+(!session.remote_support?'<div class="form-grid two"><label>مدت<select id="supportGrantMinutes"><option value="15">15 دقیقه</option><option value="30" selected>30 دقیقه</option><option value="60">60 دقیقه</option></select></label><label>سطح دسترسی<select id="supportGrantScope"><option value="readonly" selected>Read-only</option><option value="operator">Operator</option></select></label></div><p>کد یک‌بارمصرف است و هر عملیات در Audit ثبت می‌شود.</p><button class="danger" data-action="support-grant-create">ساخت کد موقت</button>':'<div class="security-note"><b>Remote Support فعال است</b><span>برای پایان جلسه از Banner بالای پنل استفاده کن.</span></div>')+'</div></details>',
+    '</div>'
   ].join('');
 }
-
 async function createRemoteSupportGrant(){
   const minutes=Number(document.getElementById('supportGrantMinutes')?.value||30),scope=document.getElementById('supportGrantScope')?.value||'operator';
   try{
