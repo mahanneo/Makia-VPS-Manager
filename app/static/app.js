@@ -1272,12 +1272,13 @@ async function submitSupportRequest(){
 
 async function settings(renderToken=window.__viewRenderToken){
   title.textContent='Settings';setPageContext('PANEL CONFIGURATION');
-  const [general,two,tokens,operator,backupRows]=await Promise.all([
+  const [general,two,tokens,operator,backupRows,sec]=await Promise.all([
     api('/api/settings/general'),
     api('/api/admin/2fa/status').catch(()=>({enabled:false,configured:false,restricted:true})),
     api('/api/admin/tokens').catch(()=>[]),
     api('/api/settings/operator'),
-    api('/api/backups').catch(()=>[])
+    api('/api/backups').catch(()=>[]),
+    api('/api/security').catch(()=>({ufw:{installed:false,active:false},fail2ban:{installed:false,active:false},ssh:{installed:true,active:true}}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='settings')return;
   window.PANEL_DOMAIN=general.panel_domain||'';window.__operatorSettings=operator;
@@ -1363,11 +1364,25 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save subscription settings</button></div></div>'
     ].join('');
   }else if(tab==='security'){
+    const httpsReady=location.protocol==='https:'||Boolean(ds.certificate);
+    const activeTokens=tokens.filter(t=>t.active).length;
+    const posture=[
+      ['HTTPS',httpsReady,httpsReady?'TLS فعال':'پنل روی HTTP / IP باز است'],
+      ['Admin 2FA',Boolean(two.enabled),two.enabled?'TOTP فعال':'فعال‌سازی توصیه می‌شود'],
+      ['UFW Firewall',Boolean(sec.ufw?.active),sec.ufw?.active?'Firewall active':sec.ufw?.installed?'Installed / inactive':'Not installed'],
+      ['Fail2ban',Boolean(sec.fail2ban?.active),sec.fail2ban?.active?'Brute-force protection active':sec.fail2ban?.installed?'Installed / inactive':'Not installed'],
+      ['OpenSSH',Boolean(sec.ssh?.active),sec.ssh?.active?'SSH daemon active':'SSH service needs attention'],
+      ['API exposure',activeTokens===0,activeTokens?activeTokens+' active token':'No active token']
+    ];
+    const healthy=posture.filter(x=>x[1]).length;
     body=[
-      '<section class="settings-section-head"><div><div class="eyebrow">ADMIN SECURITY</div><h2>Admin Security</h2><p>'+(two.restricted?'این بخش هویتی فقط برای مدیر محلی قابل تغییر است.':'Session lifetime، رمز عبور مدیر و TOTP واقعی.')+'</p></div></section>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Admin session</b><span>Signed cookie lifetime</span></div></div><div class="settings-form-grid two"><label>Session max age (minutes)<input id="opSessionMinutes" type="number" min="5" max="43200" value="'+Number(operator.session_max_age_minutes||720)+'"></label><div class="settings-inline-note"><b>'+Math.round(Number(operator.session_max_age_minutes||720)/60*10)/10+' hours</b><span>روی login بعدی اعمال می‌شود.</span></div></div><div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save session policy</button></div></div>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Administrator password</b><span>Minimum 12 characters</span></div></div><div class="settings-form-grid two"><label>Current password<input id="oldP" type="password"></label><label>New password<input id="newP" type="password" minlength="12"></label></div><div class="settings-actions"><button class="primary" data-action="settings-password-change">Change password</button></div></div>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Two-Factor Authentication</b><span>TOTP authenticator</span></div><span class="status-chip '+(two.enabled?'ok':'warn')+'">'+(two.enabled?'Enabled':'Optional')+'</span></div><div class="security-feature-row"><div><b>'+(two.enabled?'2FA is active':'Add a second factor')+'</b><span>'+(two.enabled?'Password + 6-digit TOTP is required at login.':'Google Authenticator, Microsoft Authenticator or compatible TOTP app.')+'</span></div><button class="'+(two.enabled?'danger':'primary')+'" data-action="'+(two.enabled?'settings-2fa-disable':'settings-2fa-setup')+'">'+(two.enabled?'Disable 2FA':'Enable 2FA')+'</button></div></div>'
+      '<section class="settings-section-head security-head-v26"><div><div class="eyebrow">ADMIN SECURITY</div><h2>Admin Security</h2><p>وضعیت ورود مدیر، HTTPS، Firewall، 2FA و Tokenها در یک نمای عملیاتی.</p></div><div class="security-posture-score '+(healthy>=5?'good':healthy>=3?'warn':'bad')+'"><b>'+healthy+'/'+posture.length+'</b><span>controls ready</span></div></section>',
+      (!httpsReady?'<div class="security-critical-banner"><b>پنل در حال حاضر Secure نیست</b><span>اسکرین‌شات Host با HTTP/IP باز شده است. برای استفاده عمومی Domain + HTTPS را فعال کن.</span><button class="primary" data-action="settings-tab" data-tab="domain">تنظیم HTTPS</button></div>':''),
+      '<div class="security-posture-grid">'+posture.map(x=>'<article class="'+(x[1]?'ok':'warn')+'"><i>'+(x[1]?'✓':'!')+'</i><div><b>'+x[0]+'</b><small>'+htmlEsc(x[2])+'</small></div></article>').join('')+'</div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Admin session</b><span>Signed session lifetime</span></div><span class="status-chip">'+Math.round(Number(operator.session_max_age_minutes||720)/60*10)/10+'h</span></div><div class="settings-form-grid two"><label>Session max age (minutes)<input id="opSessionMinutes" type="number" min="5" max="43200" value="'+Number(operator.session_max_age_minutes||720)+'"></label><div class="settings-inline-note"><b>Shorter is safer</b><span>برای پنل عمومی Session کوتاه‌تر و 2FA توصیه می‌شود.</span></div></div><div class="settings-actions"><button class="primary" data-action="settings-operator-save">ذخیره Session Policy</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Administrator password</b><span>حداقل 12 کاراکتر و ترجیحاً یکتا</span></div></div><div class="settings-form-grid two"><label>رمز فعلی<input id="oldP" type="password" autocomplete="current-password"></label><label>رمز جدید<input id="newP" type="password" minlength="12" autocomplete="new-password"></label></div><div class="security-password-hint"><span>پیشنهاد:</span> حروف بزرگ/کوچک + عدد + نماد و عدم استفاده مجدد از رمزهای قبلی.</div><div class="settings-actions"><button class="primary" data-action="settings-password-change">تغییر رمز مدیر</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Two-Factor Authentication</b><span>TOTP authenticator</span></div><span class="status-chip '+(two.enabled?'ok':'warn')+'">'+(two.enabled?'Enabled':'Recommended')+'</span></div><div class="security-feature-row"><div><b>'+(two.enabled?'2FA فعال است':'لایه دوم ورود را فعال کن')+'</b><span>'+(two.enabled?'برای ورود Password + کد ۶ رقمی لازم است.':'Google/Microsoft Authenticator، 1Password و سایر TOTP appها سازگارند.')+'</span></div><button class="'+(two.enabled?'danger':'primary')+'" data-action="'+(two.enabled?'settings-2fa-disable':'settings-2fa-setup')+'">'+(two.enabled?'غیرفعال‌سازی 2FA':'فعال‌سازی 2FA')+'</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Security operations</b><span>ابزارهای سریع بررسی و سخت‌سازی</span></div></div><div class="settings-shortcuts"><button data-action="nav" data-view="security"><b>Host Security</b><span>UFW · Fail2ban · SSH</span></button><button data-action="self-test"><b>Self-Test</b><span>Crypto · DB · Services</span></button><button data-action="settings-tab" data-tab="api"><b>API Tokens</b><span>'+activeTokens+' active</span></button><button data-action="nav" data-view="audit"><b>Audit Logs</b><span>ردپای عملیات مدیر</span></button></div></div>'
     ].join('');
   }else if(tab==='api'){
     body=[
