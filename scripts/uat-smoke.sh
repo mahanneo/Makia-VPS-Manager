@@ -112,7 +112,11 @@ if command -v xray >/dev/null 2>&1; then
       xray_bad "Xray runtime inactive"
       journalctl -u xray -n 12 --no-pager || true
     fi
+  else
+    xray_bad "Xray config missing"
   fi
+else
+  xray_bad "Xray binary missing"
 fi
 
 if [[ -x /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync ]]; then
@@ -140,6 +144,8 @@ if [[ -f /etc/openvpn/server/server.conf ]]; then
   else
     ovpn_bad "OpenVPN listener missing"
   fi
+else
+  ovpn_bad "OpenVPN server config missing"
 fi
 
 if [[ -f /etc/wireguard/wg0.conf ]]; then
@@ -162,6 +168,14 @@ PY
     systemctl status wg-quick@wg0 --no-pager -l || true
     wg show wg0 || true
   fi
+else
+  wg_bad "WireGuard wg0 config missing"
+fi
+
+if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then
+  ok "Stunnel tooling installed"
+else
+  bad "Stunnel tooling missing"
 fi
 
 if command -v makia-restore-portable >/dev/null 2>&1; then
