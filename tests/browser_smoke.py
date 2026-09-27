@@ -128,7 +128,7 @@ def main():
             page.locator('[data-action="openvpn-server-config"]').click()
             page.locator(".vpn-config-modal").wait_for()
             assert page.locator("#ovServerProto option").count()==2
-            page.locator('[data-action="modal-close"]').click()
+            page.locator('.vpn-config-modal .close-btn[data-action="modal-close"]').click()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
             page.locator('.pro-sidebar button[data-view="support"]').click()
             leave_sidebar(page)
@@ -261,7 +261,7 @@ def main():
             page.locator('[data-action="wg-server-config"]').click()
             page.locator(".vpn-config-modal").wait_for()
             assert page.locator("#wgServerPort").count()==1
-            page.locator('[data-action="modal-close"]').click()
+            page.locator('.vpn-config-modal .close-btn[data-action="modal-close"]').click()
             page.screenshot(path='/tmp/makia-wg-desktop.png',full_page=True)
             page.set_viewport_size({"width":390,"height":844})
             page.locator('.mobile-menu-toggle').click()
