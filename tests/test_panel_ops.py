@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from app import panel_ops
@@ -121,3 +123,16 @@ def test_domain_status_reports_certbot_nginx_readiness(monkeypatch):
     result=panel_ops.domain_status("panel.example.com")
     assert result["certbot_installed"] is True
     assert result["certbot_nginx_ready"] is True
+
+
+def test_certbot_nginx_plugin_probe(monkeypatch):
+    monkeypatch.setattr(panel_ops.shutil,"which",lambda name:"/usr/bin/certbot" if name=="certbot" else f"/usr/bin/{name}")
+    monkeypatch.setattr(panel_ops.subprocess,"run",lambda *args,**kwargs:SimpleNamespace(
+        returncode=0,stdout="Plugins selected:\n* nginx\nDescription: Nginx Web Server plugin\n",stderr=""
+    ))
+    assert panel_ops._certbot_nginx_plugin_ready() is True
+
+    monkeypatch.setattr(panel_ops.subprocess,"run",lambda *args,**kwargs:SimpleNamespace(
+        returncode=0,stdout="Plugins selected:\n* standalone\n",stderr=""
+    ))
+    assert panel_ops._certbot_nginx_plugin_ready() is False
