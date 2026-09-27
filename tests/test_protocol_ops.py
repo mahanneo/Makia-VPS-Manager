@@ -168,3 +168,50 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
     assert result["openvpn"]["service_active"] is True
     assert result["stunnel"]["installed"] is True
     assert result["ports"]=={"wireguard":443,"openvpn":1194}
+
+
+def test_xray_service_validation_falls_back_when_runuser_setuid_is_blocked(monkeypatch,tmp_path):
+    cfg=tmp_path/"config.json"
+    cfg.write_text("{}",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"_xray_service_user",lambda:"xray")
+    monkeypatch.setattr(protocol_ops.os,"geteuid",lambda:0)
+    monkeypatch.setattr(protocol_ops.shutil,"which",lambda name:"/usr/sbin/runuser" if name=="runuser" else None)
+    class Pw:
+        pw_uid=1001
+        pw_gid=1001
+    monkeypatch.setattr(protocol_ops.pwd,"getpwnam",lambda user:Pw())
+    real_stat=protocol_ops.os.stat
+    class St:
+        st_uid=1001
+        st_gid=1001
+        st_mode=0o100600
+    monkeypatch.setattr(protocol_ops.os,"stat",lambda path:St() if str(path)==str(cfg) else real_stat(path))
+    real_read=protocol_ops.Path.read_text
+    def fake_read(self,*args,**kwargs):
+        if str(self)=="/proc/self/status":
+            return "Name:\tpython\nNoNewPrivs:\t1\n"
+        return real_read(self,*args,**kwargs)
+    monkeypatch.setattr(protocol_ops.Path,"read_text",fake_read)
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_xray_test_config",lambda binary,path:calls.append((binary,str(path))) or "ok")
+    assert protocol_ops._xray_test_config_as_service("/usr/local/bin/xray",cfg)=="ok"
+    assert calls==[("/usr/local/bin/xray",str(cfg))]
+
+
+def test_openvpn_reconfigure_accepts_tcp_and_preserves_runtime(monkeypatch,tmp_path):
+    server_dir=tmp_path/"server"
+    server_dir.mkdir()
+    conf=server_dir/"server.conf"
+    conf.write_text('port 1194\nproto udp4\nkeepalive 10 120\npush "redirect-gateway def1 bypass-dhcp"\npush "dhcp-option DNS 1.1.1.1"\n',encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",tmp_path)
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{"port":443,"proto":"tcp4-server","service_active":True,"listener":True})
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**k:"")
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *a,**k:{"ok":True})
+    result=protocol_ops.reconfigure_openvpn_server(443,"tcp","9.9.9.9","1.1.1.1",True,True,15,90)
+    text=conf.read_text(encoding="utf-8")
+    assert "port 443" in text
+    assert "proto tcp4-server" in text
+    assert 'push "dhcp-option DNS 9.9.9.9"' in text
+    assert "client-to-client" in text
+    assert result["ok"] is True

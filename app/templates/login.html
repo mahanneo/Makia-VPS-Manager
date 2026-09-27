@@ -6,21 +6,50 @@
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
 </head>
-<body class="sanaei-login" data-theme="glass">
-  <div class="sanaei-login-toolbar">
-    <button type="button" title="زبان">FA</button>
-    <button type="button" title="ظاهر">◐</button>
+<body class="sanaei-login login-v026" data-theme="dark">
+  <div class="login-toolbar-v026" aria-label="تنظیمات ورود">
+    <button id="loginLangToggle" type="button" title="تغییر زبان"><span class="toolbar-icon">文</span><b id="loginLangLabel">FA</b></button>
+    <button id="loginThemeToggle" type="button" title="روشن / تاریک"><span class="toolbar-icon" id="loginThemeIcon">☾</span></button>
   </div>
-  <main class="sanaei-login-card">
+  <main class="sanaei-login-card login-card-v026">
     <div class="sanaei-login-brand"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
-    <h1>خوش آمدید</h1><p>برای ورود به پنل اطلاعات مدیر را وارد کنید.</p>
+    <h1 data-fa="خوش آمدید" data-en="Welcome">خوش آمدید</h1>
+    <p data-fa="برای ورود به پنل اطلاعات مدیر را وارد کنید." data-en="Sign in with your administrator account.">برای ورود به پنل اطلاعات مدیر را وارد کنید.</p>
     {% if error %}<div class="alert">{{error}}</div>{% endif %}
-    <form method="post" class="sanaei-login-form">
-      <label><span>نام کاربری</span><div class="sanaei-login-input"><b>♙</b><input name="username" autocomplete="username" required autofocus placeholder="admin"></div></label>
-      <label><span>رمز عبور</span><div class="sanaei-login-input"><b>⌑</b><input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"><button type="button" id="toggleLoginPassword" aria-label="نمایش رمز">◉</button></div></label>
-      <button class="sanaei-login-submit" type="submit">ورود</button>
+    <form method="post" class="sanaei-login-form" autocomplete="on">
+      <label>
+        <span data-fa="نام کاربری" data-en="Username">نام کاربری</span>
+        <div class="login-field-v026"><span class="field-icon">♙</span><input name="username" autocomplete="username" required autofocus placeholder="admin"></div>
+      </label>
+      <label>
+        <span data-fa="رمز عبور" data-en="Password">رمز عبور</span>
+        <div class="login-field-v026"><span class="field-icon">⌑</span><input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"><button type="button" id="toggleLoginPassword" aria-label="نمایش رمز">◉</button></div>
+      </label>
+      <button class="sanaei-login-submit" type="submit" data-fa="ورود" data-en="Sign in">ورود</button>
     </form>
-    <div class="sanaei-login-foot"><span>Secure Admin Session</span><span>v{{version}}</span></div>
+    <div class="sanaei-login-foot"><span data-fa="نشست امن مدیریت" data-en="Secure Admin Session">نشست امن مدیریت</span><span>v{{version}}</span></div>
   </main>
-  <script>document.getElementById("toggleLoginPassword")?.addEventListener("click",()=>{const p=document.getElementById("loginPassword");if(p)p.type=p.type==="password"?"text":"password"});</script>
+  <script>
+  (()=>{
+    const root=document.documentElement,body=document.body;
+    const langBtn=document.getElementById('loginLangToggle'),langLabel=document.getElementById('loginLangLabel');
+    const themeBtn=document.getElementById('loginThemeToggle'),themeIcon=document.getElementById('loginThemeIcon');
+    const pass=document.getElementById('loginPassword'),passBtn=document.getElementById('toggleLoginPassword');
+    function applyLang(lang){
+      const en=lang==='en';root.lang=en?'en':'fa';root.dir=en?'ltr':'rtl';langLabel.textContent=en?'EN':'FA';
+      document.querySelectorAll('[data-fa][data-en]').forEach(el=>el.textContent=en?el.dataset.en:el.dataset.fa);
+      try{localStorage.setItem('makia-login-lang',en?'en':'fa')}catch{}
+    }
+    function applyTheme(theme){
+      const light=theme==='light';body.dataset.theme=light?'light':'dark';themeIcon.textContent=light?'☀':'☾';
+      try{localStorage.setItem('makia-login-theme',light?'light':'dark')}catch{}
+    }
+    let lang='fa',theme='dark';
+    try{lang=localStorage.getItem('makia-login-lang')||'fa';theme=localStorage.getItem('makia-login-theme')||'dark'}catch{}
+    applyLang(lang);applyTheme(theme);
+    langBtn?.addEventListener('click',()=>applyLang(root.lang==='fa'?'en':'fa'));
+    themeBtn?.addEventListener('click',()=>applyTheme(body.dataset.theme==='light'?'dark':'light'));
+    passBtn?.addEventListener('click',()=>{if(!pass)return;const show=pass.type==='password';pass.type=show?'text':'password';passBtn.textContent=show?'◎':'◉'});
+  })();
+  </script>
 </body></html>

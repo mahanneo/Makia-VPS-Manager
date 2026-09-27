@@ -119,3 +119,48 @@ def test_connectivity_lab_does_not_fake_iran_validation():
     assert "نیاز به تست از داخل ایران" in JS
     assert "Server Ready به معنی" in JS
     assert "IRAN FIELD GATE" in JS
+
+
+def test_v026_login_controls_are_real_not_decorative():
+    login=(ROOT/"app/templates/login.html").read_text(encoding="utf-8")
+    assert 'id="loginLangToggle"' in login
+    assert 'id="loginThemeToggle"' in login
+    assert "makia-login-lang" in login
+    assert "makia-login-theme" in login
+    assert "login-field-v026" in login
+
+
+def test_v026_advanced_vpn_controls_are_wired():
+    for marker in [
+        "wg-server-config","wg-server-save",
+        "openvpn-server-config","openvpn-server-save",
+        "/api/protocols/wireguard/config",
+        "/api/protocols/openvpn/config",
+        "protocolLogo",
+    ]:
+        assert marker in JS
+
+
+def test_xray_wizard_only_offers_compatible_combinations():
+    assert "xrayCompatibility" in JS
+    assert "normalizeXrayWizardCombo" in JS
+    assert "hysteria2" in JS
+    assert "reality" in JS
+
+
+def test_visual_guides_cover_every_primary_protocol():
+    guide=(ROOT/"app/templates/client_guide.html").read_text(encoding="utf-8")
+    for name in ["xray","wireguard","openvpn","ssh"]:
+        assert f"/static/guides/{name}.svg" in guide
+        assert (ROOT/f"app/static/guides/{name}.svg").is_file()
+
+
+def test_support_hides_remote_access_in_advanced_section():
+    assert "support-advanced" in JS
+    assert "Remote Support پیشرفته" in JS
+    assert "Read-only" in JS
+
+
+def test_admin_security_uses_modern_security_center():
+    for marker in ["ADMIN HARDENING","security-modern-grid","Panel TLS","Runtime gate"]:
+        assert marker in JS

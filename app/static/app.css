@@ -1625,3 +1625,54 @@ body.makia-pro-shell{
   .provision-drawer .wizard-body{padding:17px}.pro-protocol-picker,.provision-drawer .wizard-form.two,.pro-review-grid,.pro-delivery-box{grid-template-columns:1fr}
   .lab-port-head,.lab-port-row{grid-template-columns:1fr 1fr}.lab-port-head span:nth-child(3),.lab-port-head span:nth-child(4){display:none}
 }
+
+
+/* v0.26 login hardening */
+.login-v026{background:#09111d!important;color:#edf4fc!important;transition:background .18s,color .18s}
+.login-v026[data-theme="light"]{background:#eef3f9!important;color:#172033!important}
+.login-toolbar-v026{position:fixed;top:18px;left:18px;display:flex;gap:8px;z-index:10}
+.login-toolbar-v026 button{min-width:40px;height:40px;padding:0 11px;border:1px solid #2b3d55;border-radius:10px;background:#111d2e;color:#dbe7f5;display:flex;align-items:center;justify-content:center;gap:6px}
+.login-toolbar-v026 button:hover{border-color:#4f82c8;background:#17263a}
+.login-toolbar-v026 .toolbar-icon{font-size:14px}.login-toolbar-v026 b{font-size:9px}
+.login-card-v026{width:min(390px,calc(100vw - 32px));padding:30px 30px 24px!important;border-radius:16px!important;background:#111d2e!important;border:1px solid #29405f!important}
+.login-v026[data-theme="light"] .login-card-v026{background:#fff!important;border-color:#c9d6e5!important;box-shadow:0 22px 60px rgba(26,45,74,.12)!important}
+.login-v026[data-theme="light"] .sanaei-login-brand strong,.login-v026[data-theme="light"] .login-card-v026 h1{color:#172033}
+.login-v026[data-theme="light"] .login-card-v026>p,.login-v026[data-theme="light"] .sanaei-login-form label>span{color:#5b6d84}
+.login-field-v026{height:44px;margin-top:6px;display:flex;align-items:center;border:1px solid #30445f;border-radius:9px;background:#0b1624;overflow:hidden;transition:border .15s,box-shadow .15s}
+.login-field-v026:focus-within{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.14)}
+.login-field-v026 .field-icon{width:40px;flex:none;text-align:center;color:#7f96af;font-size:12px}
+.login-field-v026 input{height:42px!important;min-width:0!important;flex:1!important;margin:0!important;padding:0 8px!important;border:0!important;outline:0!important;background:transparent!important;color:#f5f8fc!important;box-shadow:none!important;border-radius:0!important}
+.login-field-v026 input:focus,.login-field-v026 input:-webkit-autofill{border:0!important;outline:0!important;box-shadow:0 0 0 1000px #0b1624 inset!important;-webkit-text-fill-color:#f5f8fc!important}
+.login-field-v026 button{width:42px;height:42px;flex:none;border:0;background:transparent;color:#7f96af}
+.login-v026[data-theme="light"] .login-field-v026{background:#f5f8fc;border-color:#cbd8e7}
+.login-v026[data-theme="light"] .login-field-v026 input{color:#1e293b!important}
+.login-v026[data-theme="light"] .login-field-v026 input:focus,.login-v026[data-theme="light"] .login-field-v026 input:-webkit-autofill{box-shadow:0 0 0 1000px #f5f8fc inset!important;-webkit-text-fill-color:#1e293b!important}
+.login-v026[data-theme="light"] .login-toolbar-v026 button{background:#fff;border-color:#cbd8e7;color:#334155}
+.login-v026[data-theme="light"] .sanaei-login-foot{color:#728399;border-color:#dbe4ee}
+
+
+/* v0.26 protocol branding / advanced centers */
+.protocol-brand-logo{width:44px;height:44px;flex:0 0 44px;display:grid;place-items:center;border-radius:12px;font-weight:900;font-size:17px;color:#fff;border:1px solid #355579;box-shadow:0 8px 20px #0003}
+.protocol-brand-logo.xray{background:linear-gradient(135deg,#5232a8,#7459d9);border-color:#6e57b6}
+.protocol-brand-logo.wireguard{background:linear-gradient(135deg,#6f2132,#a63b51);border-color:#8d3949}
+.protocol-brand-logo.openvpn{background:linear-gradient(135deg,#b7640c,#e38a1c);border-color:#c8791c}
+.protocol-brand-logo.ssh{background:linear-gradient(135deg,#1f5fb7,#3888ef);border-color:#3f79be}
+.vpn-config-modal{width:min(780px,96vw)}
+.vpn-config-modal .wizard-head>div{display:flex;align-items:center;gap:11px}
+.vpn-feature-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:15px 0}
+.vpn-feature-grid>div{padding:11px;border:1px solid var(--pro-line-soft);border-radius:9px;background:#0d1929}
+.vpn-feature-grid b{display:block;font-size:10px}.vpn-feature-grid span{display:block;margin-top:3px;color:#7c91a8;font-size:9px;line-height:1.6}
+.toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}
+.toggle-grid label{display:flex;align-items:flex-start;gap:9px;padding:11px;border:1px solid var(--pro-line-soft);border-radius:9px;background:#0d1929}
+.toggle-grid input{width:auto!important;margin-top:2px!important}.toggle-grid b{display:block;font-size:10px}.toggle-grid small{display:block;color:#7b90a7;font-size:8px;margin-top:2px}
+.security-score{min-width:110px;padding:11px 14px;border:1px solid #6c5527;border-radius:10px;background:#2a2317;text-align:center}.security-score.ok{border-color:#28604c;background:#0f291f}.security-score b{display:block;font-size:20px}.security-score span{font-size:8px;color:#8ca0b7}
+.security-modern-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}.security-modern-grid article{position:relative;display:flex;align-items:center;gap:10px;padding:13px;border:1px solid var(--pro-line);border-radius:10px;background:var(--pro-surface)}
+.security-icon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#14243a;color:#79aee9;font-weight:900}.security-modern-grid b{display:block;font-size:10px}.security-modern-grid span{display:block;color:#869ab0;font-size:8px}.security-modern-grid small{display:block;color:#647a92;font-size:7px;margin-top:3px}.security-modern-grid em{position:absolute;top:10px;left:10px;font-style:normal;font-size:7px}.security-modern-grid em.ok{color:#63d9aa}.security-modern-grid em.warn{color:#edc56f}
+.security-actions-v026{display:flex;align-items:center;justify-content:space-between;gap:18px}.security-actions-v026 h3{margin:0;font-size:13px}.security-actions-v026 p{margin:4px 0 0;color:#7f93aa;font-size:9px}
+.security-note{display:flex;gap:9px;padding:12px 14px;border:1px solid #3c4d63;border-radius:10px;background:#101c2c;font-size:9px}.security-note b{color:#cfe1f5}.security-note span{color:#869ab0}
+.guide-visual-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.guide-visual-card{overflow:hidden;border:1px solid var(--pro-line);border-radius:12px;background:var(--pro-surface)}.guide-visual-card img{display:block;width:100%;aspect-ratio:720/420;object-fit:cover;border-bottom:1px solid var(--pro-line-soft)}.guide-visual-card>div{padding:14px}.guide-visual-card h3{margin:4px 0;font-size:14px}.guide-visual-card p{margin:0 0 12px;color:#8195ab;font-size:9px;line-height:1.7}
+.guide-visual-step{display:block;width:100%;max-height:360px;object-fit:contain;border:1px solid #243952;border-radius:14px;background:#0b1625;margin:14px 0}
+.support-quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.support-quick-grid button{display:flex;align-items:center;gap:10px;padding:13px;border:1px solid var(--pro-line);border-radius:10px;background:var(--pro-surface);color:#dce7f4;text-align:right}.support-quick-grid button>span{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:#173250;color:#8fc4ff}.support-quick-grid b{display:block;font-size:10px}.support-quick-grid small{display:block;color:#778da5;font-size:8px;margin-top:2px}
+.support-main-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}.support-advanced{border:1px solid var(--pro-line);border-radius:10px;background:var(--pro-surface);overflow:hidden}.support-advanced summary{list-style:none;display:flex;justify-content:space-between;align-items:center;padding:13px 15px;cursor:pointer}.support-advanced summary::-webkit-details-marker{display:none}.support-advanced summary b{display:block;font-size:10px}.support-advanced summary span{display:block;color:#7389a1;font-size:8px;margin-top:2px}.support-advanced summary em{font-style:normal;color:#80a7d4;font-size:8px}.support-advanced-body{padding:15px;border-top:1px solid var(--pro-line-soft)}
+@media(max-width:1100px){.security-modern-grid{grid-template-columns:repeat(2,1fr)}.support-quick-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){.vpn-feature-grid,.toggle-grid,.guide-visual-grid,.support-main-grid{grid-template-columns:1fr}.security-modern-grid,.support-quick-grid{grid-template-columns:1fr}.security-actions-v026{align-items:flex-start;flex-direction:column}.guide-visual-step{margin:10px 0}}

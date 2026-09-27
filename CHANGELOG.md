@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.26.0-rc1] - 2026-09-27
+
+### Host/runtime fixes
+- Fixed Xray creation under hardened systemd services where `runuser` could fail with `cannot set user id: Operation not permitted` because Makia itself runs with NoNewPrivileges/RestrictSUIDSGID.
+- Xray service-user validation now preserves the systemd sandbox instead of weakening it; config readability and the real Xray restart remain the runtime gate.
+
+### Login
+- Rebuilt login fields to remove the nested focus/autofill card effect.
+- FA/EN and Dark/Light controls now work and persist locally.
+- Password visibility remains supported.
+
+### Xray
+- Added a protocol compatibility matrix so the provisioning wizard only offers valid guided Transport/Security combinations.
+- Guided profiles remain VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP Proxy and SOCKS5.
+
+### WireGuard / OpenVPN
+- Added protocol-specific visual branding and advanced server settings.
+- WireGuard server settings: UDP port and MTU with backup/restart/rollback.
+- OpenVPN server settings: UDP/TCP, port, DNS, keepalive, redirect-gateway and client-to-client with PKI preservation and rollback.
+- OpenVPN intentionally remains one active server profile/transport at a time; simultaneous UDP+TCP instances are not falsely advertised.
+
+### Security / Support / Guides
+- Rebuilt Admin Security around UFW, Fail2ban, 2FA, HTTPS, Self-Test, Audit and API tokens.
+- Simplified Support into health, guides, logs, connectivity and tickets; Remote Support moved under Advanced and defaults to read-only.
+- Added visual connection guides for Xray, WireGuard, OpenVPN and SSH/NPV.
+
+### Release status
+- Release candidate. Stable/Official remains blocked on real VPS upgrade/UAT and inside-Iran field validation.
+
 ## [0.25.0-rc1] - 2026-09-27
 
 ### Professional UX rebuild

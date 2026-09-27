@@ -1,3 +1,13 @@
+## نسخه ۰.۲۶.۰-rc1 — Final Hardening
+
+این نسخه خطای واقعی ساخت Xray روی Hostهای systemd سخت‌گیری‌شده را اصلاح می‌کند، Login را بازطراحی می‌کند، FA/EN و Dark/Light را فعال می‌کند، ترکیب‌های Xray را قبل از Submit محدود به حالت‌های معتبر می‌کند و برای WireGuard/OpenVPN تنظیمات پیشرفته واقعی اضافه می‌کند.
+
+OpenVPN در این نسخه از هر دو Transport **UDP و TCP** پشتیبانی می‌کند و مدیر می‌تواند Transport، Port، DNS، Keepalive، Redirect Gateway و Client-to-client را تغییر دهد. معماری فعلی یک OpenVPN Server Profile فعال دارد و ادعای اجرای هم‌زمان دو Instance UDP/TCP نمی‌کند.
+
+راهنمای عمومی برای چهار خانواده Xray، WireGuard، OpenVPN و SSH/NPV دارای تصویر مرحله‌ای شده است. Admin Security و Support Center نیز برای استفاده عمومی ساده‌تر و حرفه‌ای‌تر شده‌اند.
+
+**وضعیت انتشار:** RC. تبدیل به Stable/Official فقط بعد از UAT روی VPS واقعی، تست Upgrade، تست OpenVPN TCP/UDP، WireGuard Handshake و Field Test واقعی داخل شبکه ایران انجام می‌شود.
+
 ## نسخه ۰.۲۵.۰-rc1 — رابط حرفه‌ای و خلوت‌تر
 
 این نسخه منوی Hover/Rail قبلی را کنار می‌گذارد و یک Sidebar ثابت، خوانا و دسته‌بندی‌شده ارائه می‌کند. صفحات روزمره عمداً خلوت‌تر شده‌اند: در صفحه کاربران فقط اطلاعات اصلی دیده می‌شود و QR، فایل Native، Protected ZIP، ویرایش و لغو دسترسی داخل Detail Drawer باز می‌شوند.
