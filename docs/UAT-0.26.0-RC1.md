@@ -33,6 +33,7 @@ Desktop و Mobile:
 - Autofill مرورگر نباید Border/Background دوم بسازد.
 - Login با رمز درست موفق و با رمز غلط ناموفق باشد.
 - در صورت تنظیم Domain عمومی، HTTPS باید فعال شود؛ استفاده عمومی روی HTTP/IP هشدار امنیتی دارد.
+- `makia-uat-smoke` برای Domain تنظیم‌شده باید Certificate، Listener واقعی TCP/443 و درخواست `https://DOMAIN/healthz` را PASS کند.
 
 ## 3. Users / Access Center
 
