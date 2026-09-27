@@ -1385,6 +1385,7 @@ async function selectWizardProtocol(kind){
 async function handleMakiaAction(btn){
   const action=btn.dataset.action;if(!action)return;
   if(action==='nav'){closeModal();switchView(btn.dataset.view);return}
+  if(action==='nav-settings'){closeModal();window.__settingsTab=btn.dataset.tab||'general';switchView('settings');return}
   if(action==='wizard-open'){await openProvisionWizard(btn.dataset.kind||null);return}
   if(action==='wizard-protocol'){await selectWizardProtocol(btn.dataset.kind);return}
   if(action==='wizard-xray-advanced'){captureWizard();provisionState.simpleMode=false;renderProvisionWizard();return}
