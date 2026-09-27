@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.24.0-rc1] - 2026-09-27
+
+### Sanaei-style panel structure
+- Rebuilt the main information architecture around a compact rail sidebar that expands on hover and can be pinned, following the interaction pattern of modern 3x-ui/Sanaei while keeping Makia branding and backend ownership.
+- Added first-class Dashboard, Inbounds and Clients routes.
+- Added grouped protocol-client navigation for SSH/NPV, Xray/V2Ray, WireGuard and OpenVPN without making each protocol a noisy top-level item.
+- Added Settings and Xray Tools submenus.
+- Added a dedicated Inbounds workspace sourced from the live Xray runtime.
+- Reworked Dashboard into a compact action bar, four vital tiles, 24h history, protocol distribution and system strip.
+- Reworked Clients into a single filterable directory instead of protocol launch cards.
+- Reworked Settings into compact category tabs while preserving all real backend settings.
+- Rebuilt Login/2FA into the simpler centered-card structure.
+- Preserved full-stack provisioning, port safety, exports, security, backup, updates, support and node capabilities.
+- Added browser and contract coverage for the new navigation structure.
+
+### Release status
+- Release candidate pending real-host visual/UAT review.
+
 ## [0.23.0-rc1] - 2026-09-27
 
 ### Neon dashboard rebuild
