@@ -879,9 +879,10 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
 async function protocols(renderToken=window.__viewRenderToken){
   title.textContent='مدیریت پورت‌ها';setPageContext('PORT & ENGINE MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی پورت‌ها و Engineها…</b></div>';
-  const [d,clients,matrix]=await Promise.all([
+  const [d,clients,matrix,modes]=await Promise.all([
     api('/api/protocols'),api('/api/protocol-clients'),
-    api('/api/protocols/endpoint-matrix').catch(()=>({rows:[],endpoint:'',all_ready:false}))
+    api('/api/protocols/endpoint-matrix').catch(()=>({rows:[],endpoint:'',all_ready:false})),
+    api('/api/protocols/modes').catch(()=>({modes:[],note:'Protocol modes unavailable'}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='protocols')return;
   window.__protocolData=d;window.__protocolClients=clients;
@@ -905,8 +906,16 @@ async function protocols(renderToken=window.__viewRenderToken){
     ['OpenVPN',o.installed,o.service_active,'openvpn'],
     ['Stunnel',s.installed,s.service_active,'services']
   ].map(e=>'<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc(e[0].slice(0,1))+'</div><div><b>'+htmlEsc(e[0])+'</b><span>'+(e[1]?'نصب شده':'نصب نشده')+'</span></div><span class="status-chip '+(e[2]?'ok':e[1]?'warn':'bad')+'">'+(e[2]?'در حال اجرا':e[1]?'متوقف':'Missing')+'</span><button class="ghost" data-action="nav" data-view="'+e[3]+'">تنظیمات</button></div>').join('');
+  const modeCards=(modes.modes||[]).map(m=>{
+    const action=m.id==='wireguard'?'<button class="ghost" data-action="nav" data-view="wireguard">مدیریت Peer</button>':
+      (m.id==='udp'||m.id==='tcp')?'<button class="ghost" data-action="protocol-mode-openvpn" data-proto="'+m.id+'">تنظیم OpenVPN</button>':
+      '<button class="ghost" data-action="protocol-mode-config" data-mode="'+htmlEsc(m.id)+'">'+(m.ready?'تنظیمات':'راه‌اندازی')+'</button>';
+    const extra=m.id==='ikev2'&&m.ready?'<button class="primary" data-action="protocol-mode-ikev2-user">ساخت کاربر</button>':'';
+    return '<article class="connection-mode-card '+(m.ready?'ready':'attention')+'" data-mode="'+htmlEsc(m.id)+'"><div class="connection-mode-icon">'+protocolModeGlyph(m.id)+'</div><div class="connection-mode-main"><div class="connection-mode-title"><b>'+htmlEsc(m.label)+'</b><span>'+htmlEsc(String(m.port||'—'))+'</span></div><p>'+htmlEsc(m.description||'')+'</p><small>'+htmlEsc(m.transport||'')+' · '+htmlEsc(m.client||'')+'</small></div><span class="status-chip '+(m.ready?'ok':m.installed?'warn':'bad')+'">'+(m.ready?'READY':m.installed?'SETUP':'MISSING')+'</span><div class="connection-mode-actions">'+extra+action+'</div></article>';
+  }).join('');
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">⌘</span><div><h2>مدیریت پورت‌ها</h2><p>نمایش پورت‌های فعال و کنترل Engineهای شبکه بدون تداخل TCP / UDP</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="endpoint-matrix">بررسی Endpoint</button><button class="ghost" data-action="protocol-refresh">بروزرسانی</button></div></section>',
+    '<section class="panel connection-modes-panel"><div class="panel-head"><div><h3>Change Protocol</h3><span>REAL CONNECTION MODES</span></div><div class="mode-legend"><span class="status-chip ok">READY</span><span class="status-chip warn">SETUP</span></div></div><p class="connection-modes-note">IKEv2 · WireGuard · OpenVPN UDP/TCP · TLS Stealth · WStunnel. پورت 443 فقط وقتی قابل استفاده است که با HTTPS یا سرویس دیگری تداخل نداشته باشد.</p><div class="connection-mode-list">'+(modeCards||'<div class="empty">Mode data unavailable.</div>')+'</div><div class="port-safe-note">✓ '+htmlEsc(modes.note||'هر Mode فقط زمانی READY است که Backend و Listener واقعی آن فعال باشد.')+'</div></section>',
     '<section class="panel port-management-panel"><div class="panel-head"><div><h3>لیست پورت‌های فعال</h3><span>TRANSPORT-AWARE ALLOCATION</span></div></div><div class="port-table-head"><span>پروتکل</span><span>پورت</span><span>نوع اتصال</span><span>وضعیت</span><span>عملیات</span></div><div class="port-table-body">'+(portRows||'<div class="empty">پورت مدیریت‌شده‌ای پیدا نشد.</div>')+'</div><div class="port-safe-note">✓ بررسی تداخل پورت‌ها بر اساس Transport انجام می‌شود؛ TCP/443 و UDP/443 می‌توانند هم‌زمان فعال باشند.</div></section>',
     '<section class="split-grid"><div class="panel"><div class="panel-head"><div><h3>Engineها</h3><span>INSTALL / RUNTIME</span></div></div><div class="service-control-list">'+engineRows+'</div></div><div class="panel"><div class="panel-head"><div><h3>Xray Inbounds</h3><span>'+Number((x.inbounds||[]).length)+' DETECTED</span></div></div><div class="engine-inbounds">'+((x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(String(i.protocol||'').toUpperCase())+'</b><span>'+htmlEsc(i.tag||'Inbound')+'</span></div><div><b>:'+Number(i.port||0)+'</b><span>'+Number(i.clients||0)+' users</span></div></div>').join(''):'<div class="empty compact">Inbound وجود ندارد.</div>')+'</div></div></section>',
     '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="xray">مدیریت کاربران Xray</button></div><div class="protocol-policy-mini">'+(clients.length?clients.slice(0,8).map(pc=>'<div><div><b>'+htmlEsc(pc.name)+'</b><span>'+htmlEsc(String(pc.protocol||'').toUpperCase())+'</span></div><strong class="'+(pc.enabled&&!pc.expired?'ok-text':'bad-text')+'">'+(pc.enabled&&!pc.expired?'Active':'Attention')+'</strong></div>').join(''):'<div class="empty compact">Client ثبت نشده است.</div>')+'</div></section>'
