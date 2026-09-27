@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root."; exit 1; }
+[[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root."; exit 1; }\nexport DEBIAN_FRONTEND=noninteractive
 
 ENV_FILE=/etc/makia-vps-manager/makia.env
 if [[ -r "$ENV_FILE" ]]; then
