@@ -78,6 +78,8 @@ jobs:
           test -f docs/UAT-0.24.0-RC1.md
           test -f docs/UAT-0.25.0-RC1.md
           test -f docs/UAT-0.26.0-RC1.md
+          test -f docs/UAT-0.26.0-RC2.md
+          test -f docs/UAT-PROTOCOL-MODES.md
           test -f docs/IRAN-CONNECTIVITY-FIELD-TEST.md
           test -f scripts/iran-field-preflight.sh
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
@@ -242,6 +244,8 @@ jobs:
 
       - name: Connection modes contract
         run: |
+          grep -q '0.26.0-rc2' docs/UAT-0.26.0-RC2.md
+          grep -q 'six-mode' CHANGELOG.md
           grep -q 'def protocol_modes' app/protocol_ops.py
           grep -q 'def bootstrap_ikev2' app/protocol_ops.py
           grep -q 'def bootstrap_stealth' app/protocol_ops.py
