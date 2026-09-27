@@ -204,6 +204,15 @@ def client_guide_text(kind,protocol=""):
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
         )
+    if kind=="ikev2":
+        return common+(
+            "IKEv2 / IPsec\n"
+            "1) در تنظیمات VPN سیستم‌عامل، نوع IKEv2 را انتخاب کنید.\n"
+            "2) Server و Remote ID را برابر دامنه درج‌شده در credentials قرار دهید.\n"
+            "3) Authentication را Username/Password یا EAP-MSCHAPv2 انتخاب کنید.\n"
+            "4) Username و Password اختصاصی همین کاربر را وارد کنید.\n"
+            "5) روی iOS/macOS/Windows از IKEv2 داخلی سیستم‌عامل استفاده کنید؛ Android به کلاینت سازگار IKEv2 نیاز دارد.\n"
+        )
     return common+(
         "SSH / NPV Tunnel\n"
         "1) برای NPV Tunnel / NapsternetV سازگار، لینک npvt-ssh:// را Import from Clipboard کنید یا QR را اسکن کنید.\n"
@@ -301,6 +310,35 @@ def wireguard_replace_endpoint(config,host):
     if count!=1:
         raise AccessPackageError("WireGuard client Endpoint could not be updated")
     return updated
+
+def ikev2_payload(name,server,password):
+    name=str(name or "").strip()
+    server=str(server or "").strip()
+    password=str(password or "")
+    filename=f"{safe_filename(name)}-ikev2.txt"
+    text=(
+        "Makia IKEv2 Access\n"
+        f"Server: {server}\n"
+        f"Remote ID: {server}\n"
+        "VPN Type: IKEv2\n"
+        "Authentication: Username / EAP-MSCHAPv2\n"
+        f"Username: {name}\n"
+        f"Password: {password}\n"
+        "Ports: UDP/500, UDP/4500 (NAT-T)\n"
+    )
+    return {
+        "native_filename":filename,
+        "files":{
+            filename:text.encode("utf-8"),
+            "connection-guide-fa.txt":client_guide_text("ikev2").encode("utf-8"),
+        },
+        "primary_text":text,
+        "summary":{
+            "server":server,"remote_id":server,"username":name,
+            "authentication":"EAP-MSCHAPv2","ports":[500,4500],
+        },
+    }
+
 
 def openvpn_payload(name,config):
     filename=f"{safe_filename(name)}.ovpn"
