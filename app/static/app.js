@@ -47,45 +47,41 @@ async function ensureSessionContext(force=false){
   return window.__sessionContext;
 }
 async function dashboard(renderToken=window.__viewRenderToken){
-  title.textContent='داشبورد';setPageContext('نمای کلی و آمار لحظه‌ای');
+  title.textContent='داشبورد';setPageContext('OVERVIEW');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال دریافت وضعیت سرور…</b></div>';
   const [d,hist,accessRows,stack]=await Promise.all([
     api('/api/overview'),api('/api/metrics/history?hours=24'),api('/api/access'),api('/api/protocols')
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='dashboard')return;
-  const m=d.metrics||{},services=d.services||[];
-  const healthy=services.filter(x=>x.active).length,total=services.length;
-  const activeAccess=accessRows.filter(x=>x.status==='active').length;
-  const networkTotal=Number(m.network?.sent||0)+Number(m.network?.recv||0);
+  const m=d.metrics||{},services=d.services||[],x=stack.xray||{};
+  const running=services.filter(s=>s.active).length;
   const counts={
-    xray:accessRows.filter(x=>x.kind==='xray').length,
-    ssh:accessRows.filter(x=>x.kind==='ssh').length,
-    wireguard:accessRows.filter(x=>x.kind==='wireguard').length,
-    openvpn:accessRows.filter(x=>x.kind==='openvpn').length
+    ssh:accessRows.filter(a=>a.kind==='ssh').length,
+    xray:accessRows.filter(a=>a.kind==='xray').length,
+    wireguard:accessRows.filter(a=>a.kind==='wireguard').length,
+    openvpn:accessRows.filter(a=>a.kind==='openvpn').length
   };
-  const countTotal=Math.max(1,counts.xray+counts.ssh+counts.wireguard+counts.openvpn);
-  const p={xray:counts.xray/countTotal*100,ssh:counts.ssh/countTotal*100,wg:counts.wireguard/countTotal*100,ovpn:counts.openvpn/countTotal*100};
-  const svc=services.slice(0,6).map(s=>'<div class="neon-service-pill"><i class="'+(s.active?'on':'')+'"></i><div><b>'+htmlEsc(s.label||s.name)+'</b><span>'+(s.active?'در حال اجرا':'نیاز به بررسی')+'</span></div></div>').join('');
+  const maxCount=Math.max(1,...Object.values(counts));
+  const traffic=Number(m.network?.sent||0)+Number(m.network?.recv||0);
+  const activeClients=accessRows.filter(a=>a.status==='active').length;
+  const endpoint=window.PANEL_DOMAIN||location.hostname;
+  const vital=(icon,label,value,detail,percent,footL,footR)=>'<article class="sx-vital"><div class="sx-vital-head"><span>'+icon+'</span><b>'+htmlEsc(label)+'</b></div><div class="sx-vital-value"><b>'+htmlEsc(value)+'</b><span>'+(typeof percent==="number"?'%':'')+'</span></div><div class="sx-vital-detail">'+htmlEsc(detail)+'</div><div class="sx-meter"><i style="width:'+pct(percent)+'%"></i></div><div class="sx-vital-foot"><span>'+htmlEsc(footL||'')+'</span><span>'+htmlEsc(footR||'')+'</span></div></article>';
+  const proto=(label,count)=>'<div class="sx-protocol-row"><div><b>'+label+'</b><span>'+count+' client</span></div><em>'+Math.round((count/Math.max(1,accessRows.length))*100)+'%</em><div class="sx-protocol-bar"><i style="width:'+Math.round(count/maxCount*100)+'%"></i></div></div>';
   content.innerHTML=[
-    '<div class="neon-dashboard">',
-      '<section class="neon-stat-grid">',
-        '<article class="neon-stat-card blue"><span class="neon-stat-icon">♙</span><div><small>کاربران فعال</small><b>'+activeAccess+'</b><em>از '+accessRows.length+' کاربر ثبت‌شده</em></div></article>',
-        '<article class="neon-stat-card purple"><span class="neon-stat-icon">◉</span><div><small>حجم ترافیک ثبت‌شده</small><b>'+fmtBytes(networkTotal)+'</b><em>ارسال + دریافت</em></div></article>',
-        '<article class="neon-stat-card cyan"><span class="neon-stat-icon">〽</span><div><small>ترافیک لحظه‌ای</small><b>'+Number(m.network?.rx_mbps||m.network?.mbps||0).toFixed(1)+' Mbps</b><em>Network runtime</em></div></article>',
-        '<article class="neon-stat-card green"><span class="neon-stat-icon">▣</span><div><small>سرویس‌های فعال</small><b>'+healthy+'/'+total+'</b><em>'+(healthy===total?'همه سرویس‌ها سالم':'برخی سرویس‌ها نیاز به بررسی دارند')+'</em></div></article>',
+    '<div class="sx-page">',
+      '<section class="sx-page-head"><div><h1>داشبورد</h1><p>نمای کلی وضعیت سیستم، Xray، منابع و دسترسی‌ها</p></div><div class="sx-head-actions"><span class="sx-state-pill '+(x.service_active?'':'warn')+'"><i></i>Xray · '+(x.service_active?'Running':'Attention')+(x.version?' · '+htmlEsc(x.version):'')+'</span><button class="primary" data-shell-action="create-access">＋ ساخت کاربر</button></div></section>',
+      '<section class="sx-actionbar"><button class="primary" data-action="service-action" data-service="'+dataEnc('xray')+'" data-service-action="restart">↻ Restart Xray</button><button data-action="nav" data-view="audit">▤ Logs</button><button data-action="xray-advanced">⌘ Config</button><span class="sx-sep"></span><button data-action="nav" data-view="backups">↺ Backup</button><button data-action="nav" data-view="updates">⇧ Update</button><button data-action="refresh">Refresh</button><span class="sx-version">Makia v'+htmlEsc(window.MAKIA_VERSION||'')+'</span></section>',
+      '<section class="sx-vitals">',
+        vital('◴','CPU',Number(m.cpu||0).toFixed(1),'مصرف لحظه‌ای پردازنده',Number(m.cpu||0),'24h metrics',''),
+        vital('▥','Memory',Number(m.memory||0).toFixed(1),'مصرف حافظه سیستم',Number(m.memory||0),'24h metrics',''),
+        vital('▤','Disk',Number(m.disk||0).toFixed(1),'فضای ذخیره‌سازی استفاده‌شده',Number(m.disk||0),'Host storage',''),
+        vital('◉','Services',String(running),'از '+services.length+' سرویس مدیریت‌شده',services.length?running/services.length*100:0,'Running',running+'/'+services.length),
       '</section>',
-      '<section class="neon-dashboard-main">',
-        '<div class="panel neon-chart-panel"><div class="panel-head"><div><h3>نمودار وضعیت سرور</h3><span>۲۴ ساعت گذشته</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div>'+svgHistory(hist)+'</div>',
-        '<div class="panel neon-donut-panel"><div class="panel-head"><div><h3>توزیع کاربران بر اساس پروتکل</h3><span>'+accessRows.length+' USER</span></div></div><div class="neon-donut-wrap">',
-          '<div class="protocol-donut" style="--xray:'+p.xray.toFixed(2)+';--ssh:'+p.ssh.toFixed(2)+';--wg:'+p.wg.toFixed(2)+'"><div><b>'+accessRows.length+'</b><span>کاربر</span></div></div>',
-          '<div class="protocol-legend">',
-            '<div><i style="background:#168cff"></i><span>V2Ray / Xray</span><b>'+counts.xray+'</b></div>',
-            '<div><i style="background:#7743f5"></i><span>SSH</span><b>'+counts.ssh+'</b></div>',
-            '<div><i style="background:#17d996"></i><span>WireGuard</span><b>'+counts.wireguard+'</b></div>',
-            '<div><i style="background:#ff4c62"></i><span>OpenVPN</span><b>'+counts.openvpn+'</b></div>',
-          '</div></div></div>',
+      '<section class="sx-mid-grid">',
+        '<article class="sx-card"><div class="sx-card-head"><div><h3>System history</h3><p>CPU و Memory در ۲۴ ساعت گذشته</p></div><span class="status-chip">'+(hist?.length||0)+' samples</span></div>'+svgHistory(hist)+'</article>',
+        '<article class="sx-card"><div class="sx-card-head"><div><h3>Clients by protocol</h3><p>'+activeClients+' فعال از '+accessRows.length+' پروفایل</p></div><button class="ghost" data-action="nav" data-view="access">Clients</button></div><div class="sx-protocol-list">'+proto('Xray / V2Ray',counts.xray)+proto('SSH / NPV',counts.ssh)+proto('WireGuard',counts.wireguard)+proto('OpenVPN',counts.openvpn)+'</div></article>',
       '</section>',
-      '<section class="panel"><div class="panel-head"><div><h3>وضعیت سرویس‌های اصلی</h3><span>LIVE SYSTEMD STATUS</span></div><div class="toolbar"><button class="ghost" data-action="self-test">Self-Test</button><button class="ghost" data-action="nav" data-view="services">مدیریت سرویس‌ها</button></div></div><div class="neon-service-strip">'+svc+'</div></section>',
+      '<section class="sx-system-strip"><div class="sx-system-cell"><span>Uptime</span><b>'+htmlEsc(fmtUp(m.uptime_seconds||0))+'</b></div><div class="sx-system-cell"><span>Traffic recorded</span><b>'+htmlEsc(fmtBytes(traffic))+'</b></div><div class="sx-system-cell"><span>Live sessions</span><b>'+Number(d.online_sessions||0)+'</b></div><div class="sx-system-cell"><span>Panel endpoint</span><b>'+htmlEsc(endpoint)+'</b></div></section>',
     '</div>'
   ].join('');
 }
@@ -97,39 +93,21 @@ let accessCache=[];
 let provisionState=null;
 
 async function access(renderToken=window.__viewRenderToken){
-  title.textContent='Access Center';setPageContext('IDENTITY & DELIVERY');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی دسترسی‌ها…</b></div>';
+  title.textContent='کاربران';setPageContext('CLIENTS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی کاربران…</b></div>';
   const [rows,stack,sshRows,pcRows,operator]=await Promise.all([
-    api('/api/access'),api('/api/protocols'),api('/api/accounts'),
-    api('/api/protocol-clients'),
-    api('/api/settings/operator')
+    api('/api/access'),api('/api/protocols'),api('/api/accounts'),api('/api/protocol-clients'),api('/api/settings/operator')
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='access')return;
   accessCache=rows;accountCache=sshRows;window.__protocolClients=pcRows;window.__protocolData=stack;window.__operatorSettings=operator;
+  const active=rows.filter(x=>x.status==='active').length;
   const counts={ssh:0,xray:0,wireguard:0,openvpn:0};rows.forEach(x=>{if(counts[x.kind]!==undefined)counts[x.kind]++});
-  const active=rows.filter(x=>x.status==='active').length,legacy=rows.filter(x=>x.legacy).length;
   content.innerHTML=[
-    '<section class="access-command">',
-      '<div class="access-command-copy"><div class="eyebrow">UNIFIED ACCESS OPERATIONS</div><h2>مرکز دسترسی Makia</h2>',
-      '<p>ساخت، سیاست‌گذاری، خروجی Native و تحویل رمزدار برای تمام دسترسی‌های واقعی سرور؛ بدون دکمه نمایشی.</p>',
-      '<div class="hero-actions"><button class="primary action-lg" data-action="wizard-open">＋ ساخت دسترسی جدید</button>',
-      '<button class="ghost action-lg" data-action="self-test">بررسی سلامت</button></div></div>',
-      '<div class="access-command-stats"><div><b>'+rows.length+'</b><span>Total</span></div><div><b>'+active+'</b><span>Active</span></div><div><b>'+legacy+'</b><span>Legacy</span></div><div><b>'+'4'+'</b><span>Protocols</span></div></div>',
-    '</section>',
-    '<section class="protocol-launch-grid">',
-      accessLaunchCard('ssh','SSH','Password / PIN · Expiry · Session / Device',counts.ssh,true),
-      accessLaunchCard('xray','Xray','VLESS · VMess · Trojan · Shadowsocks · Hysteria2',counts.xray,Boolean(stack.xray?.installed)),
-      accessLaunchCard('wireguard','WireGuard','Native .conf · QR · encrypted delivery',counts.wireguard,Boolean(stack.wireguard?.installed&&stack.wireguard?.config)),
-      accessLaunchCard('openvpn','OpenVPN','Inline .ovpn · PKI · encrypted delivery',counts.openvpn,Boolean(stack.openvpn?.installed&&stack.openvpn?.config)),
-    '</section>',
-    '<section class="panel access-directory">',
-      '<div class="panel-head directory-head"><div><h3>Directory</h3><span id="accessCount">'+rows.length+' PROFILES</span></div>',
-      '<div class="directory-tools"><div class="segmented" id="accessSegments">',
-        '<button class="active" data-filter-value="all">همه</button><button data-filter-value="ssh">SSH</button><button data-filter-value="xray">Xray</button><button data-filter-value="wireguard">WG</button><button data-filter-value="openvpn">OpenVPN</button>',
-      '</div><input id="accessSearch" class="search-input" placeholder="جستجو نام، پلن یا پروتکل…"></div></div>',
-      '<div class="directory-summary"><span><i class="legend-native"></i> Native export</span><span><i class="legend-protected"></i> Protected AES ZIP</span><span><i class="legend-legacy"></i> Legacy / reissue required</span></div>',
-      '<div id="accessRows" class="access-cards"></div>',
-    '</section>'
+    '<div class="sx-page">',
+      '<section class="sx-page-head"><div><h1>کاربران</h1><p>مدیریت همه Clientها و Access Profileها در یک لیست</p></div><div class="sx-head-actions"><button class="ghost" data-action="self-test">Self-Test</button><button class="primary" data-action="wizard-open">＋ افزودن کاربر</button></div></section>',
+      '<section class="sx-summary-row"><div class="sx-summary"><span>Total clients</span><b>'+rows.length+'</b><small>همه پروتکل‌ها</small></div><div class="sx-summary"><span>Active</span><b>'+active+'</b><small>قابل استفاده</small></div><div class="sx-summary"><span>Xray</span><b>'+counts.xray+'</b><small>VLESS / VMess / …</small></div><div class="sx-summary"><span>VPN + SSH</span><b>'+(counts.ssh+counts.wireguard+counts.openvpn)+'</b><small>SSH / WG / OpenVPN</small></div></section>',
+      '<section class="sx-table-wrap"><div class="sx-table-toolbar"><div><h3>Client list</h3><small id="accessCount">'+rows.length+' PROFILES</small></div><div class="sx-toolbar-right"><div class="sx-client-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><input id="accessSearch" class="sx-search" placeholder="جستجو کاربر…"></div></div><div id="accessRows" class="access-cards"></div></section>',
+    '</div>'
   ].join('');
   document.getElementById('accessSearch')?.addEventListener('input',renderAccessRows);
   document.getElementById('accessSegments')?.addEventListener('click',e=>{
@@ -139,7 +117,6 @@ async function access(renderToken=window.__viewRenderToken){
   });
   window.__accessFilter='all';renderAccessRows();
 }
-
 function accessLaunchCard(kind,name,desc,count,ready){
   const action=kind==='ssh'||ready
     ? '<button class="launch-action" data-action="wizard-open" data-kind="'+kind+'">Create</button>'
