@@ -1224,7 +1224,7 @@ async function supportCenter(renderToken=window.__viewRenderToken){
     ensureSessionContext(true).catch(()=>({remote_support:false})),
     api('/api/support/grants').catch(()=>({items:[]})),
     api('/api/diagnostics/self-test').catch(()=>({ok:false,critical:1,warnings:0,summary:'Unavailable'})),
-    api('/api/protocols').catch(()=>({})
+    api('/api/protocols').catch(()=>({}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='support')return;
   const support=requests.support||{},items=requests.items||[];
