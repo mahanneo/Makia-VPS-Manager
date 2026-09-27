@@ -414,6 +414,7 @@ def openvpn_status():
         "servers":configs,
         "config":str(server_dir/"server.conf") if (server_dir/"server.conf").exists() else None,
         "port":runtime.get("port"),"proto":runtime.get("proto"),
+        "options":_openvpn_server_options() if (server_dir/"server.conf").exists() else {},
     }
 
 def stunnel_status():
@@ -1425,6 +1426,121 @@ def repair_openvpn_ipv4_runtime():
         raise
     runtime=_openvpn_server_runtime()
     return {"ok":True,"backup":str(backup),"script_backups":script_backups,"runtime":runtime}
+
+def _openvpn_server_options():
+    server_conf=OVPN_DIR/"server/server.conf"
+    result={
+        "port":1194,"proto":"udp","dns":["1.1.1.1","8.8.8.8"],
+        "keepalive_ping":10,"keepalive_timeout":120,
+        "redirect_gateway":True,"client_to_client":False,
+    }
+    if not server_conf.exists():
+        return result
+    text=server_conf.read_text(encoding="utf-8",errors="ignore")
+    pm=re.search(r"(?m)^port\s+(\d+)\s*$",text)
+    proto_m=re.search(r"(?m)^proto\s+(\S+)\s*$",text)
+    keep_m=re.search(r"(?m)^keepalive\s+(\d+)\s+(\d+)\s*$",text)
+    dns=re.findall(r'(?m)^push\s+"dhcp-option DNS\s+([^"]+)"\s*$',text)
+    result["port"]=int(pm.group(1)) if pm else 1194
+    raw_proto=(proto_m.group(1) if proto_m else "udp4").lower()
+    result["proto"]="tcp" if raw_proto.startswith("tcp") else "udp"
+    if keep_m:
+        result["keepalive_ping"]=int(keep_m.group(1));result["keepalive_timeout"]=int(keep_m.group(2))
+    if dns:
+        result["dns"]=dns[:3]
+    result["redirect_gateway"]=bool(re.search(r'(?m)^push\s+"redirect-gateway\s+def1(?:\s+bypass-dhcp)?"\s*$',text))
+    result["client_to_client"]=bool(re.search(r"(?m)^client-to-client\s*$",text))
+    return result
+
+
+def _validate_openvpn_dns(values):
+    out=[]
+    for value in values or []:
+        raw=str(value or "").strip()
+        if not raw:
+            continue
+        try:
+            addr=ipaddress.ip_address(raw)
+        except ValueError as exc:
+            raise ProtocolError(f"invalid OpenVPN DNS server: {raw}") from exc
+        if addr.version!=4:
+            raise ProtocolError("OpenVPN managed DNS currently requires IPv4 addresses")
+        normalized=addr.compressed
+        if normalized not in out:
+            out.append(normalized)
+    if not out:
+        raise ProtocolError("at least one OpenVPN DNS server is required")
+    return out[:3]
+
+
+def reconfigure_openvpn_server(port=1194,proto="udp",dns_servers=None,keepalive_ping=10,keepalive_timeout=120,redirect_gateway=True,client_to_client=False):
+    """Safely change the managed OpenVPN server while preserving PKI and clients."""
+    server_conf=OVPN_DIR/"server/server.conf"
+    if not server_conf.exists():
+        raise ProtocolError("OpenVPN server config is not available")
+    port=_validate_port(port)
+    requested="tcp" if str(proto or "").lower().startswith("tcp") else "udp"
+    if str(proto or "").lower() not in {"udp","tcp","udp4","tcp4","tcp4-server","udp4"}:
+        raise ProtocolError("OpenVPN transport must be UDP or TCP")
+    dns=_validate_openvpn_dns(dns_servers or ["1.1.1.1","8.8.8.8"])
+    keepalive_ping=max(1,min(int(keepalive_ping),3600))
+    keepalive_timeout=max(10,min(int(keepalive_timeout),7200))
+    if keepalive_timeout<=keepalive_ping:
+        raise ProtocolError("OpenVPN keepalive timeout must be greater than ping interval")
+
+    current=_openvpn_server_runtime()
+    current_transport="tcp" if str(current.get("proto") or "").startswith("tcp") else "udp"
+    current_port=int(current.get("port") or 0)
+    if (port!=current_port or requested!=current_transport) and _port_transport_in_use(port,requested):
+        raise ProtocolError(f"{requested.upper()} port {port} is already in use")
+
+    original=server_conf.read_text(encoding="utf-8",errors="ignore")
+    backup_dir=Path("/var/backups/makia-vps-manager")
+    backup_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup=backup_dir/f"openvpn-config-{int(time.time())}.conf"
+    shutil.copy2(server_conf,backup)
+
+    updated=original
+    server_proto=_openvpn_proto(requested,server=True)
+    if re.search(r"(?m)^port\s+\d+\s*$",updated):
+        updated=re.sub(r"(?m)^port\s+\d+\s*$",f"port {port}",updated,count=1)
+    else:
+        updated=f"port {port}\n"+updated
+    if re.search(r"(?m)^proto\s+\S+\s*$",updated):
+        updated=re.sub(r"(?m)^proto\s+\S+\s*$",f"proto {server_proto}",updated,count=1)
+    else:
+        updated=f"proto {server_proto}\n"+updated
+
+    # Managed policy lines are regenerated atomically to avoid duplicate pushes.
+    updated=re.sub(r'(?m)^push\s+"dhcp-option DNS\s+[^"]+"\s*\n?',"",updated)
+    updated=re.sub(r'(?m)^push\s+"redirect-gateway\s+def1(?:\s+bypass-dhcp)?"\s*\n?',"",updated)
+    updated=re.sub(r"(?m)^keepalive\s+\d+\s+\d+\s*\n?","",updated)
+    updated=re.sub(r"(?m)^client-to-client\s*\n?","",updated)
+    policy=[]
+    if redirect_gateway:
+        policy.append('push "redirect-gateway def1 bypass-dhcp"')
+    policy.extend(f'push "dhcp-option DNS {item}"' for item in dns)
+    policy.append(f"keepalive {keepalive_ping} {keepalive_timeout}")
+    if client_to_client:
+        policy.append("client-to-client")
+    updated=updated.rstrip()+"\n"+"\n".join(policy)+"\n"
+
+    try:
+        server_conf.write_text(updated,encoding="utf-8")
+        os.chmod(server_conf,0o600)
+        _run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        runtime=_openvpn_server_runtime()
+        actual_transport="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+        if not runtime.get("service_active") or not runtime.get("listener") or int(runtime.get("port") or 0)!=port or actual_transport!=requested:
+            raise ProtocolError("OpenVPN did not reach the requested listener after reconfiguration")
+        firewall=_ufw_allow_if_active(port,requested,"OpenVPN")
+    except Exception:
+        shutil.copy2(backup,server_conf)
+        try:_run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        except Exception:pass
+        raise
+    return {"ok":True,"backup":str(backup),"runtime":runtime,"options":_openvpn_server_options(),"firewall":firewall}
+
 
 def _openvpn_remote_block(endpoint,port):
     endpoint=_validate_endpoint_host(endpoint,"OpenVPN endpoint")
