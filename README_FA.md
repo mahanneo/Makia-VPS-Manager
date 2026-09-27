@@ -1,3 +1,17 @@
+## نسخه ۰.۲۷.۰-rc1 — Connection Modes
+
+در این نسخه یک Workspace مستقل با عنوان **Connection Modes** اضافه شده است که شش مسیر واقعی را مدیریت می‌کند: **IKEv2، WireGuard، OpenVPN UDP، OpenVPN TCP، Stealth و WStunnel**.
+
+- **IKEv2** با strongSwan و EAP-MSCHAPv2 اجرا می‌شود و به Domain دارای Certificate معتبر نیاز دارد.
+- **WireGuard** همان Engine واقعی قبلی با Peer/QR/Handshake/Traffic است.
+- **UDP / TCP** دو حالت واقعی Server Transport در OpenVPN هستند؛ Makia تعارض Port را بر اساس Transport کنترل می‌کند.
+- **Stealth** نام رابط برای **VLESS/REALITY واقعی Xray** است و پروتکل ساختگی جداگانه ایجاد نمی‌کند.
+- **WStunnel** با نسخه اعتبارسنجی‌شده `11.0.0`، WireGuard را از داخل WebSocket امن روی HTTPS/WSS عبور می‌دهد؛ Client باید companion `wstunnel` را در کنار WireGuard اجرا کند.
+
+پورت `443` یک وعده نمایشی نیست: اگر Socket لازم توسط سرویس دیگری اشغال باشد، Backend عملیات را رد می‌کند. برای نمونه WireGuard و OpenVPN UDP نمی‌توانند هر دو روی UDP/443 همان IP فعال باشند؛ OpenVPN TCP/443 نیز با Nginx HTTPS روی TCP/443 تداخل دارد. WStunnel به‌جای گرفتن Socket عمومی جداگانه، از همان Nginx HTTPS و یک مسیر WebSocket مدیریت‌شده استفاده می‌کند.
+
+این نسخه **Release Candidate** است و Stable فقط پس از Upgrade/UAT روی VPS واقعی و تست Client خارجی، از جمله تست داخل ایران، بررسی می‌شود.
+
 ## نسخه ۰.۲۶.۰-rc1 — کاندیدای نهایی انتشار عمومی
 
 این نسخه روی ایرادهای واقعی Host و تکمیل تجربه مدیریتی متمرکز است. خطای ساخت Xray با پیام `runuser: cannot set user id: Operation not permitted` بدون حذف `NoNewPrivileges` رفع شده است؛ Login نیز Focus Surface واحد، تغییر زبان واقعی FA/EN و Dark/Light واقعی دارد.
