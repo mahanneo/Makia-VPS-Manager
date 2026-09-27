@@ -1,3 +1,13 @@
+## نسخه ۰.۲۴.۰-rc1 — ساختار پنل نزدیک به Sanaei / 3x-ui
+
+در این نسخه معماری رابط Makia از نو مرتب شده است. هدف، کپی ظاهری صرف نیست؛ ساختار تعامل و چیدمان پنل به الگوی آشنای 3x-ui/Sanaei نزدیک شده است: Sidebar باریک و قابل Pin، Dashboard فشرده، Inboundها به‌عنوان بخش مستقل، Client Directory واحد، Submenu برای تنظیمات و ابزارهای Xray، و فرم‌ها/جدول‌های فشرده‌تر.
+
+Backend Makia عوض نشده و قابلیت‌های اختصاصی آن مانند SSH/NPV، WireGuard، OpenVPN، Full-stack provisioning، Transport-aware port allocation، Backup، Support و Node management حفظ شده‌اند.
+
+Dashboard جدید فقط داده واقعی API را نمایش می‌دهد و صفحه Inbounds نیز وضعیت واقعی Xray Core را می‌خواند. برای قابلیت‌هایی که Backend مستقل ندارد، کنترل نمایشی جعلی اضافه نشده است.
+
+قبل از Stable، [UAT نسخه ۰.۲۴.۰-rc1](docs/UAT-0.24.0-RC1.md) باید روی VPS واقعی PASS شود.
+
 ## نسخه ۰.۲۳.۰-rc1 — بازطراحی کامل پنل
 
 این نسخه رابط کاربری Makia را از Login تا Dashboard و Workspaceهای داخلی از پایه بازطراحی می‌کند. ساختار جدید مطابق طرح تأییدشده از تم سرمه‌ای بسیار تیره، آبی الکتریکی، بنفش، سبز وضعیت و کارت‌های فشرده عملیاتی استفاده می‌کند.
