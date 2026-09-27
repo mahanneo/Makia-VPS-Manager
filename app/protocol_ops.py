@@ -624,7 +624,7 @@ def create_ikev2_user(name, password=None):
     if len(password)<10 or len(password)>128 or any(ch in password for ch in "\r\n\""):
         raise ProtocolError("IKEv2 password must be 10-128 characters and cannot contain quotes/newlines")
     text=IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore") if IKEV2_SECRETS.exists() else ""
-    marker=re.compile(r"#\\s*makia-eap:"+re.escape(name)+r"\\s*$")
+    marker=re.compile(r"#\s*makia-eap:"+re.escape(name)+r"\s*$")
     lines=[line for line in text.splitlines() if not marker.search(line)]
     lines.append(f'{name} : EAP "{password}"  # makia-eap:{name}')
     IKEV2_SECRETS.write_text("\n".join(lines).rstrip()+"\n",encoding="utf-8")
@@ -632,13 +632,13 @@ def create_ikev2_user(name, password=None):
     _run(["ipsec","rereadsecrets"],timeout=20)
     status=ikev2_status()
     profile=(
-        f"Makia IKEv2\\n"
-        f"Server: {status.get('domain') or ''}\\n"
-        f"Remote ID: {status.get('domain') or ''}\\n"
-        f"Username: {name}\\n"
-        f"Password: {password}\\n"
-        "Authentication: Username / EAP-MSCHAPv2\\n"
-        "IKE version: IKEv2\\n"
+        f"Makia IKEv2\n"
+        f"Server: {status.get('domain') or ''}\n"
+        f"Remote ID: {status.get('domain') or ''}\n"
+        f"Username: {name}\n"
+        f"Password: {password}\n"
+        "Authentication: Username / EAP-MSCHAPv2\n"
+        "IKE version: IKEv2\n"
     )
     return {"ok":True,"name":name,"password":password,"server":status.get("domain") or "","profile":profile}
 
@@ -750,11 +750,11 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
         raise ProtocolError("WStunnel path prefix must be at least 12 characters")
     WSTUNNEL_ENV.parent.mkdir(parents=True,exist_ok=True)
     WSTUNNEL_ENV.write_text(
-        f"WSTUNNEL_LISTEN_PORT={listen_port}\\n"
-        f"WSTUNNEL_TARGET_PORT={int(wg['port'])}\\n"
-        f"WSTUNNEL_PATH_PREFIX={prefix}\\n"
-        f"WSTUNNEL_CERT={cert}\\n"
-        f"WSTUNNEL_KEY={key}\\n",
+        f"WSTUNNEL_LISTEN_PORT={listen_port}\n"
+        f"WSTUNNEL_TARGET_PORT={int(wg['port'])}\n"
+        f"WSTUNNEL_PATH_PREFIX={prefix}\n"
+        f"WSTUNNEL_CERT={cert}\n"
+        f"WSTUNNEL_KEY={key}\n",
         encoding="utf-8",
     )
     os.chmod(WSTUNNEL_ENV,0o600)
