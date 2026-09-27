@@ -139,10 +139,12 @@ def main():
             page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
             page.locator(".pro-user-row",has_text="browser-client").wait_for()
+            page.screenshot(path='/tmp/makia-users.png',full_page=True)
 
             row=page.locator(".pro-user-row",has_text="browser-client")
             row.locator('[data-action="access-detail"]').click()
             page.locator(".access-detail-drawer").wait_for()
+            page.screenshot(path='/tmp/makia-user-detail.png',full_page=True)
             page.locator('[data-action="access-share"]').click()
             page.locator(".share-modal").wait_for()
             assert page.locator(".share-qr").count() >= 1
@@ -197,6 +199,7 @@ def main():
 
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator(".provision-drawer").wait_for()
+            page.screenshot(path='/tmp/makia-new-access.png',full_page=True)
             assert page.locator(".wizard-protocol").count()==4
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
             page.locator("#wizEndpointMode").select_option("ip")
@@ -256,7 +259,11 @@ def main():
             page.screenshot(path='/tmp/makia-wg-mobile.png',full_page=True)
             page.set_viewport_size({"width":1280,"height":800})
 
-            for view in ["inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
+            page.evaluate("switchView('connectivity')")
+            page.locator(".connectivity-grid").wait_for()
+            page.screenshot(path='/tmp/makia-connectivity.png',full_page=True)
+
+            for view in ["inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
                 nav=page.locator(f'.pro-sidebar nav button[data-view="{view}"]')
                 if nav.count():
                     nav.click()
