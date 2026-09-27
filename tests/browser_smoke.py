@@ -284,7 +284,18 @@ def main():
             page.locator(".connectivity-grid").wait_for()
             page.screenshot(path='/tmp/makia-connectivity.png',full_page=True)
 
-            for view in ["inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
+            page.evaluate("switchView('modes')")
+            page.locator(".connection-modes-grid").wait_for()
+            assert page.locator(".connection-mode-card").count()==6
+            mode_text=page.locator(".connection-modes-grid").inner_text()
+            for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
+                assert label in mode_text
+            assert page.locator('[data-action="mode-ikev2-setup"]').count()==1
+            assert page.locator('[data-action="mode-stealth-client"]').count()==1
+            assert page.locator('[data-action="mode-wstunnel-setup"]').count()==1
+            page.screenshot(path='/tmp/makia-connection-modes.png',full_page=True)
+
+            for view in ["inbounds","access","modes","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
                 page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
@@ -360,7 +371,7 @@ def main():
                 assert "makia-portable-migration" in manifest
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
+            for view in ["dashboard","inbounds","access","modes","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
                 page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
