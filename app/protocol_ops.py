@@ -1509,7 +1509,10 @@ def ensure_full_protocol_stack():
             os.chmod(path,0o600)
             _xray_secure_runtime_file(path)
             _xray_test_config_as_service(_binary(),path)
-        _run(["systemctl","enable","--now","xray"],timeout=60)
+        try:
+            _run(["systemctl","enable","--now","xray"],timeout=60)
+        except ProtocolError:
+            pass
         x=xray_status()
         if not x.get("service_active"):
             x=repair_xray_runtime().get("diagnostics") or xray_status()
