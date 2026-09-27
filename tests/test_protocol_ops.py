@@ -370,3 +370,10 @@ def test_wstunnel_status_reads_runtime_env(monkeypatch,tmp_path):
     assert status["port"]==8444
     assert status["target_port"]==443
     assert status["listener"] is True
+
+
+def test_component_install_is_blocked_inside_hardened_web_service(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"_process_no_new_privileges",lambda:True)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:pytest.fail("package manager must not run"))
+    with pytest.raises(ProtocolError,match="sudo makia-upgrade"):
+        protocol_ops.install_component("wireguard")
