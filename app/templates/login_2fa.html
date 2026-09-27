@@ -2,21 +2,20 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#031229"><title>{{app_name}} - 2FA</title>
+  <meta name="theme-color" content="#0b101a"><title>{{app_name}} - 2FA</title>
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
 </head>
-<body class="login-body neon-login-body" data-theme="glass">
-  <div class="login-landscape" aria-hidden="true"><div class="mountain mountain-a"></div><div class="mountain mountain-b"></div><div class="mountain mountain-c"></div><div class="lake-glow"></div></div>
-  <main class="login-shell-card">
-    <div class="login-logo-wrap"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
-    <div class="login-copy"><h1>تأیید دو مرحله‌ای</h1><p>کد ۶ رقمی Authenticator را وارد کنید</p></div>
+<body class="sanaei-login" data-theme="glass">
+  <main class="sanaei-login-card">
+    <div class="sanaei-login-brand"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
+    <h1>تأیید دو مرحله‌ای</h1><p>کد ۶ رقمی Authenticator را وارد کنید.</p>
     {% if error %}<div class="alert">{{error}}</div>{% endif %}
-    <form method="post" action="/login/2fa" class="neon-login-form">
+    <form method="post" action="/login/2fa" class="sanaei-login-form">
       <input type="hidden" name="token" value="{{token}}">
-      <label><span>Authenticator Code</span><div class="login-input-wrap"><i>◇</i><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required placeholder="123456"></div></label>
-      <button class="login-submit" type="submit">تأیید و ورود <b>←</b></button>
+      <label><span>Authenticator Code</span><div class="sanaei-login-input"><b>◇</b><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="123456"></div></label>
+      <button class="sanaei-login-submit" type="submit">تأیید و ورود</button>
     </form>
-    <div class="login-footer"><span>Time-based OTP</span><span>v{{version}}</span></div>
+    <div class="sanaei-login-foot"><span>Time-based OTP</span><span>v{{version}}</span></div>
   </main>
 </body></html>

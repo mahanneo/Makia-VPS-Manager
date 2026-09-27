@@ -75,6 +75,7 @@ jobs:
           test -f docs/UAT-0.21.0-RC1.md
           test -f docs/UAT-0.22.0-RC1.md
           test -f docs/UAT-0.23.0-RC1.md
+          test -f docs/UAT-0.24.0-RC1.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f scripts/configure-owner.py
           test -f README_FA.md
@@ -155,8 +156,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.23.0-rc1"' app/config.py
-          grep -q '^0.23.0-rc1$' VERSION
+          grep -q 'VERSION = "0.24.0-rc1"' app/config.py
+          grep -q '^0.24.0-rc1$' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -180,20 +181,23 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v0230rc1' app/static/sw.js
+          grep -q 'makia-shell-v0240rc1' app/static/sw.js
 
-      - name: Neon UI v0.23 contract
+      - name: Sanaei structure v0.24 contract
         run: |
-          grep -q 'makia-neon-shell' app/templates/dashboard.html
-          grep -q 'nav-subgroup' app/templates/dashboard.html
-          grep -q 'login-shell-card' app/templates/login.html
-          grep -q 'neon-stat-grid' app/static/app.js
-          grep -q 'protocol-donut' app/static/app.js
-          grep -q 'protocol-page-header' app/static/app.js
-          grep -q 'port-table-row' app/static/app.js
-          grep -q 'service-control-row' app/static/app.js
-          grep -q 'v0.23 Neon Operations UI' app/static/app.css
-          grep -q 'UAT — Neon UI Rebuild' docs/UAT-0.23.0-RC1.md
+          grep -q 'makia-sanaei-shell' app/templates/dashboard.html
+          grep -q 'sanaei-sidebar' app/templates/dashboard.html
+          grep -q 'data-view="inbounds"' app/templates/dashboard.html
+          grep -q 'data-group="protocolclients"' app/templates/dashboard.html
+          grep -q 'data-group="settings"' app/templates/dashboard.html
+          grep -q 'data-group="xraytools"' app/templates/dashboard.html
+          grep -q 'sanaei-login-card' app/templates/login.html
+          grep -q 'sx-vitals' app/static/app.js
+          grep -q 'inboundsWorkspace' app/static/app.js
+          grep -q 'sx-inbound-list' app/static/app.js
+          grep -q 'makia-sidebar-pinned' app/static/app.js
+          grep -q 'v0.24 Sanaei-structure shell' app/static/app.css
+          grep -q 'UAT — Sanaei-style Structure' docs/UAT-0.24.0-RC1.md
 
       - name: UAT v0.17 contract
         run: |
@@ -243,7 +247,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: makia-v023-ui-screenshots
+          name: makia-v024-ui-screenshots
           path: /tmp/makia-*.png
           if-no-files-found: ignore
           retention-days: 7
