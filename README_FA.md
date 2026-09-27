@@ -1,3 +1,15 @@
+## نسخه ۰.۲۲.۰-rc1 — نصب کامل و آمادهٔ ساخت کاربر
+
+از این نسخه، نصب تازه Makia دیگر فقط پنل و SSH را بالا نمی‌آورد. Installer به‌صورت خودکار **Xray / V2Ray، WireGuard، OpenVPN، Easy-RSA، iptables و Stunnel** را نصب می‌کند و Runtimeهای WireGuard و OpenVPN را نیز Bootstrap می‌کند. Xray هم با Core اعتبارسنجی‌شده و Config سالم فعال می‌شود.
+
+بعد از پایان نصب، مدیر باید بتواند مستقیماً وارد Workspace مربوط به SSH، Xray، WireGuard یا OpenVPN شود و **فقط User/Client بسازد**؛ مرحلهٔ Install/Bootstrap عادی دیگر بخشی از راه‌اندازی اولیه نیست.
+
+Portها نیز خودکار و Transport-aware تخصیص داده می‌شوند: WireGuard ابتدا UDP/443 و OpenVPN ابتدا UDP/1194 را امتحان می‌کنند. اگر همان Transport روی آن Port اشغال باشد، Makia Port جایگزین آزاد انتخاب می‌کند و مقدار واقعی را در تنظیمات پیش‌فرض ذخیره می‌کند. TCP/443 پنل با UDP/443 WireGuard تداخل محسوب نمی‌شود.
+
+نصب‌های فعلی که فقط SSH روی آن‌ها کار می‌کند نیز با اجرای `sudo makia-upgrade` Full Stack را دریافت می‌کنند. Updater کانفیگ‌های موجود را overwrite نمی‌کند و فقط بخش‌های مفقود را می‌سازد یا Runtime مدیریت‌شده را Repair می‌کند.
+
+قبل از Stable، [UAT نسخه ۰.۲۲.۰-rc1](docs/UAT-0.22.0-RC1.md) باید روی VPS واقعی PASS شود.
+
 ## نسخه ۰.۲۱.۰-rc1 — Control Center ماژولار
 
 ساختار پنل در این RC از حالت «همه‌چیز در یک صفحه» خارج شده است. **SSH / NPV، Xray / V2Ray، WireGuard و OpenVPN هرکدام فضای مستقل** دارند و «همه کاربران» فقط نمای سراسری بین پروتکل‌هاست. Dashboard همچنان وضعیت کل سرور، سرویس‌ها، منابع و تعداد دسترسی‌ها را خلاصه می‌کند.
