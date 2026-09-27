@@ -804,53 +804,32 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
   ].join('');
 }
 async function protocols(renderToken=window.__viewRenderToken){
-  title.textContent='Protocol Hub';setPageContext('ENGINE CONTROL');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Engineها…</b></div>';
-  const [d,clients]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients')]);
+  title.textContent='مدیریت پورت‌ها';setPageContext('PORT & ENGINE MANAGEMENT');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی پورت‌ها و Engineها…</b></div>';
+  const [d,clients,matrix]=await Promise.all([
+    api('/api/protocols'),api('/api/protocol-clients'),
+    api('/api/protocols/endpoint-matrix').catch(()=>({rows:[],endpoint:'',all_ready:false}))
+  ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='protocols')return;
   window.__protocolData=d;window.__protocolClients=clients;
-  const x=d.xray,w=d.wireguard,o=d.openvpn,s=d.stunnel,ssh=d.ssh;
-  const ready=(d.capabilities||[]).filter(x=>x.available).length,total=(d.capabilities||[]).length;
-  const xActions=x.installed
-    ? '<button class="engine-btn primaryish" data-action="nav" data-view="xray">Manage Xray Clients</button><button class="engine-btn" data-action="xray-diagnostics">Diagnostics</button>'+(!x.service_active?'<button class="engine-btn warnish" data-action="xray-repair">Repair & Restart</button>':'')+'<button class="engine-btn" data-action="xray-advanced">Advanced JSON</button><button class="engine-btn" data-action="xray-tunnel">Tunnel</button>'
-    : '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="xray">Install Xray Core</button>';
-  const wActions=!w.installed
-    ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Install & Setup</button>'
-    : (!w.config
-      ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Bootstrap wg0</button>'
-      : '<button class="engine-btn primaryish" data-action="nav" data-view="wireguard">Manage Peers</button><button class="engine-btn" data-action="wireguard-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="wireguard-repair">Repair Runtime</button>');
-  const oActions=!o.installed
-    ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Install & Setup</button>'
-    : (!o.config
-      ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="openvpn">Bootstrap Server</button>'
-      : '<button class="engine-btn primaryish" data-action="nav" data-view="openvpn">Manage Clients</button><button class="engine-btn" data-action="openvpn-diagnostics">Diagnostics</button><button class="engine-btn warnish" data-action="openvpn-repair">Repair Runtime</button>');
-  const stActions=!s.installed
-    ? '<button class="engine-btn" data-action="protocol-install" data-kind="stunnel">Install Stunnel</button>'
-    : '<button class="engine-btn" data-action="nav" data-view="services">Service Control</button>';
-
-  const capabilityHtml=(d.capabilities||[]).map(cap=>'<div class="capability-card '+(cap.available?'ready':'missing')+'"><div><b>'+htmlEsc(String(cap.id||'').toUpperCase())+'</b><span>'+htmlEsc(cap.engine||'')+'</span></div><em>'+htmlEsc(cap.available?(cap.mode==='advanced'?'ADVANCED':'READY'):'UNAVAILABLE')+'</em></div>').join('');
-  const inboundHtml=(x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(i.tag||'untagged')+'</b><span>'+htmlEsc(i.protocol||'unknown')+'</span></div><div><b>'+htmlEsc((i.listen||'0.0.0.0')+':'+(i.port??'-'))+'</b><span>'+Number(i.clients||0)+' clients</span></div></div>').join(''):'<div class="empty compact">Inbound قابل‌خواندن پیدا نشد.</div>';
-
+  const x=d.xray||{},w=d.wireguard||{},o=d.openvpn||{},s=d.stunnel||{},ssh=d.ssh||{};
+  const portRows=(matrix.rows||[]).map(row=>{
+    const ports=(row.ports||[]).length?(row.ports||[]).join(', '):'—';
+    const view=row.id==='ssh'?'ssh':row.id==='xray'?'xray':row.id==='wireguard'?'wireguard':'openvpn';
+    return '<div class="port-table-row"><div><b>'+htmlEsc(row.label)+'</b><span>'+htmlEsc(row.id==='xray'?'Xray inbounds':'Managed service')+'</span></div><div><b>'+htmlEsc(ports)+'</b></div><div><span class="transport-badge">'+htmlEsc(row.transport||'—')+'</span></div><div><span class="status-chip '+(row.runtime?'ok':'bad')+'">'+(row.runtime?'فعال':'غیرفعال')+'</span></div><div class="toolbar"><button class="ghost" data-action="nav" data-view="'+view+'">مدیریت</button></div></div>';
+  }).join('');
+  const engineRows=[
+    ['SSH',ssh.installed,ssh.service_active,'ssh'],
+    ['Xray Core',x.installed,x.service_active,'xray'],
+    ['WireGuard',w.installed,w.service_active,'wireguard'],
+    ['OpenVPN',o.installed,o.service_active,'openvpn'],
+    ['Stunnel',s.installed,s.service_active,'services']
+  ].map(e=>'<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc(e[0].slice(0,1))+'</div><div><b>'+htmlEsc(e[0])+'</b><span>'+(e[1]?'نصب شده':'نصب نشده')+'</span></div><span class="status-chip '+(e[2]?'ok':e[1]?'warn':'bad')+'">'+(e[2]?'در حال اجرا':e[1]?'متوقف':'Missing')+'</span><button class="ghost" data-action="nav" data-view="'+e[3]+'">تنظیمات</button></div>').join('');
   content.innerHTML=[
-    '<section class="protocol-command"><div><div class="eyebrow">ENGINE & TRANSPORT CONTROL</div><h2>Protocol Hub</h2><p>Engineها، Server Bootstrap، Port Allocation و تنظیمات پیشرفته اینجا مدیریت می‌شوند؛ ساخت Client در فضای مستقل هر پروتکل انجام می‌شود.</p><div class="hero-actions"><button class="primary action-lg" data-action="nav" data-view="access">Open Access Center</button><button class="ghost action-lg" data-action="endpoint-matrix">IP / Domain Readiness</button><button class="ghost action-lg" data-action="protocol-refresh">Refresh Engines</button></div></div>',
-    '<div class="protocol-readiness"><b>'+ready+'/'+total+'</b><span>CAPABILITIES READY</span></div></section>',
-    '<section class="engine-grid">',
-      engineCard('X','Xray Core','VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / Proxy',protocolState(x.installed,x.service_active),'<span>'+htmlEsc(x.version||'Version unavailable')+'</span><span>'+Number((x.inbounds||[]).length)+' inbounds</span>',xActions),
-      engineCard('W','WireGuard','Kernel/userspace WireGuard with managed wg0 bootstrap',protocolState(w.installed,w.service_active),'<span>'+Number((w.interfaces||[]).length)+' interfaces</span><span>'+Number(w.peers||0)+' peers</span>',wActions),
-      engineCard('O','OpenVPN','PKI-backed OpenVPN server and inline client profiles',protocolState(o.installed,o.service_active),'<span>'+Number((o.servers||[]).length)+' server profiles</span><span>Easy-RSA PKI</span>',oActions),
-      engineCard('S','OpenSSH','System SSH access with Makia expiry/session policy',protocolState(ssh.installed,ssh.service_active),'<span>Linux accounts</span><span>Policy worker</span>','<button class="engine-btn primaryish" data-action="nav" data-view="ssh">Manage SSH Accounts</button>'),
-      engineCard('T','Stunnel','TLS wrapper for selected TCP services',protocolState(s.installed,s.service_active),'<span>Optional sidecar</span>',stActions),
-    '</section>',
-    '<section class="protocol-detail-grid"><div class="panel"><div class="panel-head"><div><h3>Capability Matrix</h3><span>'+ready+' READY</span></div></div><div class="capability-grid-v11">'+capabilityHtml+'</div></div>',
-    '<div class="panel"><div class="panel-head"><div><h3>Xray Inbounds</h3><span>'+Number((x.inbounds||[]).length)+' DETECTED</span></div></div><div class="engine-inbounds">'+inboundHtml+'</div></div></section>',
-    '<section class="panel"><div class="panel-head"><div><h3>Port Allocation</h3><span>TRANSPORT-AWARE SAFETY</span></div><button class="ghost" data-action="endpoint-matrix">Endpoint Matrix</button></div><div class="engine-inbounds">'+
-      (x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>Xray · '+htmlEsc(String(i.protocol||'').toUpperCase())+'</b><span>'+htmlEsc(i.tag||'Inbound')+'</span></div><div><b>:'+Number(i.port||0)+'</b><span>Engine validated</span></div></div>').join('')+
-      (w.port?'<div class="engine-inbound"><div><b>WireGuard</b><span>UDP only</span></div><div><b>:'+Number(w.port)+'</b><span>UDP reservation</span></div></div>':'')+
-      (o.port?'<div class="engine-inbound"><div><b>OpenVPN</b><span>'+htmlEsc(String(o.proto||'udp').toUpperCase())+'</span></div><div><b>:'+Number(o.port)+'</b><span>Server reservation</span></div></div>':'')+
-      '<div class="wizard-note"><b>قاعده تداخل</b><span>پورت فقط با همان Transport تداخل محسوب می‌شود؛ بنابراین TCP/443 پنل می‌تواند هم‌زمان با UDP/443 WireGuard کار کند، اما دو Listener روی UDP/443 اجازه ساخت نمی‌گیرند.</span></div></div></section>',
-    '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="xray">Manage in Xray Workspace</button></div><div class="protocol-policy-mini">'+
-      (clients.length?clients.slice(0,8).map(pc=>'<div><div><b>'+htmlEsc(pc.name)+'</b><span>'+htmlEsc(String(pc.protocol||'').toUpperCase())+'</span></div><strong class="'+(pc.enabled&&!pc.expired?'ok-text':'bad-text')+'">'+(pc.enabled&&!pc.expired?'Active':'Attention')+'</strong></div>').join(''):'<div class="empty compact">هنوز Xray Client مدیریت‌شده وجود ندارد.</div>')+
-    '</div></section>'
+    '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">⌘</span><div><h2>مدیریت پورت‌ها</h2><p>نمایش پورت‌های فعال و کنترل Engineهای شبکه بدون تداخل TCP / UDP</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="endpoint-matrix">بررسی Endpoint</button><button class="ghost" data-action="protocol-refresh">بروزرسانی</button></div></section>',
+    '<section class="panel port-management-panel"><div class="panel-head"><div><h3>لیست پورت‌های فعال</h3><span>TRANSPORT-AWARE ALLOCATION</span></div></div><div class="port-table-head"><span>پروتکل</span><span>پورت</span><span>نوع اتصال</span><span>وضعیت</span><span>عملیات</span></div><div class="port-table-body">'+(portRows||'<div class="empty">پورت مدیریت‌شده‌ای پیدا نشد.</div>')+'</div><div class="port-safe-note">✓ بررسی تداخل پورت‌ها بر اساس Transport انجام می‌شود؛ TCP/443 و UDP/443 می‌توانند هم‌زمان فعال باشند.</div></section>',
+    '<section class="split-grid"><div class="panel"><div class="panel-head"><div><h3>Engineها</h3><span>INSTALL / RUNTIME</span></div></div><div class="service-control-list">'+engineRows+'</div></div><div class="panel"><div class="panel-head"><div><h3>Xray Inbounds</h3><span>'+Number((x.inbounds||[]).length)+' DETECTED</span></div></div><div class="engine-inbounds">'+((x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(String(i.protocol||'').toUpperCase())+'</b><span>'+htmlEsc(i.tag||'Inbound')+'</span></div><div><b>:'+Number(i.port||0)+'</b><span>'+Number(i.clients||0)+' users</span></div></div>').join(''):'<div class="empty compact">Inbound وجود ندارد.</div>')+'</div></div></section>',
+    '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="xray">مدیریت کاربران Xray</button></div><div class="protocol-policy-mini">'+(clients.length?clients.slice(0,8).map(pc=>'<div><div><b>'+htmlEsc(pc.name)+'</b><span>'+htmlEsc(String(pc.protocol||'').toUpperCase())+'</span></div><strong class="'+(pc.enabled&&!pc.expired?'ok-text':'bad-text')+'">'+(pc.enabled&&!pc.expired?'Active':'Attention')+'</strong></div>').join(''):'<div class="empty compact">Client ثبت نشده است.</div>')+'</div></section>'
   ].join('');
 }
 function createXrayTunnel(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY TUNNEL</div><h3>Port Forward / Dokodemo</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Name<input id="tnName" value="tunnel01"></label><label>Listen port<input id="tnListen" type="number" min="1" max="65535" value="8443"></label><label>Target host<input id="tnHost" placeholder="10.0.0.2 or example.com"></label><label>Target port<input id="tnPort" type="number" min="1" max="65535" value="443"></label><label>Network<select id="tnNetwork"><option value="tcp,udp">TCP + UDP</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label></div><div class="notice">Config قبل از Apply توسط Xray validate می‌شود و در خطا Rollback انجام می‌شود.</div><div class="toolbar"><button class="primary" onclick="submitXrayTunnel()">Create Tunnel</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`}
@@ -1054,43 +1033,23 @@ async function repairOpenVPNRuntime(){
 }
 
 async function services(renderToken=window.__viewRenderToken){
-  title.textContent='Services';setPageContext('SYSTEMD CONTROL');
+  title.textContent='مدیریت سرویس‌ها';setPageContext('SERVICE MANAGEMENT');
   const [d,pstack]=await Promise.all([api('/api/overview'),api('/api/protocols').catch(()=>({}))]);
   if(renderToken!==window.__viewRenderToken||activeView!=='services')return;
-  const running=(d.services||[]).filter(x=>x.active).length;
-  const installed={
-    xray:Boolean(pstack?.xray?.installed),
-    'openvpn-server@server':Boolean(pstack?.openvpn?.installed),
-    'wg-quick@wg0':Boolean(pstack?.wireguard?.installed)
-  };
-  const row=s=>{
+  const rows=d.services||[],running=rows.filter(x=>x.active).length;
+  const installed={xray:Boolean(pstack?.xray?.installed),'openvpn-server@server':Boolean(pstack?.openvpn?.installed),'wg-quick@wg0':Boolean(pstack?.wireguard?.installed)};
+  const body=rows.map(s=>{
     const protocolKind=s.name==='xray'?'xray':s.name==='openvpn-server@server'?'openvpn':s.name==='wg-quick@wg0'?'wireguard':'';
     const missing=protocolKind&&installed[s.name]===false;
-    let extra='';
-    if(s.name==='xray'){
-      extra=missing
-        ? '<button class="soft" data-action="protocol-setup" data-kind="xray">Install Xray</button>'
-        : '<button class="ghost" data-action="xray-diagnostics">Diagnose</button>'+(!s.active?'<button class="soft warnish" data-action="xray-repair">Repair</button>':'');
-    }else if(s.name==='openvpn-server@server'){
-      extra=missing
-        ? '<button class="soft" data-action="protocol-setup" data-kind="openvpn">Setup OpenVPN</button>'
-        : '<button class="ghost" data-action="openvpn-diagnostics">Domain</button>'+(!s.active?'<button class="soft warnish" data-action="openvpn-repair">Repair</button>':'');
-    }else if(s.name==='wg-quick@wg0'&&missing){
-      extra='<button class="soft" data-action="protocol-setup" data-kind="wireguard">Setup WireGuard</button>';
-    }
-    const controls=missing?'':[
-      '<button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="start">Start</button>',
-      '<button class="primary" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="restart">Restart</button>',
-      '<button class="danger" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="stop">Stop</button>'
-    ].join('');
-    const stateLabel=missing?'Not installed':s.active?'Running':'Attention';
-    const stateClass=missing?'warn':s.active?'ok':'bad';
-    return '<div class="row"><div><i class="status-dot '+(s.active?'ok':'bad')+'"></i><b>'+htmlEsc(s.label)+'</b><div class="muted">'+htmlEsc(s.name)+'</div></div><div class="muted">'+htmlEsc(s.state)+'</div><div><span class="status-chip '+stateClass+'">'+stateLabel+'</span></div><div class="toolbar">'+extra+controls+'</div></div>';
-  };
-  content.innerHTML=viewIntro('ALLOWLISTED SERVICES','کنترل سرویس‌ها','Start/Stop/Restart فقط برای سرویس‌های نصب‌شده و Allowlist شده نمایش داده می‌شود؛ Xray و OpenVPN Diagnostics علت Failure را از Runtime واقعی بررسی می‌کنند.','<div class="view-intro-stat"><b>'+running+'/'+d.services.length+'</b><span>RUNNING</span></div>')+
-  '<div class="panel modern-list"><div class="table">'+d.services.map(row).join('')+'</div></div>';
+    return '<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc((s.label||s.name||'?').slice(0,1))+'</div><div class="service-control-copy"><b>'+htmlEsc(s.label||s.name)+'</b><span>'+htmlEsc(s.name)+'</span></div><span class="status-chip '+(missing?'warn':s.active?'ok':'bad')+'">'+(missing?'نصب نشده':s.active?'در حال اجرا':'متوقف')+'</span><div class="service-switch '+(s.active?'on':'')+'"><i></i></div><div class="toolbar">'+
+      (missing?'<button class="primary" data-action="protocol-setup" data-kind="'+protocolKind+'">راه‌اندازی</button>':'<button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="start">Start</button><button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="restart">Restart</button><button class="danger" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="stop">Stop</button>')+
+      '</div></div>';
+  }).join('');
+  content.innerHTML=[
+    '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">▣</span><div><h2>مدیریت سرویس‌ها</h2><p>کنترل وضعیت سرویس‌های اصلی سرور و Engineهای پروتکل</p></div></div><div class="protocol-header-actions"><span class="status-chip '+(running===rows.length?'ok':'warn')+'">'+running+'/'+rows.length+' فعال</span><button class="ghost" data-action="refresh">بروزرسانی</button></div></section>',
+    '<section class="panel"><div class="panel-head"><div><h3>وضعیت سرویس‌های سیستم</h3><span>START · STOP · RESTART</span></div></div><div class="service-control-list">'+body+'</div></section>'
+  ].join('');
 }
-
 async function svc(n,a){try{await api('/api/services/'+n+'/'+a,{method:'POST'});await services()}catch(e){alert(e.message)}}
 async function security(renderToken=window.__viewRenderToken){
   title.textContent='Security Center';setPageContext('DEFENSE LAYER');
@@ -1533,7 +1492,7 @@ document.addEventListener('change',e=>{
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
 function applyLanguageShell(){
-  const fa={dashboard:'نمای کلی',access:'همه کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'وایرگارد',openvpn:'OpenVPN',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'مرکز پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const fa={dashboard:'نمای کلی',access:'همه کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'وایرگارد',openvpn:'OpenVPN',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'مدیریت سرویس‌ها',protocols:'مدیریت پورت‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش‌ها',updates:'بروزرسانی',settings:'تنظیمات پنل',support:'پشتیبانی'};
   const en={dashboard:'Overview',access:'All Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocol Hub',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
