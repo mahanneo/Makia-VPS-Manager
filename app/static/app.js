@@ -1324,13 +1324,14 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save SSH defaults</button></div></div>'
     ].join('');
   }else if(tab==='xray'){
+    const xspec=xrayProfileSpec(defs.xray_protocol||'vless'),xtransport=xspec.transports.includes(defs.xray_transport)?defs.xray_transport:xspec.preset[0],xsecurity=xspec.security.includes(defs.xray_security)?defs.xray_security:xspec.preset[1];
     body=[
       '<section class="settings-section-head"><div><div class="eyebrow">PROVISIONING DEFAULTS</div><h2>Xray Defaults</h2><p>Defaultهای واقعی ساخت Client برای VLESS / VMess / Trojan / Shadowsocks / Hysteria2.</p></div></section>',
       '<div class="settings-card-v2"><div class="settings-form-grid">',
       '<label>Protocol<select id="opXrayProtocol">'+['vless','vmess','trojan','shadowsocks','hysteria2','http','socks'].map(x=>'<option value="'+x+'" '+(defs.xray_protocol===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
       '<label>Port<input id="opXrayPort" type="number" min="1" max="65535" value="'+Number(defs.xray_port||2087)+'"></label>',
-      '<label>Transport<select id="opXrayTransport">'+['tcp','ws','grpc','httpupgrade','xhttp','kcp'].map(x=>'<option value="'+x+'" '+(defs.xray_transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
-      '<label>Security<select id="opXraySecurity"><option value="reality" '+(defs.xray_security==='reality'?'selected':'')+'>REALITY</option><option value="tls" '+(defs.xray_security==='tls'?'selected':'')+'>TLS</option><option value="none" '+(defs.xray_security==='none'?'selected':'')+'>None</option></select></label>',
+      '<label>Transport<select id="opXrayTransport">'+xspec.transports.map(x=>'<option value="'+x+'" '+(xtransport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
+      '<label>Security<select id="opXraySecurity">'+xspec.security.map(x=>'<option value="'+x+'" '+(xsecurity===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label>',
       '<label>Path / Service<input id="opXrayPath" value="'+htmlEsc(defs.xray_path||'/makia')+'"></label><label>SNI<input id="opXraySni" value="'+htmlEsc(defs.xray_sni||'www.microsoft.com')+'"></label><label>REALITY target<input id="opXrayTarget" value="'+htmlEsc(defs.xray_reality_target||'www.microsoft.com:443')+'"></label>',
       '<label>Quota GB<input id="opXrayQuota" type="number" min="0" value="'+Number(defs.xray_quota_gb??50)+'"></label><label>Expiry days<input id="opXrayDays" type="number" min="0" max="3650" value="'+Number(defs.xray_expire_days??30)+'"></label><label>IP limit<input id="opXrayIp" type="number" min="1" max="50" value="'+Number(defs.xray_ip_limit||1)+'"></label><label>Traffic reset days<input id="opXrayReset" type="number" min="0" max="3650" value="'+Number(defs.xray_reset_days??30)+'"></label></div>',
       '<div class="wizard-note"><b>Full Xray Core mode</b><span>Wizard بالا یک subset امن و ساختاریافته است. برای هر inbound/outbound/routing/fallback یا transport دیگری که Xray Core نصب‌شده پشتیبانی می‌کند از Advanced JSON استفاده کن؛ قبل از Apply با خود Xray validate و در خطا rollback می‌شود.</span></div>',
@@ -1643,6 +1644,12 @@ document.addEventListener('change',e=>{
     captureWizard();
     normalizeXrayProfile(provisionState,false);
     renderProvisionWizard();
+  }
+  if(e.target.id==='opXrayProtocol'){
+    const spec=xrayProfileSpec(e.target.value),t=document.getElementById('opXrayTransport'),s=document.getElementById('opXraySecurity');
+    if(t)t.innerHTML=spec.transports.map(x=>'<option value="'+x+'">'+x.toUpperCase()+'</option>').join('');
+    if(s)s.innerHTML=spec.security.map(x=>'<option value="'+x+'">'+x.toUpperCase()+'</option>').join('');
+    if(t)t.value=spec.preset[0];if(s)s.value=spec.preset[1];
   }
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
