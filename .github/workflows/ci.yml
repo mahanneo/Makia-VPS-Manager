@@ -77,6 +77,7 @@ jobs:
           test -f docs/UAT-0.23.0-RC1.md
           test -f docs/UAT-0.24.0-RC1.md
           test -f docs/UAT-0.25.0-RC1.md
+          test -f docs/UAT-0.26.0-RC1.md
           test -f docs/IRAN-CONNECTIVITY-FIELD-TEST.md
           test -f scripts/iran-field-preflight.sh
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
@@ -159,8 +160,145 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.25.0-rc1"' app/config.py
-          grep -q '^0.25.0-rc1$' VERSION
+          grep -q 'VERSION = "0.26.0-rc1"' app/config.py
+          grep -q '^0.26.0-rc1
+          grep -q 'require_capability' app/main.py
+          grep -q 'data-view="support"' app/templates/dashboard.html
+          grep -q '/api/support/grants' app/main.py
+          grep -q '/support/login' app/main.py
+          grep -q 'require_local_admin' app/main.py
+          grep -q 'hybrid_fallback_ipv4' app/protocol_ops.py
+          grep -q 'server-poll-timeout 8' app/protocol_ops.py
+          ! grep -q '/api/license' app/main.py
+          ! grep -q 'license_required' app/main.py
+          ! grep -q 'hasLicenseFeature' app/static/app.js
+          ! grep -R --line-number 'BEGIN PRIVATE KEY' app tools scripts --exclude='*.md'
+
+      - name: Full stack ready contract
+        run: |
+          grep -q 'Full Stack Ready UAT' docs/UAT-0.22.0-RC1.md
+          grep -q 'ensure_full_protocol_stack' app/protocol_ops.py
+          grep -q 'ensure_full_protocol_stack' scripts/install.sh
+          grep -q 'ensure_full_protocol_stack' scripts/update.sh
+          grep -q 'wireguard openvpn easy-rsa iptables stunnel4' scripts/install.sh
+          grep -q 'Xray binary missing' scripts/uat-smoke.sh
+          grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
+          grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
+          grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
+          grep -q 'makia-shell-v0260rc1' app/static/sw.js
+
+      - name: Professional UX v0.25 contract
+        run: |
+          grep -q 'makia-pro-shell' app/templates/dashboard.html
+          grep -q 'pro-sidebar' app/templates/dashboard.html
+          grep -q 'data-view="access"' app/templates/dashboard.html
+          grep -q 'data-view="connectivity"' app/templates/dashboard.html
+          grep -q 'data-group="protocols"' app/templates/dashboard.html
+          grep -q 'data-group="infra"' app/templates/dashboard.html
+          grep -q 'data-group="system"' app/templates/dashboard.html
+          grep -q 'pro-user-row' app/static/app.js
+          grep -q 'access-detail-drawer' app/static/app.js
+          grep -q 'provision-drawer' app/static/app.js
+          grep -q 'connectivityLab' app/static/app.js
+          grep -q 'نیاز به تست از داخل ایران' app/static/app.js
+          grep -q 'v0.25 Professional Operations UI' app/static/app.css
+          grep -q 'Professional UX / Iran Connectivity UAT' docs/UAT-0.25.0-RC1.md
+          grep -q 'Iran Connectivity Field Test' docs/IRAN-CONNECTIVITY-FIELD-TEST.md
+          grep -q 'transport preflight only' scripts/iran-field-preflight.sh
+
+      - name: Final hardening v0.26 contract
+        run: |
+          grep -q 'Final Hardening UAT' docs/UAT-0.26.0-RC1.md
+          grep -q 'loginLangToggle' app/templates/login.html
+          grep -q 'loginThemeToggle' app/templates/login.html
+          grep -q 'NoNewPrivs' app/protocol_ops.py
+          grep -q 'reconfigure_openvpn_server' app/protocol_ops.py
+          grep -q 'reconfigure_wireguard_server' app/protocol_ops.py
+          grep -q '/api/protocols/openvpn/config' app/main.py
+          grep -q '/api/protocols/wireguard/config' app/main.py
+          grep -q 'xrayCompatibility' app/static/app.js
+          grep -q 'openvpn-server-config' app/static/app.js
+          grep -q 'wg-server-config' app/static/app.js
+          grep -q 'support-advanced' app/static/app.js
+          grep -q 'ADMIN HARDENING' app/static/app.js
+          test -f app/static/guides/xray.svg
+          test -f app/static/guides/wireguard.svg
+          test -f app/static/guides/openvpn.svg
+          test -f app/static/guides/ssh.svg
+
+      - name: UAT v0.17 contract
+        run: |
+          grep -q 'WireGuard / Endpoint Compatibility UAT' docs/UAT-0.17.0-RC1.md
+          grep -q 'wireguard_endpoint_diagnostics' app/protocol_ops.py
+          grep -q 'repair_wireguard_runtime' app/protocol_ops.py
+          grep -q 'protocol_endpoint_matrix' app/protocol_ops.py
+          grep -q '/api/protocols/wireguard/diagnostics' app/main.py
+          grep -q '/api/protocols/wireguard/repair' app/main.py
+          grep -q '/api/protocols/endpoint-matrix' app/main.py
+          grep -q 'wireguard-diagnostics' app/static/app.js
+          grep -q 'wireguard-repair' app/static/app.js
+          grep -q 'endpoint-matrix' app/static/app.js
+          grep -q 'Checking WireGuard forwarding/NAT runtime' scripts/update.sh
+          grep -q 'WireGuard forwarding + NAT + listener' scripts/uat-smoke.sh
+          grep -q 'scrollbar-color:#2f6f94 transparent' app/static/app.css
+          grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/update.sh
+
+      - name: UAT v0.17 rc2 contract
+        run: |
+          grep -q 'WireGuard Repair Hardening UAT' docs/UAT-0.17.0-RC2.md
+          grep -q '_wireguard_set_interface_directive' app/protocol_ops.py
+          grep -q 'external_udp_verified' app/protocol_ops.py
+          grep -q 'test_wireguard_repair_inserts_directives_before_first_peer' tests/test_wireguard_runtime.py
+          grep -q 'test_wireguard_diagnostics_warns_when_peers_have_no_recent_handshake' tests/test_wireguard_runtime.py
+
+  browser-smoke:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: .
+      MAKIA_DATA_DIR: /tmp/makia-browser
+      MAKIA_INITIAL_ADMIN_PASSWORD: BrowserTestPass!123
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Protected export browser smoke
+        run: python tests/browser_smoke.py
+      - name: Upload visual review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: makia-v026-ui-screenshots
+          path: /tmp/makia-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+  xray-core-smoke:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: .
+      XRAY_BIN: /tmp/xray-runtime/xray
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Download Xray 26.3.27
+        run: |
+          curl -fsSL -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip
+          mkdir -p /tmp/xray-runtime
+          unzip -q /tmp/xray.zip -d /tmp/xray-runtime
+          chmod +x /tmp/xray-runtime/xray
+          /tmp/xray-runtime/xray version
+      - name: Validate guided Xray protocol matrix
+        run: python tests/xray_core_smoke.py
+ VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
