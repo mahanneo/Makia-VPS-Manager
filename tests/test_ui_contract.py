@@ -163,3 +163,13 @@ def test_mkcp_ui_does_not_expose_removed_seed_control():
     assert "Path / Service / Seed" not in JS
     assert "mKCP جدید Seed قدیمی ندارد." in JS
     assert "kcpSettings" not in JS
+
+
+def test_connection_modes_ui_has_real_backend_actions():
+    for marker in [
+        "Change Protocol","connection-mode-card","protocol-mode-config",
+        "protocol-mode-openvpn","protocol-mode-ikev2-user",
+        "/api/protocols/modes","IKEv2 / StrongSwan","Stealth / Stunnel","WStunnel / WSS",
+    ]:
+        assert marker in JS
+    assert "443 فقط وقتی" in JS
