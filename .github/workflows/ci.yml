@@ -239,6 +239,14 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Protected export browser smoke
         run: python tests/browser_smoke.py
+      - name: Upload visual review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: makia-v023-ui-screenshots
+          path: /tmp/makia-*.png
+          if-no-files-found: ignore
+          retention-days: 7
 
   xray-core-smoke:
     runs-on: ubuntu-24.04
