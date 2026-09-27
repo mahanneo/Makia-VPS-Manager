@@ -21,6 +21,7 @@ SWANCTL_CA=Path("/etc/swanctl/x509ca/makia-chain.pem")
 SWANCTL_KEY=Path("/etc/swanctl/private/makia-server.pem")
 STEALTH_CONF=Path("/etc/stunnel/makia-openvpn.conf")
 WSTUNNEL_ENV=STATE_DIR/"wstunnel.env"
+EAP_MSCHAPV2_PLUGIN=Path("/usr/lib/ipsec/plugins/libstrongswan-eap-mschapv2.so")
 
 class ProtocolModeError(RuntimeError):
     pass
@@ -171,6 +172,8 @@ def _copy_ikev2_credentials(cert,chain,key):
 def configure_ikev2(domain,pool="10.99.0.0/24",dns_servers=None):
     if not shutil.which("swanctl"):
         raise ProtocolModeError("StrongSwan is not installed. Run sudo makia-upgrade, then configure IKEv2 again.")
+    if not EAP_MSCHAPV2_PLUGIN.exists():
+        raise ProtocolModeError("StrongSwan EAP-MSCHAPv2 plugin is missing. Run sudo makia-upgrade, then configure IKEv2 again.")
     if not Path("/etc/systemd/system/makia-ikev2-firewall.service").exists():
         raise ProtocolModeError("Makia IKEv2 host unit is missing. Run sudo makia-upgrade first.")
     domain,cert,chain,fullchain,key=_letsencrypt(domain)
