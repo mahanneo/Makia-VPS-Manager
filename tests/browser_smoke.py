@@ -335,15 +335,16 @@ def main():
             page.locator("#opWgPort").wait_for()
             assert page.locator("#opWgPort").input_value()=="443"
 
+            settings_tabs=page.locator(".settings-tabs-sx")
             for tab in ["general","domain","ssh","xray","vpn","delivery","subscription","security","api","recovery"]:
-                page.locator(f'[data-action="settings-tab"][data-tab="{tab}"]').click()
+                settings_tabs.locator(f'[data-action="settings-tab"][data-tab="{tab}"]').click()
                 page.wait_for_timeout(180)
                 assert page.locator(".settings-content-v2").inner_text().strip(), f"settings tab {tab} empty"
                 if tab=="security":
                     assert page.locator(".security-posture-grid article").count()==6
                     page.screenshot(path='/tmp/makia-security.png',full_page=True)
 
-            page.locator('[data-action="settings-tab"][data-tab="recovery"]').click()
+            settings_tabs.locator('[data-action="settings-tab"][data-tab="recovery"]').click()
             page.locator('[data-action="portable-backup"]').click()
             page.locator("#migrationPassword").fill("MigrationPass!2026")
             with page.expect_download() as portable:
