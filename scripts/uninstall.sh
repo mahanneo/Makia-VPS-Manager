@@ -23,3 +23,4 @@ echo "Makia VPS Manager removed. Backups and protocol credentials/configs are pr
 echo "IKEv2 / Stunnel / WStunnel protocol configs under /etc are intentionally not purged."
 
 rm -f /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
+rm -f /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
