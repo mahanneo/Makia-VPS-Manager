@@ -21,6 +21,12 @@ XRAY_TLS_DIR=Path("/usr/local/etc/xray/tls")
 WG_DIR=Path("/etc/wireguard")
 OVPN_DIR=Path("/etc/openvpn")
 OVPN_EASYRSA=OVPN_DIR/"easy-rsa"
+IKEV2_CONF=Path("/etc/ipsec.conf")
+IKEV2_SECRETS=Path("/etc/ipsec.secrets")
+IKEV2_ENV=Path("/etc/makia-vps-manager/ikev2.env")
+STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
+WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
+WSTUNNEL_SERVICE="makia-wstunnel"
 
 
 def _backup_dir():
@@ -434,6 +440,336 @@ def stunnel_status():
         "service_active":_active("stunnel4"),
     }
 
+
+def _listener_present(port, proto="tcp"):
+    port=int(port or 0)
+    if not port or not shutil.which("ss"):
+        return False
+    flag="-ltn" if str(proto).lower()=="tcp" else "-lun"
+    p=subprocess.run(["ss","-H",flag],text=True,capture_output=True,timeout=8,check=False)
+    if p.returncode!=0:
+        return False
+    return any(re.search(rf":{port}\b",line) for line in (p.stdout or "").splitlines())
+
+
+def ikev2_status():
+    installed=bool(shutil.which("ipsec"))
+    active=_active("strongswan-starter") or _active("strongswan")
+    configured=False
+    users=0
+    domain=""
+    cidr=""
+    if IKEV2_CONF.exists():
+        text=IKEV2_CONF.read_text(encoding="utf-8",errors="ignore")
+        configured="# BEGIN MAKIA IKEV2" in text
+        m=re.search(r"(?m)^\s*leftid=(\S+)\s*$",text)
+        if m: domain=m.group(1).lstrip("@")
+        m=re.search(r"(?m)^\s*rightsourceip=(\S+)\s*$",text)
+        if m: cidr=m.group(1)
+    if IKEV2_SECRETS.exists():
+        for line in IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore").splitlines():
+            if "# makia-eap:" in line:
+                users+=1
+    return {
+        "installed":installed,"configured":configured,"service_active":active,
+        "listeners":{"500_udp":_listener_present(500,"udp"),"4500_udp":_listener_present(4500,"udp")},
+        "domain":domain,"cidr":cidr,"users":users,
+    }
+
+
+def stealth_status():
+    installed=_installed("stunnel4") or _installed("stunnel")
+    active=_active("stunnel4")
+    listen_port=None
+    backend_port=None
+    configured=STUNNEL_MAKIA_CONF.exists()
+    if configured:
+        text=STUNNEL_MAKIA_CONF.read_text(encoding="utf-8",errors="ignore")
+        m=re.search(r"(?m)^\s*accept\s*=\s*(?:[^:]+:)?(\d+)\s*$",text)
+        if m: listen_port=int(m.group(1))
+        m=re.search(r"(?m)^\s*connect\s*=\s*(?:[^:]+:)?(\d+)\s*$",text)
+        if m: backend_port=int(m.group(1))
+    return {
+        "installed":installed,"configured":configured,"service_active":active,
+        "port":listen_port,"backend_port":backend_port,
+        "listener":_listener_present(listen_port,"tcp") if listen_port else False,
+    }
+
+
+def wstunnel_status():
+    installed=bool(shutil.which("wstunnel"))
+    configured=WSTUNNEL_ENV.exists()
+    active=_active(WSTUNNEL_SERVICE)
+    data={}
+    if configured:
+        for line in WSTUNNEL_ENV.read_text(encoding="utf-8",errors="ignore").splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                k,v=line.split("=",1); data[k.strip()]=v.strip()
+    try: listen_port=int(data.get("WSTUNNEL_LISTEN_PORT") or 0)
+    except ValueError: listen_port=0
+    try: target_port=int(data.get("WSTUNNEL_TARGET_PORT") or 0)
+    except ValueError: target_port=0
+    return {
+        "installed":installed,"configured":configured,"service_active":active,
+        "port":listen_port or None,"target_port":target_port or None,
+        "path_prefix":data.get("WSTUNNEL_PATH_PREFIX",""),
+        "listener":_listener_present(listen_port,"tcp") if listen_port else False,
+    }
+
+
+def _replace_managed_block(text, begin, end, body):
+    text=str(text or "")
+    pattern=re.compile(rf"(?ms)^\s*{re.escape(begin)}\s*$.*?^\s*{re.escape(end)}\s*$\n?")
+    managed=f"{begin}\n{body.rstrip()}\n{end}\n"
+    if pattern.search(text):
+        return pattern.sub(managed,text,1)
+    return text.rstrip()+"\n\n"+managed if text.strip() else managed
+
+
+def bootstrap_ikev2(domain, cidr="10.77.0.0/24", dns="1.1.1.1"):
+    if not shutil.which("ipsec"):
+        raise ProtocolError("IKEv2/strongSwan tooling is not installed; run sudo makia-upgrade first")
+    domain=validate_endpoint_selection(domain,"domain",direct=True)
+    try:
+        net=ipaddress.ip_network(cidr,strict=False)
+    except Exception as exc:
+        raise ProtocolError("invalid IKEv2 client CIDR") from exc
+    if net.version!=4 or net.prefixlen<16 or net.prefixlen>29:
+        raise ProtocolError("IKEv2 client CIDR must be IPv4 with prefix /16 to /29")
+    try:
+        dns_addr=ipaddress.ip_address(str(dns).strip())
+    except ValueError as exc:
+        raise ProtocolError("IKEv2 DNS must be an IP address") from exc
+    if dns_addr.version!=4:
+        raise ProtocolError("IKEv2 DNS must be IPv4")
+
+    live=Path(f"/etc/letsencrypt/live/{domain}")
+    cert,key,chain=live/"cert.pem",live/"privkey.pem",live/"chain.pem"
+    if not cert.exists() or not key.exists() or not chain.exists():
+        raise ProtocolError("IKEv2 requires the HTTPS/Let's Encrypt certificate for this domain first")
+
+    backup_dir=_backup_dir()
+    stamp=int(time.time())
+    for src in (IKEV2_CONF,IKEV2_SECRETS):
+        if src.exists():
+            shutil.copy2(src,backup_dir/f"{src.name}.ikev2-{stamp}.bak")
+
+    cert_out=Path("/etc/ipsec.d/certs/makia-ikev2.pem")
+    key_out=Path("/etc/ipsec.d/private/makia-ikev2.key")
+    ca_out=Path("/etc/ipsec.d/cacerts/makia-ikev2-chain.pem")
+    cert_out.parent.mkdir(parents=True,exist_ok=True)
+    key_out.parent.mkdir(parents=True,exist_ok=True)
+    ca_out.parent.mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(cert,cert_out); shutil.copyfile(key,key_out); shutil.copyfile(chain,ca_out)
+    os.chmod(cert_out,0o644); os.chmod(ca_out,0o644); os.chmod(key_out,0o600)
+
+    current=IKEV2_CONF.read_text(encoding="utf-8",errors="ignore") if IKEV2_CONF.exists() else "config setup\n    uniqueids=never\n"
+    body=f"""conn makia-ikev2
+    auto=add
+    keyexchange=ikev2
+    type=tunnel
+    fragmentation=yes
+    forceencaps=yes
+    rekey=no
+    dpdaction=clear
+    dpddelay=300s
+    left=%any
+    leftid={domain}
+    leftauth=pubkey
+    leftcert=makia-ikev2.pem
+    leftsendcert=always
+    leftsubnet=0.0.0.0/0
+    right=%any
+    rightid=%any
+    rightauth=eap-mschapv2
+    rightsourceip={net.with_prefixlen}
+    rightdns={dns_addr.compressed}
+    rightsendcert=never
+    eap_identity=%identity
+    ike=aes256-sha256-modp2048,aes128-sha256-modp2048!
+    esp=aes256-sha256,aes128-sha256!"""
+    IKEV2_CONF.write_text(_replace_managed_block(current,"# BEGIN MAKIA IKEV2","# END MAKIA IKEV2",body),encoding="utf-8")
+    os.chmod(IKEV2_CONF,0o600)
+
+    secret_text=IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore") if IKEV2_SECRETS.exists() else ""
+    secret_body=": RSA makia-ikev2.key"
+    IKEV2_SECRETS.write_text(_replace_managed_block(secret_text,"# BEGIN MAKIA IKEV2 SERVER","# END MAKIA IKEV2 SERVER",secret_body),encoding="utf-8")
+    os.chmod(IKEV2_SECRETS,0o600)
+
+    IKEV2_ENV.parent.mkdir(parents=True,exist_ok=True)
+    IKEV2_ENV.write_text(f"MAKIA_IKEV2_CIDR={net.with_prefixlen}\n",encoding="utf-8")
+    os.chmod(IKEV2_ENV,0o600)
+    Path("/etc/sysctl.d/99-makia-ikev2.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    _run(["sysctl","--system"],timeout=30)
+    _run(["systemctl","daemon-reload"],timeout=20)
+    _run(["systemctl","enable","--now","makia-ikev2-network"],timeout=30)
+    service="strongswan-starter" if shutil.which("systemctl") else "strongswan"
+    _run(["systemctl","enable","--now",service],timeout=60)
+    _run(["systemctl","restart",service],timeout=60)
+    _ufw_allow_if_active(500,"udp","IKEv2")
+    _ufw_allow_if_active(4500,"udp","IKEv2 NAT-T")
+    status=ikev2_status()
+    if not status["service_active"]:
+        raise ProtocolError("strongSwan did not become active after IKEv2 configuration")
+    return {"ok":True,"domain":domain,"cidr":net.with_prefixlen,"dns":dns_addr.compressed,"status":status}
+
+
+def create_ikev2_user(name, password=None):
+    if not ikev2_status().get("configured"):
+        raise ProtocolError("IKEv2 server is not configured")
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,48}",name):
+        raise ProtocolError("IKEv2 username must be 3-48 characters: letters, numbers, dot, dash or underscore")
+    password=str(password or secrets.token_urlsafe(18))
+    if len(password)<10 or len(password)>128 or any(ch in password for ch in "\r\n\""):
+        raise ProtocolError("IKEv2 password must be 10-128 characters and cannot contain quotes/newlines")
+    text=IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore") if IKEV2_SECRETS.exists() else ""
+    lines=[line for line in text.splitlines() if f"# makia-eap:{name}" not in line]
+    lines.append(f'{name} : EAP "{password}"  # makia-eap:{name}')
+    IKEV2_SECRETS.write_text("\n".join(lines).rstrip()+"\n",encoding="utf-8")
+    os.chmod(IKEV2_SECRETS,0o600)
+    _run(["ipsec","rereadsecrets"],timeout=20)
+    status=ikev2_status()
+    profile=(
+        f"Makia IKEv2\\n"
+        f"Server: {status.get('domain') or ''}\\n"
+        f"Remote ID: {status.get('domain') or ''}\\n"
+        f"Username: {name}\\n"
+        f"Password: {password}\\n"
+        "Authentication: Username / EAP-MSCHAPv2\\n"
+        "IKE version: IKEv2\\n"
+    )
+    return {"ok":True,"name":name,"password":password,"server":status.get("domain") or "","profile":profile}
+
+
+def bootstrap_stealth(domain, listen_port=8443):
+    if not (_installed("stunnel4") or _installed("stunnel")):
+        raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
+    domain=validate_endpoint_selection(domain,"domain",direct=True)
+    listen_port=_validate_port(listen_port)
+    runtime=_openvpn_server_runtime()
+    if not runtime.get("service_active") or not str(runtime.get("proto") or "").startswith("tcp"):
+        raise ProtocolError("Stealth requires the active OpenVPN server to use TCP first")
+    backend_port=int(runtime.get("port") or 0)
+    if listen_port==backend_port:
+        raise ProtocolError("Stealth public port must differ from the OpenVPN TCP backend port")
+    existing=stealth_status()
+    if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
+        raise ProtocolError(f"TCP/{listen_port} is already in use")
+    cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+    key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
+    if not cert.exists() or not key.exists():
+        raise ProtocolError("Stealth requires a valid HTTPS/Let's Encrypt certificate first")
+    STUNNEL_MAKIA_CONF.parent.mkdir(parents=True,exist_ok=True)
+    STUNNEL_MAKIA_CONF.write_text(
+        "foreground = no\n"
+        "client = no\n"
+        "sslVersionMin = TLSv1.2\n"
+        f"cert = {cert}\nkey = {key}\n\n"
+        "[makia-openvpn]\n"
+        f"accept = 0.0.0.0:{listen_port}\n"
+        f"connect = 127.0.0.1:{backend_port}\n",
+        encoding="utf-8",
+    )
+    defaults=Path("/etc/default/stunnel4")
+    if defaults.exists():
+        text=defaults.read_text(encoding="utf-8",errors="ignore")
+        if re.search(r"(?m)^\s*ENABLED=",text):
+            text=re.sub(r"(?m)^\s*ENABLED=.*$","ENABLED=1",text)
+        else:
+            text+="\nENABLED=1\n"
+        defaults.write_text(text,encoding="utf-8")
+    _run(["systemctl","enable","--now","stunnel4"],timeout=30)
+    _run(["systemctl","restart","stunnel4"],timeout=30)
+    _ufw_allow_if_active(listen_port,"tcp","OpenVPN Stealth")
+    status=stealth_status()
+    if not status.get("listener"):
+        raise ProtocolError("Stunnel did not expose the requested TCP listener")
+    client=(
+        "client = yes\\n"
+        "foreground = yes\\n"
+        "verifyChain = yes\\n"
+        "checkHost = "+domain+"\\n"
+        "CAfile = /etc/ssl/certs/ca-certificates.crt\\n\\n"
+        "[makia-openvpn]\\n"
+        "accept = 127.0.0.1:11940\\n"
+        f"connect = {domain}:{listen_port}\\n"
+    )
+    return {"ok":True,"status":status,"domain":domain,"client_stunnel_config":client,"openvpn_local_endpoint":"127.0.0.1:11940"}
+
+
+def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
+    binary=shutil.which("wstunnel")
+    if not binary:
+        raise ProtocolError("WStunnel is not installed; run sudo makia-upgrade first")
+    wg=wireguard_status()
+    if not wg.get("service_active") or not wg.get("port"):
+        raise ProtocolError("WStunnel mode requires an active WireGuard server")
+    domain=validate_endpoint_selection(domain,"domain",direct=True)
+    listen_port=_validate_port(listen_port)
+    existing=wstunnel_status()
+    if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
+        raise ProtocolError(f"TCP/{listen_port} is already in use")
+    cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+    key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
+    if not cert.exists() or not key.exists():
+        raise ProtocolError("WStunnel WSS requires a valid HTTPS/Let's Encrypt certificate first")
+    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(18).replace("-","").replace("_","")
+    if len(prefix)<12:
+        raise ProtocolError("WStunnel path prefix must be at least 12 characters")
+    WSTUNNEL_ENV.parent.mkdir(parents=True,exist_ok=True)
+    WSTUNNEL_ENV.write_text(
+        f"WSTUNNEL_LISTEN_PORT={listen_port}\\n"
+        f"WSTUNNEL_TARGET_PORT={int(wg['port'])}\\n"
+        f"WSTUNNEL_PATH_PREFIX={prefix}\\n"
+        f"WSTUNNEL_CERT={cert}\\n"
+        f"WSTUNNEL_KEY={key}\\n",
+        encoding="utf-8",
+    )
+    os.chmod(WSTUNNEL_ENV,0o600)
+    _run(["systemctl","daemon-reload"],timeout=20)
+    _run(["systemctl","enable","--now",WSTUNNEL_SERVICE],timeout=30)
+    _run(["systemctl","restart",WSTUNNEL_SERVICE],timeout=30)
+    _ufw_allow_if_active(listen_port,"tcp","WStunnel WSS")
+    status=wstunnel_status()
+    if not status.get("listener"):
+        raise ProtocolError("WStunnel did not expose the requested TCP listener")
+    local_port=int(wg.get("port") or 51820)
+    command=(
+        f"wstunnel client --http-upgrade-path-prefix {prefix} "
+        f"-L 'udp://127.0.0.1:{local_port}:127.0.0.1:{int(wg['port'])}?timeout_sec=0' "
+        f"wss://{domain}:{listen_port}"
+    )
+    return {
+        "ok":True,"status":status,"domain":domain,"client_command":command,
+        "wireguard_endpoint":f"127.0.0.1:{local_port}",
+        "note":"Run the WStunnel client first, then use a WireGuard profile whose Endpoint points to the local UDP endpoint.",
+    }
+
+
+def protocol_modes():
+    wg=wireguard_status()
+    ov=_openvpn_server_runtime()
+    ike=ikev2_status()
+    st=stealth_status()
+    ws=wstunnel_status()
+    return {
+        "modes":[
+            {"id":"ikev2","label":"IKEv2","ports":[500,4500],"transport":"UDP/IPsec","ready":bool(ike.get("configured") and ike.get("service_active")),"status":ike},
+            {"id":"wireguard","label":"WireGuard","ports":[wg.get("port")] if wg.get("port") else [],"transport":"UDP","ready":bool(wg.get("service_active") and wg.get("config")),"status":wg},
+            {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
+            {"id":"tcp","label":"TCP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else [],"transport":"OpenVPN TCP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp")),"status":ov},
+            {"id":"stealth","label":"Stealth","ports":[st.get("port")] if st.get("port") else [],"transport":"OpenVPN over TLS/Stunnel","ready":bool(st.get("service_active") and st.get("listener")),"status":st},
+            {"id":"wstunnel","label":"WStunnel","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
+        ],
+        "constraints":{
+            "openvpn_single_active_transport":True,
+            "tcp_443_reserved_for_https":True,
+            "note":"UDP and TCP cards select the single active OpenVPN server transport. Stealth and WStunnel use separate TCP listeners to avoid faking simultaneous TCP/443 ownership.",
+        }
+    }
+
+
 def ssh_status():
     return {
         "installed":_installed("sshd") or _installed("ssh"),
@@ -446,11 +782,17 @@ def catalog():
     ovpn=openvpn_status()
     st=stunnel_status()
     ssh=ssh_status()
+    ike=ikev2_status()
+    stealth=stealth_status()
+    ws=wstunnel_status()
     return {
         "xray":x,
         "wireguard":wg,
         "openvpn":ovpn,
         "stunnel":st,
+        "ikev2":ike,
+        "stealth":stealth,
+        "wstunnel":ws,
         "ssh":ssh,
         "capabilities":[
             {"id":"vless","engine":"xray","available":x["installed"]},
@@ -466,6 +808,9 @@ def catalog():
             {"id":"openvpn","engine":"openvpn","available":ovpn["installed"],"mode":"guided"},
             {"id":"ssh","engine":"openssh","available":ssh["installed"],"mode":"guided"},
             {"id":"stunnel","engine":"stunnel","available":st["installed"],"mode":"service"},
+            {"id":"ikev2","engine":"strongswan","available":ike["installed"],"mode":"guided"},
+            {"id":"stealth","engine":"stunnel","available":st["installed"],"mode":"guided"},
+            {"id":"wstunnel","engine":"wstunnel","available":ws["installed"],"mode":"guided"},
             {"id":"tuic","engine":"external","available":False,"mode":"unavailable"},
             {"id":"amneziawg","engine":"external","available":False,"mode":"unavailable"},
             {"id":"mtproto","engine":"external","available":False,"mode":"unavailable"},
