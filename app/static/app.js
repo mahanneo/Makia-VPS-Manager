@@ -304,10 +304,36 @@ function wizardIdentityFields(s){
     '<label>Transport<input value="'+htmlEsc(s.ovpnProto.toUpperCase())+'" readonly></label></div>'
   ].join('');
 }
-function applySimpleXrayPreset(s){
-  const presets={vless:['tcp','reality'],vmess:['tcp','none'],trojan:['tcp','tls'],shadowsocks:['tcp','none'],hysteria2:['tcp','tls'],http:['tcp','none'],socks:['tcp','none']};
-  [s.transport,s.security]=presets[s.xrayProtocol]||presets.vless;
-  if(s.security==='tls'&&s.endpointMode==='domain')s.sni=s.endpoint;
+const XRAY_PROFILE_MATRIX={
+  vless:{label:'VLESS',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['reality','tls','none'],preset:['tcp','reality'],requiresDomain:false},
+  vmess:{label:'VMess',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['none','tls'],preset:['ws','none'],requiresDomain:false},
+  trojan:{label:'Trojan',transports:['tcp','ws','grpc','httpupgrade','xhttp'],security:['tls'],preset:['tcp','tls'],requiresDomain:true},
+  shadowsocks:{label:'Shadowsocks',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false},
+  hysteria2:{label:'Hysteria2',transports:['hysteria'],security:['tls'],preset:['hysteria','tls'],requiresDomain:true},
+  http:{label:'HTTP Proxy',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false},
+  socks:{label:'SOCKS5',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false}
+};
+
+function xrayProfileSpec(protocol){return XRAY_PROFILE_MATRIX[protocol]||XRAY_PROFILE_MATRIX.vless}
+
+function normalizeXrayProfile(s,forcePreset=false){
+  const spec=xrayProfileSpec(s.xrayProtocol);
+  if(forcePreset||!spec.transports.includes(s.transport))s.transport=spec.preset[0];
+  if(forcePreset||!spec.security.includes(s.security))s.security=spec.preset[1];
+  if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))s.transport='tcp';
+  if((s.security==='tls'||spec.requiresDomain)&&s.endpointMode==='domain'&&s.endpoint)s.sni=s.endpoint;
+  if(s.xrayProtocol==='hysteria2'){s.transport='hysteria';s.security='tls'}
+  return s;
+}
+
+function applySimpleXrayPreset(s){return normalizeXrayProfile(s,true)}
+
+function xrayPrerequisiteMessage(s){
+  const spec=xrayProfileSpec(s.xrayProtocol);
+  if(spec.requiresDomain&&s.endpointMode!=='domain')return spec.label+' برای TLS به Domain معتبر و Certificate نیاز دارد؛ Endpoint را روی Domain بگذار.';
+  if((s.security==='tls')&&s.endpointMode!=='domain')return 'TLS به Domain/SNI دارای Certificate معتبر روی همین VPS نیاز دارد.';
+  if(s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY در Guided mode فقط برای VLESS فعال است.';
+  return '';
 }
 
 function wizardEndpointFields(s){
@@ -323,17 +349,29 @@ function wizardPolicyFields(s){
     '<details class="pro-advanced"><summary><span>محدودیت اتصال</span><small>Session و Device/IP limit</small></summary><div class="wizard-form two"><label>نشست همزمان<input id="wizSessions" type="number" min="1" max="50" value="'+Number(s.sessions)+'"></label><label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label></div></details>'
   ].join('');
   if(s.protocol==='xray'){
-    const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>Preset پیشنهادی را نگه دار یا تنظیمات تخصصی را باز کن.</p></div>';
-    if(s.simpleMode)return intro+'<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(s.xrayProtocol.toUpperCase())+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip ok">Recommended</span></div><div class="pro-info-card"><div><b>حالت ساده</b><span>بدون محدودیت حجم و زمان؛ مناسب ساخت سریع.</span></div><small>برای Quota، Expiry، IP Limit یا Transport سفارشی وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
+    normalizeXrayProfile(s,false);
+    const spec=xrayProfileSpec(s.xrayProtocol),pre=xrayPrerequisiteMessage(s);
+    const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>فقط ترکیب‌های معتبر برای '+htmlEsc(spec.label)+' نمایش داده می‌شوند.</p></div>';
+    if(s.simpleMode)return intro+
+      '<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(spec.label)+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip '+(pre?'warn':'ok')+'">'+(pre?'نیاز به Domain':'Recommended')+'</span></div>'+
+      (pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'')+
+      '<div class="pro-info-card"><div><b>حالت ساده</b><span>Preset سازگار پروتکل اعمال شده و گزینه نامعتبر قابل انتخاب نیست.</span></div><small>برای Quota، Expiry، IP Limit یا Transport/Security سازگار وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
+    const transports=spec.transports.map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
+    const securities=spec.security.map(x=>'<option value="'+x+'" '+(s.security===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
+    const fixedTransport=spec.transports.length===1?' disabled':'',fixedSecurity=spec.security.length===1?' disabled':'';
     return [intro,
-    '<div class="wizard-form two"><label>Transport<select id="wizTransport">',
-    ['tcp','ws','grpc','httpupgrade','xhttp','kcp'].map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join(''),
-    '</select></label><label>Security<select id="wizSecurity"><option value="none" '+(s.security==='none'?'selected':'')+'>None</option><option value="tls" '+(s.security==='tls'?'selected':'')+'>TLS</option><option value="reality" '+(s.security==='reality'?'selected':'')+'>REALITY</option></select></label>',
-    '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'"></label><label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'"></label>',
-    '<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label><label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
-    '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label><label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
-    '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div><button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button>'
-  ].join('');
+      pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'',
+      '<div class="wizard-form two"><label>Transport<select id="wizTransport"'+fixedTransport+'>'+transports+'</select><small>'+htmlEsc(spec.transports.join(' · '))+'</small></label>',
+      '<label>Security<select id="wizSecurity"'+fixedSecurity+'>'+securities+'</select><small>'+htmlEsc(spec.security.join(' · ').toUpperCase())+'</small></label>',
+      '<label>Path / Service<input id="wizPath" value="'+htmlEsc(s.path)+'" '+(s.transport==='tcp'||s.transport==='hysteria'?'disabled':'')+'></label>',
+      '<label>SNI / Domain<input id="wizSni" value="'+htmlEsc(s.sni)+'" '+(s.security==='none'?'disabled':'')+'></label>',
+      (s.security==='reality'?'<label>REALITY target<input id="wizReality" value="'+htmlEsc(s.realityDest)+'"></label>':''),
+      '<label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
+      '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label>',
+      '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
+      '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div>',
+      '<button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button>'
+    ].join('');
   }
   const labels={wireguard:'WireGuard',openvpn:'OpenVPN'};
   return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>'+htmlEsc(labels[s.protocol]||s.protocol)+' آماده است</h4><p>تنظیمات سرور و Client آماده‌اند. مرحله بعد خلاصه نهایی و بسته تحویل را نشان می‌دهد.</p></div>';
@@ -393,11 +431,17 @@ function validateWizardStep(){
     if(s.endpointMode==='domain'&&(isIp||!/^([a-z0-9-]+\.)+[a-z0-9-]+\.?$/i.test(s.endpoint)))return 'در حالت دامنه، یک hostname معتبر وارد کن.';
     if(s.protocol==='xray'&&(!s.port||s.port<1||s.port>65535))return 'Port معتبر وارد کن.';
   }
-  if(s.step===3&&s.protocol==='xray'&&s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY در Wizard فعلی Makia فقط برای VLESS فعال است.';
-  if(s.step===3&&s.protocol==='xray'&&['vless','trojan'].includes(s.xrayProtocol)&&s.security==='none'){
-    const ep=(s.endpoint||'').trim();
-    const privateIp=/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ep)||ep==='localhost'||ep.endsWith('.local');
-    if(!privateIp)return 'برای '+s.xrayProtocol.toUpperCase()+' روی IP/دامنه عمومی، Security را روی REALITY یا TLS بگذار.';
+  if(s.step===3&&s.protocol==='xray'){
+    normalizeXrayProfile(s,false);
+    const pre=xrayPrerequisiteMessage(s);if(pre)return pre;
+    const spec=xrayProfileSpec(s.xrayProtocol);
+    if(!spec.transports.includes(s.transport)||!spec.security.includes(s.security))return 'ترکیب Transport / Security برای این پروتکل معتبر نیست.';
+    if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))return 'REALITY فقط با TCP/RAW، gRPC یا XHTTP در Guided mode فعال است.';
+    if(['vless','trojan'].includes(s.xrayProtocol)&&s.security==='none'){
+      const ep=(s.endpoint||'').trim();
+      const privateIp=/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ep)||ep==='localhost'||ep.endsWith('.local');
+      if(!privateIp)return 'برای '+s.xrayProtocol.toUpperCase()+' روی Endpoint عمومی TLS یا REALITY لازم است.';
+    }
   }
   return '';
 }
@@ -1512,7 +1556,13 @@ document.addEventListener('change',e=>{
   }
   if(e.target.id==='wizXrayProtocol'&&provisionState){
     captureWizard();
-    if(provisionState.simpleMode)applySimpleXrayPreset(provisionState);
+    normalizeXrayProfile(provisionState,provisionState.simpleMode);
+    renderProvisionWizard();
+  }
+  if((e.target.id==='wizTransport'||e.target.id==='wizSecurity')&&provisionState){
+    captureWizard();
+    normalizeXrayProfile(provisionState,false);
+    renderProvisionWizard();
   }
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
