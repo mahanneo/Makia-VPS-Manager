@@ -272,3 +272,101 @@ def test_xray_mkcp_uses_xray_26327_schema_without_removed_seed_header():
     assert "seed" not in stream["kcpSettings"]
     assert "header" not in stream["kcpSettings"]
     assert meta=={}
+
+
+def test_replace_managed_block_is_idempotent():
+    first=protocol_ops._replace_managed_block("config setup\n","# BEGIN X","# END X","value=1")
+    second=protocol_ops._replace_managed_block(first,"# BEGIN X","# END X","value=2")
+    assert second.count("# BEGIN X")==1
+    assert second.count("# END X")==1
+    assert "value=1" not in second
+    assert "value=2" in second
+
+
+def test_protocol_modes_reports_six_real_modes(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{
+        "service_active":True,"config":"/etc/wireguard/wg0.conf","port":443
+    })
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{
+        "service_active":True,"listener":True,"port":1194,"proto":"udp4"
+    })
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{
+        "configured":True,"service_active":True
+    })
+    monkeypatch.setattr(protocol_ops,"stealth_status",lambda:{
+        "service_active":False,"listener":False,"port":8443
+    })
+    monkeypatch.setattr(protocol_ops,"wstunnel_status",lambda:{
+        "service_active":True,"listener":True,"port":8444
+    })
+    data=protocol_ops.protocol_modes()
+    ids=[row["id"] for row in data["modes"]]
+    assert ids==["ikev2","wireguard","udp","tcp","stealth","wstunnel"]
+    by_id={row["id"]:row for row in data["modes"]}
+    assert by_id["ikev2"]["ready"] is True
+    assert by_id["wireguard"]["ready"] is True
+    assert by_id["udp"]["ready"] is True
+    assert by_id["tcp"]["ready"] is False
+    assert by_id["stealth"]["ready"] is False
+    assert by_id["wstunnel"]["ready"] is True
+    assert data["constraints"]["openvpn_single_active_transport"] is True
+
+
+def test_create_ikev2_user_writes_managed_eap_secret(monkeypatch,tmp_path):
+    secrets_file=tmp_path/"ipsec.secrets"
+    secrets_file.write_text(": RSA makia-ikev2.key\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"IKEV2_SECRETS",secrets_file)
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{
+        "configured":True,"domain":"vpn.example.com"
+    })
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_run",lambda args,**kwargs:calls.append(args) or "")
+    result=protocol_ops.create_ikev2_user("alice","StrongPass123!")
+    text=secrets_file.read_text(encoding="utf-8")
+    assert 'alice : EAP "StrongPass123!"  # makia-eap:alice' in text
+    assert result["server"]=="vpn.example.com"
+    assert result["password"]=="StrongPass123!"
+    assert ["ipsec","rereadsecrets"] in calls
+
+
+def test_create_ikev2_user_replaces_existing_named_secret(monkeypatch,tmp_path):
+    secrets_file=tmp_path/"ipsec.secrets"
+    secrets_file.write_text('alice : EAP "old"  # makia-eap:alice\n',encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"IKEV2_SECRETS",secrets_file)
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{
+        "configured":True,"domain":"vpn.example.com"
+    })
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    protocol_ops.create_ikev2_user("alice","NewStrongPass456!")
+    text=secrets_file.read_text(encoding="utf-8")
+    assert text.count("# makia-eap:alice")==1
+    assert "old" not in text
+    assert "NewStrongPass456!" in text
+
+
+@pytest.mark.parametrize("name",["a","bad user","bad/user","نام"])
+def test_create_ikev2_user_rejects_invalid_username(monkeypatch,name):
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{"configured":True})
+    with pytest.raises(ProtocolError):
+        protocol_ops.create_ikev2_user(name,"StrongPass123!")
+
+
+def test_wstunnel_status_reads_runtime_env(monkeypatch,tmp_path):
+    env=tmp_path/"wstunnel.env"
+    env.write_text(
+        "WSTUNNEL_LISTEN_PORT=8444\n"
+        "WSTUNNEL_TARGET_PORT=443\n"
+        "WSTUNNEL_PATH_PREFIX=abc123securepath\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"WSTUNNEL_ENV",env)
+    monkeypatch.setattr(protocol_ops.shutil,"which",lambda name:"/usr/local/bin/wstunnel" if name=="wstunnel" else None)
+    monkeypatch.setattr(protocol_ops,"_active",lambda name:name=="makia-wstunnel")
+    monkeypatch.setattr(protocol_ops,"_listener_present",lambda port,proto="tcp":int(port)==8444 and proto=="tcp")
+    status=protocol_ops.wstunnel_status()
+    assert status["installed"] is True
+    assert status["configured"] is True
+    assert status["service_active"] is True
+    assert status["port"]==8444
+    assert status["target_port"]==443
+    assert status["listener"] is True
