@@ -16,7 +16,7 @@ def _request(path):
     ("openvpn","8.8.8.8","domain"),
 ])
 def test_each_protocol_rejects_wrong_endpoint_type_before_provisioning(monkeypatch,kind,endpoint,mode):
-    monkeypatch.setattr(panel,"require_feature",lambda *args:"admin")
+    monkeypatch.setattr(panel,"require_capability",lambda *args:"admin")
     monkeypatch.setattr(panel,"require_mutation",lambda *args:"admin")
     monkeypatch.setattr(panel,"list_protocol_clients",lambda:[])
     def must_not_provision(*args,**kwargs):

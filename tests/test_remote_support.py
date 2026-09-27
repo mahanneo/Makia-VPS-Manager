@@ -49,7 +49,7 @@ def test_remote_operator_mutation_allowlist(monkeypatch):
     for blocked in [
         "/api/accounts",
         "/api/settings/general",
-        "/api/license/activate",
+        "/api/admin/2fa/disable",
         "/api/backups",
         "/api/access/ssh/user001/package",
     ]:

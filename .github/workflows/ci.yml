@@ -23,11 +23,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
       - name: Python compile
-        run: python -m compileall -q app owner_console tests scripts/restore-portable.py tools/license_issue.py scripts/configure-owner.py
+        run: python -m compileall -q app tests scripts/restore-portable.py scripts/configure-owner.py
       - name: Import application smoke test
         run: |
           python -c "import app.main; print(app.main.APP_NAME, app.main.VERSION)"
-          python -c "import owner_console.app; print('Owner Control Center import PASS')"
       - name: Unit tests
         run: pytest -q
       - name: Bash syntax
@@ -35,10 +34,9 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
-          node --check owner_console/static/owner.js
       - name: Dangerous pattern guard
         run: |
-          ! grep -R --line-number -E 'chmod[[:space:]]+777|shell=True|os\.system\(' app owner_console scripts tools install.sh systemd nginx
+          ! grep -R --line-number -E 'chmod[[:space:]]+777|shell=True|os\.system\(' app scripts tools install.sh systemd nginx
       - name: Makia naming contract
         run: |
           grep -q 'Makia VPS Manager' app/config.py
@@ -73,17 +71,8 @@ jobs:
           test -f docs/UAT-0.18.0.md
           test -f docs/UAT-0.18.1.md
           test -f docs/UAT-0.19.0.md
-          test -f docs/OWNER-CONTROL-CENTER-FA.md
+          test -f docs/UAT-0.20.0.md
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
-          test -f owner_console/app.py
-          test -f owner_console/license_service.py
-          test -f owner_console/static/owner.js
-          test -f owner_console/templates/index.html
-          test -f tools/install-owner-console.sh
-          test -f systemd/makia-owner-console.service
-          test -f docs/SECURITY-LICENSING.md
-          test -f app/license_public_key.pem
-          test -f tools/license_issue.py
           test -f scripts/configure-owner.py
           test -f README_FA.md
           test -f docs/CLIENT-GUIDE-FA.md
@@ -161,48 +150,21 @@ jobs:
           grep -q 'Checking OpenVPN IPv4 runtime' scripts/update.sh
           grep -q 'OpenVPN IPv4 transport' scripts/uat-smoke.sh
 
-      - name: UAT v0.15 contract
+      - name: Open access contract
         run: |
-          grep -q 'License / Security / OpenVPN Hybrid UAT' docs/UAT-0.15.0-RC1.md
-          grep -q 'Ed25519' app/license_ops.py
-          grep -q 'COMMUNITY_FEATURES' app/license_ops.py
-          grep -q 'FULL_FEATURES' app/license_ops.py
-          grep -q '/api/license/status' app/main.py
-          grep -q '/api/license/activate' app/main.py
-          grep -q '/api/support/requests' app/main.py
-          grep -q 'license_required' app/main.py
-          grep -q 'hybrid_fallback_ipv4' app/protocol_ops.py
-          grep -q 'server-poll-timeout 8' app/protocol_ops.py
-          grep -q 'MAKIA_SUPPORT_TELEGRAM' scripts/configure-owner.py
-          grep -q 'MAKIA_ADMIN_ALLOWED_CIDRS' scripts/configure-owner.py
-          grep -q 'MAKIA_RELEASE_ARCHIVE_URL' scripts/update.sh
-          grep -q 'EnvironmentFile=-/etc/makia-vps-manager/makia.env' systemd/makia-vps-manager.service
-          grep -q 'server_tokens off' nginx/makia-vps-manager.conf
-          grep -q 'License & Support' app/templates/dashboard.html
-          grep -q 'license-tier-chip' app/static/app.js
-          grep -q 'release proxy' docs/SECURITY-LICENSING.md
-          ! grep -R --line-number 'BEGIN PRIVATE KEY' app owner_console tools scripts docs --exclude='*.md'
-
-
-      - name: UAT v0.16 contract
-        run: |
-          grep -q 'Owner Control Center / Remote Support UAT' docs/UAT-0.16.0-RC1.md
-          grep -q 'MKLEASE1' app/license_ops.py
-          grep -q 'fetch_online_lease' app/license_ops.py
-          grep -q '/api/license/sync' app/main.py
+          grep -q 'VERSION = "0.20.0"' app/config.py
+          grep -q '^0.20.0$' VERSION
+          grep -q 'require_capability' app/main.py
+          grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
           grep -q '/support/login' app/main.py
           grep -q 'require_local_admin' app/main.py
-          grep -q 'support-code-box' app/static/app.js
-          grep -q '/api/public/license/lease' owner_console/app.py
-          grep -q '/api/public/tickets' owner_console/app.py
-          grep -q 'MAKIA_OWNER_TOTP_SECRET' owner_console/config.py
-          grep -q 'User=makia-owner' systemd/makia-owner-console.service
-          grep -q '127.0.0.1 --port 8790' systemd/makia-owner-console.service
-          grep -q -- '--control-plane' scripts/configure-owner.py
-          grep -q 'MAKIA_SUPPORT_WEBHOOK_TOKEN' scripts/configure-owner.py
-          ! grep -R --line-number 'BEGIN PRIVATE KEY' app owner_console tools scripts docs --exclude='*.md'
-
+          grep -q 'hybrid_fallback_ipv4' app/protocol_ops.py
+          grep -q 'server-poll-timeout 8' app/protocol_ops.py
+          ! grep -q '/api/license' app/main.py
+          ! grep -q 'license_required' app/main.py
+          ! grep -q 'hasLicenseFeature' app/static/app.js
+          ! grep -R --line-number 'BEGIN PRIVATE KEY' app tools scripts --exclude='*.md'
 
       - name: UAT v0.17 contract
         run: |
