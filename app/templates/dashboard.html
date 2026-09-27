@@ -3,91 +3,81 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#031229">
+  <meta name="theme-color" content="#111827">
   <meta name="application-name" content="Makia VPS Manager">
   <title>{{app_name}}</title>
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
 </head>
-<body class="makia-neon-shell" data-theme="{{theme}}" data-density="{{density}}">
-  <div class="neon-bg-grid" aria-hidden="true"></div>
-  <div class="neon-glow neon-glow-a" aria-hidden="true"></div>
-  <div class="neon-glow neon-glow-b" aria-hidden="true"></div>
-
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <img class="brand-logo" src="/static/makia.svg" alt="">
-      <div class="brand-copy"><strong>MAKIA</strong><span>VPS MANAGER</span></div>
+<body class="makia-sanaei-shell" data-theme="{{theme}}" data-density="{{density}}">
+  <aside class="sanaei-sidebar" id="sidebar">
+    <div class="sanaei-brand">
+      <img src="/static/makia.svg" alt="">
+      <div class="sanaei-brand-text"><strong>MAKIA</strong><span>VPS MANAGER</span></div>
+      <button type="button" class="sidebar-pin-btn" data-shell-action="sidebar-pin" title="ثابت نگه داشتن منو" aria-label="ثابت نگه داشتن منو">⌖</button>
     </div>
 
-    <nav class="neon-nav" aria-label="منوی اصلی پنل">
-      <button data-view="dashboard" class="active"><span class="nav-icon nav-blue">⌂</span><b>داشبورد</b></button>
+    <button class="sanaei-command" type="button" data-shell-action="command">
+      <span class="menu-symbol">⌕</span><b>جستجو...</b><kbd>Ctrl K</kbd>
+    </button>
 
-      <p class="nav-section-title">مدیریت کاربران</p>
-      <button data-view="access"><span class="nav-icon nav-violet">◉</span><b>همه کاربران</b><em>›</em></button>
-      <div class="nav-subgroup" aria-label="پروتکل‌های کاربران">
-        <button data-view="ssh"><span class="nav-mini-icon ssh">SSH</span><b>کاربران SSH</b></button>
-        <button data-view="xray"><span class="nav-mini-icon xray">V</span><b>V2Ray / Xray</b></button>
-        <button data-view="wireguard"><span class="nav-mini-icon wg">W</span><b>WireGuard</b></button>
-        <button data-view="openvpn"><span class="nav-mini-icon ovpn">O</span><b>OpenVPN</b></button>
+    <nav class="sanaei-nav" aria-label="منوی اصلی">
+      <button data-view="dashboard" class="active"><span class="menu-symbol">⌂</span><b>داشبورد</b></button>
+      <button data-view="inbounds"><span class="menu-symbol">⇲</span><b>Inboundها</b></button>
+      <button data-view="access"><span class="menu-symbol">♙</span><b>کاربران</b></button>
+
+      <div class="sanaei-nav-sep"></div>
+      <button data-view="nodes"><span class="menu-symbol">◎</span><b>نودها</b></button>
+      <button data-view="protocols"><span class="menu-symbol">⇄</span><b>شبکه و پورت‌ها</b></button>
+      <button data-view="services"><span class="menu-symbol">▣</span><b>سرویس‌ها</b></button>
+
+      <div class="sanaei-nav-group">
+        <button class="sanaei-group-toggle" type="button" data-shell-action="sidebar-group" data-group="settings"><span class="menu-symbol">⚙</span><b>تنظیمات</b><em>⌄</em></button>
+        <div class="sanaei-submenu" data-group-panel="settings">
+          <button data-view="settings" data-settings-tab="general"><span>•</span><b>عمومی</b></button>
+          <button data-view="settings" data-settings-tab="security"><span>•</span><b>امنیت مدیر</b></button>
+          <button data-view="settings" data-settings-tab="subscription"><span>•</span><b>Subscription</b></button>
+          <button data-view="settings" data-settings-tab="api"><span>•</span><b>API Tokens</b></button>
+          <button data-view="settings" data-settings-tab="recovery"><span>•</span><b>Recovery</b></button>
+        </div>
       </div>
 
-      <p class="nav-section-title">مدیریت سرور و سرویس‌ها</p>
-      <button data-view="services"><span class="nav-icon nav-purple">▣</span><b>مدیریت سرویس‌ها</b></button>
-      <button data-view="protocols"><span class="nav-icon nav-green">⌘</span><b>مدیریت پورت‌ها</b></button>
-      <button data-view="sessions"><span class="nav-icon nav-cyan">◉</span><b>اتصال‌های زنده</b></button>
-      <button data-view="nodes"><span class="nav-icon nav-blue">◎</span><b>نودها</b></button>
+      <div class="sanaei-nav-group">
+        <button class="sanaei-group-toggle" type="button" data-shell-action="sidebar-group" data-group="xraytools"><span class="menu-symbol">⌘</span><b>ابزارهای Xray</b><em>⌄</em></button>
+        <div class="sanaei-submenu" data-group-panel="xraytools">
+          <button data-view="xray"><span>•</span><b>Clientها</b></button>
+          <button data-view="inbounds"><span>•</span><b>Inboundها</b></button>
+          <button type="button" data-action="xray-advanced"><span>•</span><b>Advanced JSON</b></button>
+        </div>
+      </div>
 
-      <p class="nav-section-title">گزارش‌ها و نگهداری</p>
-      <button data-view="audit"><span class="nav-icon nav-orange">▤</span><b>گزارش‌ها</b></button>
-      <button data-view="backups"><span class="nav-icon nav-cyan">↺</span><b>بکاپ‌ها</b></button>
-
-      <p class="nav-section-title">تنظیمات و ابزارها</p>
-      <button data-view="settings"><span class="nav-icon nav-blue">⚙</span><b>تنظیمات پنل</b></button>
-      <button data-view="security"><span class="nav-icon nav-red">◇</span><b>امنیت</b></button>
-      <button data-view="updates"><span class="nav-icon nav-green">⇧</span><b>بروزرسانی</b></button>
-      <button data-view="guides"><span class="nav-icon nav-cyan">?</span><b>راهنمای اتصال</b></button>
-      <button data-view="support"><span class="nav-icon nav-violet">◌</span><b>پشتیبانی</b></button>
+      <div class="sanaei-nav-sep"></div>
+      <button data-view="audit"><span class="menu-symbol">▤</span><b>لاگ‌ها</b></button>
+      <button data-view="backups"><span class="menu-symbol">↺</span><b>بکاپ</b></button>
+      <button data-view="updates"><span class="menu-symbol">⇧</span><b>بروزرسانی</b></button>
+      <button data-view="guides"><span class="menu-symbol">?</span><b>راهنما</b></button>
+      <button data-view="support"><span class="menu-symbol">◌</span><b>پشتیبانی</b></button>
     </nav>
 
-    <div class="sidebar-footer">
-      <div class="server-mini-status"><i></i><div><b>سرور اصلی</b><span>{{ panel_domain or 'IP Mode' }}</span></div></div>
-      <div class="sidebar-version">v{{version}}</div>
+    <div class="sanaei-sidebar-footer">
+      <div class="sanaei-server-state"><i></i><span><b>Server</b><small>{{ panel_domain or 'IP Mode' }}</small></span></div>
+      <span class="sanaei-version">v{{version}}</span>
+      <form action="/logout" method="post"><button class="sidebar-logout" type="submit" title="خروج">↪ <b>خروج</b></button></form>
     </div>
   </aside>
 
-  <main class="workspace">
-    <header class="topbar">
-      <div class="topbar-brand-mobile">
-        <img src="/static/makia.svg" alt=""><b>MAKIA</b>
-      </div>
+  <main class="sanaei-content-shell">
+    <header class="sanaei-mobile-header">
       <button class="mobile-menu-toggle" type="button" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">☰</button>
-
-      <button class="command-trigger" type="button" data-shell-action="command">
-        <span>⌕</span><b>جستجو در کاربران، سرویس‌ها و پورت‌ها...</b><kbd>Ctrl K</kbd>
-      </button>
-
-      <div class="top-actions">
-        <button class="top-icon-button" type="button" title="روشنایی">☀</button>
-        <button class="top-icon-button" type="button" title="اعلان‌ها">♧<i class="notification-dot"></i></button>
-        <button class="top-icon-button" type="button" data-shell-action="refresh" title="بروزرسانی">↻</button>
-        <details class="account-menu">
-          <summary><span class="account-avatar">{{ (current_username or 'A')[:1]|upper }}</span><div><b>{{ current_username or 'admin' }}</b><small>Administrator</small></div><span>⌄</span></summary>
-          <div class="account-popover">
-            <button type="button" data-action="nav" data-view="settings"><span>⚙</span> تنظیمات حساب</button>
-            <form action="/logout" method="post"><button type="submit"><span>↪</span> خروج امن</button></form>
-          </div>
-        </details>
-      </div>
+      <div><img src="/static/makia.svg" alt=""><strong>MAKIA</strong></div>
+      <button type="button" data-shell-action="create-access">＋</button>
     </header>
 
-    <section class="page-titlebar">
-      <div><div class="eyebrow" id="pageContext">MAKIA CONTROL CENTER</div><h1 id="pageTitle">داشبورد</h1></div>
-      <div class="page-title-actions"><span class="top-live-badge"><i></i>ONLINE</span><button class="primary top-create" type="button" data-shell-action="create-access">＋ ساخت کاربر جدید</button></div>
-    </section>
-
-    <section id="content" aria-live="polite"></section>
+    <div class="compat-page-meta" aria-hidden="true">
+      <span id="pageContext">MAKIA CONTROL CENTER</span><span id="pageTitle">Dashboard</span>
+    </div>
+    <section id="content" class="sanaei-content" aria-live="polite"></section>
   </main>
 
   <div id="modalRoot"></div>
