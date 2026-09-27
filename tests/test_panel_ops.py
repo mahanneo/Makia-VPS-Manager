@@ -64,7 +64,7 @@ def test_issue_certificate_applies_domain_and_verifies_https(monkeypatch,tmp_pat
     monkeypatch.setattr(panel_ops,"domain_status",lambda domain:next(states))
     result=panel_ops.issue_certificate("panel.example.com","admin@example.com")
     assert "server_name panel.example.com;" in site.read_text(encoding="utf-8")
-    certbot=[x for x in calls if x and x[0]=="certbot"]
+    certbot=[x for x in calls if x and str(x[0]).endswith("/certbot")]
     assert certbot and "--redirect" in certbot[0]
     assert result["certificate"] is True
     assert result["https_listener"] is True
@@ -81,7 +81,7 @@ def test_issue_certificate_rolls_back_nginx_on_certbot_failure(monkeypatch,tmp_p
         "resolved_ipv4":["198.51.100.10"],"local_ipv4":["198.51.100.10"],"dns_matches_server":True,
     })
     def run(args,timeout=120):
-        if args and args[0]=="certbot":
+        if args and str(args[0]).endswith("/certbot"):
             raise PanelOperationError("challenge failed")
         return ""
     monkeypatch.setattr(panel_ops,"_run",run)
