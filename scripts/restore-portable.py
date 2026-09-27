@@ -140,6 +140,18 @@ def restart_stack():
     for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","fail2ban"]:
         run(["systemctl","enable","--now",svc],check=False)
         run(["systemctl","restart",svc],check=False)
+    if Path("/etc/swanctl/conf.d/makia.conf").exists() and shutil.which("swanctl"):
+        run(["systemctl","enable","--now","strongswan"],check=False)
+        run(["systemctl","restart","strongswan"],check=False)
+        run(["swanctl","--load-all"],check=False)
+        run(["systemctl","enable","--now","makia-ikev2-firewall"],check=False)
+        run(["systemctl","restart","makia-ikev2-firewall"],check=False)
+    if Path("/etc/stunnel/makia-openvpn.conf").exists():
+        run(["systemctl","enable","--now","makia-stealth"],check=False)
+        run(["systemctl","restart","makia-stealth"],check=False)
+    if Path("/etc/makia-vps-manager/wstunnel.env").exists() and shutil.which("wstunnel"):
+        run(["systemctl","enable","--now","makia-wstunnel"],check=False)
+        run(["systemctl","restart","makia-wstunnel"],check=False)
     if shutil.which("nginx"):
         test=run(["nginx","-t"],check=False)
         if test.returncode!=0:
@@ -163,6 +175,12 @@ def validate_restored():
             checks.append(("xray",p.returncode==0))
     if Path("/etc/wireguard/wg0.conf").exists():
         checks.append(("wireguard",run(["wg","show","wg0"],check=False).returncode==0))
+    if Path("/etc/swanctl/conf.d/makia.conf").exists():
+        checks.append(("ikev2",run(["systemctl","is-active","--quiet","strongswan"],check=False).returncode==0))
+    if Path("/etc/stunnel/makia-openvpn.conf").exists():
+        checks.append(("stealth",run(["systemctl","is-active","--quiet","makia-stealth"],check=False).returncode==0))
+    if Path("/etc/makia-vps-manager/wstunnel.env").exists():
+        checks.append(("wstunnel",run(["systemctl","is-active","--quiet","makia-wstunnel"],check=False).returncode==0))
     return checks
 
 
@@ -196,7 +214,7 @@ def main():
     if shutil.which("makia-backup"):
         run(["makia-backup"],check=False)
 
-    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","xray","wg-quick@wg0"]:
+    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","xray","wg-quick@wg0","makia-ikev2-firewall","makia-stealth","makia-wstunnel","strongswan"]:
         run(["systemctl","stop",svc],check=False)
 
     install_components(payload)
@@ -209,6 +227,9 @@ def main():
         ("payload/letsencrypt.tar.gz","letsencrypt",Path("/etc/letsencrypt")),
         ("payload/xray.tar.gz","xray",Path("/usr/local/etc/xray")),
         ("payload/xray_alt.tar.gz","xray_alt",Path("/etc/xray")),
+        ("payload/protocol_modes_state.tar.gz","protocol_modes_state",Path("/etc/makia-vps-manager")),
+        ("payload/swanctl.tar.gz","swanctl",Path("/etc/swanctl")),
+        ("payload/stunnel.tar.gz","stunnel",Path("/etc/stunnel")),
     ]
     for key,root,target in mappings:
         if key in payload:
