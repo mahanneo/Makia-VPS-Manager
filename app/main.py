@@ -1931,7 +1931,7 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
     actor=require_mutation(request)
     allowed_modes={"pin4","pin6","easy8","strong"}
     allowed_protocols={"vless","vmess","trojan","shadowsocks","hysteria2","http","socks"}
-    allowed_transports={"tcp","ws","grpc","httpupgrade","xhttp","kcp"}
+    allowed_transports={"tcp","ws","grpc","httpupgrade","xhttp","kcp","hysteria"}
     allowed_security={"none","tls","reality"}
     dns_mode=(payload.npv_dns_mode or "UDP").upper()
     if dns_mode not in {"UDP","TCP"}: raise HTTPException(400,"NPV DNS mode must be UDP or TCP")
@@ -1939,6 +1939,12 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
     if payload.xray_protocol not in allowed_protocols: raise HTTPException(400,"invalid Xray protocol")
     if payload.xray_transport not in allowed_transports: raise HTTPException(400,"invalid Xray transport")
     if payload.xray_security not in allowed_security: raise HTTPException(400,"invalid Xray security")
+    try:
+        normalized_xray_transport,normalized_xray_security=protocol_ops._validate_xray_guided_combo(
+            payload.xray_protocol,payload.xray_transport,payload.xray_security
+        )
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
     if payload.openvpn_proto not in {"udp","tcp"}: raise HTTPException(400,"OpenVPN proto must be udp or tcp")
     if payload.subscription_default_format not in {"base64","raw"}: raise HTTPException(400,"subscription format must be base64 or raw")
     try:
@@ -1964,8 +1970,8 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
         "default_ssh_devices":payload.ssh_devices,
         "default_xray_protocol":payload.xray_protocol,
         "default_xray_port":payload.xray_port,
-        "default_xray_transport":payload.xray_transport,
-        "default_xray_security":payload.xray_security,
+        "default_xray_transport":normalized_xray_transport,
+        "default_xray_security":normalized_xray_security,
         "default_xray_path":payload.xray_path or "/",
         "default_xray_sni":payload.xray_sni.strip(),
         "default_xray_reality_target":payload.xray_reality_target.strip(),
