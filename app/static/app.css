@@ -1625,3 +1625,27 @@ body.makia-pro-shell{
   .provision-drawer .wizard-body{padding:17px}.pro-protocol-picker,.provision-drawer .wizard-form.two,.pro-review-grid,.pro-delivery-box{grid-template-columns:1fr}
   .lab-port-head,.lab-port-row{grid-template-columns:1fr 1fr}.lab-port-head span:nth-child(3),.lab-port-head span:nth-child(4){display:none}
 }
+
+
+/* v0.26 login hardening */
+.login-v026{background:#09111d!important;color:#edf4fc!important;transition:background .18s,color .18s}
+.login-v026[data-theme="light"]{background:#eef3f9!important;color:#172033!important}
+.login-toolbar-v026{position:fixed;top:18px;left:18px;display:flex;gap:8px;z-index:10}
+.login-toolbar-v026 button{min-width:40px;height:40px;padding:0 11px;border:1px solid #2b3d55;border-radius:10px;background:#111d2e;color:#dbe7f5;display:flex;align-items:center;justify-content:center;gap:6px}
+.login-toolbar-v026 button:hover{border-color:#4f82c8;background:#17263a}
+.login-toolbar-v026 .toolbar-icon{font-size:14px}.login-toolbar-v026 b{font-size:9px}
+.login-card-v026{width:min(390px,calc(100vw - 32px));padding:30px 30px 24px!important;border-radius:16px!important;background:#111d2e!important;border:1px solid #29405f!important}
+.login-v026[data-theme="light"] .login-card-v026{background:#fff!important;border-color:#c9d6e5!important;box-shadow:0 22px 60px rgba(26,45,74,.12)!important}
+.login-v026[data-theme="light"] .sanaei-login-brand strong,.login-v026[data-theme="light"] .login-card-v026 h1{color:#172033}
+.login-v026[data-theme="light"] .login-card-v026>p,.login-v026[data-theme="light"] .sanaei-login-form label>span{color:#5b6d84}
+.login-field-v026{height:44px;margin-top:6px;display:flex;align-items:center;border:1px solid #30445f;border-radius:9px;background:#0b1624;overflow:hidden;transition:border .15s,box-shadow .15s}
+.login-field-v026:focus-within{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.14)}
+.login-field-v026 .field-icon{width:40px;flex:none;text-align:center;color:#7f96af;font-size:12px}
+.login-field-v026 input{height:42px!important;min-width:0!important;flex:1!important;margin:0!important;padding:0 8px!important;border:0!important;outline:0!important;background:transparent!important;color:#f5f8fc!important;box-shadow:none!important;border-radius:0!important}
+.login-field-v026 input:focus,.login-field-v026 input:-webkit-autofill{border:0!important;outline:0!important;box-shadow:0 0 0 1000px #0b1624 inset!important;-webkit-text-fill-color:#f5f8fc!important}
+.login-field-v026 button{width:42px;height:42px;flex:none;border:0;background:transparent;color:#7f96af}
+.login-v026[data-theme="light"] .login-field-v026{background:#f5f8fc;border-color:#cbd8e7}
+.login-v026[data-theme="light"] .login-field-v026 input{color:#1e293b!important}
+.login-v026[data-theme="light"] .login-field-v026 input:focus,.login-v026[data-theme="light"] .login-field-v026 input:-webkit-autofill{box-shadow:0 0 0 1000px #f5f8fc inset!important;-webkit-text-fill-color:#1e293b!important}
+.login-v026[data-theme="light"] .login-toolbar-v026 button{background:#fff;border-color:#cbd8e7;color:#334155}
+.login-v026[data-theme="light"] .sanaei-login-foot{color:#728399;border-color:#dbe4ee}
