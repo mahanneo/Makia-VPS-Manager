@@ -893,7 +893,7 @@ async function protocols(renderToken=window.__viewRenderToken){
   const protocolModeCards=(modesData.modes||[]).map(m=>{
     const ports=(m.ports||[]).filter(Boolean).join(', ')||'—';
     const actions={
-      ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button>',
+      ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button><button class="soft" data-action="ikev2-users">Users</button>',
       wireguard:'<button class="ghost" data-action="nav" data-view="wireguard">Manage</button>',
       udp:'<button class="ghost" data-action="openvpn-mode" data-proto="udp">Use UDP</button>',
       tcp:'<button class="ghost" data-action="openvpn-mode" data-proto="tcp">Use TCP</button>',
@@ -943,6 +943,17 @@ async function createIKEv2User(){
   const password=prompt('Password (leave empty to generate)','')||'';
   try{const r=await api('/api/protocols/ikev2/users',{method:'POST',body:JSON.stringify({name,password})});configModal('IKEv2 · '+name,r.profile,name+'-ikev2.txt')}catch(e){alert('IKEv2 user: '+e.message)}
 }
+async function openIKEv2Users(){
+  try{
+    const r=await api('/api/protocols/ikev2/users'),users=r.users||[];
+    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><div class="eyebrow">IKEV2 USERS</div><h3>StrongSwan users</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="service-control-list">'+(users.length?users.map(x=>'<div class="service-row"><div><b>'+htmlEsc(x.name)+'</b><span>EAP-MSCHAPv2</span></div><button class="danger" data-action="ikev2-user-delete" data-name="'+dataEnc(x.name)+'">Revoke</button></div>').join(''):'<div class="empty">هنوز کاربر IKEv2 ساخته نشده است.</div>')+'</div><div class="toolbar"><button class="primary" data-action="ikev2-user">New user</button><button class="ghost" data-action="modal-close">Close</button></div></div></div>';
+  }catch(e){alert('IKEv2 users: '+e.message)}
+}
+async function revokeIKEv2User(name){
+  if(!confirm('کاربر IKEv2 '+name+' لغو شود؟'))return;
+  try{await api('/api/protocols/ikev2/users/'+encodeURIComponent(name),{method:'DELETE'});toast('IKEv2 user revoked');await openIKEv2Users()}catch(e){alert('IKEv2 revoke: '+e.message)}
+}
+
 async function switchOpenVPNMode(proto){
   const current=window.__protocolData?.openvpn||{},opts=current.options||{};
   const suggested=proto==='udp'?443:8443;
@@ -1601,6 +1612,8 @@ async function handleMakiaAction(btn){
   if(action==='protocol-install'){await performProtocolInstall(btn.dataset.kind);return}
   if(action==='ikev2-setup'){await setupIKEv2();return}
   if(action==='ikev2-user'){await createIKEv2User();return}
+  if(action==='ikev2-users'){await openIKEv2Users();return}
+  if(action==='ikev2-user-delete'){await revokeIKEv2User(dataDec(btn.dataset.name));return}
   if(action==='openvpn-mode'){await switchOpenVPNMode(btn.dataset.proto||'udp');return}
   if(action==='stealth-setup'){await setupStealth();return}
   if(action==='wstunnel-setup'){await setupWStunnel();return}
