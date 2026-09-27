@@ -218,7 +218,8 @@ def client_guide_text(kind,protocol=""):
             "1) ابتدا wstunnel client را با فرمان داخل wstunnel-command.txt اجرا کنید.\n"
             "2) سپس فایل WireGuard داخل بسته را Import و فعال کنید.\n"
             "3) WireGuard به 127.0.0.1 متصل می‌شود و UDP آن از داخل WSS/443 عبور می‌کند.\n"
-            "4) کلاینت استاندارد WireGuard به‌تنهایی WStunnel را اجرا نمی‌کند؛ companion wstunnel لازم است.\n"
+            "4) اگر AllowedIPs شامل 0.0.0.0/0 است، قبل از بالا آوردن WireGuard مطمئن شوید Route آدرس سرور WStunnel از Gateway عادی باقی می‌ماند تا Loop ایجاد نشود.\n"
+            "5) کلاینت استاندارد WireGuard به‌تنهایی WStunnel را اجرا نمی‌کند؛ companion wstunnel لازم است.\n"
         )
     return common+(
         "SSH / NPV Tunnel\n"
