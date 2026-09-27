@@ -169,7 +169,7 @@ dpkg-query -W -f='${Status}' libcharon-extra-plugins 2>/dev/null | grep -q 'inst
 if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
   echo "Ensuring host security/TLS/IKEv2 packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-swanctl charon-systemd strongswan-pki libcharon-extra-plugins
+  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan-swanctl charon-systemd strongswan-pki libcharon-extra-plugins
 fi
 bash "$SRC/scripts/install-wstunnel.sh"
 
