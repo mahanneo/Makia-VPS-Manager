@@ -1311,9 +1311,9 @@ async function settings(renderToken=window.__viewRenderToken){
   }else if(tab==='domain'){
     body=[
       '<section class="settings-section-head"><div><div class="eyebrow">PUBLIC PANEL EDGE</div><h2>Panel Domain / Nginx / HTTPS</h2><p>Domain، Nginx و Let\'s Encrypt با validation و rollback واقعی مدیریت می‌شوند.</p></div></section>',
-      '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Configured domain</span><b>'+htmlEsc(general.panel_domain||'IP Mode')+'</b></div><div><span>DNS IPv4</span><b>'+htmlEsc(ds.resolved_ipv4?.length?ds.resolved_ipv4.join(', '):'Not resolved')+'</b></div><div><span>Certificate</span><b class="'+(ds.certificate&&Number(ds.certificate_days_left??99)>14?'ok-text':'warn-text')+'">'+(ds.certificate?('Installed'+(ds.certificate_days_left!==null&&ds.certificate_days_left!==undefined?' · '+Number(ds.certificate_days_left)+'d':'')):'Not installed')+'</b></div><div><span>Certbot</span><b>'+(ds.certbot_installed?'Ready':'Will install on demand')+'</b></div></div>',
+      '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Configured domain</span><b>'+htmlEsc(general.panel_domain||'IP Mode')+'</b></div><div><span>DNS IPv4</span><b class="'+(ds.dns_matches_server===false?'warn-text':'')+'">'+htmlEsc(ds.resolved_ipv4?.length?ds.resolved_ipv4.join(', '):'Not resolved')+'</b></div><div><span>DNS → this VPS</span><b class="'+(ds.dns_matches_server===false?'warn-text':ds.dns_matches_server===true?'ok-text':'')+'">'+(ds.dns_matches_server===true?'MATCH':ds.dns_matches_server===false?'MISMATCH':'UNVERIFIED')+'</b></div><div><span>Certificate</span><b class="'+(ds.certificate&&Number(ds.certificate_days_left??-1)>14?'ok-text':'warn-text')+'">'+(ds.certificate?('Installed'+(ds.certificate_days_left!==null&&ds.certificate_days_left!==undefined?' · '+Number(ds.certificate_days_left)+'d':'')):'Not installed')+'</b></div><div><span>Nginx</span><b class="'+(ds.nginx_active&&ds.nginx_config_ok?'ok-text':'warn-text')+'">'+(ds.nginx_active&&ds.nginx_config_ok?'ACTIVE / VALID':'CHECK REQUIRED')+'</b></div><div><span>Listeners</span><b>'+(ds.http_listener?'80✓':'80—')+' · '+(ds.https_listener?'443✓':'443—')+'</b></div><div><span>Certbot</span><b>'+(ds.certbot_installed?'Ready':'Will install on demand')+'</b></div></div>',
       '<div class="settings-form-grid two"><label>Panel Domain<input id="domainName" value="'+htmlEsc(general.panel_domain||'')+'" placeholder="panel.example.com"></label><label>Let\'s Encrypt email<input id="tlsEmail" type="email" placeholder="admin@example.com"></label></div>',
-      '<div class="wizard-note"><b>DNS gate</b><span>قبل از صدور HTTPS، رکورد A دامنه باید به همین VPS اشاره کند. Apply Nginx قبل از reload با nginx -t بررسی و در خطا rollback می‌شود.</span></div>',
+      '<div class="wizard-note"><b>DNS gate</b><span>Issue / Renew ابتدا DNS را با IPv4 همین VPS تطبیق می‌دهد، Domain را روی Nginx اعمال می‌کند، سپس Certbot را اجرا می‌کند؛ nginx -t و Listener 443 تأیید می‌شوند و در خطا تنظیم Nginx rollback می‌شود.</span></div>',
       '<div class="settings-actions"><button class="ghost" data-action="settings-domain-apply">Apply domain to Nginx</button><button class="primary" data-action="settings-cert-issue">Issue / Renew HTTPS</button></div></div>'
     ].join('');
   }else if(tab==='ssh'){
@@ -1369,10 +1369,11 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="settings-actions"><button class="primary" data-action="settings-operator-save">Save subscription settings</button></div></div>'
     ].join('');
   }else if(tab==='security'){
-    const httpsReady=location.protocol==='https:'||Boolean(ds.certificate);
+    const certValid=Boolean(ds.certificate)&&Number(ds.certificate_days_left??-1)>=0;
+    const httpsReady=location.protocol==='https:'&&certValid;
     const activeTokens=tokens.filter(t=>t.active).length;
     const posture=[
-      ['HTTPS',httpsReady,httpsReady?'TLS فعال':'پنل روی HTTP / IP باز است'],
+      ['HTTPS',httpsReady,httpsReady?'TLS فعال روی همین Session':certValid?'Certificate نصب است اما این Session هنوز HTTPS نیست':'گواهی معتبر نصب نشده است'],
       ['Admin 2FA',Boolean(two.enabled),two.enabled?'TOTP فعال':'فعال‌سازی توصیه می‌شود'],
       ['UFW Firewall',Boolean(sec.ufw?.active),sec.ufw?.active?'Firewall active':sec.ufw?.installed?'Installed / inactive':'Not installed'],
       ['Fail2ban',Boolean(sec.fail2ban?.active),sec.fail2ban?.active?'Brute-force protection active':sec.fail2ban?.installed?'Installed / inactive':'Not installed'],
