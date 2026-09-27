@@ -100,6 +100,7 @@ install -m 0755 "$SOURCE_DIR/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smo
 install -m 0755 "$SOURCE_DIR/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
 install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 install -m 0755 "$SOURCE_DIR/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
+install -m 0755 "$SOURCE_DIR/scripts/makia-vpn-tls-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
 install -m 0755 "$SOURCE_DIR/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SOURCE_DIR/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
 install -m 0755 "$SOURCE_DIR/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
