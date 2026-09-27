@@ -6,27 +6,9 @@ FAIL=0
 
 ok(){ printf '✓ %s\n' "$1"; }
 bad(){ printf '✗ %s\n' "$1"; FAIL=1; }
-xray_bad(){
-  if [[ "${MAKIA_ALLOW_PREEXISTING_XRAY_FAILURE:-0}" == "1" ]]; then
-    printf '! %s (pre-existing Xray failure; panel diagnostics update allowed)\n' "$1"
-  else
-    bad "$1"
-  fi
-}
-ovpn_bad(){
-  if [[ "${MAKIA_ALLOW_PREEXISTING_OPENVPN_FAILURE:-0}" == "1" ]]; then
-    printf '! %s (pre-existing OpenVPN failure; panel diagnostics update allowed)\n' "$1"
-  else
-    bad "$1"
-  fi
-}
-wg_bad(){
-  if [[ "${MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE:-0}" == "1" ]]; then
-    printf '! %s (pre-existing WireGuard failure; panel diagnostics update allowed)\n' "$1"
-  else
-    bad "$1"
-  fi
-}
+xray_bad(){ bad "$1"; }
+ovpn_bad(){ bad "$1"; }
+wg_bad(){ bad "$1"; }
 
 [[ -d "$APP" ]] || { bad "Makia runtime missing at $APP"; exit 1; }
 
