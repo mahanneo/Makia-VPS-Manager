@@ -157,3 +157,9 @@ def test_visual_guide_has_protocol_step_illustrations():
     guide=(ROOT/"app/templates/client_guide.html").read_text(encoding="utf-8")
     assert guide.count('class="visual-steps"')==4
     assert guide.count("<svg")>=12
+
+
+def test_mkcp_ui_does_not_expose_removed_seed_control():
+    assert "Path / Service / Seed" not in JS
+    assert "mKCP جدید Seed قدیمی ندارد." in JS
+    assert "kcpSettings" not in JS
