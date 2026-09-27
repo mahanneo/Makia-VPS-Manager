@@ -4,8 +4,14 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current code baseline:** `v0.18.1`
+> **Current code baseline:** `v0.19.0`
 > CI validates the repository; connectivity on a real VPS still requires external-client UAT.
+
+## v0.19 WireGuard workspace
+- A dedicated WireGuard navigation entry shows peer state, recent handshake, traffic, endpoint and delivery actions with clearer desktop/mobile navigation.
+- Makia-managed peers can be disabled and enabled persistently without changing the saved client key or exported profile. Creation now rolls back runtime state if saving the server config or encrypted export fails.
+- IP and domain endpoints remain an explicit choice during peer provisioning; diagnostics check DNS, service, forwarding and NAT. The [v0.19 live VPS checklist](docs/UAT-0.19.0.md) verifies the actual external client.
+- The interface design takes inspiration from [WG_Panel](https://github.com/Azumi67/WG_Panel), with an original Makia implementation and visual system.
 
 ## v0.18 IP / domain choice
 - Access Center has an explicit public IPv4 or domain selection for SSH/NPV, Xray, WireGuard and OpenVPN clients.
