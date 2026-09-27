@@ -921,6 +921,87 @@ async function protocols(renderToken=window.__viewRenderToken){
     '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="xray">مدیریت کاربران Xray</button></div><div class="protocol-policy-mini">'+(clients.length?clients.slice(0,8).map(pc=>'<div><div><b>'+htmlEsc(pc.name)+'</b><span>'+htmlEsc(String(pc.protocol||'').toUpperCase())+'</span></div><strong class="'+(pc.enabled&&!pc.expired?'ok-text':'bad-text')+'">'+(pc.enabled&&!pc.expired?'Active':'Attention')+'</strong></div>').join(''):'<div class="empty compact">Client ثبت نشده است.</div>')+'</div></section>'
   ].join('');
 }
+function protocolModeGlyph(mode){
+  const map={ikev2:'IP',wireguard:'WG',udp:'U',tcp:'T',stealth:'S',wstunnel:'WS'};
+  return '<span>'+htmlEsc(map[mode]||'?')+'</span>';
+}
+
+async function openProtocolModeConfigure(mode){
+  if(mode==='ikev2'){
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal engine-config-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">NATIVE IPSEC</div><h3>IKEv2 / StrongSwan</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="wizard-note"><b>پیش‌نیاز واقعی</b><span>دامنه باید Certificate معتبر Let\'s Encrypt داشته باشد. IKEv2 از UDP/500 و UDP/4500 استفاده می‌کند.</span></div>',
+      '<div class="form-grid two"><label>Domain<input id="modeIkeDomain" value="'+htmlEsc(window.PANEL_DOMAIN||'')+'" placeholder="vpn.example.com"></label><label>Client pool<input id="modeIkePool" value="10.99.0.0/24"></label><label>DNS 1<input id="modeIkeDns1" value="1.1.1.1"></label><label>DNS 2<input id="modeIkeDns2" value="8.8.8.8"></label></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="protocol-mode-save" data-mode="ikev2">Configure IKEv2</button></div>',
+      '</div></div>'
+    ].join('');
+    return;
+  }
+  if(mode==='stealth'){
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal engine-config-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">TLS WRAPPER</div><h3>Stealth / Stunnel</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="wizard-note"><b>Backend واقعی</b><span>این Mode، OpenVPN/TCP را داخل TLS واقعی Stunnel قرار می‌دهد. ابتدا OpenVPN را روی TCP فعال کن. کلاینت نیز باید Stunnel داشته باشد.</span></div>',
+      '<div class="form-grid two"><label>Domain<input id="modeStealthDomain" value="'+htmlEsc(window.PANEL_DOMAIN||'')+'"></label><label>External TCP port<input id="modeStealthPort" type="number" min="1" max="65535" value="8443"><small>443 فقط اگر HTTPS/سرویس دیگری از آن استفاده نکند.</small></label></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="protocol-mode-save" data-mode="stealth">Enable Stealth</button></div>',
+      '</div></div>'
+    ].join('');
+    return;
+  }
+  if(mode==='wstunnel'){
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal engine-config-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">WEBSOCKET TLS</div><h3>WStunnel / WSS</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="wizard-note"><b>Backend واقعی</b><span>OpenVPN/TCP از داخل WSS عبور می‌کند. Makia برای Server یک Path Secret تولید/اعمال می‌کند؛ سمت Client نیز wstunnel لازم است.</span></div>',
+      '<div class="form-grid two"><label>Domain<input id="modeWsDomain" value="'+htmlEsc(window.PANEL_DOMAIN||'')+'"></label><label>External TCP port<input id="modeWsPort" type="number" min="1" max="65535" value="9443"></label><label>Path secret (optional)<input id="modeWsPath" placeholder="خالی = تولید امن خودکار"></label></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="protocol-mode-save" data-mode="wstunnel">Enable WStunnel</button></div>',
+      '</div></div>'
+    ].join('');
+  }
+}
+
+async function saveProtocolMode(mode){
+  try{
+    let url='',payload={};
+    if(mode==='ikev2'){
+      url='/api/protocols/modes/ikev2/configure';
+      payload={domain:modeIkeDomain.value.trim(),pool:modeIkePool.value.trim(),dns_servers:[modeIkeDns1.value.trim(),modeIkeDns2.value.trim()].filter(Boolean)};
+    }else if(mode==='stealth'){
+      url='/api/protocols/modes/stealth/configure';
+      payload={domain:modeStealthDomain.value.trim(),port:Number(modeStealthPort.value)};
+    }else if(mode==='wstunnel'){
+      url='/api/protocols/modes/wstunnel/configure';
+      payload={domain:modeWsDomain.value.trim(),port:Number(modeWsPort.value),path_prefix:modeWsPath.value.trim()};
+    }else return;
+    const r=await api(url,{method:'POST',body:JSON.stringify(payload)});
+    closeModal();toast((r.ready||r.ok)?'Protocol mode READY':'Protocol mode configured');await protocols();
+    if(mode==='wstunnel'&&r.client_command){
+      modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal config-modal"><div class="wizard-head"><div><div class="eyebrow">CLIENT COMMAND</div><h3>WStunnel client</h3></div><button class="close-btn" data-action="modal-close">×</button></div><textarea id="modeClientCommand" class="config-output" readonly></textarea><div class="wizard-note"><b>دو مرحله</b><span>ابتدا WStunnel Client را اجرا کن؛ سپس OpenVPN/TCP را به Endpoint محلی نمایش‌داده‌شده وصل کن.</span></div><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="modeClientCommand">Copy</button><button class="ghost" data-action="modal-close">Done</button></div></div></div>';
+      document.getElementById('modeClientCommand').value=r.client_command;
+    }
+  }catch(e){alert(e.message)}
+}
+
+async function createIKEv2User(){
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop"><div class="modal">',
+    '<div class="wizard-head"><div><div class="eyebrow">IKEV2 ACCESS</div><h3>ساخت کاربر IKEv2</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+    '<div class="form-grid two"><label>Username<input id="ikeUserName" value="ike-user01"></label><label>Password<input id="ikeUserPass" placeholder="خالی = تولید خودکار امن"></label></div>',
+    '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="protocol-mode-ikev2-create">Create user</button></div>',
+    '</div></div>'
+  ].join('');
+}
+
+async function submitIKEv2User(){
+  const name=(document.getElementById('ikeUserName')?.value||'').trim(),password=document.getElementById('ikeUserPass')?.value||'';
+  if(!name){alert('Username لازم است.');return}
+  try{
+    const r=await api('/api/protocols/modes/ikev2/users',{method:'POST',body:JSON.stringify({name,password})});
+    configModal('IKEv2 · '+r.name,'Server: '+r.server+'\nRemote ID: '+r.remote_id+'\nUsername: '+r.name+'\nPassword: '+r.password+'\nAuthentication: '+r.authentication+'\n',r.name+'-ikev2.txt','ikev2',r.name);
+  }catch(e){alert(e.message)}
+}
+
 function createXrayTunnel(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY TUNNEL</div><h3>Port Forward / Dokodemo</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Name<input id="tnName" value="tunnel01"></label><label>Listen port<input id="tnListen" type="number" min="1" max="65535" value="8443"></label><label>Target host<input id="tnHost" placeholder="10.0.0.2 or example.com"></label><label>Target port<input id="tnPort" type="number" min="1" max="65535" value="443"></label><label>Network<select id="tnNetwork"><option value="tcp,udp">TCP + UDP</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label></div><div class="notice">Config قبل از Apply توسط Xray validate می‌شود و در خطا Rollback انجام می‌شود.</div><div class="toolbar"><button class="primary" onclick="submitXrayTunnel()">Create Tunnel</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`}
 async function submitXrayTunnel(){const payload={name:tnName.value.trim(),listen_port:Number(tnListen.value),target_host:tnHost.value.trim(),target_port:Number(tnPort.value),network:tnNetwork.value};if(!payload.name||!payload.target_host||!payload.listen_port||!payload.target_port){alert('فیلدهای اصلی را کامل کنید.');return}try{const r=await api('/api/protocols/xray/tunnels',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Tunnel '+r.listen_port+' → '+r.target_host+':'+r.target_port+' created');await protocols()}catch(e){alert(e.message)}}
 
@@ -1122,10 +1203,10 @@ async function repairOpenVPNRuntime(){
   try{await api('/api/protocols/openvpn/repair',{method:'POST'});toast('OpenVPN runtime repaired');await openOpenVPNDiagnostics()}catch(e){alert('OpenVPN repair: '+e.message)}
 }
 
-async function openOpenVPNConfigure(){
+async function openOpenVPNConfigure(preferredProto=null){
   try{
     const stack=await api('/api/protocols'),engine=stack.openvpn||{},o=engine.options||{};
-    const proto=String(o.proto||engine.proto||'udp').startsWith('tcp')?'tcp':'udp';
+    const proto=(preferredProto==='udp'||preferredProto==='tcp')?preferredProto:(String(o.proto||engine.proto||'udp').startsWith('tcp')?'tcp':'udp');
     const dns=Array.isArray(o.dns)?o.dns:['1.1.1.1','8.8.8.8'];
     modalRoot.innerHTML=[
       '<div class="modal-backdrop"><div class="modal engine-config-modal">',
@@ -1561,6 +1642,11 @@ async function handleMakiaAction(btn){
   if(action==='wg-reissue'){await reissueWireGuard(dataDec(btn.dataset.key));return}
   if(action==='wg-toggle'){await toggleWireGuardPeer(dataDec(btn.dataset.key),btn.dataset.enabled==='1');return}
   if(action==='protocol-setup'){await openProtocolSetup(btn.dataset.kind);return}
+  if(action==='protocol-mode-config'){await openProtocolModeConfigure(btn.dataset.mode);return}
+  if(action==='protocol-mode-save'){await saveProtocolMode(btn.dataset.mode);return}
+  if(action==='protocol-mode-ikev2-user'){await createIKEv2User();return}
+  if(action==='protocol-mode-ikev2-create'){await submitIKEv2User();return}
+  if(action==='protocol-mode-openvpn'){await openOpenVPNConfigure(btn.dataset.proto||null);return}
   if(action==='protocol-install'){await performProtocolInstall(btn.dataset.kind);return}
   if(action==='protocol-bootstrap'){await performProtocolBootstrap(btn.dataset.kind,btn.dataset.installed==='1');return}
   if(action==='protocol-refresh'){await currentView();return}
