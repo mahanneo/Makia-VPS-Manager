@@ -163,3 +163,25 @@ def test_mkcp_ui_does_not_expose_removed_seed_control():
     assert "Path / Service / Seed" not in JS
     assert "mKCP جدید Seed قدیمی ندارد." in JS
     assert "kcpSettings" not in JS
+
+
+def test_connection_modes_have_real_ui_and_backend_contracts():
+    for label in ["IKEv2","WireGuard","Stealth","WStunnel"]:
+        assert label in JS
+    assert "connection-modes-grid" in JS
+    assert "mode-ikev2-setup" in JS
+    assert "mode-openvpn" in JS
+    assert "mode-stealth-client" in JS
+    assert "mode-wstunnel-setup" in JS
+    assert "/api/protocols/connection-modes" in JS
+    assert "/api/protocols/ikev2/bootstrap" in JS
+    assert "/api/protocols/stealth/clients" in JS
+    assert "/api/protocols/wstunnel/bootstrap" in JS
+    assert "UDP/443 با WireGuard/443 قابل اشتراک نیست." in JS
+    assert "TCP/443 معمولاً در اختیار HTTPS/Nginx است" in JS
+
+
+def test_connection_modes_are_in_primary_protocol_navigation():
+    assert 'data-view="modes"' in DASHBOARD
+    assert "Connection Modes" in DASHBOARD
+    assert "modes:connectionModes" in JS
