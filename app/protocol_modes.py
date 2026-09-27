@@ -68,6 +68,37 @@ def _atomic_text(path,text,mode=0o600):
     tmp.write_text(text,encoding="utf-8"); os.chmod(tmp,mode); os.replace(tmp,path)
     return path
 
+def _snapshot_paths(paths):
+    snapshot={}
+    for item in paths:
+        path=Path(item)
+        if path.exists():
+            snapshot[path]=(path.read_bytes(),path.stat().st_mode & 0o777)
+        else:
+            snapshot[path]=None
+    return snapshot
+
+def _restore_paths(snapshot):
+    for path,state in snapshot.items():
+        path=Path(path)
+        if state is None:
+            path.unlink(missing_ok=True)
+            continue
+        data,mode=state
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(data)
+        os.chmod(path,mode)
+
+def _rollback_service(service,was_active):
+    try:
+        _run(["systemctl","daemon-reload"],20)
+        if was_active:
+            _run(["systemctl","restart",service],30)
+        else:
+            subprocess.run(["systemctl","disable","--now",service],text=True,capture_output=True,timeout=30,check=False)
+    except Exception:
+        pass
+
 def _service_restart(candidates):
     last=""
     for service in candidates:
@@ -154,8 +185,12 @@ def configure_ikev2(domain,pool="10.99.0.0/24",dns_servers=None):
         if addr.version!=4: raise ProtocolModeError("IKEv2 DNS must be IPv4 in this release")
         dns.append(addr.compressed)
     dns=dns[:3] or ["1.1.1.1"]
-    _ensure_swanctl_include(); _copy_ikev2_credentials(cert,chain,key)
-    conf=f"""# Managed by Makia VPS Manager.
+    sysctl_path=Path("/etc/sysctl.d/99-makia-ikev2.conf")
+    snapshot=_snapshot_paths([SWANCTL_MAIN,SWANCTL_CONF,SWANCTL_SECRETS,SWANCTL_CERT,SWANCTL_CA,SWANCTL_KEY,IKEV2_ENV,sysctl_path])
+    was_active=_active("strongswan")
+    try:
+        _ensure_swanctl_include(); _copy_ikev2_credentials(cert,chain,key)
+        conf=f"""# Managed by Makia VPS Manager.
 connections {{
   makia-ikev2 {{
     version = 2
@@ -190,17 +225,27 @@ pools {{
   }}
 }}
 """
-    _atomic_text(SWANCTL_CONF,conf,0o640); _render_ikev2_secrets()
-    _write_env(IKEV2_ENV,{"MAKIA_IKEV2_POOL":network.with_prefixlen,"MAKIA_IKEV2_UPLINK":protocol_ops._default_iface()})
-    Path("/etc/sysctl.d/99-makia-ikev2.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
-    _run(["sysctl","--system"],45)
-    service=_service_restart(("strongswan","strongswan-swanctl","strongswan-starter"))
-    _run(["swanctl","--load-all"],45)
-    _run(["systemctl","daemon-reload"],20)
-    _run(["systemctl","enable","--now","makia-ikev2-firewall"],30)
-    protocol_ops._ufw_allow_if_active(500,"udp","IKEv2")
-    protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T")
-    return {"ok":True,"service":service,"pool":network.with_prefixlen,"dns":dns,**ikev2_status()}
+        _atomic_text(SWANCTL_CONF,conf,0o640); _render_ikev2_secrets()
+        _write_env(IKEV2_ENV,{"MAKIA_IKEV2_POOL":network.with_prefixlen,"MAKIA_IKEV2_UPLINK":protocol_ops._default_iface()})
+        _atomic_text(sysctl_path,"net.ipv4.ip_forward=1\n",0o644)
+        _run(["sysctl","--system"],45)
+        service=_service_restart(("strongswan","strongswan-swanctl","strongswan-starter"))
+        _run(["swanctl","--load-all"],45)
+        _run(["systemctl","daemon-reload"],20)
+        _run(["systemctl","enable","--now","makia-ikev2-firewall"],30)
+        protocol_ops._ufw_allow_if_active(500,"udp","IKEv2")
+        protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T")
+        status=ikev2_status()
+        if not status.get("ready"):
+            raise ProtocolModeError("IKEv2 did not reach READY state after configuration")
+        return {"ok":True,"service":service,"pool":network.with_prefixlen,"dns":dns,**status}
+    except Exception as exc:
+        _restore_paths(snapshot)
+        _rollback_service("strongswan",was_active)
+        try: _run(["sysctl","--system"],45)
+        except Exception: pass
+        if isinstance(exc,ProtocolModeError): raise
+        raise ProtocolModeError(str(exc)) from exc
 
 def _load_ikev2_users(silent=False):
     if not IKEV2_USERS.exists(): return {}
@@ -261,7 +306,10 @@ def configure_stealth(domain,listen_port=8443):
         raise ProtocolModeError(f"TCP/{port} is already in use; choose another Stealth port")
     if not Path("/etc/systemd/system/makia-stealth.service").exists():
         raise ProtocolModeError("Makia Stealth service unit is missing. Run sudo makia-upgrade first.")
-    _atomic_text(STEALTH_CONF,f"""foreground = yes
+    snapshot=_snapshot_paths([STEALTH_CONF])
+    was_active=_active("makia-stealth")
+    try:
+        _atomic_text(STEALTH_CONF,f"""foreground = yes
 client = no
 [makia-openvpn]
 accept = 0.0.0.0:{port}
@@ -272,11 +320,15 @@ TIMEOUTclose = 0
 socket = l:TCP_NODELAY=1
 socket = r:TCP_NODELAY=1
 """,0o600)
-    _run(["systemctl","daemon-reload"],20); _run(["systemctl","enable","--now","makia-stealth"],30)
-    protocol_ops._ufw_allow_if_active(port,"tcp","Stealth TLS")
-    status=stealth_status()
-    if not status["ready"]: raise ProtocolModeError("Stealth service did not reach a listening state")
-    return {"ok":True,"domain":domain,"listen_port":port,"target_port":target,"client_note":"Use an stunnel-capable client, then point OpenVPN/TCP to the local stunnel port.",**status}
+        _run(["systemctl","daemon-reload"],20); _run(["systemctl","enable","--now","makia-stealth"],30)
+        status=stealth_status()
+        if not status["ready"]: raise ProtocolModeError("Stealth service did not reach a listening state")
+        protocol_ops._ufw_allow_if_active(port,"tcp","Stealth TLS")
+        return {"ok":True,"domain":domain,"listen_port":port,"target_port":target,"client_note":"Use an stunnel-capable client, then point OpenVPN/TCP to the local stunnel port.",**status}
+    except Exception as exc:
+        _restore_paths(snapshot); _rollback_service("makia-stealth",was_active)
+        if isinstance(exc,ProtocolModeError): raise
+        raise ProtocolModeError(str(exc)) from exc
 
 def wstunnel_status():
     env=_read_env(WSTUNNEL_ENV); bind=env.get("WSTUNNEL_BIND",""); m=re.search(r":(\d+)$",bind); port=int(m.group(1)) if m else None
@@ -299,12 +351,19 @@ def configure_wstunnel(domain,listen_port=9443,path_prefix=None):
         raise ProtocolModeError(f"TCP/{port} is already in use; choose another WStunnel port")
     prefix=str(path_prefix or secrets.token_urlsafe(18)).strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{12,96}",prefix): raise ProtocolModeError("WStunnel path secret must be 12-96 URL-safe characters")
-    _write_env(WSTUNNEL_ENV,{"WSTUNNEL_PATH_PREFIX":prefix,"WSTUNNEL_RESTRICT_TO":f"127.0.0.1:{target}","WSTUNNEL_CERT":str(fullchain),"WSTUNNEL_KEY":str(key),"WSTUNNEL_BIND":f"wss://0.0.0.0:{port}"})
-    _run(["systemctl","daemon-reload"],20); _run(["systemctl","enable","--now","makia-wstunnel"],30)
-    protocol_ops._ufw_allow_if_active(port,"tcp","WStunnel")
-    status=wstunnel_status()
-    if not status["ready"]: raise ProtocolModeError("WStunnel service did not reach a listening state")
-    return {"ok":True,"domain":domain,"listen_port":port,"target_port":target,"path_prefix":prefix,"client_command":f"wstunnel client --http-upgrade-path-prefix {prefix} -L tcp://127.0.0.1:11940:127.0.0.1:{target} wss://{domain}:{port}","openvpn_local_endpoint":"127.0.0.1:11940/tcp",**status}
+    snapshot=_snapshot_paths([WSTUNNEL_ENV])
+    was_active=_active("makia-wstunnel")
+    try:
+        _write_env(WSTUNNEL_ENV,{"WSTUNNEL_PATH_PREFIX":prefix,"WSTUNNEL_RESTRICT_TO":f"127.0.0.1:{target}","WSTUNNEL_CERT":str(fullchain),"WSTUNNEL_KEY":str(key),"WSTUNNEL_BIND":f"wss://0.0.0.0:{port}"})
+        _run(["systemctl","daemon-reload"],20); _run(["systemctl","enable","--now","makia-wstunnel"],30)
+        status=wstunnel_status()
+        if not status["ready"]: raise ProtocolModeError("WStunnel service did not reach a listening state")
+        protocol_ops._ufw_allow_if_active(port,"tcp","WStunnel")
+        return {"ok":True,"domain":domain,"listen_port":port,"target_port":target,"path_prefix":prefix,"client_command":f"wstunnel client --http-upgrade-path-prefix {prefix} -L tcp://127.0.0.1:11940:127.0.0.1:{target} wss://{domain}:{port}","openvpn_local_endpoint":"127.0.0.1:11940/tcp",**status}
+    except Exception as exc:
+        _restore_paths(snapshot); _rollback_service("makia-wstunnel",was_active)
+        if isinstance(exc,ProtocolModeError): raise
+        raise ProtocolModeError(str(exc)) from exc
 
 def connection_modes():
     wg=protocol_ops.wireguard_status(); ov=protocol_ops.openvpn_status(); ovp=str(ov.get("proto") or "").lower()
