@@ -196,6 +196,7 @@ def main():
             native_path=Path("/tmp/makia-browser-native.txt")
             native.value.save_as(str(native_path))
             assert "vless://" in native_path.read_text(encoding="utf-8")
+            page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator(".provision-drawer").wait_for()
