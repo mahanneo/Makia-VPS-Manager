@@ -377,3 +377,41 @@ def test_component_install_is_blocked_inside_hardened_web_service(monkeypatch):
     monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:pytest.fail("package manager must not run"))
     with pytest.raises(ProtocolError,match="sudo makia-upgrade"):
         protocol_ops.install_component("wireguard")
+
+
+def test_ikev2_user_replacement_does_not_remove_prefix_neighbor(monkeypatch,tmp_path):
+    secrets_file=tmp_path/"ipsec.secrets"
+    secrets_file.write_text(
+        'alice : EAP "old"  # makia-eap:alice\n'
+        'alice2 : EAP "keep"  # makia-eap:alice2\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"IKEV2_SECRETS",secrets_file)
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{"configured":True,"domain":"vpn.example.com"})
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    protocol_ops.create_ikev2_user("alice","NewStrongPass456!")
+    text=secrets_file.read_text(encoding="utf-8")
+    assert '# makia-eap:alice2' in text
+    assert 'alice2 : EAP "keep"' in text
+    assert text.count("# makia-eap:alice")==2  # alice marker + alice2 prefix text
+    assert len(protocol_ops.list_ikev2_users())==2
+
+
+def test_remove_ikev2_user_keeps_other_managed_users(monkeypatch,tmp_path):
+    secrets_file=tmp_path/"ipsec.secrets"
+    secrets_file.write_text(
+        ': RSA makia-ikev2.key\n'
+        'alice : EAP "one"  # makia-eap:alice\n'
+        'bob : EAP "two"  # makia-eap:bob\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"IKEV2_SECRETS",secrets_file)
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_run",lambda args,**kwargs:calls.append(args) or "")
+    result=protocol_ops.remove_ikev2_user("alice")
+    text=secrets_file.read_text(encoding="utf-8")
+    assert result["name"]=="alice"
+    assert "makia-eap:alice" not in text
+    assert "makia-eap:bob" in text
+    assert protocol_ops.list_ikev2_users()==[{"name":"bob"}]
+    assert ["ipsec","rereadsecrets"] in calls
