@@ -31,6 +31,15 @@ jobs:
         run: pytest -q
       - name: Bash syntax
         run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh
+      - name: WStunnel installer smoke
+        run: |
+          WSTUNNEL_DEST=/tmp/wstunnel-test bash scripts/install-wstunnel.sh
+          /tmp/wstunnel-test --version | grep -q '11.0.0'
+          /tmp/wstunnel-test server --help | grep -q -- '--restrict-to'
+          /tmp/wstunnel-test server --help | grep -q -- '--restrict-http-upgrade-path-prefix'
+          /tmp/wstunnel-test server --help | grep -q -- '--tls-certificate'
+          /tmp/wstunnel-test server --help | grep -q -- '--tls-private-key'
+          /tmp/wstunnel-test client --help | grep -q -- '--http-upgrade-path-prefix'
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
@@ -78,6 +87,8 @@ jobs:
           test -f docs/UAT-0.24.0-RC1.md
           test -f docs/UAT-0.25.0-RC1.md
           test -f docs/UAT-0.26.0-RC1.md
+          test -f docs/UAT-0.26.0-RC2.md
+          test -f docs/UAT-PROTOCOL-MODES.md
           test -f docs/IRAN-CONNECTIVITY-FIELD-TEST.md
           test -f scripts/iran-field-preflight.sh
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
@@ -96,6 +107,17 @@ jobs:
           grep -q 'makia-uat-smoke' scripts/update.sh
           grep -q 'makia-owner-config' scripts/install.sh
           grep -q 'makia-owner-config' scripts/update.sh
+          test -f scripts/install-wstunnel.sh
+          test -f scripts/makia-vpn-tls-sync.sh
+          test -f scripts/ikev2-network.sh
+          test -f systemd/makia-wstunnel.service
+          test -f systemd/makia-ikev2-network.service
+          grep -q 'strongswan strongswan-pki libcharon-extra-plugins' scripts/install.sh
+          grep -q 'strongswan strongswan-pki libcharon-extra-plugins' scripts/update.sh
+          grep -q 'makia-install-wstunnel' scripts/install.sh
+          grep -q 'makia-install-wstunnel' scripts/update.sh
+          grep -q 'makia-vpn-tls-sync' scripts/install.sh
+          grep -q 'makia-vpn-tls-sync' scripts/update.sh
       - name: UAT v0.11 contract
         run: |
           grep -q 'Protected ZIP' docs/UAT-0.11.0-RC1.md
@@ -160,8 +182,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.26.0-rc1"' app/config.py
-          grep -q '^0.26.0-rc1$' VERSION
+          grep -q 'VERSION = "0.26.0-rc2"' app/config.py
+          grep -Fxq '0.26.0-rc2' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -185,7 +207,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v0260rc1' app/static/sw.js
+          grep -q 'makia-shell-v0260rc2' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
@@ -227,7 +249,28 @@ jobs:
           grep -q 'security-posture-grid' app/static/app.js
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
-          grep -q 'makia-shell-v0260rc1' app/static/sw.js
+          grep -q 'makia-shell-v0260rc2' app/static/sw.js
+
+      - name: Connection modes contract
+        run: |
+          grep -q '0.26.0-rc2' docs/UAT-0.26.0-RC2.md
+          grep -q 'six-mode' CHANGELOG.md
+          grep -q 'def protocol_modes' app/protocol_ops.py
+          grep -q 'def bootstrap_ikev2' app/protocol_ops.py
+          grep -q 'def bootstrap_stealth' app/protocol_ops.py
+          grep -q 'def bootstrap_wstunnel' app/protocol_ops.py
+          grep -q '/api/protocols/modes' app/main.py
+          grep -q '/api/protocols/ikev2/bootstrap' app/main.py
+          grep -q '/api/protocols/stealth/bootstrap' app/main.py
+          grep -q '/api/protocols/wstunnel/bootstrap' app/main.py
+          grep -q 'Connection Modes' app/static/app.js
+          grep -q 'ikev2-setup' app/static/app.js
+          grep -q 'stealth-setup' app/static/app.js
+          grep -q 'wstunnel-setup' app/static/app.js
+          grep -q 'WSTUNNEL_VERSION:-11.0.0' scripts/install-wstunnel.sh
+          grep -q 'checksum mismatch' scripts/install-wstunnel.sh
+          grep -q 'IKEv2/strongSwan tooling installed' scripts/uat-smoke.sh
+          grep -q 'WStunnel tooling installed' scripts/uat-smoke.sh
 
       - name: UAT v0.17 contract
         run: |

@@ -160,10 +160,12 @@ NEED_HOST_PACKAGES=0
 command -v fail2ban-client >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 command -v certbot >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' python3-certbot-nginx 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
+dpkg-query -W -f='${Status}' strongswan 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
+dpkg-query -W -f='${Status}' libcharon-extra-plugins 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
-  echo "Ensuring host security/TLS packages outside the hardened web-service sandbox..."
+  echo "Ensuring host security/TLS/VPN packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban certbot python3-certbot-nginx
+  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
 fi
 
 ROLLBACK_ARMED=1
@@ -191,6 +193,8 @@ install -m 0644 "$SRC/systemd/makia-vps-manager.service" /etc/systemd/system/mak
 install -m 0644 "$SRC/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
+install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -205,8 +209,12 @@ install -m 0755 "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 install -m 0755 "$SRC/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
 install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 install -m 0755 "$SRC/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
+install -m 0755 "$SRC/scripts/makia-vpn-tls-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
 install -m 0755 "$SRC/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
+install -m 0755 "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
+install -m 0755 "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
+/usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload

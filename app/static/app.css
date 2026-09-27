@@ -1762,3 +1762,21 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 
 @media(max-width:1020px){.engine-feature-grid,.support-health-strip,.support-action-grid{grid-template-columns:repeat(2,1fr)}.security-posture-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:720px){.engine-feature-grid,.support-health-strip,.support-action-grid,.security-posture-grid,.engine-setting-summary{grid-template-columns:1fr}.engine-mode-switch{grid-template-columns:1fr}.support-channel,.security-critical-banner{align-items:flex-start;flex-direction:column}.guide-v26 .guide-hero{grid-template-columns:1fr}.guide-hero-visual{min-height:130px}.guide-v26 .guide-nav{grid-column:1;grid-template-columns:1fr 1fr}.visual-steps{grid-template-columns:1fr}.visual-steps svg{height:115px}}
+
+
+/* v0.27 connection modes */
+.protocol-modes-panel{margin-bottom:18px}
+.protocol-mode-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.protocol-mode-card{border:1px solid var(--line);border-radius:18px;padding:16px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));display:flex;flex-direction:column;gap:14px;min-width:0}
+.protocol-mode-card.ready{border-color:rgba(54,211,153,.28);box-shadow:inset 0 0 0 1px rgba(54,211,153,.05)}
+.protocol-mode-top{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;min-width:0}
+.protocol-mode-top>div:nth-child(2){min-width:0;display:flex;flex-direction:column;gap:3px}
+.protocol-mode-top b{font-size:15px}
+.protocol-mode-top span{font-size:11px;color:var(--muted)}
+.protocol-mode-icon .proto-glyph{width:38px;height:38px}
+.protocol-mode-meta{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-radius:12px;background:rgba(255,255,255,.025)}
+.protocol-mode-meta span{font-size:11px;color:var(--muted)}
+.protocol-mode-meta b{font-size:13px}
+.protocol-mode-card .toolbar{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:980px){.protocol-mode-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.protocol-mode-grid{grid-template-columns:1fr}.protocol-mode-card{border-radius:15px}}
