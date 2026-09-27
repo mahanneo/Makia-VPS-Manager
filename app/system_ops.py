@@ -241,6 +241,9 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "letsencrypt":"/etc/letsencrypt",
         "xray":"/usr/local/etc/xray",
         "xray_alt":"/etc/xray",
+        "protocol_modes_state":"/etc/makia-vps-manager",
+        "swanctl":"/etc/swanctl",
+        "stunnel":"/etc/stunnel",
         "nginx_site":"/etc/nginx/sites-available/makia-vps-manager",
     }
     paths={**defaults,**(system_paths or {})}
@@ -249,7 +252,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "payload/ssh-users.json":json.dumps(_managed_ssh_export(managed_users),ensure_ascii=False,indent=2).encode("utf-8"),
     }
     components={}
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","protocol_modes_state","swanctl","stunnel"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
