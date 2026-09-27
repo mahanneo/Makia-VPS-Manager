@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root."; exit 1; }\nexport DEBIAN_FRONTEND=noninteractive
+[[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root."; exit 1; }
+export DEBIAN_FRONTEND=noninteractive
 
 ENV_FILE=/etc/makia-vps-manager/makia.env
 if [[ -r "$ENV_FILE" ]]; then
@@ -332,17 +333,7 @@ fi
 
 echo
 echo "Running post-update Makia host smoke gate..."
-UAT_ENV=(env)
-if [[ "$XRAY_WAS_PRESENT" -eq 1 && "$XRAY_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet xray 2>/dev/null; then
-  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_XRAY_FAILURE=1)
-fi
-if [[ "$OVPN_WAS_PRESENT" -eq 1 && "$OVPN_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet openvpn-server@server 2>/dev/null; then
-  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_OPENVPN_FAILURE=1)
-fi
-if [[ "$WG_WAS_PRESENT" -eq 1 && "$WG_WAS_ACTIVE" -eq 0 ]] && ! systemctl is-active --quiet wg-quick@wg0 2>/dev/null; then
-  UAT_ENV+=(MAKIA_ALLOW_PREEXISTING_WIREGUARD_FAILURE=1)
-fi
-if ! "${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke; then
+if ! /usr/local/sbin/makia-uat-smoke; then
   echo "Post-update host smoke failed."
   echo "The updater will restore the previous runtime automatically."
   exit 4
