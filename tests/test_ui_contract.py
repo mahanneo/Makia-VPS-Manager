@@ -24,10 +24,10 @@ def test_shell_has_no_inline_click_handlers():
 
 def test_provisioning_wizard_contract():
     for marker in [
-        "SMART PROVISIONING",
+        "NEW ACCESS",
         "wizard-protocol",
         "wizard-create",
-        "Protected delivery package",
+        "provision-drawer",
         "protocol-bootstrap",
         "runSelfTest",
     ]:
@@ -52,7 +52,7 @@ def test_every_literal_data_action_has_dispatch_handler():
 
 def test_every_shell_action_has_dispatch_handler():
     actions=set(re.findall(r'data-shell-action=["\']([a-z0-9-]+)["\']',SHELL))
-    expected={"create-access","command","sidebar-pin","sidebar-group"}
+    expected={"create-access","command","refresh","sidebar-open","sidebar-close","sidebar-group"}
     assert actions==expected
     for action in actions:
         assert f"a==='{action}'" in JS
@@ -92,14 +92,30 @@ def test_openvpn_workspace_does_not_fake_per_client_quota():
     assert "Quota/Reset per-client برای OpenVPN" in JS
 
 
-def test_sanaei_style_information_architecture_contract():
-    assert 'class="sanaei-sidebar"' in SHELL
+def test_professional_information_architecture_contract():
+    assert 'class="pro-sidebar"' in SHELL
     assert 'data-view="dashboard"' in SHELL
-    assert 'data-view="inbounds"' in SHELL
     assert 'data-view="access"' in SHELL
-    assert 'data-group="settings"' in SHELL
-    assert 'data-group="xraytools"' in SHELL
-    assert 'data-group="protocolclients"' in SHELL
+    assert 'data-view="inbounds"' in SHELL
+    assert 'data-group="protocols"' in SHELL
+    assert 'data-group="infra"' in SHELL
+    assert 'data-group="system"' in SHELL
+    assert 'data-view="connectivity"' in SHELL
     assert "inboundsWorkspace" in JS
-    assert "sx-inbound-list" in JS
-    assert "makia-sidebar-pinned" in JS
+    assert "connectivityLab" in JS
+    assert "access-detail" in JS
+    assert "provision-drawer" in JS
+
+
+def test_user_directory_uses_progressive_disclosure():
+    assert "pro-user-table-head" in JS
+    assert "pro-user-row" in JS
+    assert "openAccessDetail" in JS
+    assert "detail-actions" in JS
+    assert "Protected ZIP" in JS
+
+
+def test_connectivity_lab_does_not_fake_iran_validation():
+    assert "نیاز به تست از داخل ایران" in JS
+    assert "Server Ready به معنی" in JS
+    assert "IRAN FIELD GATE" in JS
