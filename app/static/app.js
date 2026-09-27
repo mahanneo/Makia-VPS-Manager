@@ -75,7 +75,7 @@ async function dashboard(renderToken=window.__viewRenderToken){
       '<div class="panel glass-resource-panel"><div class="panel-head"><div><h3>مصرف منابع سرور</h3><span>REAL-TIME</span></div></div><div class="glass-rings">'+ring('CPU',m.cpu,'cyan')+ring('RAM',m.memory,'violet')+ring('Disk',m.disk,'green')+'</div><div class="glass-network-head"><span>ترافیک شبکه</span><b>'+fmtBytes(networkTotal)+'</b></div>'+svgHistory(hist)+'</div>',
     '</section>',
     '<section class="glass-secondary-grid">',
-      '<div class="panel"><div class="panel-head"><div><h3>Access Center</h3><span>'+accessRows.length+' MANAGED</span></div><button class="ghost" data-action="nav" data-view="access">Open</button></div><div class="glass-access-strip"><div><b>'+accessRows.filter(x=>x.kind==='ssh').length+'</b><span>SSH</span></div><div><b>'+accessRows.filter(x=>x.kind==='xray').length+'</b><span>Xray</span></div><button data-action="nav" data-view="wireguard"><b>'+accessRows.filter(x=>x.kind==='wireguard').length+'</b><span>WireGuard ↗</span></button><div><b>'+accessRows.filter(x=>x.kind==='openvpn').length+'</b><span>OpenVPN</span></div></div></div>',
+      '<div class="panel"><div class="panel-head"><div><h3>Protocol Workspaces</h3><span>'+accessRows.length+' MANAGED</span></div><button class="ghost" data-action="nav" data-view="access">All clients</button></div><div class="glass-access-strip"><button data-action="nav" data-view="ssh"><b>'+accessRows.filter(x=>x.kind==='ssh').length+'</b><span>SSH / NPV ↗</span></button><button data-action="nav" data-view="xray"><b>'+accessRows.filter(x=>x.kind==='xray').length+'</b><span>Xray / V2Ray ↗</span></button><button data-action="nav" data-view="wireguard"><b>'+accessRows.filter(x=>x.kind==='wireguard').length+'</b><span>WireGuard ↗</span></button><button data-action="nav" data-view="openvpn"><b>'+accessRows.filter(x=>x.kind==='openvpn').length+'</b><span>OpenVPN ↗</span></button></div></div>',
       '<div class="panel"><div class="panel-head"><div><h3>Live Sessions</h3><span>'+d.online_sessions+' ACTIVE</span></div><button class="ghost" data-action="nav" data-view="sessions">View all</button></div><div class="session-cards">'+(recent.length?recent.map(x=>'<div><span class="avatar-mini">'+htmlEsc((x.username||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(x.username)+'</b><small>'+htmlEsc(x.remote||'local')+'</small></div><time>'+htmlEsc(x.since||'')+'</time></div>').join(''):'<div class="empty compact">نشست فعالی وجود ندارد.</div>')+'</div></div>',
     '</section>'
   ].join('');
@@ -618,10 +618,10 @@ async function runSelfTest(){
 }
 
 async function accounts(renderToken=window.__viewRenderToken){
-  title.textContent='Account Center';setPageContext('SSH POLICY');
+  title.textContent='SSH / NPV';setPageContext('SSH ACCOUNT WORKSPACE');
   content.innerHTML='<div class="empty">در حال بارگذاری حساب‌ها…</div>';
   const [rows,defs]=await Promise.all([api('/api/accounts'),api('/api/accounts/new-defaults')]);
-  if(renderToken!==window.__viewRenderToken||activeView!=='accounts')return;
+  if(renderToken!==window.__viewRenderToken||!['accounts','ssh'].includes(activeView))return;
   accountCache=rows;
   content.innerHTML=`
   <div class="account-hero panel">
@@ -790,6 +790,47 @@ async function toggleWireGuardPeer(key,enabled){
   try{await api('/api/access/wireguard/'+encodeURIComponent(key)+'/state',{method:'POST',body:JSON.stringify({enabled})});toast(enabled?'همتا فعال شد':'همتا غیرفعال شد');await currentView()}catch(e){alert(e.message)}
 }
 
+async function xrayWorkspace(renderToken=window.__viewRenderToken){
+  title.textContent='Xray / V2Ray';setPageContext('XRAY CLIENT WORKSPACE');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی Xray…</b></div>';
+  const [stack,clients,accessRows,operator]=await Promise.all([
+    api('/api/protocols'),api('/api/protocol-clients'),api('/api/access'),api('/api/settings/operator')
+  ]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='xray')return;
+  window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;
+  const engine=stack.xray||{},rows=accessRows.filter(x=>x.kind==='xray');
+  const managed=clients.filter(x=>['vless','vmess','trojan','shadowsocks','hysteria2'].includes(String(x.protocol||'').toLowerCase()));
+  const active=managed.filter(x=>x.enabled&&!x.expired).length;
+  const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
+  const quota=managed.reduce((sum,x)=>sum+Number(x.quota_bytes||0),0);
+  const ipViolations=managed.filter(x=>x.ip_violation).length;
+  const inboundHtml=(engine.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(i.tag||'untagged')+'</b><span>'+htmlEsc(String(i.protocol||'unknown').toUpperCase())+'</span></div><div><b>'+htmlEsc((i.listen||'0.0.0.0')+':'+(i.port??'-'))+'</b><span>'+Number(i.clients||0)+' clients</span></div></div>').join('');
+  content.innerHTML=[
+    '<section class="wg-workspace-hero"><div><div class="eyebrow">XRAY · VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>فضای مستقل Xray / V2Ray</h2><p>ساخت Client، حجم، تاریخ انقضا، چرخه Reset، IP Limit، وضعیت فعال/غیرفعال و Subscription در همین بخش مدیریت می‌شود.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ ساخت Client':'نصب Xray Core')+'</button><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">Advanced JSON</button><button class="ghost" data-action="xray-tunnel">Tunnel</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(engine.service_active?'running':'')+'"></span><b>'+(engine.service_active?'Xray Running':engine.installed?'Xray Attention':'Xray not installed')+'</b><small>'+htmlEsc(engine.version||'Core version unavailable')+'</small></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>Clientها</span><b>'+managed.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>مصرف کل</span><b>'+fmtBytes(used)+'</b></div><div><span>IP Limit Alert</span><b>'+ipViolations+'</b></div></section>',
+    '<section class="panel"><div class="panel-head"><div><h3>Client Policy</h3><span>QUOTA · EXPIRY · RESET · IP LIMIT · STATUS</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز Client مدیریت‌شده‌ای وجود ندارد.</div>')+'</div></section>',
+    '<section class="split-grid"><div class="panel"><div class="panel-head"><div><h3>Inboundها</h3><span>PORT / TRANSPORT</span></div><button class="ghost" data-action="nav" data-view="protocols">Protocol Hub</button></div><div class="engine-inbounds">'+(inboundHtml||'<div class="empty compact">Inbound خوانا پیدا نشد.</div>')+'</div></div>',
+    '<div class="panel"><div class="panel-head"><div><h3>Delivery Profiles</h3><span>'+rows.length+' EXPORTABLE</span></div><button class="ghost" data-action="client-guide" data-kind="xray">راهنما</button></div><div class="access-cards">'+(rows.length?rows.map(accessCard).join(''):'<div class="empty compact">پروفایل تحویل وجود ندارد.</div>')+'</div></div></section>',
+    quota?'<section class="wg-workspace-help"><div><b>Quota pool</b><p>مجموع سقف‌های تعریف‌شده '+fmtBytes(quota)+' است. هر Client شمارنده و Reset مستقل خودش را دارد.</p></div><button class="ghost" data-action="refresh">Sync counters</button></section>':''
+  ].join('');
+}
+
+async function openvpnWorkspace(renderToken=window.__viewRenderToken){
+  title.textContent='OpenVPN';setPageContext('OPENVPN CLIENT WORKSPACE');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی OpenVPN…</b></div>';
+  const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
+  window.__protocolData=stack;window.__operatorSettings=operator;
+  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn');
+  const server=(engine.servers||[])[0]||{};
+  content.innerHTML=[
+    '<section class="wg-workspace-hero"><div><div class="eyebrow">OPENVPN · PKI · NATIVE OVPN</div><h2>فضای مستقل OpenVPN</h2><p>راه‌اندازی سرور، Clientها، فایل OVPN، Domain Diagnostics و عملیات PKI از Xray و SSH جدا شده‌اند.</p><div class="wg-workspace-actions"><button class="primary action-lg" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ساخت Client':'راه‌اندازی OpenVPN')+'</button><button class="ghost" data-action="openvpn-diagnostics">Domain Diagnostics</button><button class="ghost" data-action="openvpn-repair">Repair Runtime</button></div></div><div class="wg-workspace-status"><span class="wg-status-dot '+(engine.service_active?'running':'')+'"></span><b>'+(engine.service_active?'OpenVPN Running':engine.installed?'OpenVPN Attention':'OpenVPN not installed')+'</b><small>'+(server.port?htmlEsc(String(server.proto||'udp').toUpperCase()+'/'+server.port):'Server not bootstrapped')+'</small></div></section>',
+    '<section class="wg-workspace-metrics"><div><span>Clientها</span><b>'+clients.length+'</b></div><div><span>Service</span><b>'+(engine.service_active?'ON':'OFF')+'</b></div><div><span>Port</span><b>'+(server.port||'-')+'</b></div><div><span>Transport</span><b>'+htmlEsc(String(server.proto||'-').toUpperCase())+'</b></div></section>',
+    '<section class="panel"><div class="panel-head"><div><h3>OpenVPN Clients</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div></section>',
+    '<section class="wg-workspace-help"><div><b>تفکیک قابلیت واقعی</b><p>در این Release فایل و PKI و Revoke واقعی هستند. Quota/Reset per-client برای OpenVPN تا زمانی که Accounting قابل اتکای Runtime اضافه نشود به‌صورت نمایشی نشان داده نمی‌شود.</p></div><button class="ghost" data-action="client-guide" data-kind="openvpn">راهنمای کلاینت ↗</button></section>'
+  ].join('');
+}
+
 async function protocols(renderToken=window.__viewRenderToken){
   title.textContent='Protocol Hub';setPageContext('ENGINE CONTROL');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Engineها…</b></div>';
@@ -799,7 +840,7 @@ async function protocols(renderToken=window.__viewRenderToken){
   const x=d.xray,w=d.wireguard,o=d.openvpn,s=d.stunnel,ssh=d.ssh;
   const ready=(d.capabilities||[]).filter(x=>x.available).length,total=(d.capabilities||[]).length;
   const xActions=x.installed
-    ? '<button class="engine-btn primaryish" data-action="nav" data-view="access">Manage Xray Access</button><button class="engine-btn" data-action="xray-diagnostics">Diagnostics</button>'+(!x.service_active?'<button class="engine-btn warnish" data-action="xray-repair">Repair & Restart</button>':'')+'<button class="engine-btn" data-action="xray-advanced">Advanced JSON</button><button class="engine-btn" data-action="xray-tunnel">Tunnel</button>'
+    ? '<button class="engine-btn primaryish" data-action="nav" data-view="xray">Manage Xray Clients</button><button class="engine-btn" data-action="xray-diagnostics">Diagnostics</button>'+(!x.service_active?'<button class="engine-btn warnish" data-action="xray-repair">Repair & Restart</button>':'')+'<button class="engine-btn" data-action="xray-advanced">Advanced JSON</button><button class="engine-btn" data-action="xray-tunnel">Tunnel</button>'
     : '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="xray">Install Xray Core</button>';
   const wActions=!w.installed
     ? '<button class="engine-btn primaryish" data-action="protocol-setup" data-kind="wireguard">Install & Setup</button>'
@@ -1363,7 +1404,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Overview','dashboard'],['Access Center','access'],['WireGuard','wireguard'],['Live Sessions','sessions'],['Protocols','protocols'],['Client Guides','guides'],['Nodes','nodes'],['Services','services'],['Security','security'],['Backups','backups'],['Audit Logs','audit'],['Update Center','updates'],['Settings / 2FA / API Tokens','settings'],['Support','support']];
+const commandItems=[['Overview','dashboard'],['All Clients','access'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Protocol Hub','protocols'],['Live Sessions','sessions'],['Client Guides','guides'],['Nodes','nodes'],['Services','services'],['Security','security'],['Backups','backups'],['Audit Logs','audit'],['Update Center','updates'],['Settings / 2FA / API Tokens','settings'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -1515,15 +1556,15 @@ document.addEventListener('change',e=>{
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
 function applyLanguageShell(){
-  const fa={dashboard:'نمای کلی',access:'مرکز دسترسی',wireguard:'وایرگارد',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Overview',access:'Access Center',wireguard:'WireGuard',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocols',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',support:'Support'};
+  const fa={dashboard:'نمای کلی',access:'همه کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'وایرگارد',openvpn:'OpenVPN',accounts:'کاربران SSH',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'مرکز پروتکل‌ها',guides:'راهنمای اتصال',nodes:'نودها',security:'امنیت',backups:'بکاپ‌ها',audit:'گزارش رویدادها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Overview',access:'All Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',accounts:'SSH Accounts',sessions:'Live Sessions',services:'Services',protocols:'Protocol Hub',guides:'Client Guides',nodes:'Nodes',security:'Security',backups:'Backups',audit:'Audit Logs',updates:'Update Center',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,access,wireguard,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
-function switchView(v){activeView=v;setPageContext(v==='dashboard'?'OPERATIONS COCKPIT':v==='access'?'IDENTITY & DELIVERY':v==='guides'?'DELIVERY EDUCATION':'MAKIA CONTROL CENTER');document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');return currentView()}
+function switchView(v){activeView=v;setPageContext(v==='dashboard'?'OPERATIONS COCKPIT':v==='access'?'CLIENT DIRECTORY':v==='ssh'?'SSH ACCOUNT WORKSPACE':v==='xray'?'XRAY CLIENT WORKSPACE':v==='wireguard'?'WIREGUARD PEER WORKSPACE':v==='openvpn'?'OPENVPN CLIENT WORKSPACE':v==='guides'?'DELIVERY EDUCATION':'MAKIA CONTROL CENTER');document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');return currentView()}
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 document.querySelector('.mobile-menu-toggle')?.addEventListener('click',e=>{const opened=document.body.classList.toggle('menu-open');e.currentTarget.setAttribute('aria-expanded',String(opened))});
 applyLanguageShell();ensureSessionContext().catch(()=>{});switchView('dashboard');
