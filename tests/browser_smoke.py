@@ -378,6 +378,15 @@ def main():
             page.locator('.pro-sidebar button[data-view="protocols"]').click()
             leave_sidebar(page)
             page.locator(".protocol-modes-panel").wait_for()
+            page.locator('[data-action="change-protocol"]').click()
+            page.locator(".change-protocol-modal").wait_for()
+            assert page.locator(".change-protocol-row").count()==6
+            switcher_text=page.locator(".change-protocol-modal").inner_text()
+            for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
+                assert label in switcher_text
+            assert "Backend واقعی Makia" in switcher_text
+            page.locator('.change-protocol-modal [data-action="modal-close"]').last.click()
+            assert page.locator(".change-protocol-modal").count()==0
             assert page.locator(".protocol-mode-card").count()==6
             mode_text=page.locator(".protocol-modes-panel").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
