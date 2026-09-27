@@ -750,6 +750,36 @@ async function toggleWireGuardPeer(key,enabled){
   try{await api('/api/access/wireguard/'+encodeURIComponent(key)+'/state',{method:'POST',body:JSON.stringify({enabled})});toast(enabled?'همتا فعال شد':'همتا غیرفعال شد');await currentView()}catch(e){alert(e.message)}
 }
 
+async function inboundsWorkspace(renderToken=window.__viewRenderToken){
+  title.textContent='Inboundها';setPageContext('INBOUNDS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن Inboundها…</b></div>';
+  const [stack,clients]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients')]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='inbounds')return;
+  window.__protocolData=stack;window.__protocolClients=clients;
+  const engine=stack.xray||{},rows=engine.inbounds||[];
+  const totalClients=rows.reduce((n,x)=>n+Number(x.clients||0),0);
+  const protocols=[...new Set(rows.map(x=>String(x.protocol||'unknown').toUpperCase()))];
+  const list=rows.map((ib,i)=>{
+    const proto=String(ib.protocol||'unknown').toUpperCase();
+    const listen=(ib.listen||'0.0.0.0')+':'+(ib.port??'—');
+    const managed=clients.filter(c=>String(c.inbound_tag||'')===String(ib.tag||'')).length;
+    return '<div class="sx-inbound-row"><div class="sx-inbound-icon">'+htmlEsc(proto.slice(0,2))+'</div>'+
+      '<div class="sx-inbound-main"><b>'+htmlEsc(ib.tag||('inbound-'+(i+1)))+'</b><span>'+htmlEsc(proto)+'</span></div>'+
+      '<div class="sx-inbound-cell"><span>Listen</span><b dir="ltr">'+htmlEsc(listen)+'</b></div>'+
+      '<div class="sx-inbound-cell"><span>Port</span><b>'+htmlEsc(String(ib.port??'—'))+'</b></div>'+
+      '<div class="sx-inbound-cell"><span>Clients</span><b>'+Number(ib.clients||0)+'</b></div>'+
+      '<div class="sx-inbound-cell"><span>Managed</span><b>'+managed+'</b></div>'+
+      '<div class="sx-inbound-actions"><button class="ghost" data-action="nav" data-view="xray">Clients</button><button class="ghost" data-action="xray-diagnostics">Status</button><button class="ghost" data-action="xray-advanced">JSON</button></div></div>';
+  }).join('');
+  content.innerHTML=[
+    '<div class="sx-page">',
+      '<section class="sx-page-head"><div><h1>Inboundها</h1><p>ساختار Xray Inboundها، پورت‌ها و Clientهای متصل</p></div><div class="sx-head-actions"><span class="sx-state-pill '+(engine.service_active?'':'warn')+'"><i></i>'+(engine.service_active?'Xray Running':'Xray Attention')+'</span><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="primary" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ افزودن Inbound / Client':'Install Xray')+'</button></div></section>',
+      '<section class="sx-summary-row"><div class="sx-summary"><span>Inbounds</span><b>'+rows.length+'</b><small>Xray runtime</small></div><div class="sx-summary"><span>Clients</span><b>'+totalClients+'</b><small>Core-reported</small></div><div class="sx-summary"><span>Protocols</span><b>'+protocols.length+'</b><small>'+htmlEsc(protocols.join(' · ')||'—')+'</small></div><div class="sx-summary"><span>Managed clients</span><b>'+clients.length+'</b><small>Makia policy records</small></div></section>',
+      '<section class="sx-table-wrap"><div class="sx-table-toolbar"><div><h3>Inbound list</h3><small>PORT · PROTOCOL · CLIENTS</small></div><div class="sx-toolbar-right"><button class="ghost" data-action="xray-advanced">Advanced JSON</button><button class="ghost" data-action="refresh">Refresh</button></div></div><div class="sx-inbound-list">'+(list||'<div class="empty">Inbound قابل‌خواندن وجود ندارد. از افزودن Inbound یا Advanced JSON استفاده کنید.</div>')+'</div></section>',
+    '</div>'
+  ].join('');
+}
+
 async function xrayWorkspace(renderToken=window.__viewRenderToken){
   title.textContent='V2Ray / Xray';setPageContext('XRAY USER MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی Xray…</b></div>';
