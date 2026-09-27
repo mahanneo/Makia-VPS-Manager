@@ -81,15 +81,28 @@ def main():
             page_errors=[]
             page.on("pageerror",lambda exc: page_errors.append(str(exc)))
             page.goto(BASE_URL+"/login",wait_until="networkidle")
+            page.screenshot(path='/tmp/makia-login.png',full_page=True)
             page.locator('input[name="username"]').fill("admin")
             page.locator('input[name="password"]').fill(PASSWORD)
             page.locator('button[type="submit"]').click()
             page.wait_for_url(BASE_URL+"/")
             assert page.locator('body[data-theme="glass"]').count()==1
-            page.locator(".glass-status-hero").wait_for()
-            assert page.locator(".glass-summary-grid article").count()==4
-            assert page.locator(".glass-service-card").count()>=8
-            assert "OPEN ACCESS" in page.locator(".access-tier-chip").inner_text()
+            page.locator(".neon-stat-grid").wait_for()
+            assert page.locator(".neon-stat-card").count()==4
+            assert page.locator(".neon-service-pill").count()>=4
+            assert page.locator(".protocol-donut").count()==1
+            assert page.locator(".sidebar .nav-subgroup").count()==1
+            assert "مدیریت کاربران" in page.locator(".sidebar").inner_text()
+            page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
+            page.locator('aside.sidebar button[data-view="ssh"]').click()
+            page.locator(".protocol-page-header").wait_for()
+            page.screenshot(path='/tmp/makia-ssh.png',full_page=True)
+            page.locator('aside.sidebar button[data-view="xray"]').click()
+            page.locator(".protocol-client-list").wait_for()
+            page.screenshot(path='/tmp/makia-xray.png',full_page=True)
+            page.locator('aside.sidebar button[data-view="openvpn"]').click()
+            page.locator(".protocol-page-header").wait_for()
+            page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
             page.locator('aside.sidebar button[data-view="support"]').click()
             page.locator(".support-hero").wait_for()
             assert "پشتیبانی Makia" in page.locator("#content").inner_text()
@@ -193,7 +206,7 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.locator('aside.sidebar button[data-view="dashboard"]').click()
-            page.locator(".glass-status-hero").wait_for()
+            page.locator(".neon-stat-grid").wait_for()
             page.locator('[data-action="self-test"]').click()
             page.locator(".diagnostics-modal").wait_for()
             assert page.locator(".diagnostic-score.pass").count()==1
@@ -297,8 +310,16 @@ def main():
             page.locator(".protocol-launch-grid").wait_for()
             assert page.locator(".launch-card").count()==4
             assert page.locator(".launch-card.license-locked").count()==0
+            page.locator('aside.sidebar button[data-view="services"]').click()
+            page.locator(".service-control-list").wait_for()
+            page.screenshot(path='/tmp/makia-services.png',full_page=True)
             page.locator('aside.sidebar button[data-view="protocols"]').click()
-            page.locator(".engine-card").first.wait_for()
+            page.locator(".port-management-panel").wait_for()
+            assert page.locator(".port-table-row").count()>=1
+            page.screenshot(path='/tmp/makia-ports.png',full_page=True)
+            page.locator('aside.sidebar button[data-view="settings"]').click()
+            page.locator(".settings-content-v2").wait_for()
+            page.screenshot(path='/tmp/makia-settings.png',full_page=True)
             assert page.locator(".license-lock-panel").count()==0
 
             assert not page_errors, "JavaScript page errors: "+repr(page_errors)

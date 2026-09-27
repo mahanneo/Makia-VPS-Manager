@@ -3,93 +3,90 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#071b34">
+  <meta name="theme-color" content="#031229">
   <meta name="application-name" content="Makia VPS Manager">
   <title>{{app_name}}</title>
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
 </head>
-<body data-theme="{{theme}}" data-density="{{density}}">
-  <div class="noise"></div>
-  <div class="ambient ambient-a"></div>
-  <div class="ambient ambient-b"></div>
+<body class="makia-neon-shell" data-theme="{{theme}}" data-density="{{density}}">
+  <div class="neon-bg-grid" aria-hidden="true"></div>
+  <div class="neon-glow neon-glow-a" aria-hidden="true"></div>
+  <div class="neon-glow neon-glow-b" aria-hidden="true"></div>
 
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-mark">M</div>
-      <div class="brand-copy">
-        <strong>MAKIA</strong>
-        <span>VPS MANAGER</span>
-      </div>
-      <span class="release-dot" title="Release channel"></span>
+      <img class="brand-logo" src="/static/makia.svg" alt="">
+      <div class="brand-copy"><strong>MAKIA</strong><span>VPS MANAGER</span></div>
     </div>
 
-    <div class="server-pill node-card">
-      <div class="node-status"><i></i></div>
-      <div>
-        <b>Control Node</b>
-        <small>{{ panel_domain or 'IP Mode' }}</small>
+    <nav class="neon-nav" aria-label="منوی اصلی پنل">
+      <button data-view="dashboard" class="active"><span class="nav-icon nav-blue">⌂</span><b>داشبورد</b></button>
+
+      <p class="nav-section-title">مدیریت کاربران</p>
+      <button data-view="access"><span class="nav-icon nav-violet">◉</span><b>همه کاربران</b><em>›</em></button>
+      <div class="nav-subgroup" aria-label="پروتکل‌های کاربران">
+        <button data-view="ssh"><span class="nav-mini-icon ssh">SSH</span><b>کاربران SSH</b></button>
+        <button data-view="xray"><span class="nav-mini-icon xray">V</span><b>V2Ray / Xray</b></button>
+        <button data-view="wireguard"><span class="nav-mini-icon wg">W</span><b>WireGuard</b></button>
+        <button data-view="openvpn"><span class="nav-mini-icon ovpn">O</span><b>OpenVPN</b></button>
       </div>
-      <span class="node-live">LIVE</span>
-    </div>
 
-    <button class="sidebar-create" type="button" data-shell-action="create-access">
-      <span>＋</span><b>ساخت دسترسی جدید</b>
-    </button>
+      <p class="nav-section-title">مدیریت سرور و سرویس‌ها</p>
+      <button data-view="services"><span class="nav-icon nav-purple">▣</span><b>مدیریت سرویس‌ها</b></button>
+      <button data-view="protocols"><span class="nav-icon nav-green">⌘</span><b>مدیریت پورت‌ها</b></button>
+      <button data-view="sessions"><span class="nav-icon nav-cyan">◉</span><b>اتصال‌های زنده</b></button>
+      <button data-view="nodes"><span class="nav-icon nav-blue">◎</span><b>نودها</b></button>
 
-    <nav aria-label="Main navigation">
-      <p class="nav-label">CONTROL CENTER</p>
-      <button data-view="dashboard" class="active"><span>⌂</span><b>Overview</b></button>
-      <button data-view="access"><span>◈</span><b>All Clients</b></button>
+      <p class="nav-section-title">گزارش‌ها و نگهداری</p>
+      <button data-view="audit"><span class="nav-icon nav-orange">▤</span><b>گزارش‌ها</b></button>
+      <button data-view="backups"><span class="nav-icon nav-cyan">↺</span><b>بکاپ‌ها</b></button>
 
-      <p class="nav-label">PROTOCOLS</p>
-      <button data-view="ssh"><span>〉_</span><b>SSH / NPV</b></button>
-      <button data-view="xray"><span>✦</span><b>Xray / V2Ray</b></button>
-      <button data-view="wireguard"><span>⌁</span><b>WireGuard</b></button>
-      <button data-view="openvpn"><span>◉</span><b>OpenVPN</b></button>
-      <button data-view="protocols"><span>▦</span><b>Protocol Hub</b></button>
-
-      <p class="nav-label">OPERATIONS</p>
-      <button data-view="sessions"><span>◉</span><b>Live Sessions</b></button>
-      <button data-view="services"><span>⚙</span><b>Services</b></button>
-      <button data-view="nodes"><span>◎</span><b>Nodes</b></button>
-      <button data-view="guides"><span>?</span><b>Client Guides</b></button>
-
-      <p class="nav-label">SYSTEM</p>
-      <button data-view="security"><span>◇</span><b>Security</b></button>
-      <button data-view="backups"><span>↺</span><b>Backups</b></button>
-      <button data-view="audit"><span>☷</span><b>Audit Logs</b></button>
-      <button data-view="updates"><span>⇧</span><b>Update Center</b></button>
-      <button data-view="settings"><span>⌘</span><b>Settings</b></button>
-      <button data-view="support"><span>◆</span><b>Support</b></button>
+      <p class="nav-section-title">تنظیمات و ابزارها</p>
+      <button data-view="settings"><span class="nav-icon nav-blue">⚙</span><b>تنظیمات پنل</b></button>
+      <button data-view="security"><span class="nav-icon nav-red">◇</span><b>امنیت</b></button>
+      <button data-view="updates"><span class="nav-icon nav-green">⇧</span><b>بروزرسانی</b></button>
+      <button data-view="guides"><span class="nav-icon nav-cyan">?</span><b>راهنمای اتصال</b></button>
+      <button data-view="support"><span class="nav-icon nav-violet">◌</span><b>پشتیبانی</b></button>
     </nav>
 
     <div class="sidebar-footer">
-      <div class="sidebar-version"><span>Release</span><b>v{{version}}</b></div>
-      <form action="/logout" method="post"><button class="logout" type="submit">خروج امن</button></form>
+      <div class="server-mini-status"><i></i><div><b>سرور اصلی</b><span>{{ panel_domain or 'IP Mode' }}</span></div></div>
+      <div class="sidebar-version">v{{version}}</div>
     </div>
   </aside>
 
   <main class="workspace">
     <header class="topbar">
-      <button class="mobile-menu-toggle" type="button" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">☰</button>
-      <div class="page-heading">
-        <div class="eyebrow" id="pageContext">MAKIA CONTROL CENTER</div>
-        <h1 id="pageTitle">Overview</h1>
+      <div class="topbar-brand-mobile">
+        <img src="/static/makia.svg" alt=""><b>MAKIA</b>
       </div>
+      <button class="mobile-menu-toggle" type="button" aria-label="باز کردن منو" aria-controls="sidebar" aria-expanded="false">☰</button>
+
+      <button class="command-trigger" type="button" data-shell-action="command">
+        <span>⌕</span><b>جستجو در کاربران، سرویس‌ها و پورت‌ها...</b><kbd>Ctrl K</kbd>
+      </button>
+
       <div class="top-actions">
-        <div class="environment-chip">
-          <span>PRIMARY</span>
-          <b>{{ panel_domain or 'IP MODE' }}</b>
-        </div>
-        <button class="command-trigger" type="button" data-shell-action="command">
-          <span>⌕</span><b>Search Makia</b><kbd>Ctrl K</kbd>
-        </button>
-        <div class="live-chip"><i></i><span>LIVE</span></div>
-        <button class="icon-btn" type="button" data-shell-action="refresh" title="Refresh current view">↻</button>
+        <button class="top-icon-button" type="button" title="روشنایی">☀</button>
+        <button class="top-icon-button" type="button" title="اعلان‌ها">♧<i class="notification-dot"></i></button>
+        <button class="top-icon-button" type="button" data-shell-action="refresh" title="بروزرسانی">↻</button>
+        <details class="account-menu">
+          <summary><span class="account-avatar">{{ (current_username or 'A')[:1]|upper }}</span><div><b>{{ current_username or 'admin' }}</b><small>Administrator</small></div><span>⌄</span></summary>
+          <div class="account-popover">
+            <button type="button" data-action="nav" data-view="settings"><span>⚙</span> تنظیمات حساب</button>
+            <form action="/logout" method="post"><button type="submit"><span>↪</span> خروج امن</button></form>
+          </div>
+        </details>
       </div>
     </header>
+
+    <section class="page-titlebar">
+      <div><div class="eyebrow" id="pageContext">MAKIA CONTROL CENTER</div><h1 id="pageTitle">داشبورد</h1></div>
+      <div class="page-title-actions"><span class="top-live-badge"><i></i>ONLINE</span><button class="primary top-create" type="button" data-shell-action="create-access">＋ ساخت کاربر جدید</button></div>
+    </section>
+
     <section id="content" aria-live="polite"></section>
   </main>
 
@@ -100,6 +97,7 @@
     window.PANEL_DOMAIN='{{panel_domain}}';
     window.MAKIA_THEME='{{theme}}';
     window.MAKIA_DENSITY='{{density}}';
+    window.MAKIA_USER='{{current_username or "admin"}}';
   </script>
   <script src="/static/app.js?v={{version}}"></script>
 </body>

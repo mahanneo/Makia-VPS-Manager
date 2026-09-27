@@ -1,1 +1,34 @@
-<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071b34"><meta name="application-name" content="Makia VPS Manager"><title>{{app_name}}</title><link rel="manifest" href="/static/manifest.webmanifest?v={{version}}"><link rel="icon" href="/static/makia.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/app.css?v={{version}}"></head><body class="login-body" data-theme="glass"><div class="login-orb orb-a"></div><div class="login-orb orb-b"></div><main class="login-card"><div class="brand-mark login-mark">M</div><div class="eyebrow centered">SECURE SERVER CONTROL</div><h1>MAKIA <span>VPS</span></h1><p>Fast, clear and secure VPS management.</p>{% if error %}<div class="alert">{{error}}</div>{% endif %}<form method="post"><label>نام کاربری<input name="username" autocomplete="username" required placeholder="admin"></label><label>رمز عبور<input name="password" type="password" autocomplete="current-password" required placeholder="••••••••••••"></label><button class="primary-btn" type="submit">ورود به کنترل‌سنتر</button></form><div class="login-meta"><span>Signed session</span><span>v{{version}}</span></div></main></body></html>
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#031229">
+  <meta name="application-name" content="Makia VPS Manager">
+  <title>{{app_name}}</title>
+  <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css?v={{version}}">
+</head>
+<body class="login-body neon-login-body" data-theme="glass">
+  <div class="login-landscape" aria-hidden="true">
+    <div class="mountain mountain-a"></div>
+    <div class="mountain mountain-b"></div>
+    <div class="mountain mountain-c"></div>
+    <div class="lake-glow"></div>
+  </div>
+  <main class="login-shell-card">
+    <div class="login-logo-wrap"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
+    <div class="login-copy"><h1>ورود به پنل</h1><p>مدیریت حرفه‌ای سرور و کاربران از یک کنترل‌سنتر امن</p></div>
+    {% if error %}<div class="alert">{{error}}</div>{% endif %}
+    <form method="post" class="neon-login-form">
+      <label><span>نام کاربری</span><div class="login-input-wrap"><i>♙</i><input name="username" autocomplete="username" required placeholder="admin"></div></label>
+      <label><span>رمز عبور</span><div class="login-input-wrap"><i>⌑</i><input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="••••••••••••"><button class="login-eye" type="button" id="toggleLoginPassword" aria-label="نمایش رمز">◉</button></div></label>
+      <div class="login-options"><span>● نشست امن</span><span>اتصال رمزنگاری‌شده</span></div>
+      <button class="login-submit" type="submit">ورود به پنل <b>←</b></button>
+    </form>
+    <div class="login-footer"><span>Secure Control Center</span><span>v{{version}}</span></div>
+  </main>
+<script>document.getElementById("toggleLoginPassword")?.addEventListener("click",()=>{const p=document.getElementById("loginPassword");if(!p)return;p.type=p.type==="password"?"text":"password"});</script>
+</body>
+</html>

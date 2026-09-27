@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.0-rc1] - 2026-09-27
+
+### Neon dashboard rebuild
+- Rebuilt the authenticated panel shell from the ground up around the approved dark navy / electric-blue / violet visual direction.
+- Replaced the previous navigation hierarchy with a compact RTL sidebar grouped by user management, server/services, reporting, and settings/tools.
+- Added persistent protocol sub-navigation for SSH, V2Ray/Xray, WireGuard and OpenVPN.
+- Rebuilt the top bar with global search, refresh, account menu and a global Create User action.
+- Rebuilt Login and 2FA with the same Makia visual system and responsive glass card treatment.
+- Rebuilt Dashboard around four operational KPI cards, 24h live metrics, protocol distribution and service health.
+- Reworked SSH, Xray, WireGuard and OpenVPN workspaces into table-first management screens with compact stats and primary create actions.
+- Reworked Services into an operational service-control list and Protocol Hub into a dedicated Port Management view driven by the real Endpoint Matrix.
+- Kept existing backend APIs and security/backup/update/support workflows intact; this release is a frontend architecture replacement, not a backend reset.
+- Added responsive contracts for desktop and mobile and updated browser smoke coverage.
+
+### Release status
+- Release candidate pending real-host visual/UAT review and external connectivity validation.
+
 ## [0.22.0-rc1] - 2026-09-27
 
 ### Full Stack Ready installation
