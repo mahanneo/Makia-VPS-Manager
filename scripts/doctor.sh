@@ -140,8 +140,28 @@ fi
 
 if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then
   ok "Stunnel tooling" "installed"
+  if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then check_service stunnel4 "Stealth TLS/Stunnel" yes; else warn "Stealth TLS/Stunnel" "not configured"; fi
 else
   fail "Stunnel tooling" "not installed"
+fi
+
+if command -v ipsec >/dev/null 2>&1; then
+  ok "IKEv2 tooling" "strongSwan installed"
+  if grep -q '# BEGIN MAKIA IKEV2' /etc/ipsec.conf 2>/dev/null; then
+    if systemctl is-active --quiet strongswan-starter || systemctl is-active --quiet strongswan; then ok "IKEv2 runtime" "active"; else fail "IKEv2 runtime" "configured but inactive"; fi
+    if ss -H -lun 2>/dev/null | grep -Eq ':(500|4500)([[:space:]]|$)'; then ok "IKEv2 listeners" "UDP/500 or UDP/4500 active"; else fail "IKEv2 listeners" "missing UDP/500 and UDP/4500"; fi
+  else
+    warn "IKEv2 runtime" "tooling ready, not configured"
+  fi
+else
+  fail "IKEv2 tooling" "strongSwan missing; run makia-upgrade"
+fi
+
+if command -v wstunnel >/dev/null 2>&1; then
+  ok "WStunnel tooling" "$(wstunnel --version 2>/dev/null | head -n1)"
+  if [[ -f /etc/makia-vps-manager/wstunnel.env ]]; then check_service makia-wstunnel "WStunnel runtime" yes; else warn "WStunnel runtime" "tooling ready, not configured"; fi
+else
+  fail "WStunnel tooling" "missing; run makia-upgrade"
 fi
 
 printf '\nSummary: %d PASS · %d WARN · %d FAIL\n\n' "$PASS" "$WARN" "$FAIL"
