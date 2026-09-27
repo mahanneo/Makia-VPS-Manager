@@ -1528,7 +1528,7 @@ function switchView(v){
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.sanaei-nav-group').forEach(g=>{
     const name=g.querySelector('.sanaei-group-toggle')?.dataset.group;
-    if((name==='settings'&&v==='settings')||(name==='xraytools'&&['xray','inbounds'].includes(v))||(name==='protocolclients'&&['ssh','xray','wireguard','openvpn'].includes(v)))g.classList.add('open');
+    if((name==='settings'&&v==='settings')||(name==='protocolclients'&&['ssh','xray','wireguard','openvpn'].includes(v)))g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
   document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');
