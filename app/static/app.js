@@ -239,18 +239,22 @@ async function openProvisionWizard(protocol){
   const initialEndpoint=window.PANEL_DOMAIN||location.hostname;
   const initialMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(initialEndpoint)?'ip':'domain';
   const ovpn=window.__protocolData?.openvpn||{};
+  const usedXrayPorts=new Set((window.__protocolData?.xray?.inbounds||[]).map(x=>Number(x.port)));
+  let xrayPort=Number(d.xray_port||2087);
+  while(usedXrayPorts.has(xrayPort)&&xrayPort<65535)xrayPort++;
   provisionState={
     step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',
     endpoint:initialEndpoint,endpointMode:initialMode,
     endpointValues:{ip:initialMode==='ip'?initialEndpoint:'',domain:initialMode==='domain'?initialEndpoint:''},
     password:'',passwordMode:d.ssh_password_mode||'pin6',
     expireDate:'',plan:'',note:'',sessions:Number(d.ssh_sessions||1),devices:Number(d.ssh_devices||1),
-    xrayProtocol:d.xray_protocol||'vless',port:Number(d.xray_port||2087),transport:d.xray_transport||'xhttp',security:d.xray_security||'reality',path:d.xray_path||'/makia',
+    xrayProtocol:d.xray_protocol||'vless',port:xrayPort,transport:'tcp',security:'reality',simpleMode:true,path:d.xray_path||'/makia',
     sni:d.xray_sni||'www.microsoft.com',realityDest:d.xray_reality_target||'www.microsoft.com:443',
     quota:Number(d.xray_quota_gb??50),expireDays:Number(d.xray_expire_days??30),resetDays:Number(d.xray_reset_days??30),
     dns:d.wireguard_dns||'1.1.1.1',wgPort:Number(d.wireguard_port||443),wgMtu:Number(d.wireguard_mtu||1280),wgKeepalive:Number(d.wireguard_keepalive??15),wgAllowedIps:d.wireguard_allowed_ips||'0.0.0.0/0',wgCidr:d.wireguard_cidr||'10.66.66.1/24',ovpnProto:String(ovpn.proto||d.openvpn_proto||'udp').startsWith('tcp')?'tcp':'udp',ovpnPort:Number(ovpn.port||d.openvpn_port||1194),
     packagePassword:''
   };
+  applySimpleXrayPreset(provisionState);
   if(protocol==='ssh'){
     const mode=d.ssh_password_mode||'pin6';
     const sec=await api('/api/accounts/generate-secret?mode='+encodeURIComponent(mode)).catch(()=>({secret:''}));
@@ -340,6 +344,12 @@ function wizardIdentityFields(s){
   ].join('');
 }
 
+function applySimpleXrayPreset(s){
+  const presets={vless:['tcp','reality'],vmess:['tcp','none'],trojan:['tcp','tls'],shadowsocks:['tcp','none'],hysteria2:['tcp','tls'],http:['tcp','none'],socks:['tcp','none']};
+  [s.transport,s.security]=presets[s.xrayProtocol]||presets.vless;
+  if(s.security==='tls'&&s.endpointMode==='domain')s.sni=s.endpoint;
+}
+
 function wizardEndpointFields(s){
   const mode=s.endpointMode==='ip'?'ip':'domain';
   return '<label>Endpoint type<select id="wizEndpointMode"><option value="domain" '+(mode==='domain'?'selected':'')+'>دامنه</option><option value="ip" '+(mode==='ip'?'selected':'')+'>IPv4 عمومی</option></select></label>'+
@@ -354,8 +364,10 @@ function wizardPolicyFields(s){
     '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label></div>',
     '<div class="wizard-note"><b>Security</b><span>PIN 4 مجاز است، اما برای سرویس عمومی PIN 6 یا Strong توصیه می‌شود.</span></div>'
   ].join('');
-  if(s.protocol==='xray') return [
-    '<div class="wizard-section-title"><h4>Network & Limits</h4><p>Transport، Security و محدودیت‌های Client را تعیین کن.</p></div>',
+  if(s.protocol==='xray'){
+    const intro='<div class="wizard-section-title"><h4>Network & Limits</h4><p>Transport، Security و محدودیت‌های Client را تعیین کن.</p></div>';
+    if(s.simpleMode)return intro+'<div class="wizard-note"><b>ساخت ساده</b><span>'+htmlEsc(s.xrayProtocol.toUpperCase())+' با '+htmlEsc(s.transport.toUpperCase())+' و '+htmlEsc(s.security.toUpperCase())+' ساخته می‌شود. محدودیت حجم، زمان و دستگاه اعمال نمی‌شود.'+(s.security==='tls'?' برای TLS، گواهی معتبر همان SNI باید روی سرور موجود باشد.':'')+'</span></div><button class="soft" data-action="wizard-xray-advanced">تنظیمات پیشرفته</button>';
+    return [intro,
     '<div class="wizard-form three"><label>Transport<select id="wizTransport">',
     ['tcp','ws','grpc','httpupgrade','xhttp','kcp'].map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join(''),
     '</select></label><label>Security<select id="wizSecurity"><option value="none" '+(s.security==='none'?'selected':'')+'>None</option><option value="tls" '+(s.security==='tls'?'selected':'')+'>TLS</option><option value="reality" '+(s.security==='reality'?'selected':'')+'>REALITY</option></select></label>',
@@ -365,8 +377,9 @@ function wizardPolicyFields(s){
     '<label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota)+'"><small>0 = Unlimited</small></label>',
     '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label>',
     '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
-    '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div>'
+    '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div><button class="soft" data-action="wizard-xray-simple">بازگشت به ساخت ساده</button>'
   ].join('');
+  }
   return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>تنظیمات پایه آماده است</h4><p>برای '+htmlEsc(s.protocol)+' تنظیم اضافی لازم نیست. در مرحله بعد اطلاعات و رمز بسته تحویل را بررسی کن.</p></div>';
 }
 
@@ -376,7 +389,7 @@ function wizardReview(s){
   summary.push(['Name',s.name]);
   if(s.endpoint)summary.push(['Endpoint ('+(s.endpointMode==='ip'?'IP':'Domain')+')',s.endpoint]);
   if(s.protocol==='ssh'){summary.push(['Expire',s.expireDate||'No expiry']);summary.push(['Sessions',s.sessions]);summary.push(['Devices',s.devices])}
-  if(s.protocol==='xray'){summary.push(['Port',s.port]);summary.push(['Transport',s.transport]);summary.push(['Security',s.security]);summary.push(['Quota',s.quota?String(s.quota)+' GB':'Unlimited']);summary.push(['Days',s.expireDays||'Unlimited'])}
+  if(s.protocol==='xray'){summary.push(['Port',s.port]);summary.push(['Transport',s.transport]);summary.push(['Security',s.security]);summary.push(['Quota',s.simpleMode?'Unlimited':s.quota?String(s.quota)+' GB':'Unlimited']);summary.push(['Days',s.simpleMode?'Unlimited':s.expireDays||'Unlimited'])}
   return [
     '<div class="wizard-section-title"><h4>Review & Delivery</h4><p>قبل از ساخت، اطلاعات نهایی را کنترل کن.</p></div>',
     '<div class="review-grid">'+summary.map(x=>'<div><span>'+htmlEsc(x[0])+'</span><b>'+htmlEsc(x[1])+'</b></div>').join('')+'</div>',
@@ -437,7 +450,8 @@ function validateWizardStep(){
 }
 
 async function wizardNext(){
-  captureWizard();const err=validateWizardStep();if(err){alert(err);return}
+  captureWizard();if(provisionState.step===2&&provisionState.protocol==='xray'&&provisionState.simpleMode)applySimpleXrayPreset(provisionState);
+  const err=validateWizardStep();if(err){alert(err);return}
   provisionState.step=Math.min(4,provisionState.step+1);
   if(provisionState.step===4&&!provisionState.packagePassword){
     const r=await api('/api/accounts/generate-secret?mode=pin6').catch(()=>({secret:''}));provisionState.packagePassword=r.secret||'';
@@ -456,7 +470,7 @@ async function createProvisionedAccess(){
       r=await api('/api/accounts',{method:'POST',body:JSON.stringify({username:s.name,password:s.password,password_mode:'manual',endpoint:s.endpoint,endpoint_mode:s.endpointMode,expire_date:s.expireDate||null,plan:s.plan,note:s.note,connection_limit:s.sessions,device_limit:s.devices,quota_mb:0,renewal_days:0})});
       key=s.name;
     }else if(s.protocol==='xray'){
-      r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify({protocol:s.xrayProtocol,port:s.port,name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,transport:s.transport,security:s.security,path_value:s.path,server_name:s.sni,reality_dest:s.realityDest,quota_gb:s.quota,expire_days:s.expireDays,ip_limit:s.devices,reset_days:s.resetDays})});
+      r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify({protocol:s.xrayProtocol,port:s.port,name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,transport:s.transport,security:s.security,path_value:s.path,server_name:s.sni,reality_dest:s.realityDest,quota_gb:s.simpleMode?0:s.quota,expire_days:s.simpleMode?0:s.expireDays,ip_limit:s.simpleMode?50:s.devices,reset_days:s.simpleMode?0:s.resetDays})});
       kind='xray';key=String(r.client_id);
     }else if(s.protocol==='wireguard'){
       r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,dns:s.dns,mtu:s.wgMtu,keepalive:s.wgKeepalive,allowed_ips:s.wgAllowedIps})});key=s.name;
@@ -1021,19 +1035,19 @@ async function openOpenVPNDiagnostics(){
     modalRoot.innerHTML=[
       '<div class="modal-backdrop"><div class="modal diagnostics-modal openvpn-diagnostics-modal">',
       '<div class="wizard-head"><div><div class="eyebrow">OPENVPN DOMAIN DIAGNOSTICS</div><h3>'+htmlEsc(endpoint)+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
-      '<div class="xray-diagnostic-grid"><div><span>Service</span><b class="'+(d.service_active?'ok-text':'bad-text')+'">'+(d.service_active?'ACTIVE':'DOWN')+'</b></div><div><span>Listener</span><b class="'+(d.listener?'ok-text':'bad-text')+'">'+(d.listener?'READY':'MISSING')+'</b></div><div><span>Transport</span><b>'+htmlEsc(String(d.proto||'-'))+' : '+htmlEsc(String(d.port||'-'))+'</b></div><div><span>DNS → VPS</span><b class="'+(d.dns_matches_server===false?'bad-text':'ok-text')+'">'+(d.endpoint_is_ip?'DIRECT IP':d.dns_matches_server===false?'MISMATCH':'OK / UNKNOWN')+'</b></div></div>',
+      '<div class="xray-diagnostic-grid"><div><span>Service</span><b class="'+(d.service_active?'ok-text':'bad-text')+'">'+(d.service_active?'ACTIVE':'DOWN')+'</b></div><div><span>Listener</span><b class="'+(d.listener?'ok-text':'bad-text')+'">'+(d.listener?'READY':'MISSING')+'</b></div><div><span>Transport</span><b>'+htmlEsc(String(d.proto||'-'))+' : '+htmlEsc(String(d.port||'-'))+'</b></div><div><span>DNS → VPS</span><b class="'+(d.dns_matches_server===false?'bad-text':'ok-text')+'">'+(d.endpoint_is_ip?'DIRECT IP':d.dns_matches_server===false?'MISMATCH':'OK / UNKNOWN')+'</b></div><div><span>FORWARD</span><b class="'+(d.forwarding?.forward_in===false||d.forwarding?.forward_out===false?'bad-text':'ok-text')+'">'+(d.forwarding?.forward_in===true&&d.forwarding?.forward_out===true?'READY':'UNKNOWN / MISSING')+'</b></div><div><span>NAT</span><b class="'+(d.forwarding?.nat===false?'bad-text':'ok-text')+'">'+(d.forwarding?.nat===true?'READY':'UNKNOWN / MISSING')+'</b></div></div>',
       '<div class="domain-resolution-grid"><div><span>A / IPv4</span><code>'+htmlEsc((d.resolved_ipv4||[]).join(', ')||'none')+'</code></div><div><span>AAAA / IPv6</span><code>'+htmlEsc((d.resolved_ipv6||[]).join(', ')||'none')+'</code></div><div><span>VPS IPv4</span><code>'+htmlEsc((d.local_ipv4||[]).join(', ')||'unknown')+'</code></div></div>',
       d.hybrid_available?'<div class="wizard-note success-note"><b>Domain + IP Smart Fallback</b><span>پروفایل جدید ابتدا '+htmlEsc(endpoint)+' را امتحان می‌کند و اگر مسیر دامنه/DNS روی Client جواب نداد، به '+htmlEsc(d.hybrid_fallback_ipv4||'IPv4 VPS')+' سوییچ می‌کند.</span></div>':'',
       warnings?'<div class="diagnostic-hints">'+warnings+'</div>':'<div class="wizard-note"><b>Domain endpoint ready</b><span>دامنه به IPv4 این VPS می‌رسد و Listener OpenVPN فعال است.</span></div>',
       '<div class="wizard-note"><b>SSL clarification</b><span>گواهی HTTPS پنل برای Nginx است. OpenVPN از CA/Certificate داخلی خودش استفاده می‌کند؛ Cloudflare/HTTP proxy معمولی نمی‌تواند UDP/TCP خام OpenVPN را Forward کند.</span></div>',
-      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="ghost" data-action="openvpn-repair">Normalize IPv4</button><button class="primary" data-action="client-guide" data-kind="openvpn">راهنمای کاربر</button></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="ghost" data-action="openvpn-repair">Repair IPv4 / Forwarding</button><button class="primary" data-action="client-guide" data-kind="openvpn">راهنمای کاربر</button></div>',
       '</div></div>'
     ].join('');
   }catch(e){alert('OpenVPN diagnostics: '+e.message)}
 }
 async function repairOpenVPNRuntime(){
-  if(!confirm('OpenVPN server.conf به udp4/tcp4 و IPv4 listener نرمال شود؟ قبل از تغییر Backup گرفته می‌شود و در Failure rollback خواهد شد.'))return;
-  try{await api('/api/protocols/openvpn/repair',{method:'POST'});toast('OpenVPN IPv4 runtime normalized');await openOpenVPNDiagnostics()}catch(e){alert('OpenVPN repair: '+e.message)}
+  if(!confirm('OpenVPN IPv4 و قوانین FORWARD/NAT مدیریت‌شده اصلاح شوند؟ پیش از تغییر Backup گرفته می‌شود و در خطا Rollback انجام می‌شود. سرویس کوتاه Restart خواهد شد.'))return;
+  try{await api('/api/protocols/openvpn/repair',{method:'POST'});toast('OpenVPN runtime repaired');await openOpenVPNDiagnostics()}catch(e){alert('OpenVPN repair: '+e.message)}
 }
 
 async function services(renderToken=window.__viewRenderToken){
@@ -1347,7 +1361,7 @@ function operatorPayloadFromUi(){
     ssh_devices:readSettingValue('opSshDevices',Number(x.ssh_devices||1)),
     xray_protocol:readSettingValue('opXrayProtocol',x.xray_protocol||'vless'),
     xray_port:readSettingValue('opXrayPort',Number(x.xray_port||2087)),
-    xray_transport:readSettingValue('opXrayTransport',x.xray_transport||'xhttp'),
+    xray_transport:readSettingValue('opXrayTransport',x.xray_transport||'tcp'),
     xray_security:readSettingValue('opXraySecurity',x.xray_security||'reality'),
     xray_path:readSettingValue('opXrayPath',x.xray_path||'/makia'),
     xray_sni:readSettingValue('opXraySni',x.xray_sni||'www.microsoft.com'),
@@ -1436,6 +1450,8 @@ async function handleMakiaAction(btn){
   if(action==='nav'){closeModal();switchView(btn.dataset.view);return}
   if(action==='wizard-open'){await openProvisionWizard(btn.dataset.kind||null);return}
   if(action==='wizard-protocol'){await selectWizardProtocol(btn.dataset.kind);return}
+  if(action==='wizard-xray-advanced'){captureWizard();provisionState.simpleMode=false;renderProvisionWizard();return}
+  if(action==='wizard-xray-simple'){captureWizard();provisionState.simpleMode=true;applySimpleXrayPreset(provisionState);renderProvisionWizard();return}
   if(action==='wizard-next'){await wizardNext();return}
   if(action==='wizard-prev'){wizardPrev();return}
   if(action==='wizard-create'){await createProvisionedAccess();return}
@@ -1545,7 +1561,12 @@ document.addEventListener('change',e=>{
     captureWizard();
     provisionState.endpointMode=next;
     provisionState.endpoint=provisionState.endpointValues[next]||'';
+    if(provisionState.protocol==='xray'&&provisionState.simpleMode)applySimpleXrayPreset(provisionState);
     renderProvisionWizard();
+  }
+  if(e.target.id==='wizXrayProtocol'&&provisionState){
+    captureWizard();
+    if(provisionState.simpleMode)applySimpleXrayPreset(provisionState);
   }
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});

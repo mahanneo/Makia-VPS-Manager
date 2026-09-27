@@ -194,6 +194,21 @@ def main():
             assert "8.8.8.8" in page.locator(".review-grid").text_content()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
+            page.evaluate("window.__protocolData.xray.installed=true")
+            page.locator('[data-shell-action="create-access"]').click()
+            page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
+            page.locator("#wizXrayProtocol").select_option("vmess")
+            page.locator("#wizEndpoint").fill("vpn.example.com")
+            page.locator('[data-action="wizard-next"]').click()
+            assert "VMESS" in page.locator(".wizard-note").text_content()
+            assert "TCP" in page.locator(".wizard-note").text_content()
+            assert "NONE" in page.locator(".wizard-note").text_content()
+            assert page.locator("#wizSecurity").count()==0
+            page.locator('[data-action="wizard-xray-advanced"]').click()
+            assert page.locator("#wizSecurity").count()==1
+            page.locator('[data-action="wizard-xray-simple"]').click()
+            page.locator('.close-btn[data-action="modal-close"]').click()
+
             page.locator('aside.sidebar button[data-view="dashboard"]').click()
             page.locator(".glass-status-hero").wait_for()
             page.locator('[data-action="self-test"]').click()

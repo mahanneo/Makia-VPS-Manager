@@ -160,3 +160,70 @@ def test_openvpn_client_rejects_wrong_port_before_issuing_certificate(tmp_path,m
     monkeypatch.setattr(protocol_ops.subprocess,"run",lambda *args,**kw:(_ for _ in ()).throw(AssertionError("must not issue certificate")))
     with pytest.raises(protocol_ops.ProtocolError,match="match the OpenVPN server"):
         protocol_ops.create_openvpn_client("client02","8.8.8.8",443,"udp")
+
+
+def test_openvpn_gateway_scripts_add_forward_and_nat_rules(tmp_path,monkeypatch):
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",tmp_path)
+    up,down=protocol_ops._openvpn_forward_scripts("eth0")
+    assert 'iptables -I FORWARD 1 -i "$dev" -j ACCEPT' in up.read_text()
+    assert 'iptables -I FORWARD 1 -o "$dev" -j ACCEPT' in up.read_text()
+    assert "-s 10.8.0.0/24 -o eth0 -j MASQUERADE" in up.read_text()
+    assert 'iptables -D FORWARD -i "$dev" -j ACCEPT' in down.read_text()
+    assert 'iptables -D FORWARD -o "$dev" -j ACCEPT' in down.read_text()
+    import subprocess
+    for script in (up,down):
+        assert subprocess.run(["sh","-n",str(script)],check=False).returncode==0
+
+
+def test_openvpn_repair_updates_managed_gateway_and_preserves_config(tmp_path,monkeypatch):
+    ovpn=tmp_path/"openvpn"
+    (ovpn/"server").mkdir(parents=True)
+    up=ovpn/"makia-up.sh"
+    down=ovpn/"makia-down.sh"
+    for script in (up,down): script.write_text("#!/bin/sh\n",encoding="utf-8")
+    conf=ovpn/"server/server.conf"
+    conf.write_text(f"port 1194\nproto udp4\ndev tun\nup {up}\ndown {down}\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"eth0")
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_active",lambda name:True)
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{"service_active":True,"listener":True})
+    result=protocol_ops.repair_openvpn_ipv4_runtime()
+    assert "iptables -I FORWARD" in up.read_text()
+    assert "iptables -I FORWARD" in down.read_text() or "iptables -D FORWARD" in down.read_text()
+    assert "proto udp4" in conf.read_text()
+    assert Path(result["backup"]).exists()
+
+
+def test_openvpn_diagnostics_report_missing_forward_rules(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{"port":1194,"proto":"udp4","service_active":True,"listener":True})
+    monkeypatch.setattr(protocol_ops,"_openvpn_forwarding_runtime",lambda:{"interface":"tun0","forward_in":False,"forward_out":False,"nat":False})
+    result=protocol_ops.openvpn_endpoint_diagnostics("8.8.8.8")
+    assert any("FORWARD" in warning for warning in result["warnings"])
+    assert any("NAT" in warning for warning in result["warnings"])
+
+
+def test_openvpn_repair_restores_gateway_scripts_if_restart_fails(tmp_path,monkeypatch):
+    ovpn=tmp_path/"openvpn"
+    (ovpn/"server").mkdir(parents=True)
+    up=ovpn/"makia-up.sh"
+    down=ovpn/"makia-down.sh"
+    up.write_text("#!/bin/sh\nold-up\n")
+    down.write_text("#!/bin/sh\nold-down\n")
+    conf=ovpn/"server/server.conf"
+    original=f"port 1194\nproto udp\ndev tun\nup {up}\ndown {down}\n"
+    conf.write_text(original)
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"eth0")
+    calls=[]
+    def restart(*args,**kwargs):
+        calls.append(args)
+        if len(calls)==1: raise protocol_ops.ProtocolError("restart failed")
+        return ""
+    monkeypatch.setattr(protocol_ops,"_run",restart)
+    with pytest.raises(protocol_ops.ProtocolError,match="restart failed"):
+        protocol_ops.repair_openvpn_ipv4_runtime()
+    assert conf.read_text()==original
+    assert up.read_text()=="#!/bin/sh\nold-up\n"
+    assert down.read_text()=="#!/bin/sh\nold-down\n"
+    assert len(calls)==2

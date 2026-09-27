@@ -4,7 +4,7 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current code baseline:** `v0.18.0`
+> **Current code baseline:** `v0.18.1`
 > CI validates the repository; connectivity on a real VPS still requires external-client UAT.
 
 ## v0.18 IP / domain choice
@@ -12,6 +12,7 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 - Client exports keep the selected address. OpenVPN profile downloads no longer switch to the panel domain; an existing imported client profile still needs to be re-imported if its endpoint changes.
 - A direct VPN hostname needs DNS-only routing to the VPS. Xray TLS/REALITY has separate SNI and certificate requirements, and may use a supported proxy transport.
 - See [v0.18 protocol UAT](docs/UAT-0.18.0.md) for the IP/domain matrix and the remaining live VPS checks.
+- The [v0.18.1 connectivity patch UAT](docs/UAT-0.18.1.md) covers the simplified Xray wizard and OpenVPN forwarding repair.
 
 ## v0.16 Owner Control Center & consent-based Remote Support
 - A separate Owner Control Center manages customers, installations, signed licenses, renewals, revocations, support tickets and owner audit history.
