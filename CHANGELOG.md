@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.27.0-rc1] - 2026-09-27
+
+### Real connection modes
+- Added a first-class **Change Protocol** workspace with six real modes: IKEv2, WireGuard, OpenVPN UDP, OpenVPN TCP, Stealth/TLS and WStunnel/WSS.
+- IKEv2 is backed by StrongSwan/swanctl with EAP-MSCHAPv2 users, Let's Encrypt server identity, UDP/500 + UDP/4500 and managed forwarding/NAT.
+- WireGuard continues to use the existing peer/key/QR/handshake/traffic backend.
+- UDP and TCP map to the real managed OpenVPN server transport rather than decorative protocol labels.
+- Stealth wraps OpenVPN/TCP with a real Stunnel TLS listener.
+- WStunnel wraps OpenVPN/TCP in WSS using pinned wstunnel v11.0.0 and verified release checksums.
+- TCP port collisions are rejected instead of silently breaking Nginx/HTTPS or another listener. WireGuard/OpenVPN UDP remain transport-distinct from HTTPS TCP/443.
+
+### Delivery and host lifecycle
+- IKEv2 users receive native credential text plus Protected ZIP support through the existing Access artifact pipeline.
+- Installer/updater provision StrongSwan, wstunnel and hardened systemd units outside the web-service sandbox.
+- Rebuilt the corrupted host UAT smoke script and added optional-runtime checks for configured IKEv2, Stealth and WStunnel services.
+
+### Validation boundary
+- Stealth requires a client-side Stunnel-compatible wrapper; WStunnel requires the wstunnel client plus OpenVPN. They are not falsely advertised as import-only OpenVPN profiles.
+- The managed OpenVPN architecture still has one active UDP-or-TCP server profile; 0.27 does not pretend both transports are simultaneously active.
+- Stable remains blocked on real VPS upgrade/clean-install UAT and real client testing from inside Iran.
+
 ## [0.26.0-rc1] - 2026-09-27
 
 ### Host bug fixes
