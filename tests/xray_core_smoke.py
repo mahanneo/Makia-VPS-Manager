@@ -83,6 +83,36 @@ def main():
             "streamSettings":vmess_stream,
         })
 
+        # Additional guided transport/security combinations: the UI only
+        # offers combinations that this exact Xray Core can validate.
+        extra_profiles=[
+            ("vless","grpc","reality","/grpc","www.microsoft.com","www.microsoft.com:443",21011),
+            ("vless","ws","tls","/vless-ws","test.example.com","",21012),
+            ("vless","httpupgrade","tls","/vless-up","test.example.com","",21013),
+            ("vless","kcp","none","makia-kcp","","",21014),
+            ("vmess","grpc","tls","/vm-grpc","test.example.com","",21015),
+            ("vmess","xhttp","none","/vm-xhttp","","",21016),
+        ]
+        for idx,(proto,transport,security,path_value,sni,target_dest,port) in enumerate(extra_profiles):
+            stream,_=protocol_ops._build_xray_stream(binary,proto,transport,security,path_value,sni,target_dest)
+            cid=str(uuid.uuid4())
+            settings={"clients":[{"id":cid,"email":f"ci-extra-{idx}","level":0}]}
+            if proto=="vless":
+                settings["decryption"]="none"
+            data["inbounds"].append({
+                "tag":f"makia-ci-extra-{idx}","listen":"127.0.0.1","port":port,"protocol":proto,
+                "settings":settings,"streamSettings":stream,
+            })
+
+        # Trojan WebSocket/gRPC + TLS.
+        for idx,transport in enumerate(("ws","grpc"),start=18):
+            stream,_=protocol_ops._build_xray_stream(binary,"trojan",transport,"tls","/trojan","test.example.com","")
+            data["inbounds"].append({
+                "tag":f"makia-ci-trojan-{transport}","listen":"127.0.0.1","port":21000+idx,"protocol":"trojan",
+                "settings":{"clients":[{"password":f"ci-trojan-{transport}","email":f"ci-trojan-{transport}","level":0}]},
+                "streamSettings":stream,
+            })
+
         # Trojan + TLS using a real generated certificate.
         trojan_stream,_=protocol_ops._build_xray_stream(binary,"trojan","tcp","tls","/","test.example.com","")
         data["inbounds"].append({
@@ -137,7 +167,7 @@ def main():
 
         assert reality_meta["public_key"]
         assert reality_meta["short_id"]
-        print("Xray 26.3.27 guided protocol matrix PASS: VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP, SOCKS5")
+        print("Xray 26.3.27 guided matrix PASS: VLESS RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP; VMess WS/gRPC/XHTTP; Trojan TCP/WS/gRPC; Shadowsocks; Hysteria2; HTTP; SOCKS5")
     finally:
         cover.shutdown();cover.server_close()
         protocol_ops._xray_materialize_tls=original_tls
