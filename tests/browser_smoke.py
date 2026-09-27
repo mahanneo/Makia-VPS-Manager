@@ -379,6 +379,21 @@ def main():
             leave_sidebar(page)
             page.locator(".port-management-panel").wait_for()
             assert page.locator(".port-table-row").count()>=1
+            page.locator(".connection-modes-panel").wait_for()
+            assert page.locator(".connection-mode-card").count()==6
+            mode_text=page.locator(".connection-modes-panel").inner_text()
+            for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
+                assert label in mode_text
+            page.locator('[data-action="protocol-mode-config"][data-mode="ikev2"]').click()
+            page.locator("#modeIkeDomain").wait_for()
+            assert page.locator("#modeIkePool").input_value()=="10.99.0.0/24"
+            page.locator('.close-btn[data-action="modal-close"]').click()
+            page.locator('[data-action="protocol-mode-config"][data-mode="stealth"]').click()
+            assert page.locator("#modeStealthPort").input_value()=="8443"
+            page.locator('.close-btn[data-action="modal-close"]').click()
+            page.locator('[data-action="protocol-mode-config"][data-mode="wstunnel"]').click()
+            assert page.locator("#modeWsPort").input_value()=="9443"
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.screenshot(path='/tmp/makia-ports.png',full_page=True)
             page.locator('.pro-sidebar button[data-view="settings"]').click()
             page.locator(".settings-content-v2").wait_for()
