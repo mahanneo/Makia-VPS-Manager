@@ -165,11 +165,11 @@ command -v certbot >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 command -v swanctl >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' python3-certbot-nginx 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' charon-systemd 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
-dpkg-query -W -f='${Status}' libcharon-extra-plugins 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
+dpkg-query -W -f='${Status}' libcharon-extauth-plugins 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
   echo "Ensuring host security/TLS/IKEv2 packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan-swanctl charon-systemd strongswan-pki libcharon-extra-plugins
+  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan-swanctl charon-systemd strongswan-pki libcharon-extauth-plugins
 fi
 bash "$SRC/scripts/install-wstunnel.sh"
 
