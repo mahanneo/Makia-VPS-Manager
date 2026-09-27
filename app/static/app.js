@@ -85,7 +85,7 @@ async function dashboard(renderToken=window.__viewRenderToken){
             '<div><i style="background:#ff4c62"></i><span>OpenVPN</span><b>'+counts.openvpn+'</b></div>',
           '</div></div></div>',
       '</section>',
-      '<section class="panel"><div class="panel-head"><div><h3>وضعیت سرویس‌های اصلی</h3><span>LIVE SYSTEMD STATUS</span></div><button class="ghost" data-action="nav" data-view="services">مدیریت سرویس‌ها</button></div><div class="neon-service-strip">'+svc+'</div></section>',
+      '<section class="panel"><div class="panel-head"><div><h3>وضعیت سرویس‌های اصلی</h3><span>LIVE SYSTEMD STATUS</span></div><div class="toolbar"><button class="ghost" data-action="self-test">Self-Test</button><button class="ghost" data-action="nav" data-view="services">مدیریت سرویس‌ها</button></div></div><div class="neon-service-strip">'+svc+'</div></section>',
     '</div>'
   ].join('');
 }
@@ -763,7 +763,7 @@ async function wireguard(renderToken=window.__viewRenderToken){
       '<button class="'+(enabled?'soft':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(enabled?'0':'1')+'">'+(enabled?'خاموش':'روشن')+'</button><button class="danger" data-action="revoke-access" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">حذف</button></div></div>';
   }).join('');
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon wg">WG</span><div><h2>WireGuard</h2><p>مدیریت Peerها، Handshake و ترافیک کاربران WireGuard</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="wireguard-diagnostics">Diagnostics</button><button class="ghost" data-action="nav" data-view="settings">تنظیمات WireGuard</button><button class="primary" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ایجاد همتا جدید':'راه‌اندازی WireGuard')+'</button></div></section>',
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon wg">WG</span><div><h2>WireGuard</h2><p>مدیریت Peerها، Handshake و ترافیک کاربران WireGuard</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="wireguard-diagnostics">Diagnostics</button><button class="ghost" data-action="nav" data-view="settings">تنظیمات WireGuard</button><button class="primary" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ساخت همتا جدید':'راه‌اندازی WireGuard')+'</button></div></section>',
     '<section class="wg-workspace-metrics"><div><span>کل همتاها</span><b>'+peers.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>Handshake اخیر</span><b>'+connected+'</b></div><div><span>ترافیک کل</span><b>'+fmtBytes(rx+tx)+'</b></div></section>',
     '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران WireGuard</h3><span>HANDSHAKE · TRAFFIC · CONFIG</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="neon-table-head"><span>نام همتا</span><span>وضعیت</span><span>ترافیک / Endpoint</span><span>عملیات</span></div><div class="table">'+(peerRows||'<div class="empty">هنوز همتایی ساخته نشده است.</div>')+'</div></section>'
   ].join('');
