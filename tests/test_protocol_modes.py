@@ -94,3 +94,8 @@ def test_snapshot_restore_round_trip(tmp_path):
     assert existing.read_text(encoding="utf-8")=="before\n"
     assert (existing.stat().st_mode & 0o777)==0o640
     assert not absent.exists()
+
+
+def test_tls_backed_modes_require_dns_hostname():
+    with pytest.raises(protocol_modes.ProtocolModeError,match="DNS hostname"):
+        protocol_modes._letsencrypt("203.0.113.10")
