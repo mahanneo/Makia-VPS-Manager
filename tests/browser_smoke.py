@@ -97,28 +97,27 @@ def main():
             assert page.locator(".sx-vital").count()==4
             assert page.locator(".sx-system-cell").count()==4
             assert page.locator(".sx-protocol-row").count()==4
-            assert page.locator(".sanaei-nav").count()==1
-            assert "Inboundها" in page.locator(".sanaei-sidebar").inner_text()
-            assert page.locator('.sanaei-sidebar button[data-view="inbounds"]').count()>=1
+            assert page.locator(".pro-nav").count()==1
+            assert "Inboundها" in page.locator(".pro-sidebar").inner_text()
+            assert page.locator('.pro-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
-            page.locator('.sanaei-sidebar button[data-view="inbounds"]').click()
+            page.locator('.pro-sidebar button[data-view="inbounds"]').click()
             leave_sidebar(page)
             page.locator(".sx-inbound-list").wait_for()
             page.screenshot(path='/tmp/makia-inbounds.png',full_page=True)
-            page.locator('.sanaei-group-toggle[data-group="protocolclients"]').click()
-            page.locator('.sanaei-sidebar button[data-view="ssh"]').click()
+            page.locator('.pro-sidebar button[data-view="ssh"]').click()
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-ssh.png',full_page=True)
-            page.locator('.sanaei-sidebar button[data-view="xray"]').click()
+            page.locator('.pro-sidebar button[data-view="xray"]').click()
             leave_sidebar(page)
             page.locator(".protocol-client-list").wait_for()
             page.screenshot(path='/tmp/makia-xray.png',full_page=True)
-            page.locator('.sanaei-sidebar button[data-view="openvpn"]').click()
+            page.locator('.pro-sidebar button[data-view="openvpn"]').click()
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
-            page.locator('.sanaei-sidebar button[data-view="support"]').click()
+            page.locator('.pro-sidebar button[data-view="support"]').click()
             leave_sidebar(page)
             page.locator(".support-hero").wait_for()
             assert "پشتیبانی Makia" in page.locator("#content").inner_text()
@@ -137,12 +136,16 @@ def main():
             support_page.locator("#remoteSupportBanner").wait_for()
             assert "REMOTE SUPPORT SESSION" in support_page.locator("#remoteSupportBanner").inner_text()
             support_context.close()
-            page.locator('.sanaei-sidebar button[data-view="access"]').click()
+            page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
-            page.locator(".access-profile",has_text="browser-client").wait_for()
+            page.locator(".pro-user-row",has_text="browser-client").wait_for()
+            page.screenshot(path='/tmp/makia-users.png',full_page=True)
 
-            row=page.locator(".access-profile",has_text="browser-client")
-            row.locator('[data-action="access-share"]').click()
+            row=page.locator(".pro-user-row",has_text="browser-client")
+            row.locator('[data-action="access-detail"]').click()
+            page.locator(".access-detail-drawer").wait_for()
+            page.screenshot(path='/tmp/makia-user-detail.png',full_page=True)
+            page.locator('[data-action="access-share"]').click()
             page.locator(".share-modal").wait_for()
             assert page.locator(".share-qr").count() >= 1
             assert page.locator("#shareText").input_value().startswith("vless://")
@@ -163,8 +166,10 @@ def main():
             assert "<svg" in sub_qr_path.read_text(encoding="utf-8")
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            row=page.locator(".access-profile",has_text="browser-client")
-            row.locator('[data-action="protected-export"]').click()
+            row=page.locator(".pro-user-row",has_text="browser-client")
+            row.locator('[data-action="access-detail"]').click()
+            page.locator(".access-detail-drawer").wait_for()
+            page.locator('[data-action="protected-export"]').click()
             page.locator("#protectedPassword").wait_for()
             page.locator("#protectedPassword").fill("739251")
             with page.expect_download() as dl:
@@ -183,15 +188,19 @@ def main():
                 assert "راهنمای اتصال Makia" in zf.read("connection-guide-fa.txt").decode("utf-8")
 
             page.locator('.close-btn[data-action="modal-close"]').click()
-            row=page.locator(".access-profile",has_text="browser-client")
+            row=page.locator(".pro-user-row",has_text="browser-client")
+            row.locator('[data-action="access-detail"]').click()
+            page.locator(".access-detail-drawer").wait_for()
             with page.expect_download() as native:
-                row.locator('[data-action="native-export"]').click()
+                page.locator('[data-action="native-export"]').click()
             native_path=Path("/tmp/makia-browser-native.txt")
             native.value.save_as(str(native_path))
             assert "vless://" in native_path.read_text(encoding="utf-8")
+            page.locator('.close-btn[data-action="modal-close"]').click()
 
-            page.locator('.sanaei-sidebar .sidebar-create').click()
-            page.locator(".provision-wizard").wait_for()
+            page.locator('.pro-sidebar .pro-create-access').click()
+            page.locator(".provision-drawer").wait_for()
+            page.screenshot(path='/tmp/makia-new-access.png',full_page=True)
             assert page.locator(".wizard-protocol").count()==4
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
             page.locator("#wizEndpointMode").select_option("ip")
@@ -203,26 +212,26 @@ def main():
             page.locator('[data-action="wizard-next"]').click()
             assert page.locator("#wizSessions").count()==1
             page.locator('[data-action="wizard-next"]').click()
-            assert "Endpoint (IP)" in page.locator(".review-grid").text_content()
+            assert "Endpoint" in page.locator(".review-grid").text_content()
             assert "8.8.8.8" in page.locator(".review-grid").text_content()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.evaluate("window.__protocolData.xray.installed=true")
-            page.locator('.sanaei-sidebar .sidebar-create').click()
+            page.locator('.pro-sidebar .pro-create-access').click()
             page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
             page.locator("#wizXrayProtocol").select_option("vmess")
             page.locator("#wizEndpoint").fill("8.8.8.8")
             page.locator('[data-action="wizard-next"]').click()
-            assert "VMESS" in page.locator(".wizard-note").text_content()
-            assert "TCP" in page.locator(".wizard-note").text_content()
-            assert "NONE" in page.locator(".wizard-note").text_content()
+            assert "VMESS" in page.locator(".recommended-profile").text_content()
+            assert "TCP" in page.locator(".recommended-profile").text_content()
+            assert "NONE" in page.locator(".recommended-profile").text_content()
             assert page.locator("#wizSecurity").count()==0
             page.locator('[data-action="wizard-xray-advanced"]').click()
             assert page.locator("#wizSecurity").count()==1
             page.locator('[data-action="wizard-xray-simple"]').click()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            page.locator('.sanaei-sidebar button[data-view="dashboard"]').click()
+            page.locator('.pro-sidebar button[data-view="dashboard"]').click()
             leave_sidebar(page)
             page.locator(".sx-vitals").wait_for()
             page.locator('[data-action="self-test"]').click()
@@ -230,7 +239,7 @@ def main():
             assert page.locator(".diagnostic-score.pass").count()==1
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            page.locator('.sanaei-sidebar button[data-view="wireguard"]').click()
+            page.locator('.pro-sidebar button[data-view="wireguard"]').click()
             leave_sidebar(page)
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('.wg-workspace-metrics>div').count()==4
@@ -239,10 +248,10 @@ def main():
             page.set_viewport_size({"width":390,"height":844})
             page.locator('.mobile-menu-toggle').click()
             assert page.locator('.mobile-menu-toggle').get_attribute('aria-expanded')=='true'
-            page.locator('.sanaei-sidebar button[data-view="dashboard"]').click()
+            page.locator('.pro-sidebar button[data-view="dashboard"]').click()
             assert page.locator('.mobile-menu-toggle').get_attribute('aria-expanded')=='false'
             page.locator('.mobile-menu-toggle').click()
-            page.locator('.sanaei-sidebar button[data-view="wireguard"]').click()
+            page.locator('.pro-sidebar button[data-view="wireguard"]').click()
             leave_sidebar(page)
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('body.menu-open').count()==0
@@ -251,26 +260,29 @@ def main():
             page.screenshot(path='/tmp/makia-wg-mobile.png',full_page=True)
             page.set_viewport_size({"width":1280,"height":800})
 
+            page.evaluate("switchView('connectivity')")
+            page.locator(".connectivity-grid").wait_for()
+            page.screenshot(path='/tmp/makia-connectivity.png',full_page=True)
+
             for view in ["inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
-                nav=page.locator(f'.sanaei-sidebar nav button[data-view="{view}"]')
-                nav.click()
+                page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
-                assert "active" in (nav.get_attribute("class") or ""), f"{view} sidebar item not active"
+                nav=page.locator(f'.pro-sidebar nav button[data-view="{view}"]')
+                if nav.count():
+                    assert "active" in (nav.get_attribute("class") or ""), f"{view} sidebar item not active"
 
             page.evaluate("() => openXrayDiagnostics()")
             page.locator(".xray-diagnostics-modal").wait_for()
             assert "XRAY RUNTIME DIAGNOSTICS" in page.locator(".xray-diagnostics-modal").inner_text()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            page.locator('.sanaei-sidebar button[data-view="guides"]').click()
-            leave_sidebar(page)
+            page.evaluate("switchView('guides')")
             page.locator(".guide-admin-grid").wait_for()
             assert page.locator(".guide-admin-card").count()==4
             assert page.locator('[data-action="client-guide-copy"]').count()==4
-            page.locator('.sanaei-group-toggle[data-group="settings"]').click()
-            page.locator('[data-action="nav-settings"][data-tab="general"]').click()
+            page.locator('.pro-sidebar button[data-view="settings"]').click()
             leave_sidebar(page)
             page.locator(".settings-content-v2").wait_for()
 
@@ -324,30 +336,27 @@ def main():
                 assert "makia-portable-migration" in manifest
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","backups","audit","updates","support"]:
-                nav=page.locator(f'.sanaei-sidebar nav button[data-view="{view}"]')
-                nav.click()
+            for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
+                page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
 
-            page.locator('.sanaei-sidebar button[data-view="access"]').click()
+            page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
-            page.locator(".sx-table-wrap").wait_for()
+            page.locator(".pro-directory").wait_for()
             assert page.locator("#accessSegments button").count()==5
             assert page.locator(".license-lock-panel").count()==0
-            page.locator('.sanaei-sidebar button[data-view="services"]').click()
+            page.locator('.pro-sidebar button[data-view="services"]').click()
             leave_sidebar(page)
             page.locator(".service-control-list").wait_for()
             page.screenshot(path='/tmp/makia-services.png',full_page=True)
-            page.locator('.sanaei-sidebar button[data-view="protocols"]').click()
+            page.locator('.pro-sidebar button[data-view="protocols"]').click()
             leave_sidebar(page)
             page.locator(".port-management-panel").wait_for()
             assert page.locator(".port-table-row").count()>=1
             page.screenshot(path='/tmp/makia-ports.png',full_page=True)
-            if page.locator('.sanaei-nav-group.open .sanaei-submenu [data-action="nav-settings"][data-tab="general"]').count()==0:
-                page.locator('.sanaei-group-toggle[data-group="settings"]').click()
-            page.locator('[data-action="nav-settings"][data-tab="general"]').click()
+            page.locator('.pro-sidebar button[data-view="settings"]').click()
             page.locator(".settings-content-v2").wait_for()
             page.screenshot(path='/tmp/makia-settings.png',full_page=True)
             assert page.locator(".license-lock-panel").count()==0

@@ -1,3 +1,11 @@
+## نسخه ۰.۲۵.۰-rc1 — رابط حرفه‌ای و خلوت‌تر
+
+این نسخه منوی Hover/Rail قبلی را کنار می‌گذارد و یک Sidebar ثابت، خوانا و دسته‌بندی‌شده ارائه می‌کند. صفحات روزمره عمداً خلوت‌تر شده‌اند: در صفحه کاربران فقط اطلاعات اصلی دیده می‌شود و QR، فایل Native، Protected ZIP، ویرایش و لغو دسترسی داخل Detail Drawer باز می‌شوند.
+
+ساخت دسترسی جدید نیز دیگر یک Modal بزرگ و شلوغ نیست؛ یک Provisioning Drawer مرحله‌ای باز می‌شود و فقط اطلاعات ضروری را نشان می‌دهد. تنظیمات تخصصی مثل Session/IP limits، MTU، Keepalive، Xray Transport/Security و Quota با Progressive Disclosure نمایش داده می‌شوند.
+
+بخش **Connectivity Lab** وضعیت واقعی Runtime و Endpointهای SSH/Xray/WireGuard/OpenVPN را بررسی می‌کند. این بخش عمداً بین «Server Ready» و «تأیید اتصال از داخل ایران» تفاوت می‌گذارد. برای تست واقعی ایران، `docs/IRAN-CONNECTIVITY-FIELD-TEST.md` و ابزار `scripts/iran-field-preflight.sh` اضافه شده‌اند. هیچ Release نباید بدون Field Test واقعی داخل ایران ادعای سازگاری قطعی داشته باشد.
+
 ## نسخه ۰.۲۴.۰-rc1 — ساختار پنل نزدیک به Sanaei / 3x-ui
 
 در این نسخه معماری رابط Makia از نو مرتب شده است. هدف، کپی ظاهری صرف نیست؛ ساختار تعامل و چیدمان پنل به الگوی آشنای 3x-ui/Sanaei نزدیک شده است: Sidebar باریک و قابل Pin، Dashboard فشرده، Inboundها به‌عنوان بخش مستقل، Client Directory واحد، Submenu برای تنظیمات و ابزارهای Xray، و فرم‌ها/جدول‌های فشرده‌تر.

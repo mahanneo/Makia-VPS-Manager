@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.25.0-rc1] - 2026-09-27
+
+### Professional UX rebuild
+- Replaced the hover/rail-style navigation with a fixed, readable grouped sidebar designed for daily operations.
+- Reduced visible navigation to primary groups: Main, Protocols, Infrastructure, System, Settings and Support.
+- Added a sticky top bar with global search, server status, refresh and administrator context.
+- Increased typography and control sizing across the panel for better readability on 1280–1920px displays.
+- Rebuilt the unified Users page as a compact table with protocol filters and a per-user detail drawer; delivery/export/revoke controls are no longer displayed on every row.
+- Rebuilt Create Access as a right-side provisioning drawer with progressive disclosure. Basic identity and endpoint fields stay visible while advanced protocol/network settings remain collapsed until needed.
+- Preserved all real SSH, Xray, WireGuard and OpenVPN creation APIs and protected delivery flows.
+- Added Connectivity Lab to aggregate Xray, WireGuard, OpenVPN, endpoint-matrix and self-test status without falsely claiming Iran-network compatibility.
+
+### Iran connectivity validation
+- Added `docs/IRAN-CONNECTIVITY-FIELD-TEST.md` and `scripts/iran-field-preflight.sh`.
+- Server-side readiness and client-side Iran field validation are explicitly separated.
+- Stable release is blocked until real client tests from inside Iran are recorded for the protocols actually published.
+
+### Release status
+- Release candidate pending CI/browser smoke and real Iran field testing.
+
 ## [0.24.0-rc1] - 2026-09-27
 
 ### Sanaei-style panel structure

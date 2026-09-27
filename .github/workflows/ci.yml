@@ -76,6 +76,9 @@ jobs:
           test -f docs/UAT-0.22.0-RC1.md
           test -f docs/UAT-0.23.0-RC1.md
           test -f docs/UAT-0.24.0-RC1.md
+          test -f docs/UAT-0.25.0-RC1.md
+          test -f docs/IRAN-CONNECTIVITY-FIELD-TEST.md
+          test -f scripts/iran-field-preflight.sh
           test -f docs/REMOTE-SUPPORT-SECURITY-FA.md
           test -f scripts/configure-owner.py
           test -f README_FA.md
@@ -128,7 +131,7 @@ jobs:
           grep -q 'XRAY_VALIDATED_VERSION="v26.3.27"' app/protocol_ops.py
           grep -q '/help/connect' app/main.py
           grep -q 'connection-guide-fa.txt' app/access_ops.py
-          grep -q "data-view=\"guides\"" app/templates/dashboard.html
+          grep -Fq "['Client Guides','guides']" app/static/app.js
           grep -q 'xray-diagnostics' app/static/app.js
           grep -q 'xray-repair' app/static/app.js
           grep -q 'README_FA.md' README.md
@@ -156,8 +159,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.24.0-rc1"' app/config.py
-          grep -q '^0.24.0-rc1$' VERSION
+          grep -q 'VERSION = "0.25.0-rc1"' app/config.py
+          grep -q '^0.25.0-rc1$' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -181,23 +184,26 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v0240rc1' app/static/sw.js
+          grep -q 'makia-shell-v0250rc1' app/static/sw.js
 
-      - name: Sanaei structure v0.24 contract
+      - name: Professional UX v0.25 contract
         run: |
-          grep -q 'makia-sanaei-shell' app/templates/dashboard.html
-          grep -q 'sanaei-sidebar' app/templates/dashboard.html
-          grep -q 'data-view="inbounds"' app/templates/dashboard.html
-          grep -q 'data-group="protocolclients"' app/templates/dashboard.html
-          grep -q 'data-group="settings"' app/templates/dashboard.html
-          grep -q 'data-group="xraytools"' app/templates/dashboard.html
-          grep -q 'sanaei-login-card' app/templates/login.html
-          grep -q 'sx-vitals' app/static/app.js
-          grep -q 'inboundsWorkspace' app/static/app.js
-          grep -q 'sx-inbound-list' app/static/app.js
-          grep -q 'makia-sidebar-pinned' app/static/app.js
-          grep -q 'v0.24 Sanaei-structure shell' app/static/app.css
-          grep -q 'UAT — Sanaei-style Structure' docs/UAT-0.24.0-RC1.md
+          grep -q 'makia-pro-shell' app/templates/dashboard.html
+          grep -q 'pro-sidebar' app/templates/dashboard.html
+          grep -q 'data-view="access"' app/templates/dashboard.html
+          grep -q 'data-view="connectivity"' app/templates/dashboard.html
+          grep -q 'data-group="protocols"' app/templates/dashboard.html
+          grep -q 'data-group="infra"' app/templates/dashboard.html
+          grep -q 'data-group="system"' app/templates/dashboard.html
+          grep -q 'pro-user-row' app/static/app.js
+          grep -q 'access-detail-drawer' app/static/app.js
+          grep -q 'provision-drawer' app/static/app.js
+          grep -q 'connectivityLab' app/static/app.js
+          grep -q 'نیاز به تست از داخل ایران' app/static/app.js
+          grep -q 'v0.25 Professional Operations UI' app/static/app.css
+          grep -q 'Professional UX / Iran Connectivity UAT' docs/UAT-0.25.0-RC1.md
+          grep -q 'Iran Connectivity Field Test' docs/IRAN-CONNECTIVITY-FIELD-TEST.md
+          grep -q 'transport preflight only' scripts/iran-field-preflight.sh
 
       - name: UAT v0.17 contract
         run: |
@@ -247,7 +253,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: makia-v024-ui-screenshots
+          name: makia-v025-ui-screenshots
           path: /tmp/makia-*.png
           if-no-files-found: ignore
           retention-days: 7
