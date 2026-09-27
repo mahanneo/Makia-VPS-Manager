@@ -3,6 +3,7 @@
 ## [0.26.0-rc1] - 2026-09-27
 
 ### Host bug fixes
+- Fixed HTTPS issuance on hardened hosts: Certbot/NGINX plugin packages are now provisioned by the root installer/updater, never by the web service. This prevents APT `seteuid 42 / setresuid: Operation not permitted` failures under `RestrictSUIDSGID=true` and `NoNewPrivileges=true`.
 - Fixed the Xray creation failure `runuser: cannot set user id: Operation not permitted` without weakening Makia's systemd `NoNewPrivileges` hardening. Xray syntax is still validated by Core, while service-user file visibility falls back to explicit UID/GID permission validation when setuid is prohibited.
 - Rebuilt Login input focus styling so Username/Password have one visible focus surface instead of a nested second card.
 - Made Login FA/EN and Dark/Light controls functional and persistent.
