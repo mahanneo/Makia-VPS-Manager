@@ -55,6 +55,26 @@ def _nginx_config_ok():
     p=subprocess.run(["nginx","-t"],text=True,capture_output=True,timeout=15,check=False)
     return p.returncode==0
 
+def _certbot_nginx_plugin_ready():
+    """Return whether the host Certbot installation exposes the Nginx plugin.
+
+    Package installation must happen in the root installer/updater, never in
+    the hardened web service where RestrictSUIDSGID/NoNewPrivileges prevent
+    APT's _apt privilege drop.
+    """
+    certbot=shutil.which("certbot")
+    if not certbot:
+        return False
+    try:
+        p=subprocess.run(
+            [certbot,"plugins"],
+            text=True,capture_output=True,timeout=20,check=False,
+        )
+    except (OSError,subprocess.TimeoutExpired):
+        return False
+    return p.returncode==0 and bool(re.search(r"(?mi)^\*\s+nginx\b",p.stdout or ""))
+
+
 def _listen_ports():
     ports=set()
     if not shutil.which("ss"):
@@ -105,6 +125,7 @@ def domain_status(domain=None):
         "certificate_expires_at":cert_expires_at,
         "certificate_days_left":cert_days_left,
         "certbot_installed":bool(shutil.which("certbot")),
+        "certbot_nginx_ready":bool(shutil.which("certbot")) and _certbot_nginx_plugin_ready(),
         "nginx_site":str(NGINX_SITE),
         "nginx_installed":bool(shutil.which("nginx")),
         "nginx_active":_service_active("nginx"),
@@ -161,11 +182,14 @@ def issue_certificate(domain,email):
         # Certificate issuance must be self-contained: users should not have to
         # remember to press the separate Apply-domain button first.
         apply_domain(domain)
-        if not shutil.which("certbot"):
-            _run(["apt-get","update"],timeout=180)
-            _run(["apt-get","install","-y","certbot","python3-certbot-nginx"],timeout=300)
+        certbot=shutil.which("certbot")
+        if not certbot or not _certbot_nginx_plugin_ready():
+            raise PanelOperationError(
+                "Certbot + Nginx plugin are not installed on this host. "
+                "Run 'sudo makia-upgrade' once, then retry HTTPS issuance."
+            )
         _run([
-            "certbot","--nginx","-d",domain,
+            certbot,"--nginx","-d",domain,
             "--non-interactive","--agree-tos","--email",email,
             "--redirect"
         ],timeout=300)
