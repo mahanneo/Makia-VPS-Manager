@@ -126,7 +126,7 @@ if command -v openvpn >/dev/null 2>&1; then
   ok "OpenVPN tooling" "$(openvpn --version 2>/dev/null | head -n1)"
   if [[ -f /etc/openvpn/server/server.conf ]] && systemctl is-active --quiet openvpn-server@server; then
     OVPN_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/server.conf 2>/dev/null || true)"
-    if [[ -n "$OVPN_PORT" ]] && ss -H -lntu 2>/dev/null | grep -Eq ":\${OVPN_PORT}([[:space:]]|$)"; then
+    if [[ -n "$OVPN_PORT" ]] && ss -H -lntu 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
       ok "OpenVPN runtime" "active + listener :$OVPN_PORT"
     else
       fail "OpenVPN runtime" "service active but listener missing"
