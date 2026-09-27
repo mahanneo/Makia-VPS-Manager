@@ -81,12 +81,21 @@ def main():
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
             assert "چطور کانفیگ Makia را اضافه کنم؟" in portal.locator("body").inner_text()
+            assert portal.locator(".guide-visual-step").count()==4
             portal.close()
 
             page=browser.new_page(accept_downloads=True)
             page_errors=[]
             page.on("pageerror",lambda exc: page_errors.append(str(exc)))
             page.goto(BASE_URL+"/login",wait_until="networkidle")
+            assert page.locator(".login-field-v026").count()==2
+            page.locator("#loginThemeToggle").click()
+            assert page.locator('body[data-theme="light"]').count()==1
+            page.locator("#loginLangToggle").click()
+            assert page.locator("html").get_attribute("lang")=="en"
+            page.locator("#loginLangToggle").click()
+            page.locator("#loginThemeToggle").click()
+            assert page.locator('body[data-theme="dark"]').count()==1
             page.screenshot(path='/tmp/makia-login.png',full_page=True)
             page.locator('input[name="username"]').fill("admin")
             page.locator('input[name="password"]').fill(PASSWORD)
@@ -116,11 +125,16 @@ def main():
             page.locator('.pro-sidebar button[data-view="openvpn"]').click()
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
+            page.locator('[data-action="openvpn-server-config"]').click()
+            page.locator(".vpn-config-modal").wait_for()
+            assert page.locator("#ovServerProto option").count()==2
+            page.locator('[data-action="modal-close"]').click()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
             page.locator('.pro-sidebar button[data-view="support"]').click()
             leave_sidebar(page)
-            page.locator(".support-hero").wait_for()
+            page.locator(".support-v026").wait_for()
             assert "پشتیبانی Makia" in page.locator("#content").inner_text()
+            page.locator(".support-advanced summary").click()
             page.locator("#supportGrantScope").select_option("readonly")
             page.locator('[data-action="support-grant-create"]').click()
             page.locator(".support-code-box").wait_for()
@@ -244,6 +258,10 @@ def main():
             page.locator('.wg-workspace-hero').wait_for()
             assert page.locator('.wg-workspace-metrics>div').count()==4
             assert 'ساخت همتا' in page.locator('.wg-workspace-hero').inner_text() or 'راه‌اندازی WireGuard' in page.locator('.wg-workspace-hero').inner_text()
+            page.locator('[data-action="wg-server-config"]').click()
+            page.locator(".vpn-config-modal").wait_for()
+            assert page.locator("#wgServerPort").count()==1
+            page.locator('[data-action="modal-close"]').click()
             page.screenshot(path='/tmp/makia-wg-desktop.png',full_page=True)
             page.set_viewport_size({"width":390,"height":844})
             page.locator('.mobile-menu-toggle').click()
@@ -279,8 +297,9 @@ def main():
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             page.evaluate("switchView('guides')")
-            page.locator(".guide-admin-grid").wait_for()
-            assert page.locator(".guide-admin-card").count()==4
+            page.locator(".guide-visual-grid").wait_for()
+            assert page.locator(".guide-visual-card").count()==4
+            assert page.locator(".guide-visual-card img").count()==4
             assert page.locator('[data-action="client-guide-copy"]').count()==4
             page.locator('.pro-sidebar button[data-view="settings"]').click()
             leave_sidebar(page)
