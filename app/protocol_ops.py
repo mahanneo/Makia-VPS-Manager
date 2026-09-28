@@ -2536,6 +2536,69 @@ def xray_client_traffic(email, reset=False):
             if name.endswith(">>>uplink"): up+=value
             elif name.endswith(">>>downlink"): down+=value
     return {"uplink":up,"downlink":down,"total":up+down,"available":True,"error":None}
+
+def xray_inbound_traffic(tag, reset=False):
+    binary=_binary()
+    if not binary:
+        raise ProtocolError("Xray core is not installed")
+    pattern=f"inbound>>>{tag}>>>traffic>>>"
+    args=[binary,"api","statsquery","--server=127.0.0.1:10085","-pattern",pattern]
+    if reset:
+        args += ["-reset=true"]
+    p=subprocess.run(args,text=True,capture_output=True,timeout=8,check=False)
+    if p.returncode!=0:
+        return {"uplink":0,"downlink":0,"total":0,"available":False,"error":(p.stderr or p.stdout or "")[:240]}
+    up=down=0
+    text=p.stdout or ""
+    try:
+        payload=json.loads(text)
+        rows=payload.get("stat") or payload.get("stats") or []
+        for item in rows if isinstance(rows,list) else []:
+            name=str((item or {}).get("name") or "")
+            value=int((item or {}).get("value") or 0)
+            if name.endswith(">>>uplink"):up+=value
+            elif name.endswith(">>>downlink"):down+=value
+    except Exception:
+        for name,value in re.findall(r'name["\']?\s*:\s*"([^"]+)".*?value["\']?\s*:\s*"?(\d+)',text,re.S):
+            if name.endswith(">>>uplink"):up+=int(value)
+            elif name.endswith(">>>downlink"):down+=int(value)
+    return {"uplink":up,"downlink":down,"total":up+down,"available":True,"error":None}
+
+
+def set_outline_inbound_enabled(tag,enabled):
+    """Enable/disable one Outline-compatible inbound without deleting its credential."""
+    binary=_binary(); config_path=_config_path()
+    if not binary or not config_path:raise ProtocolError("Xray core/config is not available")
+    path=Path(config_path)
+    try:data=json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:raise ProtocolError(f"cannot parse Xray config: {exc}") from exc
+    inbound=next((x for x in data.get("inbounds",[]) if isinstance(x,dict) and x.get("tag")==tag),None)
+    if not inbound:raise ProtocolError("Outline inbound not found")
+    if str(inbound.get("protocol") or "")!="shadowsocks":
+        raise ProtocolError("target inbound is not Outline/Shadowsocks")
+    current=str(inbound.get("listen") or "0.0.0.0")
+    if enabled:
+        if current=="127.0.0.1":inbound["listen"]="0.0.0.0"
+    else:
+        inbound["listen"]="127.0.0.1"
+    tmp=_xray_temp_json_path(path,"outline-state")
+    backup=_backup_dir()/f"xray-outline-state-{int(time.time())}.json"
+    shutil.copy2(path,backup)
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(tmp,0o600)
+    try:
+        _xray_test_config(binary,tmp)
+        os.replace(tmp,path);_xray_secure_runtime_file(path);_xray_test_config_as_service(binary,path)
+        _run(["systemctl","restart","xray"],timeout=30)
+        if not _active("xray"):raise ProtocolError("Xray did not become active after Outline state change")
+    except Exception:
+        try:
+            shutil.copy2(backup,path);_xray_secure_runtime_file(path);_run(["systemctl","restart","xray"],timeout=30)
+        except Exception:pass
+        raise
+    return {"tag":tag,"enabled":bool(enabled),"listen":"0.0.0.0" if enabled else "127.0.0.1"}
+
+
 def xray_client_online_ips(email):
     binary=_binary()
     if not binary:
