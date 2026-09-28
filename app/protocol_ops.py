@@ -2712,6 +2712,516 @@ def _validate_xray_guided_combo(protocol,transport,security):
     return transport,security
 
 
+
+def xray_inbound_builder_capabilities():
+    """3x-ui inspired capability map, constrained to the pinned Makia Core."""
+    return {
+        "protocols":{
+            "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls","reality"]},
+            "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+            "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["tls","reality"]},
+            "shadowsocks":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+            "hysteria2":{"transports":["hysteria"],"security":["tls"]},
+            "http":{"transports":["tcp"],"security":["none"]},
+            "socks":{"transports":["tcp"],"security":["none"]},
+        },
+        "transport_options":{
+            "tcp":["accept_proxy_protocol","header_type","http_host","http_path"],
+            "ws":["path","host","heartbeat_period","accept_proxy_protocol"],
+            "grpc":["service_name","authority","multi_mode"],
+            "httpupgrade":["path","host","accept_proxy_protocol"],
+            "xhttp":["path","host","mode","x_padding_bytes"],
+            "kcp":["mtu","tti","uplink_capacity","downlink_capacity","cwnd_multiplier","max_sending_window"],
+            "hysteria":["udp_idle_timeout"],
+        },
+        "security_options":{
+            "tls":["server_name","alpn"],
+            "reality":["server_name","target","fingerprint","short_id","spider_x","xver"],
+        },
+        "sniffing":["enabled","dest_override","route_only","metadata_only"],
+        "sockopt":["tcp_fast_open","tcp_no_delay","tcp_congestion","domain_strategy","mark","interface","tproxy"],
+        "shadowsocks_methods":[
+            "aes-128-gcm","aes-256-gcm","chacha20-poly1305",
+            "2022-blake3-aes-128-gcm","2022-blake3-aes-256-gcm"
+        ],
+        "xhttp_modes":["auto","packet-up","stream-up","stream-one"],
+        "flow":["","xtls-rprx-vision"],
+    }
+
+
+def _xray_builder_validate_combo(protocol,transport,security):
+    protocol=str(protocol or "").lower()
+    transport=str(transport or "tcp").lower()
+    security=str(security or "none").lower()
+    aliases={"raw":"tcp","websocket":"ws","mkcp":"kcp"}
+    transport=aliases.get(transport,transport)
+    caps=xray_inbound_builder_capabilities()["protocols"].get(protocol)
+    if not caps:
+        raise ProtocolError("unsupported Xray protocol")
+    if transport not in caps["transports"]:
+        raise ProtocolError(f"{protocol.upper()} does not support {transport.upper()} in the Makia inbound builder")
+    if security not in caps["security"]:
+        raise ProtocolError(f"{protocol.upper()} does not support security={security} in the Makia inbound builder")
+    if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
+        raise ProtocolError("REALITY is only valid with TCP/RAW, gRPC or XHTTP")
+    if protocol=="hysteria2":
+        return "hysteria","tls"
+    return transport,security
+
+
+def _xray_builder_listen(value):
+    raw=str(value or "").strip()
+    if not raw or raw=="*":
+        return "0.0.0.0"
+    try:
+        return ipaddress.ip_address(raw.strip("[]")).compressed
+    except ValueError as exc:
+        raise ProtocolError("Xray listen must be an IPv4/IPv6 address or left blank") from exc
+
+
+def _xray_builder_headers(value):
+    if value in (None,""):
+        return {}
+    if not isinstance(value,dict):
+        raise ProtocolError("transport headers must be a JSON object")
+    out={}
+    for key,val in value.items():
+        name=str(key or "").strip()
+        if not name or len(name)>80 or not re.fullmatch(r"[A-Za-z0-9!#$%&'*+.^_|~-]+",name):
+            raise ProtocolError("invalid transport header name")
+        if isinstance(val,(list,dict)):
+            raise ProtocolError("transport header values must be scalar strings")
+        text=str(val)
+        if len(text)>1024:
+            raise ProtocolError("transport header value is too long")
+        out[name]=text
+    return out
+
+
+def _xray_deep_merge(base,extra):
+    if not isinstance(extra,dict):
+        return base
+    for key,value in extra.items():
+        if key in {"method","network","security","tlsSettings","realitySettings"}:
+            continue
+        if isinstance(value,dict) and isinstance(base.get(key),dict):
+            _xray_deep_merge(base[key],value)
+        else:
+            base[key]=value
+    return base
+
+
+def _xray_public_from_private(binary,private_key):
+    if not private_key:
+        return ""
+    out=_run([binary,"x25519","-i",str(private_key)],timeout=10)
+    public=""
+    for line in out.splitlines():
+        if ":" not in line:
+            continue
+        key,value=line.split(":",1)
+        normalized=key.strip().lower().replace(" ","")
+        if normalized.startswith("public") or normalized.startswith("password"):
+            public=value.strip()
+    if not public:
+        raise ProtocolError("unable to derive REALITY client key from server private key")
+    return public
+
+
+def _xray_builder_stream(binary,protocol,transport,security,options):
+    options=dict(options or {})
+    path_value=str(options.get("path") or "/").strip() or "/"
+    server_name=str(options.get("server_name") or "").strip().lower()
+    reality_dest=str(options.get("reality_dest") or options.get("target") or "").strip()
+
+    if protocol=="hysteria2":
+        if not server_name:
+            raise ProtocolError("Hysteria2 requires a TLS domain/SNI")
+        cert,key=_xray_materialize_tls(server_name)
+        stream={
+            "method":"hysteria","security":"tls",
+            "hysteriaSettings":{"version":2},
+            "tlsSettings":{
+                "serverName":server_name,"alpn":["h3"],
+                "certificates":[{"certificateFile":str(cert),"keyFile":str(key)}],
+            },
+        }
+        idle=int(options.get("udp_idle_timeout") or 0)
+        if idle:
+            if not 2<=idle<=600:
+                raise ProtocolError("Hysteria UDP idle timeout must be 2-600 seconds")
+            stream["hysteriaSettings"]["udpIdleTimeout"]=idle
+        return stream,{}
+
+    stream,reality_meta=_build_xray_stream(
+        binary,protocol,transport,security,path_value,server_name,reality_dest
+    )
+    method=stream.get("method","raw")
+    headers=_xray_builder_headers(options.get("headers") or {})
+
+    if method=="raw":
+        raw={}
+        if bool(options.get("accept_proxy_protocol")):
+            raw["acceptProxyProtocol"]=True
+        header_type=str(options.get("header_type") or "none").lower()
+        if header_type not in {"none","http"}:
+            raise ProtocolError("RAW header type must be none or http")
+        raw["header"]={"type":header_type}
+        if header_type=="http":
+            http_path=str(options.get("http_path") or path_value or "/")
+            http_host=str(options.get("http_host") or options.get("host") or "")
+            request={"path":[http_path],"headers":{}}
+            if http_host:
+                request["headers"]["Host"]=[http_host]
+            raw["header"]["request"]=request
+        stream["rawSettings"]=raw
+    elif method=="websocket":
+        ws=stream.setdefault("wsSettings",{})
+        ws["path"]=path_value if path_value.startswith("/") else "/"+path_value
+        host=str(options.get("host") or "").strip()
+        if host: ws["host"]=host
+        if headers: ws["headers"]=headers
+        heartbeat=int(options.get("heartbeat_period") or 0)
+        if heartbeat<0 or heartbeat>3600:
+            raise ProtocolError("WebSocket heartbeat must be 0-3600 seconds")
+        if heartbeat: ws["heartbeatPeriod"]=heartbeat
+        if bool(options.get("accept_proxy_protocol")): ws["acceptProxyProtocol"]=True
+    elif method=="grpc":
+        grpc=stream.setdefault("grpcSettings",{})
+        service=str(options.get("service_name") or path_value.strip("/") or "")
+        grpc["serviceName"]=service
+        authority=str(options.get("authority") or "").strip()
+        if authority: grpc["authority"]=authority
+        if bool(options.get("multi_mode")): grpc["multiMode"]=True
+    elif method=="httpupgrade":
+        hu=stream.setdefault("httpupgradeSettings",{})
+        hu["path"]=path_value if path_value.startswith("/") else "/"+path_value
+        host=str(options.get("host") or "").strip()
+        if host: hu["host"]=host
+        if headers: hu["headers"]=headers
+        if bool(options.get("accept_proxy_protocol")): hu["acceptProxyProtocol"]=True
+    elif method=="xhttp":
+        xh=stream.setdefault("xhttpSettings",{})
+        xh["path"]=path_value if path_value.startswith("/") else "/"+path_value
+        host=str(options.get("host") or "").strip()
+        if host: xh["host"]=host
+        mode=str(options.get("xhttp_mode") or options.get("mode") or "auto")
+        if mode not in xray_inbound_builder_capabilities()["xhttp_modes"]:
+            raise ProtocolError("invalid XHTTP mode")
+        xh["mode"]=mode
+        padding=str(options.get("x_padding_bytes") or "").strip()
+        if padding: xh["xPaddingBytes"]=padding
+    elif method=="mkcp":
+        kcp=stream.setdefault("kcpSettings",{})
+        ranges={
+            "mtu":(576,1460,1350),
+            "tti":(10,100,20),
+            "uplink_capacity":(1,100000,5),
+            "downlink_capacity":(1,100000,20),
+            "cwnd_multiplier":(1,1000,1),
+            "max_sending_window":(576,268435456,2097152),
+        }
+        keys={
+            "mtu":"mtu","tti":"tti","uplink_capacity":"uplinkCapacity",
+            "downlink_capacity":"downlinkCapacity","cwnd_multiplier":"cwndMultiplier",
+            "max_sending_window":"maxSendingWindow",
+        }
+        for src,(low,high,default) in ranges.items():
+            raw_value=options.get(src)
+            value=default if raw_value in (None,"") else int(raw_value)
+            if not low<=value<=high:
+                raise ProtocolError(f"mKCP {src} is out of range")
+            kcp[keys[src]]=value
+
+    if security=="tls":
+        alpn=options.get("alpn")
+        if isinstance(alpn,str):
+            alpn=[x.strip() for x in alpn.split(",") if x.strip()]
+        if alpn:
+            stream.setdefault("tlsSettings",{})["alpn"]=list(alpn)[:8]
+    elif security=="reality":
+        rs=stream.setdefault("realitySettings",{})
+        fingerprint=str(options.get("fingerprint") or "chrome").strip()
+        spider_x=str(options.get("spider_x") or "/")
+        rs_meta=dict(reality_meta)
+        rs_meta["fingerprint"]=fingerprint
+        rs_meta["spider_x"]=spider_x
+        short_id=str(options.get("short_id") or "").strip().lower()
+        if short_id:
+            if not re.fullmatch(r"[0-9a-f]{0,16}",short_id) or len(short_id)%2:
+                raise ProtocolError("REALITY Short ID must be even-length hex up to 16 characters")
+            rs["shortIds"]=[short_id]
+            rs_meta["short_id"]=short_id
+        xver=int(options.get("xver") or 0)
+        if xver not in {0,1,2}:
+            raise ProtocolError("REALITY xver must be 0, 1 or 2")
+        rs["xver"]=xver
+        reality_meta=rs_meta
+
+    sock={}
+    sock_map={
+        "tcp_fast_open":"tcpFastOpen","tcp_no_delay":"tcpNoDelay",
+        "tcp_congestion":"tcpcongestion","domain_strategy":"domainStrategy",
+        "mark":"mark","interface":"interface","tproxy":"tproxy",
+    }
+    for src,dst in sock_map.items():
+        value=options.get(src)
+        if value in (None,"",False,0,"0"):
+            continue
+        if src in {"tcp_fast_open","tcp_no_delay"}:
+            sock[dst]=bool(value)
+        elif src=="mark":
+            sock[dst]=int(value)
+        else:
+            sock[dst]=str(value)
+    if sock:
+        stream["sockopt"]=sock
+
+    extra=options.get("extra_stream")
+    if extra:
+        if not isinstance(extra,dict):
+            raise ProtocolError("Extra stream options must be a JSON object")
+        _xray_deep_merge(stream,extra)
+    stream["method"]=method
+    stream["security"]=security
+    return stream,reality_meta
+
+
+def _xray_builder_sniffing(options):
+    options=dict(options or {})
+    enabled=bool(options.get("sniffing_enabled",True))
+    override=options.get("sniffing_dest_override",["http","tls","quic"])
+    if isinstance(override,str):
+        override=[x.strip().lower() for x in override.split(",") if x.strip()]
+    allowed={"http","tls","quic","fakedns","fakedns+others"}
+    clean=[str(x).lower() for x in (override or []) if str(x).lower() in allowed]
+    return {
+        "enabled":enabled,
+        "destOverride":clean,
+        "routeOnly":bool(options.get("sniffing_route_only",True)),
+        "metadataOnly":bool(options.get("sniffing_metadata_only",False)),
+    }
+
+
+def _xray_builder_client(protocol,name,credential,flow="",ss_method="aes-128-gcm"):
+    if protocol in {"vless","vmess"}:
+        item={"id":credential,"email":name,"level":0}
+        if protocol=="vless" and flow:
+            item["flow"]=flow
+        settings={"clients":[item]}
+        if protocol=="vless":settings["decryption"]="none"
+        return settings,item
+    if protocol=="trojan":
+        item={"password":credential,"email":name,"level":0}
+        return {"clients":[item]},item
+    if protocol=="hysteria2":
+        item={"auth":credential,"email":name,"level":0}
+        return {"version":2,"users":[item]},item
+    if protocol=="http":
+        return {"accounts":[{"user":name,"pass":credential}]},None
+    if protocol=="socks":
+        return {"auth":"password","accounts":[{"user":name,"pass":credential}],"udp":True,"ip":"127.0.0.1"},None
+    if protocol=="shadowsocks":
+        return {"method":ss_method,"password":credential,"network":"tcp,udp"},None
+    raise ProtocolError("unsupported Xray protocol")
+
+
+def _xray_builder_credential(protocol,value=""):
+    value=str(value or "").strip()
+    if protocol in {"vless","vmess"}:
+        if value:
+            try:return str(uuid.UUID(value))
+            except ValueError as exc:raise ProtocolError("VLESS/VMess credential must be a valid UUID") from exc
+        return str(uuid.uuid4())
+    if value:
+        if len(value)<6 or len(value)>128:
+            raise ProtocolError("client credential must be 6-128 characters")
+        return value
+    return secrets.token_urlsafe(24 if protocol=="hysteria2" else 18)
+
+
+def _xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_meta=None,flow="",fingerprint="chrome",spider_x="/"):
+    stream=inbound.get("streamSettings") or {}
+    method=stream.get("method") or "raw"
+    security=stream.get("security") or "none"
+    host=_uri_host(endpoint)
+    port=int(inbound.get("port") or 0)
+    label=urllib.parse.quote(name,safe="")
+    link_type={"raw":"tcp","websocket":"ws","mkcp":"kcp"}.get(method,method)
+    q={"type":link_type,"security":security}
+    if method=="raw":
+        raw=stream.get("rawSettings") or {}
+        header=raw.get("header") or {}
+        if header.get("type")=="http":
+            q["headerType"]="http"
+            req=header.get("request") or {}
+            paths=req.get("path") or []
+            if paths:q["path"]=str(paths[0])
+            hosts=((req.get("headers") or {}).get("Host") or [])
+            if hosts:q["host"]=str(hosts[0])
+    elif method=="websocket":
+        ws=stream.get("wsSettings") or {}
+        q["path"]=ws.get("path") or "/"
+        if ws.get("host"):q["host"]=ws["host"]
+    elif method=="grpc":
+        gs=stream.get("grpcSettings") or {}
+        q["serviceName"]=gs.get("serviceName") or ""
+        if gs.get("authority"):q["authority"]=gs["authority"]
+        if gs.get("multiMode"):q["mode"]="multi"
+    elif method=="httpupgrade":
+        hu=stream.get("httpupgradeSettings") or {}
+        q["path"]=hu.get("path") or "/"
+        if hu.get("host"):q["host"]=hu["host"]
+    elif method=="xhttp":
+        xh=stream.get("xhttpSettings") or {}
+        q["path"]=xh.get("path") or "/"
+        if xh.get("host"):q["host"]=xh["host"]
+        if xh.get("mode"):q["mode"]=xh["mode"]
+        if xh.get("xPaddingBytes"):q["x_padding_bytes"]=xh["xPaddingBytes"]
+    if security=="tls":
+        tls=stream.get("tlsSettings") or {}
+        q["sni"]=tls.get("serverName") or ""
+        alpn=tls.get("alpn") or []
+        if alpn:q["alpn"]=",".join(str(x) for x in alpn)
+    elif security=="reality":
+        meta=dict(reality_meta or {})
+        q.update({
+            "sni":meta.get("server_name") or "","fp":fingerprint or meta.get("fingerprint") or "chrome",
+            "pbk":meta.get("public_key") or "","sid":meta.get("short_id") or "",
+            "spx":spider_x or meta.get("spider_x") or "/",
+        })
+        if flow:q["flow"]=flow
+    query=urllib.parse.urlencode({k:v for k,v in q.items() if v not in (None,"")})
+    if protocol=="vless":
+        return f"vless://{credential}@{host}:{port}?{query}#{label}"
+    if protocol=="trojan":
+        return f"trojan://{urllib.parse.quote(credential,safe='')}@{host}:{port}?{query}#{label}"
+    if protocol=="vmess":
+        obj={
+            "v":"2","ps":name,"add":endpoint,"port":str(port),"id":credential,
+            "aid":"0","scy":"auto","net":link_type,"type":"none",
+            "host":q.get("host",""),"path":q.get("path") or q.get("serviceName") or "",
+            "tls":"tls" if security=="tls" else "",
+        }
+        if security=="tls":obj["sni"]=q.get("sni","")
+        return "vmess://"+base64.b64encode(json.dumps(obj,separators=(",",":")).encode()).decode()
+    if protocol=="hysteria2":
+        tls=stream.get("tlsSettings") or {}
+        hq={"sni":tls.get("serverName") or "","insecure":"0"}
+        return f"hysteria2://{urllib.parse.quote(credential,safe='')}@{host}:{port}/?{urllib.parse.urlencode(hq)}#{label}"
+    if protocol=="shadowsocks":
+        settings=inbound.get("settings") or {}
+        method=settings.get("method") or "aes-128-gcm"
+        userinfo=base64.urlsafe_b64encode(f"{method}:{credential}".encode()).decode().rstrip("=")
+        return f"ss://{userinfo}@{host}:{port}#{label}"
+    if protocol=="http":
+        return f"http://{urllib.parse.quote(name,safe='')}:{urllib.parse.quote(credential,safe='')}@{host}:{port}#{label}"
+    if protocol=="socks":
+        return f"socks://{urllib.parse.quote(name,safe='')}:{urllib.parse.quote(credential,safe='')}@{host}:{port}#{label}"
+    return ""
+
+
+def create_xray_full_inbound(spec):
+    if not isinstance(spec,dict):
+        raise ProtocolError("invalid Xray inbound payload")
+    protocol=str(spec.get("protocol") or "").lower()
+    transport,security=_xray_builder_validate_combo(protocol,spec.get("transport"),spec.get("security"))
+    port=_validate_port(spec.get("port"))
+    listen=_xray_builder_listen(spec.get("listen"))
+    remark=str(spec.get("remark") or "").strip()
+    if not remark or len(remark)>80:
+        raise ProtocolError("Inbound remark is required and must be at most 80 characters")
+    name=str(spec.get("name") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name):
+        raise ProtocolError("client name must use letters, numbers, dot, dash or underscore")
+    endpoint=_validate_endpoint_host(spec.get("endpoint"))
+    flow=str(spec.get("flow") or "").strip()
+    if flow not in {"","xtls-rprx-vision"}:
+        raise ProtocolError("unsupported Xray flow")
+    if flow and not (protocol=="vless" and ((transport=="tcp" and security in {"tls","reality"}) or transport=="xhttp")):
+        raise ProtocolError("XTLS Vision is only available for supported VLESS transport/security combinations")
+    binary=_binary()
+    if not binary:
+        raise ProtocolError("Xray core is not installed")
+    path=Path(_config_path() or "/usr/local/etc/xray/config.json")
+    path.parent.mkdir(parents=True,exist_ok=True)
+    if path.exists():
+        try:data=json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:raise ProtocolError(f"cannot parse existing Xray config: {exc}") from exc
+    else:
+        data=_xray_default_config(path)
+    data=_ensure_xray_stats(data)
+    inbounds=data.setdefault("inbounds",[])
+    if not isinstance(inbounds,list):
+        raise ProtocolError("invalid Xray inbounds collection")
+    if any(isinstance(item,dict) and int(item.get("port") or -1)==port for item in inbounds):
+        raise ProtocolError("this port is already used by another Xray inbound")
+    transport_proto="udp" if transport in {"kcp","hysteria"} else "tcp"
+    if _port_transport_in_use(port,transport_proto):
+        owner=_port_owner_label(port,transport_proto)
+        raise ProtocolError(f"{transport_proto.upper()}/{port} is already in use by {owner}")
+    options=dict(spec.get("options") or {})
+    options.setdefault("path",spec.get("path") or "/")
+    options.setdefault("server_name",spec.get("server_name") or "")
+    options.setdefault("reality_dest",spec.get("reality_dest") or "")
+    stream,reality_meta=_xray_builder_stream(binary,protocol,transport,security,options)
+    credential=_xray_builder_credential(protocol,spec.get("credential"))
+    ss_method=str(spec.get("shadowsocks_method") or "aes-128-gcm")
+    if protocol=="shadowsocks" and ss_method not in xray_inbound_builder_capabilities()["shadowsocks_methods"]:
+        raise ProtocolError("unsupported Shadowsocks method in Makia builder")
+    settings,client_obj=_xray_builder_client(protocol,name,credential,flow,ss_method)
+    tag_base=re.sub(r"[^A-Za-z0-9_.-]+","-",remark).strip(".-")[:40] or protocol
+    tag=f"makia-{tag_base}-{port}"
+    if any(isinstance(item,dict) and item.get("tag")==tag for item in inbounds):
+        tag=f"{tag}-{secrets.token_hex(2)}"
+    inbound={
+        "tag":tag,"listen":listen,"port":port,
+        "protocol":"hysteria" if protocol=="hysteria2" else protocol,
+        "settings":settings,"streamSettings":stream,
+        "sniffing":_xray_builder_sniffing(options),
+    }
+    inbounds.append(inbound)
+    tmp=_xray_temp_json_path(path,"inbound-builder")
+    backup_dir=_backup_dir()
+    backup=None
+    if path.exists():
+        backup=backup_dir/f"xray-builder-{int(time.time())}.json"
+        shutil.copy2(path,backup)
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(tmp,0o600)
+    try:
+        _xray_test_config(binary,tmp)
+        os.replace(tmp,path)
+        _xray_secure_runtime_file(path)
+        _xray_test_config_as_service(binary,path)
+        _run(["systemctl","restart","xray"],timeout=30)
+        if not _active("xray"):
+            raise ProtocolError("Xray did not become active after inbound apply")
+        if not _wait_listener(port,transport_proto,timeout=8.0,interval=0.25):
+            raise ProtocolError(f"Xray {transport_proto.upper()}/{port} did not become ready within 8 seconds")
+        _ufw_allow_if_active(port,transport_proto,f"Xray {protocol}")
+    except Exception:
+        try:
+            if tmp.exists():tmp.unlink()
+            if backup and backup.exists():
+                shutil.copy2(backup,path)
+                _xray_secure_runtime_file(path)
+                _run(["systemctl","restart","xray"],timeout=30)
+        except Exception:
+            pass
+        raise
+    fingerprint=str(options.get("fingerprint") or "chrome")
+    spider_x=str(options.get("spider_x") or "/")
+    share=_xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x)
+    return {
+        "protocol":protocol,"tag":tag,"remark":remark,"listen":listen,"port":port,
+        "name":name,"credential":credential,"transport":stream.get("method"),
+        "security":stream.get("security"),"share_link":share,
+        "reality":reality_meta,"backup":str(backup) if backup else None,
+        "inbound":inbound,
+    }
+
+
 def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", security="none", path_value="/", server_name="", reality_dest="", manual=False):
     protocol=(protocol or "").lower()
     if protocol not in {"vless","vmess","trojan","shadowsocks","hysteria2","http","socks"}:
