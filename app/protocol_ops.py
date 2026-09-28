@@ -2086,6 +2086,16 @@ def reconfigure_openvpn_server(port=1194,proto="udp",dns_servers=None,keepalive_
     current=_openvpn_server_runtime()
     current_transport="tcp" if str(current.get("proto") or "").startswith("tcp") else "udp"
     current_port=int(current.get("port") or 0)
+    if requested!=current_transport:
+        auxiliaries=[
+            item for item in (_openvpn_transport_runtimes().values())
+            if item and item.get("name")!="server" and item.get("service_active")
+        ]
+        if auxiliaries:
+            raise ProtocolError(
+                "Primary OpenVPN transport cannot be switched while auxiliary transport instances are active; "
+                "use Connection Modes to add UDP/TCP without replacing the primary runtime"
+            )
     if (port!=current_port or requested!=current_transport) and _port_transport_in_use(port,requested):
         raise ProtocolError(f"{requested.upper()} port {port} is already in use")
 
