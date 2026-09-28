@@ -640,6 +640,67 @@ def account_new_defaults(request:Request):
         "expiry_presets":[1,7,30,60,90],
     }
 
+class ServicePlanPayload(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    protocol_kind:str=Field(default="xray",max_length=24)
+    config:dict=Field(default_factory=dict)
+    price_label:str=Field(default="",max_length=80)
+    active:bool=True
+
+def _validate_service_plan(payload:ServicePlanPayload):
+    kind=str(payload.protocol_kind or "").lower()
+    allowed={"ssh","xray","wireguard","openvpn","outline"}
+    if kind not in allowed:
+        raise HTTPException(400,"unsupported plan protocol")
+    cfg=dict(payload.config or {})
+    numeric={
+        "expire_days":(0,3650),"quota_gb":(0,100000),"ip_limit":(1,50),
+        "device_limit":(1,50),"connection_limit":(1,50),"reset_days":(0,3650),
+    }
+    for key,(low,high) in numeric.items():
+        if key in cfg:
+            try:value=float(cfg[key])
+            except Exception:raise HTTPException(400,f"invalid plan field: {key}")
+            if value<low or value>high:
+                raise HTTPException(400,f"plan field out of range: {key}")
+    return kind,cfg
+
+@app.get("/api/plans")
+def service_plans_get(request:Request,active_only:bool=False):
+    require_user(request)
+    return list_service_plans(active_only)
+
+@app.post("/api/plans")
+def service_plans_create(payload:ServicePlanPayload,request:Request):
+    actor=require_mutation(request)
+    kind,cfg=_validate_service_plan(payload)
+    try:
+        plan_id=create_service_plan(payload.name,kind,cfg,payload.price_label,payload.active)
+    except Exception as exc:
+        raise HTTPException(400,str(exc))
+    audit(actor,"plan_create",str(plan_id),f"{payload.name}; {kind}",ip(request))
+    return get_service_plan(plan_id)
+
+@app.put("/api/plans/{plan_id}")
+def service_plans_update(plan_id:int,payload:ServicePlanPayload,request:Request):
+    actor=require_mutation(request)
+    if not get_service_plan(plan_id):
+        raise HTTPException(404,"plan not found")
+    kind,cfg=_validate_service_plan(payload)
+    update_service_plan(plan_id,payload.name,kind,cfg,payload.price_label,payload.active)
+    audit(actor,"plan_update",str(plan_id),f"{payload.name}; {kind}",ip(request))
+    return get_service_plan(plan_id)
+
+@app.delete("/api/plans/{plan_id}")
+def service_plans_delete(plan_id:int,request:Request):
+    actor=require_mutation(request)
+    if not get_service_plan(plan_id):
+        raise HTTPException(404,"plan not found")
+    delete_service_plan(plan_id)
+    audit(actor,"plan_delete",str(plan_id),ip=ip(request))
+    return {"ok":True}
+
+
 @app.get("/api/accounts/generate-secret")
 def account_generate_secret(request:Request,mode:str="strong"):
     require_user(request)
