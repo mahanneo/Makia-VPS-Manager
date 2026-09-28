@@ -675,20 +675,29 @@ def remove_ikev2_user(name):
     return {"ok":True,"name":name}
 
 
-def bootstrap_stealth(domain, listen_port=8443):
+def bootstrap_stealth(domain, listen_port=9443):
     if not (_installed("stunnel4") or _installed("stunnel")):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     listen_port=_validate_port(listen_port)
     fallback=_openvpn_named_runtime("makia-tcp")
     if not fallback.get("service_active") or not fallback.get("listener"):
-        fallback=ensure_openvpn_tcp_fallback(8443)["status"]
+        backend_port=_select_available_port_excluding(
+            8443,"tcp",(10443,11940,12443),exclude_ports={listen_port}
+        )
+        fallback=ensure_openvpn_tcp_fallback(backend_port)["status"]
     backend_port=int(fallback.get("port") or 0)
     if listen_port==backend_port:
-        raise ProtocolError("Stealth public port must differ from the OpenVPN TCP backend port")
+        raise ProtocolError(
+            f"Stealth public TCP/{listen_port} conflicts with the active OpenVPN TCP backend. "
+            "Choose a different public Stealth port; Makia will not move an active TCP backend silently."
+        )
     existing=stealth_status()
     if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
-        raise ProtocolError(f"TCP/{listen_port} is already in use")
+        owner=_port_owner_label(listen_port,"tcp")
+        suggestion=_suggest_free_port("tcp",(9443,10443,11443,12443),exclude_ports={backend_port})
+        hint=f"; try TCP/{suggestion}" if suggestion else ""
+        raise ProtocolError(f"TCP/{listen_port} is already owned by {owner}{hint}")
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
     if not cert.exists() or not key.exists():
@@ -801,7 +810,8 @@ def protocol_modes():
             "tcp_fallback_parallel":True,
             "tcp_443_reserved_for_https":True,
             "note":"Primary OpenVPN can remain UDP while Makia runs a separate TCP fallback. Stealth reuses that TCP backend, so enabling it no longer disconnects UDP users.",
-        }
+        },
+        "port_plan":connection_port_plan(),
     }
 
 
@@ -1626,45 +1636,77 @@ def ensure_openvpn_tcp_fallback(port=8443):
     port=_validate_port(port)
     server_dir=OVPN_DIR/"server"
     required=[server_dir/"ca.crt",server_dir/"server.crt",server_dir/"server.key",server_dir/"dh.pem",server_dir/"crl.pem",server_dir/"ta.key"]
-    if not all(p.exists() for p in required):
-        raise ProtocolError("OpenVPN primary server/PKI must be configured before enabling TCP fallback")
+    missing=[p.name for p in required if not p.exists()]
+    if missing:
+        raise ProtocolError(
+            "OpenVPN TCP fallback requires the existing OpenVPN PKI; missing: "
+            +", ".join(missing)
+        )
 
     current=_openvpn_named_runtime("makia-tcp")
-    if current.get("config") and Path(current["config"]).exists():
-        existing_port=int(current.get("port") or 0)
-        if existing_port!=port and _port_transport_in_use(port,"tcp"):
-            raise ProtocolError(f"TCP port {port} is already in use")
-    elif _port_transport_in_use(port,"tcp"):
-        raise ProtocolError(f"TCP port {port} is already in use; choose another fallback port")
+    same_configured=int(current.get("port") or 0)==port and Path(current.get("config") or "").exists()
+    if _port_transport_in_use(port,"tcp") and not (same_configured and current.get("listener")):
+        owner=_port_owner_label(port,"tcp")
+        suggestion=_suggest_free_port("tcp",(8443,10443,11940,12443),exclude_ports={port})
+        hint=f"; try TCP/{suggestion}" if suggestion else ""
+        raise ProtocolError(f"TCP/{port} is already owned by {owner}{hint}")
 
     network="10.9.0.0/24"
-    up,down=_openvpn_aux_forward_scripts("tcp",network)
     conf=OVPN_TCP_FALLBACK_CONF
-    conf.parent.mkdir(parents=True,exist_ok=True)
-    conf.write_text(
-        f"port {port}\nproto tcp4-server\nlocal 0.0.0.0\ndev tun-tcp\n"
-        "topology subnet\nserver 10.9.0.0 255.255.255.0\n"
-        f"ca {server_dir/'ca.crt'}\ncert {server_dir/'server.crt'}\nkey {server_dir/'server.key'}\n"
-        f"dh {server_dir/'dh.pem'}\ncrl-verify {server_dir/'crl.pem'}\ntls-crypt {server_dir/'ta.key'}\n"
-        'push "redirect-gateway def1 bypass-dhcp"\n'
-        'push "dhcp-option DNS 1.1.1.1"\npush "dhcp-option DNS 8.8.8.8"\n'
-        "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
-        "data-ciphers AES-256-GCM:AES-128-GCM\ndata-ciphers-fallback AES-256-GCM\nauth SHA256\nverb 3\n"
-        f"script-security 2\nup {up}\ndown {down}\n",
-        encoding="utf-8",
-    )
-    os.chmod(conf,0o600)
-    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
-    sysctl_dir.mkdir(parents=True,exist_ok=True)
-    (sysctl_dir/"99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
-    _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
-    _run(["systemctl","enable","--now",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
-    _run(["systemctl","restart",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
-    _ufw_allow_if_active(port,"tcp","OpenVPN TCP fallback")
-    status=_openvpn_named_runtime("makia-tcp")
-    if not status.get("service_active") or not status.get("listener"):
-        raise ProtocolError("OpenVPN TCP fallback did not reach the requested listener")
-    return {"ok":True,"status":status,"port":port,"proto":"tcp"}
+    backup_dir=_backup_dir()
+    stamp=f"{int(time.time())}-{secrets.token_hex(3)}"
+    backups={}
+    for path in [conf,OVPN_DIR/"makia-tcp-up.sh",OVPN_DIR/"makia-tcp-down.sh"]:
+        if path.exists():
+            target=backup_dir/f"{path.name}.{stamp}.bak"
+            shutil.copy2(path,target)
+            backups[path]=target
+
+    try:
+        up,down=_openvpn_aux_forward_scripts("tcp",network)
+        conf.parent.mkdir(parents=True,exist_ok=True)
+        conf.write_text(
+            f"port {port}\nproto tcp4-server\nlocal 0.0.0.0\ndev tun-tcp\n"
+            "topology subnet\nserver 10.9.0.0 255.255.255.0\n"
+            f"ca {server_dir/'ca.crt'}\ncert {server_dir/'server.crt'}\nkey {server_dir/'server.key'}\n"
+            f"dh {server_dir/'dh.pem'}\ncrl-verify {server_dir/'crl.pem'}\ntls-crypt {server_dir/'ta.key'}\n"
+            'push "redirect-gateway def1 bypass-dhcp"\n'
+            'push "dhcp-option DNS 1.1.1.1"\npush "dhcp-option DNS 8.8.8.8"\n'
+            "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
+            "data-ciphers AES-256-GCM:AES-128-GCM\ndata-ciphers-fallback AES-256-GCM\nauth SHA256\nverb 3\n"
+            f"script-security 2\nup {up}\ndown {down}\n",
+            encoding="utf-8",
+        )
+        os.chmod(conf,0o600)
+        sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+        sysctl_dir.mkdir(parents=True,exist_ok=True)
+        (sysctl_dir/"99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        _run(["systemctl","enable","--now",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
+        _run(["systemctl","restart",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
+        _ufw_allow_if_active(port,"tcp","OpenVPN TCP fallback")
+        status=_openvpn_named_runtime("makia-tcp")
+        if not status.get("service_active") or not status.get("listener"):
+            raise ProtocolError("OpenVPN TCP fallback service started but no TCP listener was detected")
+        return {"ok":True,"status":status,"port":port,"proto":"tcp"}
+    except Exception:
+        for path in [conf,OVPN_DIR/"makia-tcp-up.sh",OVPN_DIR/"makia-tcp-down.sh"]:
+            backup=backups.get(path)
+            try:
+                if backup and backup.exists():
+                    shutil.copy2(backup,path)
+                elif path.exists() and path not in backups:
+                    path.unlink()
+            except OSError:
+                pass
+        if current.get("config") and Path(current.get("config") or "").exists():
+            try:
+                _run(["systemctl","restart",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
+            except Exception:
+                pass
+        else:
+            subprocess.run(["systemctl","stop",OVPN_TCP_FALLBACK_SERVICE],capture_output=True,text=True,check=False)
+        raise
 
 
 def _openvpn_server_runtime():
@@ -2169,6 +2211,104 @@ def _port_transport_in_use(port, proto):
 
 def _port_in_use(port):
     return _port_transport_in_use(port,"tcp") or _port_transport_in_use(port,"udp")
+
+
+def _suggest_free_port(proto,candidates,exclude_ports=None):
+    excluded={int(x) for x in (exclude_ports or set()) if x}
+    for candidate in candidates:
+        try:
+            candidate=_validate_port(candidate)
+        except Exception:
+            continue
+        if candidate in excluded:
+            continue
+        if not _port_transport_in_use(candidate,proto):
+            return candidate
+    return None
+
+
+def _select_available_port_excluding(preferred,proto,fallbacks=(),exclude_ports=None):
+    excluded={int(x) for x in (exclude_ports or set()) if x}
+    candidates=[]
+    for value in (preferred,*fallbacks):
+        try:
+            value=_validate_port(value)
+        except Exception:
+            continue
+        if value not in excluded and value not in candidates:
+            candidates.append(value)
+    for value in candidates:
+        if not _port_transport_in_use(value,proto):
+            return value
+    raise ProtocolError(
+        f"no free {str(proto).upper()} port found outside reserved ports: "
+        +", ".join(str(x) for x in candidates)
+    )
+
+
+def _port_owner_label(port,proto):
+    """Best-effort human-readable owner for a real occupied listener."""
+    port=_validate_port(port)
+    proto=str(proto or "").lower()
+    if not _port_transport_in_use(port,proto):
+        return "free"
+
+    if proto=="tcp":
+        if port==443 and (_active("nginx") or _active("apache2")):
+            return "HTTPS web server (TCP/443)"
+        tcp=_openvpn_named_runtime("makia-tcp")
+        if int(tcp.get("port") or 0)==port and (tcp.get("service_active") or tcp.get("listener")):
+            return "OpenVPN TCP fallback"
+        st=stealth_status()
+        if int(st.get("port") or 0)==port and (st.get("configured") or st.get("listener")):
+            return "Stealth / Stunnel"
+        ws=wstunnel_status()
+        if int(ws.get("port") or 0)==port and (ws.get("configured") or ws.get("listener")):
+            return "WStunnel"
+        try:
+            xr=xray_status()
+            for inbound in xr.get("inbounds") or []:
+                if int(inbound.get("port") or 0)==port:
+                    return f"Xray inbound {inbound.get('tag') or inbound.get('protocol') or ''}".strip()
+        except Exception:
+            pass
+    elif proto=="udp":
+        wg=wireguard_status()
+        if int(wg.get("port") or 0)==port and wg.get("service_active"):
+            return "WireGuard"
+        ov=_openvpn_server_runtime()
+        if int(ov.get("port") or 0)==port and str(ov.get("proto") or "").startswith("udp"):
+            return "OpenVPN UDP"
+    return "another host service"
+
+
+def connection_port_plan():
+    """Describe actual TCP listener ownership and safe alternatives without mutating runtime."""
+    tcp=_openvpn_named_runtime("makia-tcp")
+    st=stealth_status()
+    ws=wstunnel_status()
+    rows=[]
+    for service,port in [
+        ("HTTPS",443),
+        ("OpenVPN TCP fallback",int(tcp.get("port") or 8443)),
+        ("Stealth public TLS",int(st.get("port") or 9443)),
+        ("WStunnel WSS",int(ws.get("port") or 8444)),
+    ]:
+        occupied=_port_transport_in_use(port,"tcp")
+        rows.append({
+            "service":service,"port":port,"transport":"tcp","occupied":occupied,
+            "owner":_port_owner_label(port,"tcp") if occupied else "",
+        })
+    return {
+        "rows":rows,
+        "suggested":{
+            "openvpn_tcp":int(tcp.get("port") or 0) or _suggest_free_port("tcp",(8443,10443,11940,12443)),
+            "stealth":int(st.get("port") or 0) or _suggest_free_port("tcp",(9443,10443,11443,12443),exclude_ports={int(tcp.get("port") or 0)}),
+            "wstunnel":int(ws.get("port") or 0) or _suggest_free_port("tcp",(8444,10444,11444,12444)),
+        },
+        "https_tcp_443_reserved":bool(_port_transport_in_use(443,"tcp")),
+        "note":"TCP/443 has one owner. UDP/443 may coexist because TCP and UDP are independent transports.",
+    }
 
 def _select_available_port(preferred, proto, fallbacks=()):
     proto=str(proto or "").lower()
