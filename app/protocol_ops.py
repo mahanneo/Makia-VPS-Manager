@@ -2299,6 +2299,19 @@ def connection_port_plan():
             "service":service,"port":port,"transport":"tcp","occupied":occupied,
             "owner":_port_owner_label(port,"tcp") if occupied else "",
         })
+    server_dir=OVPN_DIR/"server"
+    required=["ca.crt","server.crt","server.key","dh.pem","crl.pem","ta.key"]
+    missing_pki=[name for name in required if not (server_dir/name).exists()]
+    tcp_blockers=[]
+    if missing_pki:
+        tcp_blockers.append("Missing OpenVPN PKI: "+", ".join(missing_pki))
+    if not tcp.get("listener") and not _suggest_free_port("tcp",(8443,10443,11940,12443)):
+        tcp_blockers.append("No free TCP fallback port in the managed candidate set")
+    stealth_blockers=[]
+    if not (_installed("stunnel4") or _installed("stunnel")):
+        stealth_blockers.append("Stunnel tooling is not installed")
+    if missing_pki:
+        stealth_blockers.append("Stealth needs the existing OpenVPN PKI/TCP backend")
     return {
         "rows":rows,
         "suggested":{
@@ -2306,6 +2319,7 @@ def connection_port_plan():
             "stealth":int(st.get("port") or 0) or _suggest_free_port("tcp",(9443,10443,11443,12443),exclude_ports={int(tcp.get("port") or 0)}),
             "wstunnel":int(ws.get("port") or 0) or _suggest_free_port("tcp",(8444,10444,11444,12444)),
         },
+        "blockers":{"openvpn_tcp":tcp_blockers,"stealth":stealth_blockers},
         "https_tcp_443_reserved":bool(_port_transport_in_use(443,"tcp")),
         "note":"TCP/443 has one owner. UDP/443 may coexist because TCP and UDP are independent transports.",
     }
