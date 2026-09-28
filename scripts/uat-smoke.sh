@@ -134,25 +134,44 @@ else
   bad "Xray Certbot deploy hook missing"
 fi
 
-if [[ -f /etc/openvpn/server/server.conf ]]; then
-  OVPN_PROTO="$(awk '$1=="proto"{print $2; exit}' /etc/openvpn/server/server.conf 2>/dev/null || true)"
-  OVPN_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/server.conf 2>/dev/null || true)"
-  if [[ "$OVPN_PROTO" == "udp4" || "$OVPN_PROTO" == "tcp4-server" ]]; then
-    ok "OpenVPN IPv4 transport ($OVPN_PROTO)"
-  else
-    ovpn_bad "OpenVPN transport is not normalized to udp4/tcp4-server ($OVPN_PROTO)"
-  fi
-  if systemctl is-active --quiet openvpn-server@server; then
-    ok "OpenVPN runtime active"
-  else
-    ovpn_bad "OpenVPN runtime inactive"
-    journalctl -u openvpn-server@server -n 12 --no-pager || true
-  fi
-  if [[ -n "$OVPN_PORT" ]] && ss -H -lntu 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
-    ok "OpenVPN listener on port $OVPN_PORT"
-  else
-    ovpn_bad "OpenVPN listener missing"
-  fi
+OVPN_CONFIGS=(/etc/openvpn/server/*.conf)
+if [[ -e "${OVPN_CONFIGS[0]}" ]]; then
+  OVPN_UDP_READY=0
+  OVPN_TCP_READY=0
+  for OVPN_CONF in "${OVPN_CONFIGS[@]}"; do
+    OVPN_NAME="$(basename "$OVPN_CONF" .conf)"
+    OVPN_PROTO="$(awk '$1=="proto"{print $2; exit}' "$OVPN_CONF" 2>/dev/null || true)"
+    OVPN_PORT="$(awk '$1=="port"{print $2; exit}' "$OVPN_CONF" 2>/dev/null || true)"
+    OVPN_UNIT="openvpn-server@${OVPN_NAME}"
+    if [[ "$OVPN_PROTO" == "udp4" || "$OVPN_PROTO" == "tcp4-server" ]]; then
+      ok "OpenVPN $OVPN_NAME IPv4 transport ($OVPN_PROTO)"
+    else
+      ovpn_bad "OpenVPN $OVPN_NAME transport is not normalized ($OVPN_PROTO)"
+    fi
+    if systemctl is-active --quiet "$OVPN_UNIT"; then
+      ok "OpenVPN $OVPN_NAME runtime active"
+    else
+      ovpn_bad "OpenVPN $OVPN_NAME runtime inactive"
+      journalctl -u "$OVPN_UNIT" -n 12 --no-pager || true
+    fi
+    if [[ "$OVPN_PROTO" == udp* ]]; then
+      if [[ -n "$OVPN_PORT" ]] && ss -H -lun 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
+        ok "OpenVPN $OVPN_NAME UDP listener on $OVPN_PORT"
+        OVPN_UDP_READY=1
+      else
+        ovpn_bad "OpenVPN $OVPN_NAME UDP listener missing"
+      fi
+    elif [[ "$OVPN_PROTO" == tcp* ]]; then
+      if [[ -n "$OVPN_PORT" ]] && ss -H -ltn 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
+        ok "OpenVPN $OVPN_NAME TCP listener on $OVPN_PORT"
+        OVPN_TCP_READY=1
+      else
+        ovpn_bad "OpenVPN $OVPN_NAME TCP listener missing"
+      fi
+    fi
+  done
+  [[ "$OVPN_UDP_READY" -eq 1 ]] && ok "OpenVPN UDP mode READY" || ovpn_bad "OpenVPN UDP mode not READY"
+  [[ "$OVPN_TCP_READY" -eq 1 ]] && ok "OpenVPN TCP mode READY" || ok "OpenVPN TCP mode not configured yet"
 else
   ovpn_bad "OpenVPN server config missing"
 fi
