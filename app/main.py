@@ -3107,6 +3107,68 @@ def client_diagnostics(client_id:int,request:Request):
     critical=[x for x in checks if not x["ok"] and x["level"]=="error"]
     return {"ok":not critical,"client":row,"checks":checks,"critical":len(critical)}
 
+
+@app.get("/api/diagnostics/access/{kind}/{key}")
+def access_diagnostics(kind:str,key:str,request:Request):
+    require_user(request)
+    kind=str(kind or "").lower()
+    checks=[]
+    def add(name,ok,detail,level="error"):
+        checks.append({"name":name,"ok":bool(ok),"detail":str(detail),"level":level})
+    if kind=="xray":
+        try:return client_diagnostics(int(key),request)
+        except ValueError:raise HTTPException(400,"invalid Xray client id")
+    if kind=="ssh":
+        profile=get_profile(key)
+        add("profile",bool(profile),"profile found" if profile else "profile not found")
+        try:
+            status=protocol_ops.ssh_status()
+            add("ssh_service",bool(status.get("service_active")),status.get("detail") or "SSH runtime")
+        except Exception as exc:add("ssh_service",False,str(exc))
+        if profile:
+            raw=profile.get("expire_date")
+            expired=False
+            if raw:
+                try:expired=date.fromisoformat(raw)<date.today()
+                except Exception:pass
+            add("expiry",not expired,raw or "no expiry")
+            add("enabled",bool(profile.get("enabled")),"enabled" if profile.get("enabled") else "disabled")
+        art=get_access_artifact_by_key("ssh",key)
+        add("delivery_artifact",bool(art),"available" if art else "missing","warn")
+    elif kind=="wireguard":
+        peers=protocol_ops.list_wireguard_peers()
+        peer=next((x for x in peers if x.get("name")==key),None)
+        add("peer",bool(peer),"peer found" if peer else "peer not found")
+        try:
+            status=protocol_ops.wireguard_status()
+            add("wireguard_service",bool(status.get("service_active")),f"UDP/{status.get('port') or '—'}")
+        except Exception as exc:add("wireguard_service",False,str(exc))
+        if peer:
+            try:
+                runtime={x.get("public_key"):x for x in protocol_ops._wireguard_peer_runtime()}
+                live=runtime.get(peer.get("public_key"),{})
+                age=live.get("handshake_age")
+                add("handshake",age is not None and age<300,"never" if age is None else f"{age}s ago","warn")
+            except Exception as exc:add("handshake",False,str(exc),"warn")
+        art=get_access_artifact_by_key("wireguard",key)
+        add("delivery_artifact",bool(art),"available" if art else "missing","warn")
+    elif kind=="openvpn":
+        clients=protocol_ops.list_openvpn_clients()
+        client=next((x for x in clients if x.get("name")==key),None)
+        add("client_certificate",bool(client),"client found" if client else "client not found")
+        try:
+            status=protocol_ops.openvpn_status()
+            add("openvpn_service",bool(status.get("service_active")),f"{status.get('proto') or ''}/{status.get('port') or '—'}")
+            add("listener",bool(status.get("listener")),f"{status.get('proto') or ''}/{status.get('port') or '—'}")
+        except Exception as exc:add("openvpn_runtime",False,str(exc))
+        art=get_access_artifact_by_key("openvpn",key)
+        add("delivery_artifact",bool(art),"OVPN export available" if art else "artifact will be rebuilt on export","warn")
+    else:
+        raise HTTPException(404,"unsupported access type")
+    critical=[x for x in checks if not x["ok"] and x["level"]=="error"]
+    return {"ok":not critical,"kind":kind,"key":key,"checks":checks,"critical":len(critical)}
+
+
 @app.get("/api/migration/wizard")
 def migration_wizard(request:Request):
     require_local_admin(request)
