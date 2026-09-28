@@ -856,7 +856,7 @@ async function inboundsWorkspace(renderToken=window.__viewRenderToken){
       '<div class="sx-inbound-cell"><span>Port</span><b>'+htmlEsc(String(ib.port??'—'))+'</b></div>'+
       '<div class="sx-inbound-cell"><span>Clients</span><b>'+Number(ib.clients||0)+'</b></div>'+
       '<div class="sx-inbound-cell"><span>Managed</span><b>'+managed+'</b></div>'+
-      '<div class="sx-inbound-actions"><button class="ghost" data-action="nav" data-view="xray">Clients</button><button class="ghost" data-action="xray-diagnostics">Status</button><button class="ghost" data-action="xray-advanced">JSON</button></div></div>';
+      '<div class="sx-inbound-actions"><button class="primary" data-action="xray-inbound-client" data-tag="'+dataEnc(ib.tag||'')+'" data-protocol="'+htmlEsc(String(ib.protocol||''))+'">+ Client</button><button class="ghost" data-action="nav" data-view="xray">Clients</button><button class="ghost" data-action="xray-diagnostics">Status</button><button class="ghost" data-action="xray-advanced">JSON</button></div></div>';
   }).join('');
   content.innerHTML=[
     '<div class="sx-page">',
@@ -1317,6 +1317,54 @@ async function createXrayInboundBuilder(){
     const result=await api('/api/protocols/xray/inbounds',{method:'POST',body:JSON.stringify(payload)});
     xrayCredentialModal(result);
   }catch(e){alert('Xray Inbound: '+e.message)}
+}
+
+
+function openXrayInboundClient(tag,protocol){
+  const allowed=['vless','vmess','trojan','hysteria2'].includes(String(protocol||'').toLowerCase());
+  if(!allowed){alert('این Protocol در Makia فعلاً Client چندگانه قابل مدیریت ندارد؛ برای Shadowsocks/HTTP/SOCKS یک Inbound جدا بساز.');return}
+  const endpoint=window.PANEL_DOMAIN||location.hostname;
+  const endpointMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(endpoint)?'ip':'domain';
+  const defaults=window.__operatorSettings?.defaults||{};
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop"><div class="modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">ADD XRAY CLIENT</div><h3>'+htmlEsc(tag)+'</h3><p>'+htmlEsc(String(protocol).toUpperCase())+' · همین Inbound و Transport/Security حفظ می‌شود</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="form-grid two">',
+        '<label>Client / Email<input id="xacName" value="user'+Math.floor(Math.random()*9000+1000)+'" maxlength="48"></label>',
+        '<label>Credential (اختیاری)<input id="xacCredential" dir="ltr" placeholder="خالی = تولید خودکار"></label>',
+        '<label>Endpoint mode<select id="xacEndpointMode"><option value="domain" '+(endpointMode==='domain'?'selected':'')+'>Domain</option><option value="ip" '+(endpointMode==='ip'?'selected':'')+'>IP</option></select></label>',
+        '<label>Client endpoint<input id="xacEndpoint" dir="ltr" value="'+htmlEsc(endpoint)+'"></label>',
+        '<label>Flow<select id="xacFlow"><option value="">None</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select><span class="muted">فقط اگر Inbound VLESS + RAW + TLS/REALITY باشد قابل اعمال است.</span></label>',
+        '<label>Traffic quota GB<input id="xacQuota" type="number" min="0" value="'+Number(defaults.xray_quota_gb??50)+'"></label>',
+        '<label>Expiry days<input id="xacDays" type="number" min="0" max="3650" value="'+Number(defaults.xray_expire_days??30)+'"></label>',
+        '<label>IP limit<input id="xacIp" type="number" min="1" max="50" value="'+Number(defaults.xray_ip_limit||1)+'"></label>',
+        '<label>Reset days<input id="xacReset" type="number" min="0" max="3650" value="'+Number(defaults.xray_reset_days??30)+'"></label>',
+      '</div>',
+      '<div class="wizard-note"><b>Same inbound</b><span>Port، Transport، TLS/REALITY و Sniffing تغییر نمی‌کند. فقط Client جدید به همین Inbound اضافه می‌شود و Share/QR مستقل می‌گیرد.</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="xray-inbound-client-create" data-tag="'+dataEnc(tag)+'">Create client</button></div>',
+    '</div></div>'
+  ].join('');
+}
+
+async function createXrayInboundClient(tag){
+  const payload={
+    name:xbValue('xacName').trim(),
+    endpoint:xbValue('xacEndpoint').trim(),
+    endpoint_mode:xbValue('xacEndpointMode','auto'),
+    credential:xbValue('xacCredential','').trim(),
+    flow:xbValue('xacFlow',''),
+    quota_gb:Number(xbValue('xacQuota','0')||0),
+    expire_days:Number(xbValue('xacDays','0')||0),
+    ip_limit:Number(xbValue('xacIp','1')||1),
+    reset_days:Number(xbValue('xacReset','0')||0)
+  };
+  if(!payload.name||!payload.endpoint){alert('Client و Endpoint الزامی هستند.');return}
+  try{
+    const result=await api('/api/protocols/xray/inbounds/'+encodeURIComponent(tag)+'/clients',{
+      method:'POST',body:JSON.stringify(payload)
+    });
+    xrayCredentialModal(result);
+  }catch(e){alert('Add Xray client: '+e.message)}
 }
 
 function protocolClientRow(c){const quota=Number(c.quota_bytes||0),used=Number(c.usage?.total||0),p=quota?Math.min(100,(used/quota)*100):0;const expiry=c.expire_at?new Date(c.expire_at*1000).toLocaleDateString():'∞';const state=!c.enabled?('Disabled'+(c.disabled_reason?' · '+c.disabled_reason:'')):(c.expired?'Expired':'Active');const sub=location.origin+'/sub/'+c.subscription_id;const ipCount=Number(c.online_ip_count||0),ipState=c.ip_violation?'bad':(ipCount?'ok':'');const accounting=c.accounting_supported!==false;return `<div class="protocol-client-row"><div><div class="client-main"><b>${c.name}</b><span class="protocol-pill">${c.protocol.toUpperCase()}</span><span class="status-chip ${c.enabled&&!c.expired?'ok':'bad'}">${state}</span>${c.ip_violation?'<span class="status-chip bad">IP LIMIT</span>':''}</div><div class="muted">${c.inbound_tag}</div></div><div>${accounting?`<b>${fmtBytes(used)} / ${quota?fmtBytes(quota):'Unlimited'}</b><div class="usage-track"><i style="width:${p}%"></i></div><div class="muted">↑ ${fmtBytes(c.usage?.uplink||0)} · ↓ ${fmtBytes(c.usage?.downlink||0)} · Reset ${c.reset_days?c.reset_days+'d':'manual'}</div>`:'<span class="status-chip warn">Accounting unavailable</span><div class="muted">این پروتکل در این نسخه counter مستقل per-client ندارد.</div>'}</div><div><b>${expiry}</b><div class="muted">${c.days_left===null?'No expiry':c.days_left+' days left'}</div><div class="chips"><button class="status-chip ${ipState}" onclick="showClientIPs(${c.id})">IPs ${ipCount}/${c.ip_limit}</button></div></div><div class="toolbar"><button class="ghost" onclick="copyText('${sub}')">Subscription</button><button class="ghost" onclick="editProtocolClient(${c.id})">Policy</button>${accounting?'<button class="soft" onclick="resetProtocolTraffic('+c.id+')">Reset</button>':''}</div></div>`}
@@ -1925,6 +1973,8 @@ async function handleMakiaAction(btn){
   if(action==='nav'){closeModal();switchView(btn.dataset.view);return}
   if(action==='nav-settings'){closeModal();window.__settingsTab=btn.dataset.tab||'general';switchView('settings');return}
   if(action==='xray-inbound-builder'){await openXrayInboundBuilder();return}
+  if(action==='xray-inbound-client'){openXrayInboundClient(dataDec(btn.dataset.tag),btn.dataset.protocol||'');return}
+  if(action==='xray-inbound-client-create'){await createXrayInboundClient(dataDec(btn.dataset.tag));return}
   if(action==='xray-builder-create'){await createXrayInboundBuilder();return}
   if(action==='wizard-open'){await openProvisionWizard(btn.dataset.kind||null);return}
   if(action==='wizard-protocol'){await selectWizardProtocol(btn.dataset.kind);return}
