@@ -220,8 +220,8 @@ def _automation_loop():
             # lightweight health alerts
             if int(now)%3600<60:
                 try:
-                    usage=system_ops.system_snapshot()
-                    disk=float(usage.get("disk_percent") or usage.get("disk") or 0)
+                    usage=system_ops.metrics()
+                    disk=float(usage.get("disk") or 0)
                     if disk>=90:_notification("warning","health","Disk usage is high",f"{disk:.1f}% used",telegram=True)
                 except Exception:pass
         except Exception:
