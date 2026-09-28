@@ -125,7 +125,7 @@ def test_v026_login_controls_are_functional_and_single_surface():
     login=(ROOT/"app/templates/login.html").read_text(encoding="utf-8")
     assert 'id="loginLangToggle"' in login
     assert 'id="loginThemeToggle"' in login
-    assert "makia-login-lang" in login
+    assert "let lang='{{language}}'==='en'?'en':'fa'" in login
     assert "makia-login-theme" in login
     assert 'class="pro-login-field"' in login
     assert "pro-login-field input:focus" in (ROOT/"app/static/app.css").read_text(encoding="utf-8")
