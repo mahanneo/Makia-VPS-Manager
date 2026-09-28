@@ -1846,6 +1846,60 @@ def backup_create(request:Request):
     audit(actor,"backup_create",result["name"],ip=ip(request))
     return result
 
+@app.get("/api/backups/migration-readiness")
+def migration_readiness(request:Request):
+    require_local_admin(request)
+    panel_domain=str(get_setting("panel_domain","") or "").strip().lower().rstrip(".")
+    rows=[]
+    domain_endpoints=set()
+    for artifact in list_access_artifacts():
+        metadata={}
+        try:
+            metadata=json.loads(artifact.get("metadata_json") or "{}")
+        except (TypeError,ValueError):
+            metadata={}
+        endpoint=str(metadata.get("endpoint") or metadata.get("host") or "").strip()
+        if not endpoint:
+            rows.append({
+                "kind":artifact.get("kind") or "",
+                "name":artifact.get("display_name") or artifact.get("external_key") or "",
+                "endpoint":"","mode":"unknown","zero_touch":False,
+            })
+            continue
+        host=endpoint
+        if host.startswith("[") and host.endswith("]"):
+            host=host[1:-1]
+        host=host.rstrip(".").lower()
+        try:
+            ipaddress.ip_address(host)
+            mode="direct_ip"
+            zero_touch=False
+        except ValueError:
+            mode="domain"
+            zero_touch=True
+            domain_endpoints.add(host)
+        rows.append({
+            "kind":artifact.get("kind") or "",
+            "name":artifact.get("display_name") or artifact.get("external_key") or "",
+            "endpoint":endpoint,"mode":mode,"zero_touch":zero_touch,
+        })
+    direct=[row for row in rows if row["mode"]=="direct_ip"]
+    unknown=[row for row in rows if row["mode"]=="unknown"]
+    domains=sorted(domain_endpoints)
+    return {
+        "panel_domain":panel_domain,
+        "total":len(rows),
+        "domain_based":sum(1 for row in rows if row["mode"]=="domain"),
+        "direct_ip":len(direct),
+        "unknown":len(unknown),
+        "zero_touch_candidate":not direct and not unknown,
+        "domains_to_repoint":domains,
+        "panel_domain_covered":bool(panel_domain and panel_domain in domain_endpoints),
+        "attention":direct+unknown,
+        "note":"Domain-based profiles can preserve credentials across VPS cutover when every listed DNS name is repointed. Direct-IP or unknown endpoints require review/reissue.",
+    }
+
+
 class PortableBackupRequest(BaseModel):
     password:str=Field(min_length=10,max_length=128)
 
