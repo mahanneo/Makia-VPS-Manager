@@ -29,6 +29,7 @@ async def security_headers(request:Request,call_next):
         request.url.path.startswith("/sub/") or
         request.url.path.startswith("/client/") or
         request.url.path.startswith("/access/") or
+        request.url.path=="/integrations/telegram/webhook" or
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
@@ -2810,6 +2811,248 @@ def access_diagnostics(kind:str,key:str,request:Request):
     return {"kind":kind,"key":key,"ok":all(x["ok"] for x in checks),"checks":checks,"state":state}
 
 
+
+class BackupSchedulePayload(BaseModel):
+    enabled:bool=True
+    frequency_hours:int=Field(default=24,ge=1,le=168)
+    keep_local:int=Field(default=7,ge=1,le=50)
+    password:str=Field(default="",max_length=128)
+    remote_enabled:bool=False
+    remote_host:str=Field(default="",max_length=255)
+    remote_user:str=Field(default="",max_length=32)
+    remote_path:str=Field(default="/var/backups/makia",max_length=240)
+    remote_port:int=Field(default=22,ge=1,le=65535)
+    remote_key_path:str=Field(default="",max_length=240)
+
+def _backup_schedule_snapshot():
+    try:cfg=json.loads(get_setting("backup_schedule_json","{}") or "{}")
+    except Exception:cfg={}
+    try:status=json.loads(get_setting("backup_schedule_status","{}") or "{}")
+    except Exception:status={}
+    return {
+        "enabled":bool(cfg.get("enabled",False)),
+        "frequency_hours":int(cfg.get("frequency_hours") or 24),
+        "keep_local":int(cfg.get("keep_local") or 7),
+        "remote":cfg.get("remote") or {},
+        "has_password":bool(get_setting("backup_schedule_secret","")),
+        "last_run":int(get_setting("backup_schedule_last_run","0") or 0),
+        "status":status,
+    }
+
+@app.get("/api/backups/schedule")
+def backup_schedule_get(request:Request):
+    require_local_admin(request)
+    return _backup_schedule_snapshot()
+
+@app.put("/api/backups/schedule")
+def backup_schedule_put(payload:BackupSchedulePayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    if payload.enabled and not payload.password and not get_setting("backup_schedule_secret",""):
+        raise HTTPException(400,"set a Full Migration backup password before enabling scheduled backups")
+    remote={
+        "enabled":bool(payload.remote_enabled),
+        "host":payload.remote_host.strip(),
+        "user":payload.remote_user.strip(),
+        "path":payload.remote_path.strip(),
+        "port":payload.remote_port,
+        "key_path":payload.remote_key_path.strip(),
+    }
+    if remote["enabled"]:
+        # Validate without transmitting a file.
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,255}",remote["host"]):
+            raise HTTPException(400,"invalid remote backup host")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}",remote["user"]):
+            raise HTTPException(400,"invalid remote backup user")
+        if remote["key_path"] and not Path(remote["key_path"]).is_file():
+            raise HTTPException(400,"remote backup SSH key does not exist")
+    cfg={"enabled":payload.enabled,"frequency_hours":payload.frequency_hours,"keep_local":payload.keep_local,"remote":remote}
+    set_setting("backup_schedule_json",json.dumps(cfg,ensure_ascii=False,separators=(",",":")))
+    if payload.password:
+        if len(payload.password)<10:raise HTTPException(400,"backup password must be at least 10 characters")
+        set_setting("backup_schedule_secret",integration_ops.seal_secret({"password":payload.password}))
+    audit(actor,"backup_schedule_update","scheduler",f"enabled={payload.enabled}; remote={payload.remote_enabled}",ip(request))
+    return _backup_schedule_snapshot()
+
+@app.post("/api/backups/schedule/run")
+def backup_schedule_run(request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    try:
+        from . import scheduled_backup
+        result=scheduled_backup.run_once(True)
+    except Exception as exc:
+        raise HTTPException(400,str(exc))
+    audit(actor,"backup_schedule_run",result.get("name","manual"),ip=ip(request))
+    return result
+
+
+class CloudflareIntegrationPayload(BaseModel):
+    api_token:str=Field(default="",max_length=256)
+    zone_id:str=Field(default="",max_length=80)
+    record_name:str=Field(default="",max_length=253)
+    ttl:int=Field(default=60,ge=60,le=86400)
+
+class CloudflareCutoverPayload(BaseModel):
+    ipv4:str=Field(min_length=7,max_length=64)
+
+def _cloudflare_snapshot():
+    return {
+        "configured":bool(get_setting("cloudflare_secret","") and get_setting("cloudflare_zone_id","") and get_setting("cloudflare_record_name","")),
+        "zone_id":get_setting("cloudflare_zone_id",""),
+        "record_name":get_setting("cloudflare_record_name",""),
+        "ttl":_setting_int("cloudflare_ttl",60,60,86400),
+    }
+
+@app.get("/api/integrations/cloudflare")
+def cloudflare_get(request:Request):
+    require_local_admin(request)
+    return _cloudflare_snapshot()
+
+@app.put("/api/integrations/cloudflare")
+def cloudflare_put(payload:CloudflareIntegrationPayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    zone=payload.zone_id.strip();name=payload.record_name.strip().lower().rstrip(".")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,80}",zone):raise HTTPException(400,"invalid Cloudflare zone id")
+    if not name or "." not in name:raise HTTPException(400,"invalid Cloudflare A-record name")
+    if payload.api_token:
+        if len(payload.api_token)<20:raise HTTPException(400,"invalid Cloudflare API token")
+        set_setting("cloudflare_secret",integration_ops.seal_secret({"api_token":payload.api_token.strip()}))
+    elif not get_setting("cloudflare_secret",""):
+        raise HTTPException(400,"Cloudflare API token is required")
+    set_setting("cloudflare_zone_id",zone);set_setting("cloudflare_record_name",name);set_setting("cloudflare_ttl",payload.ttl)
+    audit(actor,"cloudflare_settings_update",name,ip=ip(request))
+    return _cloudflare_snapshot()
+
+def _cloudflare_token():
+    secret=get_setting("cloudflare_secret","")
+    if not secret:return ""
+    try:return str(integration_ops.open_secret(secret).get("api_token") or "")
+    except Exception:return ""
+
+@app.post("/api/integrations/cloudflare/test")
+def cloudflare_test(request:Request):
+    require_local_admin(request);require_mutation(request)
+    cfg=_cloudflare_snapshot()
+    try:record=integration_ops.cloudflare_record(_cloudflare_token(),cfg["zone_id"],cfg["record_name"])
+    except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    return {"ok":True,"record":record,"dns_only":None if not record else not bool(record.get("proxied"))}
+
+@app.post("/api/integrations/cloudflare/cutover")
+def cloudflare_cutover(payload:CloudflareCutoverPayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    cfg=_cloudflare_snapshot()
+    if not cfg["configured"]:raise HTTPException(409,"Cloudflare integration is not configured")
+    try:
+        result=integration_ops.cloudflare_update_a(_cloudflare_token(),cfg["zone_id"],cfg["record_name"],payload.ipv4,cfg["ttl"])
+    except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    audit(actor,"cloudflare_dns_cutover",cfg["record_name"],f"ipv4={payload.ipv4}; dns_only=true",ip(request))
+    resolved=[]
+    try:resolved=sorted({x[4][0] for x in socket.getaddrinfo(cfg["record_name"],443,socket.AF_INET,socket.SOCK_STREAM)})
+    except OSError:pass
+    return {"ok":True,"record":result,"resolved_ipv4":resolved,"propagated":payload.ipv4 in resolved}
+
+
+class TelegramIntegrationPayload(BaseModel):
+    bot_token:str=Field(default="",max_length=256)
+    chat_id:str=Field(default="",max_length=40)
+    enable_webhook:bool=False
+
+def _telegram_snapshot():
+    return {
+        "configured":bool(get_setting("telegram_secret","") and get_setting("telegram_chat_id","")),
+        "chat_id":get_setting("telegram_chat_id",""),
+        "webhook_enabled":_setting_bool("telegram_webhook_enabled",False),
+    }
+
+def _telegram_token():
+    raw=get_setting("telegram_secret","")
+    if not raw:return ""
+    try:return str(integration_ops.open_secret(raw).get("bot_token") or "")
+    except Exception:return ""
+
+@app.get("/api/integrations/telegram")
+def telegram_get(request:Request):
+    require_local_admin(request)
+    return _telegram_snapshot()
+
+@app.put("/api/integrations/telegram")
+def telegram_put(payload:TelegramIntegrationPayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    chat=payload.chat_id.strip()
+    if not re.fullmatch(r"-?\d{5,30}",chat):raise HTTPException(400,"invalid Telegram chat id")
+    if payload.bot_token:
+        set_setting("telegram_secret",integration_ops.seal_secret({"bot_token":payload.bot_token.strip()}))
+    elif not get_setting("telegram_secret",""):
+        raise HTTPException(400,"Telegram bot token is required")
+    set_setting("telegram_chat_id",chat)
+    if payload.enable_webhook:
+        domain=(get_setting("panel_domain","") or "").strip()
+        if not domain:raise HTTPException(409,"HTTPS panel domain is required for Telegram webhook")
+        secret=get_setting("telegram_webhook_secret","") or secrets.token_urlsafe(32)
+        set_setting("telegram_webhook_secret",secret)
+        try:integration_ops.telegram_set_webhook(_telegram_token(),f"https://{domain}/integrations/telegram/webhook",secret)
+        except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+        set_setting("telegram_webhook_enabled","1")
+    audit(actor,"telegram_settings_update","telegram",f"webhook={payload.enable_webhook}",ip(request))
+    return _telegram_snapshot()
+
+@app.post("/api/integrations/telegram/test")
+def telegram_test(request:Request):
+    require_local_admin(request);require_mutation(request)
+    try:result=integration_ops.telegram_send(_telegram_token(),get_setting("telegram_chat_id",""),f"✅ Makia {VERSION}\nTelegram integration is working.")
+    except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    return {"ok":True,"message_id":result.get("message_id")}
+
+@app.post("/integrations/telegram/webhook")
+async def telegram_webhook(request:Request):
+    secret=str(get_setting("telegram_webhook_secret","") or "")
+    received=str(request.headers.get("x-telegram-bot-api-secret-token") or "")
+    if not secret or not secrets.compare_digest(secret,received):
+        raise HTTPException(403,"invalid webhook secret")
+    try:payload=await request.json()
+    except Exception:raise HTTPException(400,"invalid update")
+    message=payload.get("message") or {}
+    chat=str((message.get("chat") or {}).get("id") or "")
+    configured=str(get_setting("telegram_chat_id","") or "")
+    if not chat or chat!=configured:
+        return {"ok":True}
+    text=str(message.get("text") or "").strip().split()[0].lower()
+    response=""
+    if text in {"/status","/start"}:
+        m=system_ops.metrics();stack=protocol_ops.catalog()
+        response=f"Makia {VERSION}\nCPU {m['cpu']:.0f}% · RAM {m['memory']:.0f}% · Disk {m['disk']:.0f}%\nXray: {'UP' if stack.get('xray',{}).get('service_active') else 'DOWN'}\nWG: {'UP' if stack.get('wireguard',{}).get('service_active') else 'DOWN'}\nOpenVPN: {'UP' if stack.get('openvpn',{}).get('service_active') else 'DOWN'}"
+    elif text=="/expiry":
+        expiry=expiry_center(request,7)
+        response=f"Expiring/expired in 7 days: {expiry['count']}\nExpired: {expiry['expired']}"
+    elif text=="/backup":
+        try:
+            from . import scheduled_backup
+            result=scheduled_backup.run_once(True)
+            response=f"✅ Backup: {result.get('name')}\n{str(result.get('sha256') or '')[:16]}…"
+        except Exception as exc:response="❌ Backup failed: "+str(exc)[:400]
+    else:
+        response="Commands: /status /expiry /backup"
+    try:integration_ops.telegram_send(_telegram_token(),configured,response)
+    except Exception:pass
+    return {"ok":True}
+
+
+@app.get("/api/disaster-recovery/summary")
+def disaster_recovery_summary(request:Request):
+    require_local_admin(request)
+    readiness=backup_migration_readiness(request)
+    cf=_cloudflare_snapshot()
+    backups=system_ops.backup_list()
+    full=next((x for x in backups if x.get("type")=="full_migration"),None)
+    return {
+        "readiness":readiness,"cloudflare":cf,"latest_full_backup":full,
+        "steps":[
+            "preflight","full_backup","install_destination","verify_bundle",
+            "restore","runtime_verification","dns_cutover","client_uat"
+        ],
+        "stable_config_cutover":bool(readiness.get("same_config_cutover_ready")),
+    }
+
+
 @app.get("/api/audit")
 def audit_list(request:Request,limit:int=100):
     require_user(request); limit=max(1,min(limit,500))
@@ -2894,6 +3137,13 @@ class NodeHeartbeat(BaseModel):
     cpu:float=Field(ge=0,le=100)
     memory:float=Field(ge=0,le=100)
     disk:float=Field(ge=0,le=100)
+    public_ip:str=Field(default="",max_length=64)
+    region:str=Field(default="",max_length=80)
+    users:int=Field(default=0,ge=0,le=1000000)
+    online_users:int=Field(default=0,ge=0,le=1000000)
+    traffic_bytes:int=Field(default=0,ge=0)
+    services:dict=Field(default_factory=dict)
+    last_error:str=Field(default="",max_length=500)
 
 @app.get("/api/nodes")
 def nodes_get(request:Request):
@@ -2920,8 +3170,11 @@ def node_heartbeat(payload:NodeHeartbeat,request:Request):
     node=node_by_token(token or "")
     if not node:
         raise HTTPException(403,"invalid node token")
-    update_node_heartbeat(node["id"],payload.hostname,payload.version,payload.cpu,payload.memory,payload.disk)
-    return {"ok":True,"node_id":node["id"]}
+    update_node_heartbeat(
+        node["id"],payload.hostname,payload.version,payload.cpu,payload.memory,payload.disk,
+        payload.public_ip,payload.region,payload.users,payload.online_users,payload.traffic_bytes,payload.services,payload.last_error
+    )
+    return {"ok":True,"node_id":node["id"],"server_time":int(time.time())}
 
 class GeneralSettings(BaseModel):
     language:str="fa"
