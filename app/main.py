@@ -28,6 +28,7 @@ async def security_headers(request:Request,call_next):
         request.url.path.startswith("/static/") or
         request.url.path.startswith("/sub/") or
         request.url.path.startswith("/client/") or
+        request.url.path.startswith("/access/") or
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
@@ -1811,7 +1812,7 @@ def public_access_portal(token:str,request:Request):
     native_filename=payload.get("native_filename") or ""
     has_native=bool(native_filename and native_filename in files)
     qr=""
-    if share_text:
+    if share_text and kind in {"xray","wireguard","ssh"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
@@ -1877,6 +1878,8 @@ def public_access_qr(token:str,request:Request):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
+    if kind not in {"xray","wireguard","ssh"}:
+        raise HTTPException(404,"QR is not available for this access type")
     share=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not share:
         raise HTTPException(404,"QR is not available for this access type")
