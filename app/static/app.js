@@ -851,7 +851,7 @@ async function inboundsWorkspace(renderToken=window.__viewRenderToken){
     const listen=(ib.listen||'0.0.0.0')+':'+(ib.port??'—');
     const managed=clients.filter(c=>String(c.inbound_tag||'')===String(ib.tag||'')).length;
     return '<div class="sx-inbound-row"><div class="sx-inbound-icon">'+htmlEsc(proto.slice(0,2))+'</div>'+
-      '<div class="sx-inbound-main"><b>'+htmlEsc(ib.tag||('inbound-'+(i+1)))+'</b><span>'+htmlEsc(proto)+'</span></div>'+
+      '<div class="sx-inbound-main"><b>'+htmlEsc(ib.tag||('inbound-'+(i+1)))+'</b><span>'+htmlEsc(proto)+' · '+htmlEsc(String(ib.transport||'raw').toUpperCase())+' · '+htmlEsc(String(ib.security||'none').toUpperCase())+'</span></div>'+
       '<div class="sx-inbound-cell"><span>Listen</span><b dir="ltr">'+htmlEsc(listen)+'</b></div>'+
       '<div class="sx-inbound-cell"><span>Port</span><b>'+htmlEsc(String(ib.port??'—'))+'</b></div>'+
       '<div class="sx-inbound-cell"><span>Clients</span><b>'+Number(ib.clients||0)+'</b></div>'+
