@@ -361,6 +361,7 @@ def restore_v2_system_payload(payload):
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
         "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
         "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
+        "makia-ops-monitor.service","makia-ops-monitor.timer",
     }
     for key,blob in payload.items():
         if not key.startswith("payload/systemd/"):
@@ -499,7 +500,7 @@ def restart_stack():
             if start_script.is_file():
                 run([str(start_script)],check=False)
 
-    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","makia-scheduled-backup.timer","fail2ban"]:
+    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","makia-scheduled-backup.timer","makia-ops-monitor.timer","fail2ban"]:
         run(["systemctl","enable","--now",svc],check=False)
         run(["systemctl","restart",svc],check=False)
 
