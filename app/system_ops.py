@@ -1,4 +1,4 @@
-import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3
+import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3, hashlib
 from datetime import datetime
 from pathlib import Path
 import psutil
@@ -235,6 +235,14 @@ def _managed_ssh_export(usernames):
     return rows
 
 def portable_migration_files(data_dir,managed_users,panel_domain="",version="",system_paths=None):
+    """Build a complete encrypted-migration payload owner.
+
+    The caller wraps these files in an AES protected ZIP. Keep this function
+    limited to state required to reproduce the same server identity on a fresh
+    VPS: app DB/secret, protocol keys/PKI/config, managed SSH password hashes,
+    TLS material and the active Nginx site. Owner/distribution secrets such as
+    release bearer tokens are intentionally not exported.
+    """
     defaults={
         "wireguard":"/etc/wireguard",
         "openvpn":"/etc/openvpn",
@@ -242,6 +250,13 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "xray":"/usr/local/etc/xray",
         "xray_alt":"/etc/xray",
         "nginx_site":"/etc/nginx/sites-available/makia-vps-manager",
+        "ipsec_d":"/etc/ipsec.d",
+        "ipsec_conf":"/etc/ipsec.conf",
+        "ipsec_secrets":"/etc/ipsec.secrets",
+        "ikev2_env":"/etc/makia-vps-manager/ikev2.env",
+        "wstunnel_env":"/etc/makia-vps-manager/wstunnel.env",
+        "stunnel_conf":"/etc/stunnel/makia-openvpn.conf",
+        "stunnel_defaults":"/etc/default/stunnel4",
     }
     paths={**defaults,**(system_paths or {})}
     files={
@@ -249,28 +264,58 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "payload/ssh-users.json":json.dumps(_managed_ssh_export(managed_users),ensure_ascii=False,indent=2).encode("utf-8"),
     }
     components={}
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","ipsec_d"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
             components[name]=True
         else:
             components[name]=False
-    nginx=Path(paths["nginx_site"])
-    if nginx.is_file():
-        files["payload/nginx-site.conf"]=nginx.read_bytes()
-        components["nginx_site"]=True
-    else:
-        components["nginx_site"]=False
+
+    single_files={
+        "nginx_site":"payload/nginx-site.conf",
+        "ipsec_conf":"payload/ipsec.conf",
+        "ipsec_secrets":"payload/ipsec.secrets",
+        "ikev2_env":"payload/ikev2.env",
+        "wstunnel_env":"payload/wstunnel.env",
+        "stunnel_conf":"payload/stunnel-makia.conf",
+        "stunnel_defaults":"payload/stunnel4-defaults",
+    }
+    for key,archive_name in single_files.items():
+        src=Path(paths[key])
+        if src.is_file():
+            files[archive_name]=src.read_bytes()
+            components[key]=True
+        else:
+            components[key]=False
+
+    checksums={name:hashlib.sha256(blob).hexdigest() for name,blob in files.items()}
     manifest={
         "format":"makia-portable-migration",
-        "format_version":1,
+        "format_version":2,
         "created_at":datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "app_version":str(version or ""),
         "panel_domain":str(panel_domain or ""),
         "managed_ssh_users":len(json.loads(files["payload/ssh-users.json"].decode("utf-8"))),
         "components":components,
-        "cutover_note":"Keep the same public domain and update its DNS A/AAAA record to the new VPS after restore. Existing client credentials remain unchanged.",
+        "sha256":checksums,
+        "cutover":{
+            "dns":"Keep the same public domain and update its DNS A/AAAA record to the new VPS after restore.",
+            "cloudflare":"VPN records used by raw WireGuard/OpenVPN/IKEv2 must be DNS-only, not proxied.",
+            "client_configs":"Existing configs continue unchanged only when their endpoint is the preserved domain. Direct-IP client configs must be reissued.",
+        },
+        "cutover_note":"Keep the same public domain and update its DNS A/AAAA record to the new VPS after restore. Existing domain-based client credentials remain unchanged.",
+        "excluded_secrets":["/etc/makia-vps-manager/makia.env"],
     }
     files["manifest.json"]=json.dumps(manifest,ensure_ascii=False,indent=2).encode("utf-8")
+    files["RESTORE.txt"]=(
+        "Makia Disaster Recovery / VPS Migration\n"
+        "1) Install the same Makia version on the destination VPS.\n"
+        "2) Copy this encrypted ZIP to the destination.\n"
+        "3) Validate: sudo makia-restore-portable BUNDLE.zip\n"
+        "4) Apply:    sudo makia-restore-portable BUNDLE.zip --apply\n"
+        "5) Run:      sudo makia-doctor && sudo makia-uat-smoke\n"
+        "6) Point the existing domain DNS A record to the new VPS.\n"
+        "Raw VPN records in Cloudflare must be DNS-only.\n"
+    ).encode("utf-8")
     return files
