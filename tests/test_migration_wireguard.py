@@ -1,6 +1,8 @@
 import json
 import hashlib
 import importlib.util
+import io
+import tarfile
 
 import pyzipper
 import pytest
@@ -202,3 +204,48 @@ def test_portable_restore_v2_validates_payload_sha256(tmp_path):
         zf.writestr("payload/data.tar.gz",payload)
     with pytest.raises(RuntimeError,match="checksum mismatch"):
         restore.read_bundle(bad,password)
+
+
+def _tar_with_symlink(link_name,target_name):
+    buf=io.BytesIO()
+    with tarfile.open(fileobj=buf,mode="w:gz") as tf:
+        directory=tarfile.TarInfo("letsencrypt/live/example.com")
+        directory.type=tarfile.DIRTYPE
+        directory.mode=0o755
+        tf.addfile(directory)
+        archive_dir=tarfile.TarInfo("letsencrypt/archive/example.com")
+        archive_dir.type=tarfile.DIRTYPE
+        archive_dir.mode=0o755
+        tf.addfile(archive_dir)
+        data=b"certificate"
+        cert=tarfile.TarInfo("letsencrypt/archive/example.com/fullchain1.pem")
+        cert.size=len(data)
+        cert.mode=0o644
+        tf.addfile(cert,io.BytesIO(data))
+        link=tarfile.TarInfo(link_name)
+        link.type=tarfile.SYMTYPE
+        link.linkname=target_name
+        tf.addfile(link)
+    return buf.getvalue()
+
+
+def test_safe_extract_allows_letsencrypt_relative_symlink_inside_root(tmp_path):
+    restore=_restore_module()
+    blob=_tar_with_symlink(
+        "letsencrypt/live/example.com/fullchain.pem",
+        "../../archive/example.com/fullchain1.pem",
+    )
+    restore.safe_extract_tar(blob,tmp_path)
+    link=tmp_path/"letsencrypt/live/example.com/fullchain.pem"
+    assert link.is_symlink()
+    assert link.read_text()=="certificate"
+
+
+def test_safe_extract_rejects_symlink_escape(tmp_path):
+    restore=_restore_module()
+    blob=_tar_with_symlink(
+        "letsencrypt/live/example.com/fullchain.pem",
+        "../../../../../../etc/shadow",
+    )
+    with pytest.raises(RuntimeError,match="unsafe symlink"):
+        restore.safe_extract_tar(blob,tmp_path)
