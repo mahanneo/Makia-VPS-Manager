@@ -18,7 +18,7 @@
 - HTTPS/Nginx معمولاً TCP/443 را نگه می‌دارد.
 - WireGuard می‌تواند UDP/443 را هم‌زمان استفاده کند.
 - Stealth و WStunnel باید TCP port آزاد داشته باشند مگر در آینده ingress/multiplexing واقعی اضافه شود.
-- UDP و TCP در کارت‌های OpenVPN دو حالت یک Server Profile فعال هستند، نه دو instance جعلی هم‌زمان.
+- OpenVPN UDP و TCP باید به‌صورت دو Runtime مستقل قابل فعال‌سازی هم‌زمان باشند؛ هر کدام Listener، tunnel device و subnet جدا دارد و PKI مشترک را استفاده می‌کند.
 
 ## Host gate
 
@@ -54,11 +54,20 @@ sudo systemctl status makia-ikev2-network --no-pager
 
 ### UDP / TCP OpenVPN
 
-هر دو حالت جداگانه تست شوند. تغییر transport باید backup/restart/listener verification/rollback داشته باشد.
+ابتدا UDP موجود را فعال نگه دارید و سپس از کارت TCP، TCP را نیز فعال کنید. فعال‌سازی TCP **نباید UDP را متوقف یا Config اصلی را بازنویسی کند**.
+
+```bash
+sudo systemctl status openvpn-server@server --no-pager
+sudo systemctl status openvpn-server@transport-tcp --no-pager
+sudo ss -lunp | grep openvpn
+sudo ss -ltnp | grep openvpn
+```
+
+در Protocol Hub هر دو کارت UDP و TCP باید هم‌زمان READY شوند. برای یک Client موجود، فایل UDP و TCP جدا صادر و هر دو از Client واقعی تست شوند.
 
 ### Stealth
 
-OpenVPN باید ابتدا TCP باشد. سپس Stealth روی TCP port آزاد Configure شود.
+Stealth باید در صورت نبود TCP Backend، یک OpenVPN TCP Runtime مستقل را خودکار آماده کند؛ UDP موجود نباید قطع شود. سپس Stunnel روی یک TCP port آزاد مثل 9443 Configure شود.
 
 ```bash
 sudo systemctl status stunnel4 --no-pager
