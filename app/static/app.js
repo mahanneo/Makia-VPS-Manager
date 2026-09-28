@@ -176,6 +176,7 @@ function openAccessDetail(id){
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">Native config</button>',
+    (a.kind==='openvpn'?'<button class="ghost" data-action="openvpn-transport-profile" data-key="'+key+'" data-transport="udp">UDP profile</button><button class="ghost" data-action="openvpn-transport-profile" data-key="'+key+'" data-transport="tcp">TCP profile</button>':''),
     '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Protected ZIP</button>',
     '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">راهنمای اتصال</button>'
   ].join(''):'<span class="muted">برای این رکورد خروجی قابل تحویل موجود نیست.</span>';
@@ -534,6 +535,13 @@ async function performProtectedDownload(kind,key,name,password){
 async function downloadAccessNative(kind,key){
   try{await fetchDownload('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/native',{},'makia-'+kind+'-'+key);toast('Native file دانلود شد')}
   catch(e){alert('Native export: '+e.message)}
+}
+
+async function downloadOpenVPNTransportProfile(key,transport){
+  try{
+    await fetchDownload('/api/protocols/openvpn/clients/'+encodeURIComponent(key)+'/profile?transport='+encodeURIComponent(transport),{},'makia-openvpn-'+key+'-'+transport+'.ovpn');
+    toast('OpenVPN '+String(transport).toUpperCase()+' profile دانلود شد');
+  }catch(e){alert('OpenVPN profile: '+e.message)}
 }
 
 async function openAccessShare(kind,key,name){
@@ -1010,15 +1018,22 @@ async function revokeIKEv2User(name){
 }
 
 async function switchOpenVPNMode(proto){
-  const current=window.__protocolData?.openvpn||{},opts=current.options||{};
+  const modes=window.__protocolModes?.modes||[];
+  const mode=modes.find(x=>x.id===proto)||{};
   const suggested=proto==='udp'?443:8443;
-  const port=Number(prompt('OpenVPN '+proto.toUpperCase()+' port',String(current.port||suggested)));if(!port)return;
-  const payload={port,proto,dns_servers:opts.dns_servers||['1.1.1.1','8.8.8.8'],keepalive_ping:Number(opts.keepalive_ping||10),keepalive_timeout:Number(opts.keepalive_timeout||120),redirect_gateway:opts.redirect_gateway!==false,client_to_client:Boolean(opts.client_to_client)};
-  try{await api('/api/protocols/openvpn/configure',{method:'POST',body:JSON.stringify(payload)});toast('OpenVPN switched to '+proto.toUpperCase());await protocols()}catch(e){alert('OpenVPN '+proto.toUpperCase()+': '+e.message)}
+  const currentPort=(mode.ports||[])[0]||suggested;
+  const port=Number(prompt('OpenVPN '+proto.toUpperCase()+' port',String(currentPort)));if(!port)return;
+  try{
+    const r=await api('/api/protocols/openvpn/transports/'+encodeURIComponent(proto)+'/ensure',{method:'POST',body:JSON.stringify({port})});
+    toast('OpenVPN '+proto.toUpperCase()+' READY on '+String(r.runtime?.port||port));
+    window.__protocolData=await api('/api/protocols');
+    window.__protocolModes=await api('/api/protocols/modes');
+    await protocols();
+  }catch(e){alert('OpenVPN '+proto.toUpperCase()+': '+e.message)}
 }
 async function setupStealth(){
   const domain=prompt('Stealth TLS domain',window.PANEL_DOMAIN||'');if(!domain)return;
-  const port=Number(prompt('Public Stealth TCP port','8443'));if(!port)return;
+  const port=Number(prompt('Public Stealth TCP port','9443'));if(!port)return;
   try{const r=await api('/api/protocols/stealth/bootstrap',{method:'POST',body:JSON.stringify({domain,port})});configModal('Stealth TLS client',r.client_stunnel_config,'makia-stealth-stunnel.conf');toast('Stealth listener ready')}catch(e){alert('Stealth: '+e.message)}
 }
 async function setupWStunnel(){
@@ -1655,6 +1670,7 @@ async function handleMakiaAction(btn){
     await performProtectedDownload(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name),dataDec(btn.dataset.password));return;
   }
   if(action==='native-export'){await downloadAccessNative(btn.dataset.kind,dataDec(btn.dataset.key));return}
+  if(action==='openvpn-transport-profile'){await downloadOpenVPNTransportProfile(dataDec(btn.dataset.key),btn.dataset.transport||'udp');return}
   if(action==='access-share'){await openAccessShare(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
