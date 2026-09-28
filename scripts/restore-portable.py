@@ -54,6 +54,14 @@ def read_bundle(path:Path,password:str):
         for name,digest in expected.items():
             blob=payload.get(name)
             if blob is None:
+                # RC2 used a generic archive filename sanitizer that rewrote
+                # '@' in systemd template unit names. Recover those bundles
+                # without weakening checksum verification.
+                legacy_name=name.replace("@","-")
+                blob=payload.get(legacy_name)
+                if blob is not None:
+                    payload[name]=blob
+            if blob is None:
                 raise RuntimeError(f"bundle payload missing: {name}")
             actual=hashlib.sha256(blob).hexdigest()
             if actual!=str(digest):
