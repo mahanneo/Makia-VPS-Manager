@@ -2725,6 +2725,7 @@ def xray_inbound_builder_capabilities():
             "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
             "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls","reality"]},
             "shadowsocks":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+            "outline":{"transports":["tcp"],"security":["none"]},
             "hysteria2":{"transports":["hysteria"],"security":["tls"]},
             "http":{"transports":["tcp"],"security":["none"]},
             "socks":{"transports":["tcp"],"security":["none"]},
@@ -3266,7 +3267,9 @@ def create_xray_full_inbound(spec):
     if not isinstance(spec,dict):
         raise ProtocolError("invalid Xray inbound payload")
     protocol=str(spec.get("protocol") or "").lower()
+    requested_protocol=protocol
     transport,security=_xray_builder_validate_combo(protocol,spec.get("transport"),spec.get("security"))
+    core_protocol="shadowsocks" if protocol=="outline" else protocol
     port=_validate_port(spec.get("port"))
     listen=_xray_builder_listen(spec.get("listen"))
     remark=str(spec.get("remark") or "").strip()
@@ -3279,7 +3282,7 @@ def create_xray_full_inbound(spec):
     flow=str(spec.get("flow") or "").strip()
     if flow not in {"","xtls-rprx-vision"}:
         raise ProtocolError("unsupported Xray flow")
-    if flow and not (protocol=="vless" and transport=="tcp" and security in {"tls","reality"}):
+    if flow and not (core_protocol=="vless" and transport=="tcp" and security in {"tls","reality"}):
         raise ProtocolError("XTLS Vision in Makia builder currently requires VLESS + TCP/RAW + TLS/REALITY")
     binary=_binary()
     if not binary:
@@ -3299,7 +3302,7 @@ def create_xray_full_inbound(spec):
         raise ProtocolError("this port is already used by another Xray inbound")
     if transport in {"kcp","hysteria"}:
         transport_protos={"udp"}
-    elif protocol in {"shadowsocks","socks"}:
+    elif core_protocol in {"shadowsocks","socks"}:
         transport_protos={"tcp","udp"}
     else:
         transport_protos={"tcp"}
@@ -3311,19 +3314,19 @@ def create_xray_full_inbound(spec):
     options.setdefault("path",spec.get("path") or "/")
     options.setdefault("server_name",spec.get("server_name") or "")
     options.setdefault("reality_dest",spec.get("reality_dest") or "")
-    stream,reality_meta=_xray_builder_stream(binary,protocol,transport,security,options)
-    credential=_xray_builder_credential(protocol,spec.get("credential"))
+    stream,reality_meta=_xray_builder_stream(binary,core_protocol,transport,security,options)
+    credential=_xray_builder_credential(core_protocol,spec.get("credential"))
     ss_method=str(spec.get("shadowsocks_method") or "aes-128-gcm")
-    if protocol=="shadowsocks" and ss_method not in xray_inbound_builder_capabilities()["shadowsocks_methods"]:
+    if core_protocol=="shadowsocks" and ss_method not in xray_inbound_builder_capabilities()["shadowsocks_methods"]:
         raise ProtocolError("unsupported Shadowsocks method in Makia builder")
-    settings,client_obj=_xray_builder_client(protocol,name,credential,flow,ss_method)
+    settings,client_obj=_xray_builder_client(core_protocol,name,credential,flow,ss_method)
     tag_base=re.sub(r"[^A-Za-z0-9_.-]+","-",remark).strip(".-")[:40] or protocol
     tag=f"makia-{tag_base}-{port}"
     if any(isinstance(item,dict) and item.get("tag")==tag for item in inbounds):
         tag=f"{tag}-{secrets.token_hex(2)}"
     inbound={
         "tag":tag,"listen":listen,"port":port,
-        "protocol":"hysteria" if protocol=="hysteria2" else protocol,
+        "protocol":"hysteria" if core_protocol=="hysteria2" else core_protocol,
         "settings":settings,"streamSettings":stream,
         "sniffing":_xray_builder_sniffing(options),
     }
@@ -3347,7 +3350,7 @@ def create_xray_full_inbound(spec):
         for transport_proto in sorted(transport_protos):
             if not _wait_listener(port,transport_proto,timeout=8.0,interval=0.25):
                 raise ProtocolError(f"Xray {transport_proto.upper()}/{port} did not become ready within 8 seconds")
-            _ufw_allow_if_active(port,transport_proto,f"Xray {protocol}")
+            _ufw_allow_if_active(port,transport_proto,f"Xray {requested_protocol}")
     except Exception:
         try:
             if tmp.exists():tmp.unlink()
@@ -3360,9 +3363,9 @@ def create_xray_full_inbound(spec):
         raise
     fingerprint=str(options.get("fingerprint") or "chrome")
     spider_x=str(options.get("spider_x") or "/")
-    share=_xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x)
+    share=_xray_builder_share_link(core_protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x)
     return {
-        "protocol":protocol,"tag":tag,"remark":remark,"listen":listen,"port":port,
+        "protocol":requested_protocol,"core_protocol":core_protocol,"tag":tag,"remark":remark,"listen":listen,"port":port,
         "name":name,"credential":credential,"transport":stream.get("method"),
         "security":stream.get("security"),"share_link":share,
         "reality":reality_meta,"backup":str(backup) if backup else None,
