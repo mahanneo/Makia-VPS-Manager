@@ -425,6 +425,7 @@ def openvpn_status():
         configs=[p.stem for p in server_dir.glob("*.conf")]
     active=any(_active(f"openvpn-server@{name}") for name in configs)
     runtime=_openvpn_server_runtime() if (server_dir/"server.conf").exists() else {}
+    transports=_openvpn_transport_runtimes() if server_dir.exists() else {"udp":None,"tcp":None}
     return {
         "installed":installed,
         "service_active":active,
@@ -432,6 +433,7 @@ def openvpn_status():
         "config":str(server_dir/"server.conf") if (server_dir/"server.conf").exists() else None,
         "port":runtime.get("port"),"proto":runtime.get("proto"),
         "options":_openvpn_server_options() if (server_dir/"server.conf").exists() else {},
+        "transports":transports,
     }
 
 def stunnel_status():
@@ -673,14 +675,16 @@ def remove_ikev2_user(name):
     return {"ok":True,"name":name}
 
 
-def bootstrap_stealth(domain, listen_port=8443):
+def bootstrap_stealth(domain, listen_port=9443):
     if not (_installed("stunnel4") or _installed("stunnel")):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     listen_port=_validate_port(listen_port)
-    runtime=_openvpn_server_runtime()
-    if not runtime.get("service_active") or not str(runtime.get("proto") or "").startswith("tcp"):
-        raise ProtocolError("Stealth requires the active OpenVPN server to use TCP first")
+    runtime=_openvpn_transport_runtimes().get("tcp")
+    if not runtime or not runtime.get("service_active") or not runtime.get("listener"):
+        runtime=ensure_openvpn_transport("tcp").get("runtime") or {}
+    if not runtime.get("service_active") or not runtime.get("listener"):
+        raise ProtocolError("Stealth could not prepare a live OpenVPN TCP backend")
     backend_port=int(runtime.get("port") or 0)
     if listen_port==backend_port:
         raise ProtocolError("Stealth public port must differ from the OpenVPN TCP backend port")
@@ -780,7 +784,9 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
 
 def protocol_modes():
     wg=wireguard_status()
-    ov=_openvpn_server_runtime()
+    transports=_openvpn_transport_runtimes()
+    ov_udp=transports.get("udp") or {}
+    ov_tcp=transports.get("tcp") or {}
     ike=ikev2_status()
     st=stealth_status()
     ws=wstunnel_status()
@@ -788,15 +794,16 @@ def protocol_modes():
         "modes":[
             {"id":"ikev2","label":"IKEv2","ports":[500,4500],"transport":"UDP/IPsec","ready":bool(ike.get("configured") and ike.get("service_active")),"status":ike},
             {"id":"wireguard","label":"WireGuard","ports":[wg.get("port")] if wg.get("port") else [],"transport":"UDP","ready":bool(wg.get("service_active") and wg.get("config")),"status":wg},
-            {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
-            {"id":"tcp","label":"TCP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else [],"transport":"OpenVPN TCP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp")),"status":ov},
+            {"id":"udp","label":"UDP","ports":[ov_udp.get("port")] if ov_udp.get("port") else [],"transport":"OpenVPN UDP","ready":bool(ov_udp.get("service_active") and ov_udp.get("listener")),"status":ov_udp},
+            {"id":"tcp","label":"TCP","ports":[ov_tcp.get("port")] if ov_tcp.get("port") else [],"transport":"OpenVPN TCP","ready":bool(ov_tcp.get("service_active") and ov_tcp.get("listener")),"status":ov_tcp},
             {"id":"stealth","label":"Stealth","ports":[st.get("port")] if st.get("port") else [],"transport":"OpenVPN over TLS/Stunnel","ready":bool(st.get("service_active") and st.get("listener")),"status":st},
             {"id":"wstunnel","label":"WStunnel","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
         ],
         "constraints":{
-            "openvpn_single_active_transport":True,
+            "openvpn_single_active_transport":False,
+            "openvpn_dual_transport":True,
             "tcp_443_reserved_for_https":True,
-            "note":"UDP and TCP cards select the single active OpenVPN server transport. Stealth and WStunnel use separate TCP listeners to avoid faking simultaneous TCP/443 ownership.",
+            "note":"OpenVPN UDP and TCP can run concurrently on independent instances/subnets. TCP/443 still cannot be shared with HTTPS, Stealth or WStunnel on the same IP.",
         }
     }
 
