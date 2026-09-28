@@ -271,9 +271,16 @@ def inspect_portable_migration_blob(blob,password,expected_version=""):
             payload_names=[name for name in names if name.startswith("payload/")]
             expected=manifest.get("payload_sha256") or {}
             for name,digest in expected.items():
-                if name not in names:
-                    raise OperationError(f"bundle payload missing: {name}")
-                if hashlib.sha256(zf.read(name)).hexdigest()!=str(digest):
+                read_name=name
+                if read_name not in names:
+                    # Backward compatibility for RC2 bundles created before
+                    # archive-name handling preserved '@' in systemd templates.
+                    legacy_name=name.replace("@","-")
+                    if legacy_name in names:
+                        read_name=legacy_name
+                    else:
+                        raise OperationError(f"bundle payload missing: {name}")
+                if hashlib.sha256(zf.read(read_name)).hexdigest()!=str(digest):
                     raise OperationError(f"bundle checksum mismatch: {name}")
             required={"payload/data.tar.gz","payload/ssh-users.json"}
             if not required.issubset(names):
