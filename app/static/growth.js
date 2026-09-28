@@ -96,6 +96,22 @@
     xrayCredentialModal(r);
   }
 
+  function selectedBulkTargets(){
+    return [...document.querySelectorAll('.access-select:checked')].map(x=>x.dataset.target).filter(Boolean);
+  }
+  async function runBulk(action,days=0,gb=0){
+    const targets=selectedBulkTargets();
+    if(!targets.length){alert(T('حداقل یک کاربر را انتخاب کنید.','Select at least one client.'));return}
+    if(action==='renew'){
+      if(!days)days=Number(prompt(T('چند روز اضافه شود؟','Days to add?'),'30')||0);
+      if(!gb)gb=Number(prompt(T('چند GB اضافه شود؟','GB to add?'),'50')||0);
+    }
+    const result=await api('/api/clients/bulk',{method:'POST',body:JSON.stringify({targets,action,add_days:days,add_gb:gb})});
+    toast(String((result.ok||[]).length)+' '+T('کاربر بروزرسانی شد','clients updated'));
+    if((result.failed||[]).length)alert((result.failed||[]).map(x=>x.target+': '+x.error).join('\n'));
+    await access();
+  }
+
   window.MAKIA_GROWTH_VIEWS={
     plans:growthPlansView,expiry:growthExpiryView,automation:growthAutomationView,
     migration:growthMigrationView,diagnostics:growthDiagnosticsView,outline:growthOutlineView
@@ -106,6 +122,10 @@
     e.preventDefault();e.stopImmediatePropagation();
     const a=btn.dataset.growthAction;
     try{
+      if(a==='bulk-renew'){await runBulk('renew',30,50);return}
+      if(a==='bulk-enable'){await runBulk('enable');return}
+      if(a==='bulk-disable'){await runBulk('disable');return}
+      if(a==='bulk-reset'){await runBulk('reset_traffic');return}
       if(a==='plan-new'){openGrowthPlanEditor();return}
       if(a==='plan-edit'){const p=(await api('/api/plans')).find(x=>Number(x.id)===Number(btn.dataset.id));if(p)openGrowthPlanEditor(p);return}
       if(a==='plan-save'){await savePlan(Number(btn.dataset.id||0));return}
