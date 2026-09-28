@@ -2702,9 +2702,7 @@ def managed_bulk_action(payload:ManagedBulkAction,request:Request):
     return {"done":done,"failed":failed}
 
 
-@app.get("/api/expiry")
-def expiry_center(request:Request,days:int=30):
-    require_user(request)
+def _expiry_snapshot(days=30):
     horizon=max(0,min(int(days),3650))
     today=date.today()
     now_ts=int(time.time())
@@ -2730,12 +2728,17 @@ def expiry_center(request:Request,days:int=30):
     rows.sort(key=lambda x:x.get("days_left",999999))
     return {"days":horizon,"count":len(rows),"expired":sum(1 for x in rows if x.get("expired")),"rows":rows}
 
+@app.get("/api/expiry")
+def expiry_center(request:Request,days:int=30):
+    require_user(request)
+    return _expiry_snapshot(days)
+
 
 @app.get("/api/notifications")
 def notifications_get(request:Request):
     require_user(request)
     events=list_notification_events(100)
-    expiry=expiry_center(request,7)
+    expiry=_expiry_snapshot(7)
     stale=[]
     now=time.time()
     for node in list_nodes():
@@ -3021,7 +3024,7 @@ async def telegram_webhook(request:Request):
         m=system_ops.metrics();stack=protocol_ops.catalog()
         response=f"Makia {VERSION}\nCPU {m['cpu']:.0f}% · RAM {m['memory']:.0f}% · Disk {m['disk']:.0f}%\nXray: {'UP' if stack.get('xray',{}).get('service_active') else 'DOWN'}\nWG: {'UP' if stack.get('wireguard',{}).get('service_active') else 'DOWN'}\nOpenVPN: {'UP' if stack.get('openvpn',{}).get('service_active') else 'DOWN'}"
     elif text=="/expiry":
-        expiry=expiry_center(request,7)
+        expiry=_expiry_snapshot(7)
         response=f"Expiring/expired in 7 days: {expiry['count']}\nExpired: {expiry['expired']}"
     elif text=="/backup":
         try:
