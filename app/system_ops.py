@@ -302,9 +302,7 @@ def stage_migration_restore(blob,password,expected_version=""):
     job_root.mkdir(parents=True,mode=0o700)
     os.chmod(job_root,0o700)
     bundle_path=job_root/"bundle.zip"
-    password_path=job_root/"password"
     bundle_path.write_bytes(bytes(blob)); os.chmod(bundle_path,0o600)
-    password_path.write_text(str(password),encoding="utf-8"); os.chmod(password_path,0o600)
     status={
         "job_id":job_id,"state":"verified","created_at":datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sha256":preview["sha256"],"bundle_version":preview["bundle_version"],
@@ -316,6 +314,32 @@ def stage_migration_restore(blob,password,expected_version=""):
     status_path.write_text(json.dumps(status,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     os.chmod(status_path,0o600)
     return {**status,"restore_ready":True}
+
+
+def arm_migration_restore(job_id,password,expected_version=""):
+    job_id=str(job_id or "")
+    if not re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}",job_id):
+        raise OperationError("invalid restore job id")
+    job_root=_backup_root(create=False)/"restore-jobs"/job_id
+    bundle=job_root/"bundle.zip"
+    if not bundle.is_file():
+        raise OperationError("staged migration bundle is missing")
+    # Re-verify immediately before commit so a stale/tampered staged file cannot run.
+    preview=inspect_portable_migration_blob(bundle.read_bytes(),password,expected_version)
+    if not preview["compatible"]:
+        raise OperationError("migration bundle version is no longer compatible")
+    password_path=job_root/"password"
+    fd=os.open(password_path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+    with os.fdopen(fd,"w",encoding="utf-8") as fh:
+        fh.write(str(password))
+        fh.flush()
+        os.fsync(fh.fileno())
+    status=migration_restore_status(job_id)
+    status.update({"state":"armed","message":"Final integrity verification passed; restore job is armed."})
+    path=job_root/"status.json"
+    path.write_text(json.dumps(status,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(path,0o600)
+    return status
 
 
 def migration_restore_status(job_id):
