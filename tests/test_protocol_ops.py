@@ -539,3 +539,37 @@ def test_listener_present_falls_back_to_proc_net(monkeypatch):
             raise OSError("missing")
     monkeypatch.setattr(protocol_ops,"Path",FakePath)
     assert protocol_ops._listener_present(45217,"tcp") is True
+
+
+def test_xray_inbound_builder_capabilities_follow_3x_style_rules():
+    caps=protocol_ops.xray_inbound_builder_capabilities()
+    assert "vless" in caps["protocols"]
+    assert "vmess" in caps["protocols"]
+    assert "trojan" in caps["protocols"]
+    assert "shadowsocks" in caps["protocols"]
+    assert "xhttp" in caps["protocols"]["vless"]["transports"]
+    assert "reality" in caps["protocols"]["trojan"]["security"]
+    assert "none" in caps["protocols"]["vless"]["security"]
+    assert "sockopt" in caps and "tcp_congestion" in caps["sockopt"]
+
+
+def test_xray_inbound_builder_reality_constraints():
+    assert protocol_ops._xray_builder_validate_combo("vless","tcp","reality")==("tcp","reality")
+    assert protocol_ops._xray_builder_validate_combo("trojan","grpc","reality")==("grpc","reality")
+    with pytest.raises(ProtocolError,match="REALITY"):
+        protocol_ops._xray_builder_validate_combo("trojan","ws","reality")
+    with pytest.raises(ProtocolError):
+        protocol_ops._xray_builder_validate_combo("vmess","tcp","reality")
+
+
+def test_xray_builder_headers_reject_nested_values():
+    assert protocol_ops._xray_builder_headers({"X-Test":"ok"})=={"X-Test":"ok"}
+    with pytest.raises(ProtocolError):
+        protocol_ops._xray_builder_headers({"X-Test":{"nested":True}})
+
+
+def test_xray_builder_listen_accepts_blank_and_ip():
+    assert protocol_ops._xray_builder_listen("")=="0.0.0.0"
+    assert protocol_ops._xray_builder_listen("127.0.0.1")=="127.0.0.1"
+    with pytest.raises(ProtocolError):
+        protocol_ops._xray_builder_listen("example.com")
