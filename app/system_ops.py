@@ -256,6 +256,18 @@ def backup_download_path(name):
     return path
 
 
+def _migration_versions_compatible(bundle_version,expected_version):
+    bundle=str(bundle_version or "").strip()
+    destination=str(expected_version or "").strip()
+    if not bundle or not destination or bundle==destination:
+        return True
+    # RC3 contains an explicit compatibility shim for RC2 Full Migration
+    # bundles (including the historical systemd '@' archive-name defect).
+    # Keep this allow-list directional and narrow; do not silently accept
+    # arbitrary older/newer application versions.
+    return (bundle,destination)==("0.26.0-rc2","0.26.0-rc3")
+
+
 def inspect_portable_migration_blob(blob,password,expected_version=""):
     if len(blob)<100:
         raise OperationError("migration bundle is empty or invalid")
@@ -290,7 +302,7 @@ def inspect_portable_migration_blob(blob,password,expected_version=""):
     except Exception as exc:
         raise OperationError("encrypted migration bundle verification failed") from exc
     bundle_version=str(manifest.get("app_version") or "")
-    compatible=not expected_version or not bundle_version or bundle_version==str(expected_version)
+    compatible=_migration_versions_compatible(bundle_version,expected_version)
     return {
         "manifest":manifest,"sha256":hashlib.sha256(blob).hexdigest(),"size":len(blob),
         "compatible":compatible,"expected_version":str(expected_version or ""),"bundle_version":bundle_version,
