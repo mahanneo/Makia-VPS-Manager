@@ -2,6 +2,7 @@ import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfil
 from datetime import datetime
 from pathlib import Path
 import psutil
+import pyzipper
 from .config import ALLOWED_SERVICES
 
 class OperationError(RuntimeError): pass
@@ -149,26 +150,182 @@ def security_status():
     return {"ufw":ufw,"fail2ban":fail2ban,"ssh":ssh}
 
 
+def _backup_root():
+    root=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
+    root.mkdir(parents=True,exist_ok=True,mode=0o700)
+    try: os.chmod(root,0o700)
+    except OSError: pass
+    return root
+
+
+def _sha256_file(path):
+    digest=hashlib.sha256()
+    with open(path,"rb") as fh:
+        for chunk in iter(lambda:fh.read(1024*1024),b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _backup_metadata_path(path):
+    return Path(str(path)+".meta.json")
+
+
+def _write_backup_metadata(path,metadata):
+    meta=_backup_metadata_path(path)
+    meta.write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(meta,0o600)
+
+
 def backup_list():
-    root="/var/backups/makia-vps-manager"
-    if not os.path.isdir(root): return []
+    root=_backup_root()
     items=[]
-    for name in sorted(os.listdir(root),reverse=True):
-        path=os.path.join(root,name)
-        if os.path.isfile(path) and name.endswith(".tar.gz"):
-            st=os.stat(path)
-            items.append({"name":name,"size":st.st_size,"created_at":int(st.st_mtime)})
+    paths=[p for p in root.iterdir() if p.is_file() and (p.name.endswith(".tar.gz") or p.name.endswith(".zip"))]
+    for path in sorted(paths,key=lambda p:p.stat().st_mtime,reverse=True):
+        st=path.stat()
+        meta={}
+        meta_path=_backup_metadata_path(path)
+        if meta_path.is_file():
+            try: meta=json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception: meta={}
+        kind=meta.get("type") or ("full_migration" if path.name.endswith(".zip") else "quick")
+        items.append({
+            "name":path.name,
+            "size":st.st_size,
+            "created_at":int(meta.get("created_at_epoch") or st.st_mtime),
+            "type":kind,
+            "version":str(meta.get("version") or ""),
+            "sha256":str(meta.get("sha256") or _sha256_file(path)),
+            "encrypted":bool(meta.get("encrypted",path.name.endswith(".zip"))),
+            "restore_ready":bool(meta.get("restore_ready",kind=="quick")),
+        })
     return items[:50]
 
-def create_backup(data_dir: str):
-    root="/var/backups/makia-vps-manager"
-    os.makedirs(root,mode=0o700,exist_ok=True)
+
+def create_backup(data_dir: str,version=""):
+    root=_backup_root()
     stamp=datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    out=os.path.join(root,f"makia-data-{stamp}.tar.gz")
+    out=root/f"makia-data-{stamp}.tar.gz"
     blob=_portable_data_tar(data_dir)
-    Path(out).write_bytes(blob)
+    out.write_bytes(blob)
     os.chmod(out,0o600)
-    return {"name":os.path.basename(out),"path":out,"size":os.path.getsize(out)}
+    metadata={
+        "type":"quick","version":str(version or ""),"encrypted":False,
+        "restore_ready":True,"sha256":hashlib.sha256(blob).hexdigest(),
+        "created_at_epoch":int(time.time()),
+    }
+    _write_backup_metadata(out,metadata)
+    return {"name":out.name,"path":str(out),"size":out.stat().st_size,**metadata}
+
+
+def save_full_migration_backup(blob,version="",manifest=None):
+    root=_backup_root()
+    stamp=datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    out=root/f"makia-full-migration-{stamp}.zip"
+    fd=os.open(out,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    try:
+        with os.fdopen(fd,"wb") as fh:
+            fh.write(bytes(blob))
+            fh.flush()
+            os.fsync(fh.fileno())
+    except Exception:
+        try: out.unlink()
+        except OSError: pass
+        raise
+    metadata={
+        "type":"full_migration","version":str(version or ""),"encrypted":True,
+        "restore_ready":True,"sha256":hashlib.sha256(blob).hexdigest(),
+        "created_at_epoch":int(time.time()),
+        "format_version":int((manifest or {}).get("format_version") or 0),
+        "panel_domain":str((manifest or {}).get("panel_domain") or ""),
+    }
+    _write_backup_metadata(out,metadata)
+    return {"name":out.name,"path":str(out),"size":out.stat().st_size,**metadata}
+
+
+def backup_download_path(name):
+    raw=str(name or "")
+    safe=Path(raw).name
+    if safe!=raw or not (safe.endswith(".tar.gz") or safe.endswith(".zip")):
+        raise OperationError("invalid backup name")
+    path=_backup_root()/safe
+    if not path.is_file():
+        raise OperationError("backup not found")
+    return path
+
+
+def inspect_portable_migration_blob(blob,password,expected_version=""):
+    if len(blob)<100:
+        raise OperationError("migration bundle is empty or invalid")
+    try:
+        with pyzipper.AESZipFile(io.BytesIO(bytes(blob)),"r") as zf:
+            zf.setpassword(str(password or "").encode("utf-8"))
+            names=set(zf.namelist())
+            if "manifest.json" not in names:
+                raise OperationError("manifest.json is missing")
+            manifest=json.loads(zf.read("manifest.json").decode("utf-8"))
+            if manifest.get("format")!="makia-portable-migration" or int(manifest.get("format_version") or 0)!=2:
+                raise OperationError("unsupported migration bundle format")
+            payload_names=[name for name in names if name.startswith("payload/")]
+            expected=manifest.get("payload_sha256") or {}
+            for name,digest in expected.items():
+                if name not in names:
+                    raise OperationError(f"bundle payload missing: {name}")
+                if hashlib.sha256(zf.read(name)).hexdigest()!=str(digest):
+                    raise OperationError(f"bundle checksum mismatch: {name}")
+            required={"payload/data.tar.gz","payload/ssh-users.json"}
+            if not required.issubset(names):
+                raise OperationError("migration bundle is missing required Makia data")
+    except OperationError:
+        raise
+    except Exception as exc:
+        raise OperationError("encrypted migration bundle verification failed") from exc
+    bundle_version=str(manifest.get("app_version") or "")
+    compatible=not expected_version or not bundle_version or bundle_version==str(expected_version)
+    return {
+        "manifest":manifest,"sha256":hashlib.sha256(blob).hexdigest(),"size":len(blob),
+        "compatible":compatible,"expected_version":str(expected_version or ""),"bundle_version":bundle_version,
+        "components":manifest.get("components") or {},"payload_count":len(payload_names),
+    }
+
+
+def stage_migration_restore(blob,password,expected_version=""):
+    preview=inspect_portable_migration_blob(blob,password,expected_version)
+    if not preview["compatible"]:
+        raise OperationError(
+            f"migration version mismatch: bundle={preview['bundle_version']} destination={preview['expected_version']}"
+        )
+    job_id=datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")+"-"+os.urandom(4).hex()
+    job_root=_backup_root()/"restore-jobs"/job_id
+    job_root.mkdir(parents=True,mode=0o700)
+    os.chmod(job_root,0o700)
+    bundle_path=job_root/"bundle.zip"
+    password_path=job_root/"password"
+    bundle_path.write_bytes(bytes(blob)); os.chmod(bundle_path,0o600)
+    password_path.write_text(str(password),encoding="utf-8"); os.chmod(password_path,0o600)
+    status={
+        "job_id":job_id,"state":"verified","created_at":datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sha256":preview["sha256"],"bundle_version":preview["bundle_version"],
+        "panel_domain":str(preview["manifest"].get("panel_domain") or ""),
+        "components":preview["components"],"payload_count":preview["payload_count"],
+        "message":"Bundle integrity and compatibility verified. Ready to restore.",
+    }
+    status_path=job_root/"status.json"
+    status_path.write_text(json.dumps(status,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(status_path,0o600)
+    return {**status,"restore_ready":True}
+
+
+def migration_restore_status(job_id):
+    job_id=str(job_id or "")
+    if not re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}",job_id):
+        raise OperationError("invalid restore job id")
+    path=_backup_root()/"restore-jobs"/job_id/"status.json"
+    if not path.is_file():
+        raise OperationError("restore job not found")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise OperationError("restore job status is invalid") from exc
 
 
 def _tar_bytes(path, arcname):
