@@ -2366,11 +2366,21 @@ async function savePlan(id){
 async function usePlan(id){
   const p=(window.__planRows||[]).find(x=>Number(x.id)===Number(id));if(!p)return;
   if(p.kind==='outline'){switchView('outline');setTimeout(()=>openOutlineClient(p),150);return}
+  if(p.kind==='xray'){
+    await openXrayInboundBuilder();
+    const protocol=String(p.protocol||'vless').toLowerCase(),cfg=p.config||{};
+    const proto=document.getElementById('xbProtocol');if(proto&&[...proto.options].some(o=>o.value===protocol)){proto.value=protocol;syncXrayInboundBuilder()}
+    if(document.getElementById('xbQuota'))document.getElementById('xbQuota').value=Number(p.quota_mb||0)/1024;
+    if(document.getElementById('xbDays'))document.getElementById('xbDays').value=Number(p.duration_days||0);
+    if(document.getElementById('xbIpLimit'))document.getElementById('xbIpLimit').value=Number(p.ip_limit||1);
+    if(cfg.transport&&document.getElementById('xbTransport')&&[...document.getElementById('xbTransport').options].some(o=>o.value===cfg.transport)){document.getElementById('xbTransport').value=cfg.transport;syncXrayInboundBuilder()}
+    if(cfg.security&&document.getElementById('xbSecurity')&&[...document.getElementById('xbSecurity').options].some(o=>o.value===cfg.security)){document.getElementById('xbSecurity').value=cfg.security;syncXrayInboundBuilder()}
+    return;
+  }
   await openProvisionWizard(p.kind);
   if(!provisionState)return;
   provisionState.plan=p.name;provisionState.expireDays=Number(p.duration_days||0);provisionState.quota=Number(p.quota_mb||0)/1024;provisionState.sessions=Number(p.connection_limit||1);provisionState.devices=Number(p.ip_limit||1);
-  if(p.kind==='ssh'){provisionState.expireDate=p.duration_days?dateAfterDays(p.duration_days):''}
-  if(p.kind==='xray'&&p.protocol)provisionState.xrayProtocol=p.protocol;
+  if(p.kind==='ssh')provisionState.expireDate=p.duration_days?dateAfterDays(p.duration_days):'';
   renderProvisionWizard();
 }
 
