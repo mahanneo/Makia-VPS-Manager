@@ -187,7 +187,8 @@ def restart_stack():
         run(["systemctl","reload","nginx"],check=False)
 
 
-def validate_restored():
+def validate_restored(payload=None):
+    payload=payload or {}
     checks=[]
     health=run(["curl","-fsS","--max-time","5","http://127.0.0.1:8787/healthz"],check=False)
     checks.append(("backend",health.returncode==0))
@@ -202,6 +203,15 @@ def validate_restored():
             checks.append(("xray",p.returncode==0))
     if Path("/etc/wireguard/wg0.conf").exists():
         checks.append(("wireguard",run(["wg","show","wg0"],check=False).returncode==0))
+    if "payload/openvpn.tar.gz" in payload:
+        configs=list(Path("/etc/openvpn/server").glob("*.conf")) if Path("/etc/openvpn/server").exists() else []
+        checks.append(("openvpn",bool(configs) and all(run(["systemctl","is-active",f"openvpn-server@{x.stem}"],check=False).returncode==0 for x in configs)))
+    if "payload/ipsec.conf" in payload:
+        checks.append(("ikev2",run(["ipsec","status"],check=False).returncode==0))
+    if "payload/stunnel-makia.conf" in payload:
+        checks.append(("stealth",run(["systemctl","is-active","stunnel4"],check=False).returncode==0))
+    if "payload/wstunnel.env" in payload:
+        checks.append(("wstunnel",run(["systemctl","is-active","makia-wstunnel"],check=False).returncode==0))
     return checks
 
 
@@ -235,8 +245,12 @@ def main():
     if shutil.which("makia-backup"):
         run(["makia-backup"],check=False)
 
-    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","xray","wg-quick@wg0"]:
+    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","xray","wg-quick@wg0","stunnel4","makia-wstunnel","strongswan-starter","strongswan","makia-ikev2-network"]:
         run(["systemctl","stop",svc],check=False)
+    server_dir=Path("/etc/openvpn/server")
+    if server_dir.exists():
+        for conf in server_dir.glob("*.conf"):
+            run(["systemctl","stop",f"openvpn-server@{conf.stem}"],check=False)
 
     install_components(payload)
     restore_data(payload["payload/data.tar.gz"])
@@ -248,6 +262,7 @@ def main():
         ("payload/letsencrypt.tar.gz","letsencrypt",Path("/etc/letsencrypt")),
         ("payload/xray.tar.gz","xray",Path("/usr/local/etc/xray")),
         ("payload/xray_alt.tar.gz","xray_alt",Path("/etc/xray")),
+        ("payload/ipsec_d.tar.gz","ipsec_d",Path("/etc/ipsec.d")),
     ]
     for key,root,target in mappings:
         if key in payload:
@@ -262,6 +277,18 @@ def main():
             enabled.unlink()
         enabled.symlink_to(site)
 
+    file_mappings=[
+        ("payload/ipsec.conf",Path("/etc/ipsec.conf"),0o600),
+        ("payload/ipsec.secrets",Path("/etc/ipsec.secrets"),0o600),
+        ("payload/ikev2.env",Path("/etc/makia-vps-manager/ikev2.env"),0o600),
+        ("payload/wstunnel.env",Path("/etc/makia-vps-manager/wstunnel.env"),0o600),
+        ("payload/stunnel-makia.conf",Path("/etc/stunnel/makia-openvpn.conf"),0o600),
+        ("payload/stunnel4-defaults",Path("/etc/default/stunnel4"),0o644),
+    ]
+    for key,target,mode in file_mappings:
+        if key in payload:
+            restore_file(payload[key],target,mode)
+
     # Normalize restored Xray ownership/TLS paths for the destination
     # systemd user before the final stack restart.
     if shutil.which("xray") and (Path("/usr/local/etc/xray/config.json").exists() or Path("/etc/xray/config.json").exists()):
@@ -270,7 +297,7 @@ def main():
         protocol_ops.repair_xray_runtime()
 
     restart_stack()
-    checks=validate_restored()
+    checks=validate_restored(payload)
     failed=[name for name,ok in checks if not ok]
     for name,ok in checks:
         print(("PASS" if ok else "FAIL"),name)
@@ -279,7 +306,8 @@ def main():
     domain=str(manifest.get("panel_domain") or "")
     print("\nPortable restore PASS.")
     if domain:
-        print(f"Cutover: point DNS for {domain} to this VPS. Existing Xray/WireGuard/SSH credentials remain unchanged.")
+        print(f"Cutover: point DNS for {domain} to this VPS. Existing domain-based Xray/WireGuard/OpenVPN/IKEv2 credentials remain unchanged.")
+        print("Cloudflare: raw VPN records must be DNS-only. Direct-IP client configs must be reissued.")
 
 
 if __name__=="__main__":
