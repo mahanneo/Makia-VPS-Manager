@@ -1937,6 +1937,7 @@ def backup_restore_apply(job_id:str,payload:MigrationRestoreApply,request:Reques
         system_ops.arm_migration_restore(job_id,payload.password,VERSION)
         system_ops._run(["systemctl","start","--no-block",unit],timeout=15)
     except system_ops.OperationError as e:
+        system_ops.discard_migration_restore_password(job_id)
         audit(actor,"migration_restore_start_failed",job_id,str(e)[:500],ip=ip(request))
         raise HTTPException(400,str(e))
     audit(actor,"migration_restore_started",job_id,ip=ip(request))
