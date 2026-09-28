@@ -383,11 +383,14 @@ def node_by_token(token):
         row=con.execute("SELECT id,name,active FROM nodes WHERE token_hash=? AND active=1",(h,)).fetchone()
         return dict(row) if row else None
 
-def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk):
+def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk,endpoint="",region="",users=0,online=0,rx=0,tx=0,latency_ms=None):
     with connect() as con:
         con.execute(
-            "UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=? WHERE id=?",
-            (now(),hostname,version,float(cpu),float(memory),float(disk),int(node_id))
+            """UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=?,endpoint=?,region=?,
+               users=?,online=?,rx=?,tx=?,latency_ms=? WHERE id=?""",
+            (now(),hostname,version,float(cpu),float(memory),float(disk),str(endpoint or "")[:255],str(region or "")[:80],
+             max(0,int(users or 0)),max(0,int(online or 0)),max(0,int(rx or 0)),max(0,int(tx or 0)),
+             None if latency_ms is None else max(0,float(latency_ms)),int(node_id))
         )
 
 
