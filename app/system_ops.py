@@ -535,6 +535,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "ipsec_conf":"/etc/ipsec.conf",
         "ipsec_secrets":"/etc/ipsec.secrets",
         "stunnel_defaults":"/etc/default/stunnel4",
+        "outline":"/opt/outline",
     }
     paths={**defaults,**(system_paths or {})}
     files={
@@ -543,7 +544,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     }
     components={}
 
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d","outline"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
@@ -564,7 +565,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     systemd_units=[
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
         "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
-        "makia-migration-restore@.service",
+        "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
     ]
     systemd_count=0
     for unit in systemd_units:
