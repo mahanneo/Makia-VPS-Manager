@@ -63,8 +63,8 @@ sudo makia-uat-smoke
 
 Required:
 - migration manifest format v2 and SHA256 payload validation PASS;
-- DB/.secret, SSH hashes, Xray/REALITY, WireGuard, OpenVPN PKI/configs, IKEv2, Stunnel/Stealth, WStunnel and TLS/Nginx state restore successfully when present;
-- WireGuard/OpenVPN NAT/FORWARD rules are rebuilt for the **destination** VPS uplink interface;
+- DB/.secret, SSH user hashes + SSH host keys, Xray/REALITY, WireGuard, OpenVPN PKI/configs, IKEv2, Stunnel/Stealth, WStunnel and TLS/Nginx state restore successfully when present;
+- WireGuard/OpenVPN NAT/FORWARD rules are rebuilt for the **destination** VPS uplink interface;\n- restored SSH host keys pass `sshd -t` before SSH is reloaded, preserving the previous server fingerprint;
 - when client profiles use the preserved domain, changing that domain's DNS A/AAAA record to the new VPS is sufficient for cutover without changing keys/UUID/PKI;
 - direct-IP profiles are identified as requiring reissue;
 - raw WireGuard/OpenVPN/IKEv2 DNS records in Cloudflare are DNS-only.
