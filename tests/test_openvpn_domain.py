@@ -251,3 +251,11 @@ def test_render_openvpn_client_can_select_auxiliary_tcp_runtime(tmp_path,monkeyp
     assert result["server"]=="transport-tcp"
     assert result["port"]==8443
     assert result["proto"]=="tcp"
+
+
+def test_render_openvpn_client_rejects_unknown_transport(tmp_path,monkeypatch):
+    ovpn,easy=_write_openvpn_fixture(tmp_path,"udp4")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"OVPN_EASYRSA",easy)
+    with pytest.raises(protocol_ops.ProtocolError,match="must be UDP or TCP"):
+        protocol_ops.render_openvpn_client("client01","vpn.example.com","quic")
