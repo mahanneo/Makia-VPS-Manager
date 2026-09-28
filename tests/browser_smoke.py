@@ -290,6 +290,10 @@ def main():
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
                 assert page.locator("#content").inner_text().strip(), f"{view} rendered empty content"
+                if view=="backups":
+                    page.locator(".recovery-readiness").wait_for()
+                    assert "Domain-based" in page.locator(".disaster-cutover-card").inner_text()
+                    assert "Direct IP" in page.locator(".disaster-cutover-card").inner_text()
                 nav=page.locator(f'.pro-sidebar nav button[data-view="{view}"]')
                 if nav.count():
                     assert "active" in (nav.get_attribute("class") or ""), f"{view} sidebar item not active"
@@ -367,6 +371,7 @@ def main():
                 assert manifest["format"]=="makia-portable-migration"
                 assert manifest["format_version"]==2
                 assert "sha256" in manifest
+                assert "ssh_host_keys" in manifest
                 assert "DNS-only" in manifest["cutover"]["cloudflare"]
             page.locator('.close-btn[data-action="modal-close"]').click()
 
