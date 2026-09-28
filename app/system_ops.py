@@ -443,6 +443,39 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         else:
             components[name]=False
 
+    # Preserve only Makia-owned systemd unit definitions; never archive unrelated host units.
+    systemd_dir=Path("/etc/systemd/system")
+    systemd_units=[
+        "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
+        "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
+        "makia-migration-restore@.service",
+    ]
+    systemd_count=0
+    for unit in systemd_units:
+        src=systemd_dir/unit
+        if src.is_file():
+            files[f"payload/systemd/{unit}"]=src.read_bytes()
+            systemd_count+=1
+    components["systemd"]=systemd_count>0
+
+    firewall_rules=[]
+    if shutil.which("ufw"):
+        p=subprocess.run(["ufw","status"],text=True,capture_output=True,timeout=10,check=False)
+        if p.returncode==0:
+            for line in (p.stdout or "").splitlines():
+                if "makia" not in line.lower():
+                    continue
+                match=re.match(r"^\s*(\d+)/(tcp|udp)\s+ALLOW\b",line,re.I)
+                if match:
+                    firewall_rules.append({"port":int(match.group(1)),"proto":match.group(2).lower()})
+    # Runtime reconstruction also re-allows protocol ports, but preserving this list
+    # makes the migration bundle explicit and auditable.
+    files["payload/makia-firewall.json"]=json.dumps(
+        [{"port":port,"proto":proto} for port,proto in sorted({(r["port"],r["proto"]) for r in firewall_rules})],
+        ensure_ascii=False,
+    ).encode("utf-8")
+    components["firewall"]=True
+
     checksums={
         name:hashlib.sha256(blob).hexdigest()
         for name,blob in files.items()
