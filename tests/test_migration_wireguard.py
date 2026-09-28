@@ -1,4 +1,9 @@
 import json
+import hashlib
+import importlib.util
+
+import pyzipper
+import pytest
 import sqlite3
 from pathlib import Path
 
@@ -158,3 +163,42 @@ def test_local_backup_uses_consistent_sqlite_snapshot(tmp_path,monkeypatch):
     monkeypatch.setattr(system_ops.os.path,"isdir",lambda p: Path(p).is_dir())
     blob=system_ops._portable_data_tar(str(data))
     assert blob
+
+
+def _restore_module():
+    path=Path(__file__).resolve().parents[1]/"scripts"/"restore-portable.py"
+    spec=importlib.util.spec_from_file_location("makia_restore_portable",path)
+    module=importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_portable_restore_v2_validates_payload_sha256(tmp_path):
+    restore=_restore_module()
+    bundle=tmp_path/"good.zip"
+    password="MigrationPass!2026"
+    payload=b"portable-data"
+    manifest={
+        "format":"makia-portable-migration",
+        "format_version":2,
+        "sha256":{"payload/data.tar.gz":hashlib.sha256(payload).hexdigest()},
+    }
+    with pyzipper.AESZipFile(bundle,"w",compression=pyzipper.ZIP_DEFLATED,encryption=pyzipper.WZ_AES) as zf:
+        zf.setpassword(password.encode())
+        zf.setencryption(pyzipper.WZ_AES,nbits=256)
+        zf.writestr("manifest.json",json.dumps(manifest))
+        zf.writestr("payload/data.tar.gz",payload)
+    parsed,files=restore.read_bundle(bundle,password)
+    assert parsed["format_version"]==2
+    assert files["payload/data.tar.gz"]==payload
+
+    bad=tmp_path/"bad.zip"
+    manifest["sha256"]["payload/data.tar.gz"]="0"*64
+    with pyzipper.AESZipFile(bad,"w",compression=pyzipper.ZIP_DEFLATED,encryption=pyzipper.WZ_AES) as zf:
+        zf.setpassword(password.encode())
+        zf.setencryption(pyzipper.WZ_AES,nbits=256)
+        zf.writestr("manifest.json",json.dumps(manifest))
+        zf.writestr("payload/data.tar.gz",payload)
+    with pytest.raises(RuntimeError,match="checksum mismatch"):
+        restore.read_bundle(bad,password)
