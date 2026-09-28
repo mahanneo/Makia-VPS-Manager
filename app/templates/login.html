@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="{{language}}" dir="{{'ltr' if language == 'en' else 'rtl'}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -67,7 +67,7 @@
       fa:{lang:'FA',title:'خوش آمدید',subtitle:'برای ورود به پنل، اطلاعات مدیر را وارد کنید.',user:'نام کاربری',pass:'رمز عبور',submit:'ورود',secure:'ورود امن مدیر',show:'نمایش رمز',hide:'پنهان کردن رمز'},
       en:{lang:'EN',title:'Welcome back',subtitle:'Enter your administrator credentials to continue.',user:'Username',pass:'Password',submit:'Sign in',secure:'Secure admin session',show:'Show password',hide:'Hide password'}
     };
-    let lang=localStorage.getItem('makia-login-lang')||'fa';
+    let lang='{{language}}'==='en'?'en':'fa';
     let theme=localStorage.getItem('makia-login-theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
 
     function applyLang(){
@@ -89,7 +89,7 @@
       document.getElementById('loginThemeIcon').textContent=theme==='dark'?'☾':'☀';
       document.querySelector('meta[name="theme-color"]').setAttribute('content',theme==='dark'?'#08111e':'#eef4fb');
     }
-    langBtn.addEventListener('click',()=>{lang=lang==='fa'?'en':'fa';localStorage.setItem('makia-login-lang',lang);applyLang()});
+    langBtn.addEventListener('click',()=>{lang=lang==='fa'?'en':'fa';applyLang()});
     themeBtn.addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';localStorage.setItem('makia-login-theme',theme);applyTheme()});
     passwordBtn.addEventListener('click',()=>{
       password.type=password.type==='password'?'text':'password';
