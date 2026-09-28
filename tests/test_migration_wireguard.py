@@ -10,6 +10,7 @@ import sqlite3
 from pathlib import Path
 
 from app import protocol_ops, system_ops
+from app import main as app_main
 
 
 def test_wireguard_allowed_ips_validation():
@@ -84,6 +85,10 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     stunnel_conf.write_text("[makia-openvpn]\naccept=9443\nconnect=127.0.0.1:8443\n",encoding="utf-8")
     stunnel_defaults=tmp_path/"stunnel4.defaults"
     stunnel_defaults.write_text("ENABLED=1\n",encoding="utf-8")
+    ssh_dir=tmp_path/"ssh"
+    ssh_dir.mkdir()
+    (ssh_dir/"ssh_host_ed25519_key").write_text("ssh-private\n",encoding="utf-8")
+    (ssh_dir/"ssh_host_ed25519_key.pub").write_text("ssh-public\n",encoding="utf-8")
 
     monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[{"username":"user001","password_hash":"$6$hash"}])
     files=system_ops.portable_migration_files(
@@ -102,6 +107,7 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
             "wstunnel_env":str(wstunnel_env),
             "stunnel_conf":str(stunnel_conf),
             "stunnel_defaults":str(stunnel_defaults),
+            "ssh_dir":str(ssh_dir),
         },
     )
     assert "manifest.json" in files
@@ -115,6 +121,8 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     assert "payload/ikev2.env" in files
     assert "payload/wstunnel.env" in files
     assert "payload/stunnel-makia.conf" in files
+    assert "payload/ssh-host-keys/ssh_host_ed25519_key" in files
+    assert "payload/ssh-host-keys/ssh_host_ed25519_key.pub" in files
     assert "RESTORE.txt" in files
     manifest=json.loads(files["manifest.json"])
     assert manifest["format"]=="makia-portable-migration"
@@ -126,7 +134,10 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     assert manifest["components"]["ipsec_d"] is True
     assert manifest["components"]["wstunnel_env"] is True
     assert manifest["components"]["stunnel_conf"] is True
+    assert manifest["components"]["ssh_host_keys"] is True
+    assert manifest["ssh_host_keys"]==["ssh_host_ed25519_key","ssh_host_ed25519_key.pub"]
     assert manifest["sha256"]["payload/ipsec.secrets"]
+    assert manifest["sha256"]["payload/ssh-host-keys/ssh_host_ed25519_key"]
     assert manifest["excluded_secrets"]==["/etc/makia-vps-manager/makia.env"]
     assert "DNS-only" in manifest["cutover"]["cloudflare"]
 
@@ -249,3 +260,52 @@ def test_safe_extract_rejects_symlink_escape(tmp_path):
     )
     with pytest.raises(RuntimeError,match="unsafe symlink"):
         restore.safe_extract_tar(blob,tmp_path)
+
+
+def test_restore_ssh_host_keys_preserves_fingerprint_material(tmp_path,monkeypatch):
+    restore=_restore_module()
+    ssh_dir=tmp_path/"ssh"
+    ssh_dir.mkdir()
+    (ssh_dir/"ssh_host_ed25519_key").write_bytes(b"destination-old")
+    monkeypatch.setattr(restore,"SSH_DIR",ssh_dir)
+    monkeypatch.setattr(restore,"BACKUP_ROOT",tmp_path/"backups")
+    monkeypatch.setattr(restore.os,"chown",lambda *args:None)
+    monkeypatch.setattr(restore.shutil,"which",lambda name:"/usr/sbin/sshd" if name=="sshd" else None)
+    calls=[]
+    class Result:
+        def __init__(self,code=0):
+            self.returncode=code
+            self.stdout=""
+            self.stderr=""
+    def fake_run(args,check=True):
+        calls.append(list(args))
+        return Result(0)
+    monkeypatch.setattr(restore,"run",fake_run)
+    payload={
+        "payload/ssh-host-keys/ssh_host_ed25519_key":b"source-private",
+        "payload/ssh-host-keys/ssh_host_ed25519_key.pub":b"source-public",
+    }
+    restored=restore.restore_ssh_host_keys(payload)
+    assert restored==["ssh_host_ed25519_key","ssh_host_ed25519_key.pub"]
+    assert (ssh_dir/"ssh_host_ed25519_key").read_bytes()==b"source-private"
+    assert (ssh_dir/"ssh_host_ed25519_key.pub").read_bytes()==b"source-public"
+    assert (ssh_dir/"ssh_host_ed25519_key").stat().st_mode & 0o777==0o600
+    assert (ssh_dir/"ssh_host_ed25519_key.pub").stat().st_mode & 0o777==0o644
+    assert ["/usr/sbin/sshd","-t"] in calls
+
+
+def test_migration_readiness_identifies_direct_ip_clients(monkeypatch):
+    monkeypatch.setattr(app_main,"require_local_admin",lambda request:"admin")
+    monkeypatch.setattr(app_main,"get_setting",lambda key,default="":"vpn.example.com" if key=="panel_domain" else default)
+    monkeypatch.setattr(app_main,"list_access_artifacts",lambda:[
+        {"kind":"wireguard","external_key":"wg1","display_name":"WG Domain","metadata_json":json.dumps({"endpoint":"vpn.example.com"})},
+        {"kind":"openvpn","external_key":"ov1","display_name":"OV Direct","metadata_json":json.dumps({"endpoint":"203.0.113.50"})},
+        {"kind":"xray","external_key":"xr1","display_name":"XR Domain","metadata_json":json.dumps({"endpoint":"edge.example.com"})},
+    ])
+    result=app_main.migration_readiness(None)
+    assert result["total"]==3
+    assert result["domain_based"]==2
+    assert result["direct_ip"]==1
+    assert result["zero_touch_candidate"] is False
+    assert result["domains_to_repoint"]==["edge.example.com","vpn.example.com"]
+    assert result["attention"][0]["name"]=="OV Direct"
