@@ -312,6 +312,43 @@ def _public_access_state(kind,key):
         return {"active":active,"reason":reason,"usage":snap}
     return {"active":True,"reason":"active","usage":None}
 
+
+def _secret_config_get(name):
+    raw=get_setting("secret:"+str(name),"")
+    if not raw:
+        return {}
+    try:
+        payload=access_ops.open_payload(raw)
+        return payload if isinstance(payload,dict) else {}
+    except Exception:
+        return {}
+
+def _secret_config_set(name,value):
+    payload=dict(value or {})
+    set_setting("secret:"+str(name),access_ops.seal_payload(payload))
+    return payload
+
+def _masked_secret(value):
+    raw=str(value or "")
+    if not raw:return ""
+    if len(raw)<=8:return "••••"
+    return raw[:4]+"…"+raw[-4:]
+
+def _notification_delivery(kind,title,detail="",level="info"):
+    delivered=False
+    cfg=_secret_config_get("telegram")
+    if cfg.get("enabled") and cfg.get("bot_token") and cfg.get("chat_id"):
+        try:
+            system_ops.telegram_send(
+                cfg["bot_token"],cfg["chat_id"],
+                f"[Makia] {title}\n{detail}".strip()
+            )
+            delivered=True
+        except Exception:
+            delivered=False
+    add_notification_event(kind,title,detail,level,delivered)
+    return delivered
+
 def bearer(request:Request):
     auth=request.headers.get("authorization","")
     if auth.lower().startswith("bearer "):
