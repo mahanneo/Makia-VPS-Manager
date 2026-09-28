@@ -264,6 +264,9 @@ def _migration_versions_compatible(bundle_version,expected_version):
     # Full Migration format v2 stayed compatible across the 0.26 RC line.
     # Keep this directional and explicit: RC5 may restore earlier verified
     # RC2/RC3/RC4 bundles, including the RC2 systemd-template name shim.
+    compatible_to_rc6={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5"}
+    if destination=="0.26.0-rc6" and bundle in compatible_to_rc6:
+        return True
     compatible_to_rc5={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4"}
     if destination=="0.26.0-rc5" and bundle in compatible_to_rc5:
         return True
