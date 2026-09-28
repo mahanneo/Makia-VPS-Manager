@@ -2984,6 +2984,12 @@ class NodeHeartbeat(BaseModel):
     cpu:float=Field(ge=0,le=100)
     memory:float=Field(ge=0,le=100)
     disk:float=Field(ge=0,le=100)
+    public_url:str=Field(default="",max_length=255)
+    users:int=Field(default=0,ge=0,le=10_000_000)
+    online_users:int=Field(default=0,ge=0,le=10_000_000)
+    rx:int=Field(default=0,ge=0)
+    tx:int=Field(default=0,ge=0)
+    services:dict=Field(default_factory=dict)
 
 @app.get("/api/nodes")
 def nodes_get(request:Request):
@@ -3010,7 +3016,10 @@ def node_heartbeat(payload:NodeHeartbeat,request:Request):
     node=node_by_token(token or "")
     if not node:
         raise HTTPException(403,"invalid node token")
-    update_node_heartbeat(node["id"],payload.hostname,payload.version,payload.cpu,payload.memory,payload.disk)
+    update_node_heartbeat(
+        node["id"],payload.hostname,payload.version,payload.cpu,payload.memory,payload.disk,
+        payload.public_url,payload.users,payload.online_users,payload.rx,payload.tx,payload.services
+    )
     return {"ok":True,"node_id":node["id"]}
 
 class GeneralSettings(BaseModel):
