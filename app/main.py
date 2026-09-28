@@ -1834,6 +1834,16 @@ def public_access_portal(token:str,request:Request):
     files=payload.get("files") or {}
     native_filename=payload.get("native_filename") or ""
     has_native=bool(native_filename and native_filename in files)
+    public_files=[]
+    for filename,data in files.items():
+        safe_name=str(filename)
+        if "/" in safe_name or "\\" in safe_name or safe_name.endswith("-qr.svg"):
+            continue
+        public_files.append({
+            "name":safe_name,
+            "size":len(data.encode("utf-8") if isinstance(data,str) else bytes(data)),
+            "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
+        })
     qr=""
     if share_text and kind in {"xray","wireguard","ssh"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
@@ -1846,7 +1856,9 @@ def public_access_portal(token:str,request:Request):
         "kind":kind,"key":key,"name":artifact.get("display_name") or key,
         "protocol":protocol,"summary":summary,"state":state,
         "share_text":share_text,"qr":qr,"has_native":has_native,
-        "native_filename":native_filename,"portal_url":portal_url,
+        "native_filename":native_filename,"public_files":public_files,
+        "details_text":str(payload.get("primary_text") or "") if kind=="ssh" else "",
+        "portal_url":portal_url,
         "guide_url":f"{public_origin(request)}/help/connect#{guide_kind}",
         "download_url":f"/access/{token}/download",
         "qr_url":f"/access/{token}/qr.svg" if qr else "",
@@ -1883,6 +1895,37 @@ def public_access_download(token:str,request:Request):
     safe=access_ops.safe_filename(filename)
     return Response(content=bytes(data),media_type=media,headers={
         "Content-Disposition":f'attachment; filename="{safe}"',
+        "Cache-Control":"no-store, private","Pragma":"no-cache",
+        "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
+        "X-Content-Type-Options":"nosniff",
+    })
+
+
+
+@app.get("/access/{token}/files/{filename}")
+def public_access_file(token:str,filename:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        raise HTTPException(410,"access is no longer active")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    payload=_current_delivery_payload(kind,key,payload,request)
+    files=payload.get("files") or {}
+    requested=str(filename or "")
+    if "/" in requested or "\\" in requested or requested not in files:
+        raise HTTPException(404,"file not found")
+    data=files[requested]
+    if isinstance(data,str):data=data.encode("utf-8")
+    media="application/octet-stream"
+    if requested.endswith((".txt",".conf",".json")):media="text/plain; charset=utf-8"
+    elif requested.endswith(".ovpn"):media="application/x-openvpn-profile"
+    elif requested.endswith(".svg"):media="image/svg+xml"
+    return Response(content=bytes(data),media_type=media,headers={
+        "Content-Disposition":f'attachment; filename="{access_ops.safe_filename(requested)}"',
         "Cache-Control":"no-store, private","Pragma":"no-cache",
         "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
         "X-Content-Type-Options":"nosniff",
