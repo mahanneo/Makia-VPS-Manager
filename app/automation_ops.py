@@ -12,12 +12,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import access_ops, system_ops
+from . import access_ops, system_ops, outline_ops
 from .config import DATA_DIR
 from .db import (
     all_profiles, due_backup_schedules, update_backup_schedule_state,
     add_backup_run, list_backup_runs, get_setting, set_setting,
-    add_alert_event, list_alert_events,
+    add_alert_event, list_alert_events, list_protocol_clients, set_protocol_client_enabled,
 )
 
 _scheduler_started=False
@@ -260,6 +260,77 @@ def send_configured_alert(kind,severity,title,message):
     return delivered
 
 
+def telegram_poll_commands(version):
+    raw=get_setting("integrations_config_enc","")
+    if not raw:return
+    cfg=open_config(raw); tg=cfg.get("telegram") or {}
+    if not tg.get("enabled") or not tg.get("bot_token") or not tg.get("chat_id") or not tg.get("commands",True):
+        return
+    token=str(tg["bot_token"]); expected_chat=str(tg["chat_id"])
+    offset=int(get_setting("telegram_update_offset","0") or 0)
+    url=f"https://api.telegram.org/bot{token}/getUpdates?"+urllib.parse.urlencode({"timeout":0,"offset":offset,"allowed_updates":json.dumps(["message"])})
+    try:
+        _,result=_json_request(url,timeout=10)
+    except Exception:return
+    if not result.get("ok"):return
+    for update in result.get("result") or []:
+        offset=max(offset,int(update.get("update_id") or 0)+1)
+        message=update.get("message") or {}
+        chat=str((message.get("chat") or {}).get("id") or "")
+        text=str(message.get("text") or "").strip()
+        if chat!=expected_chat or not text.startswith("/"):continue
+        cmd=text.split()[0].split("@")[0].lower()
+        try:
+            if cmd in {"/start","/help"}:
+                reply="Makia commands:\n/status — server health\n/expiry — expiring users\n/backups — latest backups"
+            elif cmd=="/status":
+                m=system_ops.metrics()
+                clients=list_protocol_clients()
+                reply=f"Makia {version}\nCPU {m.get('cpu_percent',0)}% · RAM {m.get('memory_percent',0)}% · Disk {m.get('disk_percent',0)}%\nManaged protocol clients: {len(clients)}"
+            elif cmd=="/expiry":
+                now_ts=int(time.time()); exp=[]
+                for row in list_protocol_clients():
+                    e=int(row.get("expire_at") or 0)
+                    if e and e-now_ts<=7*86400:
+                        exp.append(f"{row.get('name')} · {max(0,(e-now_ts)//86400)}d")
+                reply="Expiring ≤7d:\n"+("\n".join(exp[:30]) if exp else "None")
+            elif cmd=="/backups":
+                rows=system_ops.backup_list()[:5]
+                reply="Latest backups:\n"+("\n".join(f"{x['name']} · {x.get('type')} · {x.get('size',0)}B" for x in rows) if rows else "None")
+            else:
+                reply="Unknown command. Use /help"
+            telegram_send(token,expected_chat,reply)
+        except Exception:
+            pass
+    set_setting("telegram_update_offset",str(offset))
+
+
+def enforce_outline_expiry():
+    now_ts=int(time.time())
+    for row in list_protocol_clients():
+        if row.get("engine")!="outline" or not row.get("enabled"):continue
+        expire=int(row.get("expire_at") or 0)
+        if expire and expire<=now_ts:
+            outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
+            try:outline_ops.set_data_limit(outline_id,0)
+            except Exception:continue
+            set_protocol_client_enabled(row["id"],False,"expired")
+
+
+def health_alerts():
+    try:
+        m=system_ops.metrics()
+        disk=float(m.get("disk_percent") or 0)
+        if disk>=90:send_configured_alert("disk-high","error","Disk usage critical",f"Disk usage is {disk:.1f}%")
+    except Exception:pass
+    for svc in ("makia-vps-manager","xray","nginx"):
+        try:
+            s=system_ops.service_status(svc)
+            if s.get("installed") and not s.get("active"):
+                send_configured_alert(f"service:{svc}","error",f"Service down: {svc}",str(s.get("state") or "inactive"))
+        except Exception:pass
+
+
 def scheduler_tick(version):
     now_ts=int(time.time())
     for schedule in due_backup_schedules(now_ts):
@@ -272,6 +343,9 @@ def scheduler_tick(version):
         except Exception as exc:
             update_backup_schedule_state(schedule["id"],next_run,"failed",str(exc),now_ts)
             send_configured_alert(f"backup-failed:{schedule['id']}","error","Scheduled backup failed",str(exc))
+    enforce_outline_expiry()
+    health_alerts()
+    telegram_poll_commands(version)
 
 
 def _scheduler_loop(version):
