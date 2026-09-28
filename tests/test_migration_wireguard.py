@@ -199,6 +199,14 @@ def test_full_migration_bundle_is_encrypted_verified_and_listed(tmp_path,monkeyp
     assert rows[0]["restore_ready"] is True
     assert rows[0]["version"]=="0.26.0-rc2"
     assert rows[0]["sha256"]==preview["sha256"]
+    staged=system_ops.stage_migration_restore(blob,password,"0.26.0-rc2")
+    job_dir=Path(system_ops._backup_root())/"restore-jobs"/staged["job_id"]
+    assert not (job_dir/"password").exists(), "verify/preview must not persist the password"
+    armed=system_ops.arm_migration_restore(staged["job_id"],password,"0.26.0-rc2")
+    assert armed["state"]=="armed"
+    assert (job_dir/"password").stat().st_mode & 0o077 == 0
+    system_ops.discard_migration_restore_password(staged["job_id"])
+    assert not (job_dir/"password").exists()
 
 
 def test_migration_bundle_wrong_password_is_rejected(tmp_path,monkeypatch):
