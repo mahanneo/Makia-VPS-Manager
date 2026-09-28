@@ -84,7 +84,7 @@ def test_primary_navigation_has_dedicated_protocol_workspaces():
 
 
 def test_xray_workspace_exposes_real_policy_controls():
-    for marker in ["QUOTA · EXPIRY · RESET · IP LIMIT · STATUS","protocolClientRow","resetProtocolTraffic"]:
+    for marker in ["Clientهای مدیریت‌شده","QUOTA · EXPIRY · IP LIMIT","protocolClientRow","resetProtocolTraffic"]:
         assert marker in JS
 
 
