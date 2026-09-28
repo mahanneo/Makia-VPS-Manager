@@ -1,30 +1,27 @@
+{% set fa = language != "en" %}
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="{{language}}" dir="{{'ltr' if language == 'en' else 'rtl'}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#07101d">
-  <title>راهنمای تصویری اتصال · Makia</title>
+  <meta name="robots" content="noindex,nofollow">
+  <title>{{'راهنمای اتصال' if fa else 'Connection Guide'}} · Makia</title>
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
 </head>
 <body class="client-page guide-page guide-v26">
   <main class="client-shell guide-shell">
     <header class="guide-top">
-      <div class="client-brand"><img src="/static/makia.svg" alt=""><div><b>MAKIA</b><span>VISUAL CONNECTION GUIDE</span></div></div>
+      <div class="client-brand"><img src="/static/makia.svg" alt=""><div><b>MAKIA</b><span>{{'راهنمای اتصال' if fa else 'CONNECTION GUIDE'}}</span></div></div>
       <span class="guide-version">v{{version}}</span>
     </header>
 
     <section class="client-card guide-hero">
       <div class="guide-hero-copy">
-        <div class="eyebrow">راهنمای قدم‌به‌قدم</div>
-        <h1>اتصال بدون حدس و خطا</h1>
-        <p>نوع دسترسی خودت را انتخاب کن. هر بخش با شکل ساده نشان می‌دهد کدام گزینه را در برنامه Client پیدا کنی. QR، لینک و فایل کانفیگ حاوی Credential هستند و باید خصوصی بمانند.</p>
-      </div>
-      <div class="guide-hero-visual" aria-hidden="true">
-        <div class="guide-device"><span></span><i>QR</i><b>CONNECT</b></div>
-        <div class="guide-route">→</div>
-        <div class="guide-server"><img src="/static/makia.svg" alt=""><span>MAKIA</span></div>
+        <div class="eyebrow">{{'راهنمای قدم‌به‌قدم' if fa else 'STEP-BY-STEP GUIDE'}}</div>
+        <h1>{{'اتصال روی موبایل و کامپیوتر' if fa else 'Connect on mobile and desktop'}}</h1>
+        <p>{{'نوع دسترسی خود را انتخاب کنید. فایل، QR و لینک اتصال اختصاصی هستند و باید فقط در اختیار صاحب حساب باشند.' if fa else 'Choose your access type. Connection files, QR codes and links are private and should only be shared with the account owner.'}}</p>
       </div>
       <nav class="guide-nav">
         <a href="#xray"><span class="guide-mini-icon xray">X</span>Xray</a>
@@ -37,55 +34,69 @@
     <section class="client-card guide-section" id="xray">
       <div class="guide-section-head"><span class="guide-icon xray">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>Xray / V2Ray</h2></div></div>
       <div class="visual-steps">
-        <figure><svg viewBox="0 0 240 145"><rect x="63" y="8" width="114" height="129" rx="15"/><rect x="76" y="27" width="88" height="86" rx="6"/><path d="M93 46h54M93 60h41M92 83h24"/><rect x="121" y="76" width="29" height="25" rx="4"/><path d="m129 83 13 11m0-11-13 11"/></svg><figcaption><b>۱. افزودن پروفایل</b><span>Scan QR یا Import from Clipboard را باز کن.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><rect x="58" y="13" width="124" height="118" rx="13"/><rect x="77" y="33" width="86" height="18" rx="5"/><rect x="77" y="60" width="86" height="18" rx="5"/><rect x="77" y="87" width="86" height="23" rx="6"/><path d="M91 69h43m-43 28h30"/></svg><figcaption><b>۲. پروفایل را انتخاب کن</b><span>نام Makia را پیدا کن و بدون تغییر SNI/Key ذخیره کن.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><rect x="55" y="12" width="130" height="120" rx="14"/><circle cx="120" cy="68" r="29"/><path d="M106 69l9 9 20-23"/><rect x="87" y="107" width="66" height="10" rx="5"/></svg><figcaption><b>۳. Connect</b><span>بعد از سبز شدن اتصال، مرور وب و DNS را تست کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="65" y="10" width="110" height="125" rx="16"/><rect x="83" y="30" width="74" height="74" rx="8"/><path d="M94 42h18v18H94zm34 0h18v18h-18zM94 76h18v18H94zm28-8h10v10h-10zm16 16h10v10h-10z"/></svg><figcaption><b>{{'۱. دریافت پروفایل' if fa else '1. Get the profile'}}</b><span>{{'QR یا لینک اختصاصی را باز کنید.' if fa else 'Open your private QR or link.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="52" y="23" width="136" height="96" rx="12"/><path d="M76 48h88M76 66h66M76 84h78"/><circle cx="164" cy="94" r="12"/><path d="m158 94 5 5 8-11"/></svg><figcaption><b>{{'۲. وارد کردن' if fa else '2. Import'}}</b><span>{{'پروفایل را در کلاینت سازگار وارد کنید.' if fa else 'Import it into a compatible client.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/><rect x="78" y="117" width="84" height="9" rx="4"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'پروفایل را فعال و اینترنت را تست کنید.' if fa else 'Activate the profile and test internet access.'}}</span></figcaption></figure>
       </div>
       <div class="guide-method-grid">
-        <article><b>QR مستقیم</b><p>در v2rayNG، Hiddify، NekoBox یا Client سازگار گزینه Scan QR را بزن و QR همان کاربر را اسکن کن.</p></article>
-        <article><b>Copy Link</b><p>Share Link را Copy و از Import from Clipboard استفاده کن.</p></article>
-        <article><b>Subscription</b><p>Subscription URL را اضافه کن و سپس Update/Refresh را بزن.</p></article>
+        <article><b>{{'Android' if fa else 'Android'}}</b><p>{{'Hiddify، v2rayNG یا NekoBox را نصب کنید. QR را اسکن کنید یا لینک را از حافظه وارد کنید، سپس پروفایل را فعال کنید.' if fa else 'Install Hiddify, v2rayNG or NekoBox. Scan the QR code or import the link from clipboard, then activate the profile.'}}</p></article>
+        <article><b>iPhone / iPad</b><p>{{'یک کلاینت سازگار Xray نصب کنید. QR یا لینک اختصاصی را وارد کنید و بدون تغییر SNI، کلید عمومی، Short ID یا Port متصل شوید.' if fa else 'Install a compatible Xray client. Import the private QR/link and connect without changing SNI, public key, Short ID or port.'}}</p></article>
+        <article><b>Windows / macOS</b><p>{{'Hiddify یا کلاینت سازگار را نصب کنید، لینک را وارد کنید و پروفایل ساخته‌شده را انتخاب کنید.' if fa else 'Install Hiddify or another compatible client, import the link and select the created profile.'}}</p></article>
       </div>
-      <div class="notice">REALITY: مقادیر SNI، Public Key، Short ID و Fingerprint داخل لینک هستند. آن‌ها را دستی تغییر نده. Trojan و Hysteria2 در Guided mode به Domain/Certificate معتبر نیاز دارند.</div>
+      <div class="notice">{{'در پروفایل‌های REALITY مقادیر SNI، Public Key، Short ID و Fingerprint را تغییر ندهید.' if fa else 'For REALITY profiles, do not change SNI, Public Key, Short ID or Fingerprint.'}}</div>
     </section>
 
     <section class="client-card guide-section" id="wireguard">
-      <div class="guide-section-head"><span class="guide-icon wg">W</span><div><div class="eyebrow">NATIVE VPN · QR · CONFIG</div><h2>WireGuard</h2></div></div>
+      <div class="guide-section-head"><span class="guide-icon wg">W</span><div><div class="eyebrow">{{'VPN بومی · QR · فایل تنظیمات' if fa else 'NATIVE VPN · QR · CONFIG'}}</div><h2>WireGuard</h2></div></div>
       <div class="visual-steps">
-        <figure><svg viewBox="0 0 240 145"><rect x="67" y="10" width="106" height="126" rx="14"/><path d="M88 37h64v64H88zM94 43h15v15H94zm37 0h15v15h-15zM94 80h15v15H94zm28-10h9v9h-9zm18 15h8v9h-8z"/></svg><figcaption><b>۱. QR یا فایل</b><span>در WireGuard روی + بزن و Scan QR / Import File را انتخاب کن.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><rect x="52" y="24" width="136" height="94" rx="10"/><path d="M73 45h94M73 59h64M73 73h83M73 87h53"/><circle cx="163" cy="94" r="12"/><path d="m157 94 5 5 8-11"/></svg><figcaption><b>۲. Tunnel را ذخیره کن</b><span>Endpoint، PublicKey، DNS و MTU را تغییر نده.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><path d="M120 14 73 34v35c0 30 19 50 47 62 28-12 47-32 47-62V34z"/><path d="M98 72h44M120 50v44"/><circle cx="120" cy="72" r="28"/></svg><figcaption><b>۳. Activate</b><span>Handshake و دریافت اینترنت را بررسی کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95zm25-9h9v9h-9zm17 15h9v9h-9z"/></svg><figcaption><b>{{'۱. QR یا فایل' if fa else '1. QR or file'}}</b><span>{{'QR را اسکن کنید یا فایل .conf را بگیرید.' if fa else 'Scan the QR or get the .conf file.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="54" y="25" width="132" height="92" rx="11"/><path d="M76 48h88M76 66h62M76 84h75"/><path d="M160 47v39m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن تونل' if fa else '2. Import tunnel'}}</b><span>{{'فایل را در WireGuard وارد کنید.' if fa else 'Import the file into WireGuard.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><path d="M120 14 74 34v34c0 30 19 50 46 63 27-13 46-33 46-63V34z"/><path d="M100 72h40M120 52v40"/></svg><figcaption><b>{{'۳. فعال‌سازی' if fa else '3. Activate'}}</b><span>{{'تونل را روشن و Handshake را بررسی کنید.' if fa else 'Activate the tunnel and verify the handshake.'}}</span></figcaption></figure>
       </div>
-      <div class="notice">اگر روی یک ISP وصل نشد ولی روی شبکه دیگر وصل شد، تنظیمات را خودسرانه تغییر نده. UDP ممکن است در بعضی مسیرها محدود باشد؛ نتیجه سمت سرور به‌تنهایی وضعیت ISP را ثابت نمی‌کند.</div>
+      <div class="guide-method-grid">
+        <article><b>{{'موبایل' if fa else 'Mobile'}}</b><p>{{'برنامه رسمی WireGuard را نصب کنید. علامت + را بزنید و QR را اسکن کنید یا فایل .conf را وارد کنید.' if fa else 'Install the official WireGuard app. Tap + and scan the QR code or import the .conf file.'}}</p></article>
+        <article><b>Windows</b><p>{{'برنامه WireGuard را نصب کنید، گزینه وارد کردن تونل از فایل را بزنید و فایل .conf را انتخاب کنید.' if fa else 'Install WireGuard, choose Import tunnel(s) from file and select the .conf file.'}}</p></article>
+        <article><b>macOS</b><p>{{'WireGuard را نصب کنید، فایل .conf را وارد کنید و تونل را فعال کنید.' if fa else 'Install WireGuard, import the .conf file and activate the tunnel.'}}</p></article>
+      </div>
+      <div class="notice">{{'Endpoint، کلیدها، DNS و MTU را بدون هماهنگی تغییر ندهید.' if fa else 'Do not change endpoint, keys, DNS or MTU unless instructed.'}}</div>
     </section>
 
     <section class="client-card guide-section" id="openvpn">
       <div class="guide-section-head"><span class="guide-icon ovpn">O</span><div><div class="eyebrow">PKI · TCP / UDP · OVPN</div><h2>OpenVPN</h2></div></div>
       <div class="visual-steps">
-        <figure><svg viewBox="0 0 240 145"><path d="M74 28h92v91H74z"/><path d="M88 49h63M88 64h47M88 79h56"/><path d="m88 100 13 10 24-27"/></svg><figcaption><b>۱. فایل OVPN</b><span>فایل اختصاصی خودت را روی دستگاه ذخیره کن.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><rect x="58" y="19" width="124" height="106" rx="13"/><circle cx="120" cy="59" r="24"/><path d="M109 79v20h22V79M120 66v18"/><rect x="86" y="104" width="68" height="9" rx="4"/></svg><figcaption><b>۲. Import Profile</b><span>در OpenVPN Connect گزینه Upload File / Import Profile را بزن.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><rect x="53" y="19" width="134" height="106" rx="14"/><path d="M78 47h84M78 64h84"/><rect x="78" y="82" width="84" height="22" rx="11"/><circle cx="151" cy="93" r="7"/></svg><figcaption><b>۳. Connect</b><span>پروفایل را روشن کن؛ TCP/UDP داخل فایل تنظیم شده است.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><path d="M74 26h92v93H74z"/><path d="M90 48h60M90 64h48M90 80h55"/><path d="m90 99 12 10 24-29"/></svg><figcaption><b>{{'۱. دانلود OVPN' if fa else '1. Download OVPN'}}</b><span>{{'فایل اختصاصی خود را دانلود کنید.' if fa else 'Download your private OVPN file.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="58" y="20" width="124" height="105" rx="13"/><path d="M83 48h74M83 67h54"/><path d="M120 80v24m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن پروفایل' if fa else '2. Import profile'}}</b><span>{{'فایل را در OpenVPN Connect وارد کنید.' if fa else 'Import the file into OpenVPN Connect.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'پروفایل را فعال کنید.' if fa else 'Activate the profile.'}}</span></figcaption></figure>
       </div>
-      <div class="notice">HTTPS پنل با TLS داخلی OpenVPN فرق دارد. اگر پروفایل Domain دارد، رکورد A باید مستقیم به VPS برسد. بعد از تغییر Server Port/Transport، فایل OVPN را دوباره از مدیر دریافت کن.</div>
+      <div class="guide-method-grid">
+        <article><b>Android / iPhone</b><p>{{'OpenVPN Connect را نصب کنید. فایل .ovpn را دانلود کنید و از بخش وارد کردن پروفایل، فایل را انتخاب کنید.' if fa else 'Install OpenVPN Connect. Download the .ovpn file and import it from the profile import screen.'}}</p></article>
+        <article><b>Windows</b><p>{{'OpenVPN Connect را نصب کنید، فایل .ovpn را وارد کنید و سپس اتصال را فعال کنید.' if fa else 'Install OpenVPN Connect, import the .ovpn file and then connect.'}}</p></article>
+        <article><b>macOS</b><p>{{'OpenVPN Connect را نصب کنید و همان فایل .ovpn را وارد کنید.' if fa else 'Install OpenVPN Connect and import the same .ovpn file.'}}</p></article>
+      </div>
+      <div class="notice">{{'اگر مدیر Port یا Transport سرور را تغییر داد، فایل OVPN جدید را از لینک اختصاصی خود دریافت کنید.' if fa else 'If the server port or transport changes, download a fresh OVPN file from your private access page.'}}</div>
     </section>
 
     <section class="client-card guide-section" id="ssh">
-      <div class="guide-section-head"><span class="guide-icon ssh">›_</span><div><div class="eyebrow">SSH · NPV TUNNEL / NAPSTERNETV</div><h2>SSH / NPV</h2></div></div>
+      <div class="guide-section-head"><span class="guide-icon ssh">›_</span><div><div class="eyebrow">SSH · NPV</div><h2>SSH / NPV</h2></div></div>
       <div class="visual-steps">
-        <figure><svg viewBox="0 0 240 145"><rect x="50" y="25" width="140" height="94" rx="9"/><path d="m73 52 16 14-16 14M99 81h38"/><circle cx="166" cy="49" r="8"/></svg><figcaption><b>۱. اطلاعات ورود</b><span>Host، Port، Username و Password را از مدیر بگیر.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><rect x="63" y="10" width="114" height="125" rx="14"/><rect x="79" y="31" width="82" height="82" rx="5"/><path d="M89 42h20v20H89zm42 0h20v20h-20zm-42 42h20v20H89zm31-11h10v10h-10zm20 17h10v10h-10z"/></svg><figcaption><b>۲. NPV QR</b><span>Scan QR یا Import from Clipboard را در Client سازگار انتخاب کن.</span></figcaption></figure>
-        <figure><svg viewBox="0 0 240 145"><path d="M54 32h132v82H54z"/><path d="m72 56 17 13-17 13M101 82h44"/><circle cx="166" cy="93" r="10"/><path d="m161 93 4 4 7-9"/></svg><figcaption><b>۳. اتصال</b><span>در OpenSSH یا NPV اتصال را اجرا و محدودیت Session را رعایت کن.</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="50" y="26" width="140" height="92" rx="10"/><path d="m72 54 17 14-17 14M101 82h42"/></svg><figcaption><b>{{'۱. دریافت مشخصات' if fa else '1. Get credentials'}}</b><span>{{'Host، Port، Username و Password را ببینید.' if fa else 'View host, port, username and password.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95z"/></svg><figcaption><b>{{'۲. NPV یا SSH' if fa else '2. NPV or SSH'}}</b><span>{{'QR را اسکن یا مشخصات را دستی وارد کنید.' if fa else 'Scan the QR or enter the credentials manually.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="55" y="25" width="130" height="94" rx="11"/><path d="m78 55 16 13-16 13M106 81h42"/><circle cx="165" cy="94" r="11"/><path d="m159 94 5 5 8-11"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'اتصال را اجرا و محدودیت نشست را رعایت کنید.' if fa else 'Connect and respect the session limit.'}}</span></figcaption></figure>
       </div>
-      <div class="notice">OpenSSH رمز را داخل config استاندارد ذخیره نمی‌کند. Credential را خصوصی نگه دار و اگر Import اختصاصی Client شناسایی نشد، اطلاعات SSH را دستی وارد کن.</div>
+      <div class="guide-method-grid">
+        <article><b>NPV</b><p>{{'اگر QR یا لینک npvt-ssh دارید، آن را در NapsternetV یا کلاینت سازگار وارد کنید.' if fa else 'If you have an npvt-ssh QR/link, import it into NapsternetV or another compatible client.'}}</p></article>
+        <article><b>Windows / macOS / Linux</b><p>{{'برای SSH معمولی از Server، Port، Username و Password موجود در صفحه اختصاصی استفاده کنید.' if fa else 'For standard SSH, use the Server, Port, Username and Password shown on your private access page.'}}</p></article>
+        <article><b>{{'نکته امنیتی' if fa else 'Security note'}}</b><p>{{'رمز و لینک اختصاصی را عمومی نکنید. در صورت لو رفتن، از مدیر بخواهید لینک یا دسترسی را تعویض کند.' if fa else 'Do not publish your password or private link. If exposed, ask the administrator to rotate the link or credentials.'}}</p></article>
+      </div>
     </section>
 
     <section class="client-card guide-section" id="troubleshooting">
-      <div class="eyebrow">TROUBLESHOOTING</div><h2>اگر وصل نشد</h2>
+      <div class="eyebrow">{{'رفع مشکل' if fa else 'TROUBLESHOOTING'}}</div><h2>{{'اگر وصل نشد' if fa else 'If it does not connect'}}</h2>
       <div class="guide-method-grid">
-        <article><b>اینترنت و ساعت</b><p>اتصال پایه، تاریخ/ساعت صحیح و خاموش بودن VPN دیگر را بررسی کن.</p></article>
-        <article><b>شبکه دیگر</b><p>Mobile Data و Wi‑Fi را جداگانه امتحان کن؛ محدودیت مسیرها یکسان نیست.</p></article>
-        <article><b>کانفیگ را دستکاری نکن</b><p>UUID، Key، SNI، Port، Endpoint، MTU و DNS را فقط با دستور مدیر تغییر بده.</p></article>
-        <article><b>گزارش دقیق</b><p>نام Profile، سیستم‌عامل، Client app/version و متن خطا را ارسال کن؛ Credential کامل را عمومی نفرست.</p></article>
+        <article><b>{{'اینترنت و ساعت دستگاه' if fa else 'Internet and device time'}}</b><p>{{'اتصال پایه اینترنت، تاریخ و ساعت صحیح و خاموش بودن VPN دیگر را بررسی کنید.' if fa else 'Check basic internet access, correct date/time and make sure another VPN is not active.'}}</p></article>
+        <article><b>{{'شبکه دیگر' if fa else 'Try another network'}}</b><p>{{'دیتای موبایل و Wi-Fi را جداگانه امتحان کنید.' if fa else 'Test mobile data and Wi-Fi separately.'}}</p></article>
+        <article><b>{{'تنظیمات را تغییر ندهید' if fa else 'Do not edit the profile'}}</b><p>{{'UUID، Key، SNI، Port، Endpoint، MTU و DNS را فقط با دستور مدیر تغییر دهید.' if fa else 'Only change UUID, key, SNI, port, endpoint, MTU or DNS when instructed by the administrator.'}}</p></article>
+        <article><b>{{'گزارش خطا' if fa else 'Report the error'}}</b><p>{{'نام پروفایل، سیستم‌عامل، نام و نسخه برنامه و متن خطا را برای مدیر ارسال کنید.' if fa else 'Send the profile name, operating system, client app/version and exact error message to the administrator.'}}</p></article>
       </div>
     </section>
     <footer>Makia VPS Manager · v{{version}}</footer>

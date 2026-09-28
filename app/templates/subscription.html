@@ -1,5 +1,6 @@
+{% set fa = language != "en" %}
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="{{language}}" dir="{{'ltr' if language == 'en' else 'rtl'}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -9,37 +10,37 @@
 </head>
 <body class="client-page">
   <main class="client-shell">
-    <div class="client-brand"><div class="brand-mark">M</div><div><b>MAKIA</b><span>CLIENT ACCESS</span></div></div>
+    <div class="client-brand"><div class="brand-mark">M</div><div><b>MAKIA</b><span>{{'دسترسی کاربر' if fa else 'CLIENT ACCESS'}}</span></div></div>
     <section class="client-card">
-      <div class="eyebrow">ACCESS PROFILE</div>
+      <div class="eyebrow">{{'پروفایل دسترسی' if fa else 'ACCESS PROFILE'}}</div>
       <h1>{{client.name}}</h1>
-      <div class="chips"><span class="protocol-pill">{{client.protocol|upper}}</span>{% if client.enabled %}<span class="status-chip ok">ACTIVE</span>{% else %}<span class="status-chip bad">DISABLED</span>{% endif %}</div>
+      <div class="chips"><span class="protocol-pill">{{client.protocol|upper}}</span>{% if client.enabled %}<span class="status-chip ok">{{'فعال' if fa else 'ACTIVE'}}</span>{% else %}<span class="status-chip bad">{{'غیرفعال' if fa else 'DISABLED'}}</span>{% endif %}</div>
       <div class="client-kpis">
-        <div><span>مصرف</span><b id="used">{{client.used_bytes}}</b></div>
-        <div><span>حجم کل</span><b id="quota">{{client.quota_bytes}}</b></div>
-        <div><span>دستگاه / IP</span><b>{{client.ip_limit}}</b></div>
-        <div><span>انقضا</span><b id="expire">{{client.expire_at}}</b></div>
+        <div><span>{{'مصرف' if fa else 'Used'}}</span><b id="used">{{client.used_bytes}}</b></div>
+        <div><span>{{'حجم کل' if fa else 'Quota'}}</span><b id="quota">{{client.quota_bytes}}</b></div>
+        <div><span>{{'دستگاه / IP' if fa else 'Device / IP'}}</span><b>{{client.ip_limit}}</b></div>
+        <div><span>{{'انقضا' if fa else 'Expires'}}</span><b id="expire">{{client.expire_at}}</b></div>
       </div>
       <div class="usage-track large"><i id="usageBar"></i></div>
       {% if profile_qr %}
       <div class="client-qr-grid">
-        <div class="client-qr-card"><img src="{{profile_qr}}" alt="Profile QR"><b>QR اتصال مستقیم</b><span>برای v2rayNG / Hiddify / NPV و کلاینت سازگار</span><a class="ghost link-btn" download="{{client.name}}-profile-qr.svg" href="{{profile_qr}}">دانلود QR</a></div>
-        {% if subscription_qr %}<div class="client-qr-card"><img src="{{subscription_qr}}" alt="Subscription QR"><b>QR اشتراک</b><span>برای افزودن Subscription و دریافت همین پروفایل</span><a class="ghost link-btn" download="{{client.name}}-subscription-qr.svg" href="{{subscription_qr}}">دانلود QR اشتراک</a></div>{% endif %}
+        <div class="client-qr-card"><img src="{{profile_qr}}" alt="Profile QR"><b>{{'QR اتصال مستقیم' if fa else 'Direct connection QR'}}</b><span>{{'برای Hiddify، v2rayNG و برنامه‌های سازگار' if fa else 'For Hiddify, v2rayNG and compatible clients'}}</span><a class="ghost link-btn" download="{{client.name}}-profile-qr.svg" href="{{profile_qr}}">{{'دانلود QR' if fa else 'Download QR'}}</a></div>
+        {% if subscription_qr %}<div class="client-qr-card"><img src="{{subscription_qr}}" alt="Subscription QR"><b>{{'QR اشتراک' if fa else 'Subscription QR'}}</b><span>{{'برای افزودن اشتراک و دریافت همین پروفایل' if fa else 'Add as a subscription to retrieve this profile'}}</span><a class="ghost link-btn" download="{{client.name}}-subscription-qr.svg" href="{{subscription_qr}}">{{'دانلود QR اشتراک' if fa else 'Download subscription QR'}}</a></div>{% endif %}
       </div>
       {% endif %}
       <div class="client-share-box">
-        <label>لینک اتصال مستقیم<textarea id="clientShareLink" readonly>{{client.share_link}}</textarea></label>
-        <button class="ghost" type="button" onclick="navigator.clipboard.writeText(document.getElementById('clientShareLink').value)">Copy Link</button>
+        <label>{{'لینک اتصال مستقیم' if fa else 'Direct connection link'}}<textarea id="clientShareLink" readonly>{{client.share_link}}</textarea></label>
+        <button class="ghost" type="button" onclick="navigator.clipboard.writeText(document.getElementById('clientShareLink').value)">{{'کپی لینک' if fa else 'Copy link'}}</button>
       </div>
       {% if subscription_enabled %}
       <div class="client-actions">
-        <a class="primary link-btn" href="{{subscription_url}}">Subscription</a>
-        <a class="ghost link-btn" href="/sub/{{subscription_id}}?format=raw">Raw Link</a>
+        <a class="primary link-btn" href="{{subscription_url}}">{{'اشتراک' if fa else 'Subscription'}}</a>
+        <a class="ghost link-btn" href="/sub/{{subscription_id}}?format=raw">{{'لینک خام' if fa else 'Raw link'}}</a>
         <a class="ghost link-btn" href="/sub/{{subscription_id}}?format=json">JSON</a>
       </div>
       {% endif %}
-      <div class="client-actions guide-actions"><a class="ghost link-btn" href="{{guide_url}}" target="_blank" rel="noopener">راهنمای نصب و اتصال</a></div>
-      <div class="notice">QR و لینک اتصال شامل Credential این پروفایل هستند. فقط برای صاحب همین دسترسی ارسال شوند؛ محدودیت حجم، انقضا و IP همچنان سمت سرور اعمال می‌شود.</div>
+      <div class="client-actions guide-actions"><a class="ghost link-btn" href="{{guide_url}}" target="_blank" rel="noopener">{{'راهنمای نصب و اتصال' if fa else 'Installation and connection guide'}}</a></div>
+      <div class="notice">{{'QR و لینک اتصال شامل اطلاعات محرمانه این پروفایل هستند. فقط برای صاحب همین دسترسی ارسال شوند؛ محدودیت حجم، انقضا و IP همچنان سمت سرور اعمال می‌شود.' if fa else 'The QR and connection link contain this profile\'s private credentials. Share them only with the owner; quota, expiry and IP limits are still enforced by the server.'}}</div>
     </section>
     <footer>Makia VPS Manager · v{{version}}</footer>
   </main>
@@ -47,8 +48,8 @@
     const used=Number({{client.used_bytes}}),quota=Number({{client.quota_bytes}}),exp=Number({{client.expire_at}});
     const f=n=>{if(!n)return'0 B';const u=['B','KB','MB','GB','TB'];const i=Math.min(u.length-1,Math.floor(Math.log(n)/Math.log(1024)));return(n/1024**i).toFixed(i?1:0)+' '+u[i]};
     document.getElementById('used').textContent=f(used);
-    document.getElementById('quota').textContent=quota?f(quota):'نامحدود';
-    document.getElementById('expire').textContent=exp?new Date(exp*1000).toLocaleDateString():'نامحدود';
+    document.getElementById('quota').textContent=quota?f(quota):{{ "'نامحدود'" if fa else "'Unlimited'" }};
+    document.getElementById('expire').textContent=exp?new Date(exp*1000).toLocaleDateString({{ "'fa-IR'" if fa else "'en-US'" }}):{{ "'نامحدود'" if fa else "'Unlimited'" }};
     document.getElementById('usageBar').style.width=quota?Math.min(100,used/quota*100)+'%':'0%';
   </script>
 </body>

@@ -28,6 +28,7 @@ async def security_headers(request:Request,call_next):
         request.url.path.startswith("/static/") or
         request.url.path.startswith("/sub/") or
         request.url.path.startswith("/client/") or
+        request.url.path.startswith("/access/") or
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
@@ -242,11 +243,74 @@ def ssh_npv_options(username):
     }
 
 def artifact_save(kind,external_key,display_name,protocol,payload,metadata=None):
+    meta=dict(metadata or {})
+    existing=get_access_artifact_by_key(str(kind),str(external_key))
+    if existing:
+        try:
+            old_meta=json.loads(existing.get("metadata_json") or "{}")
+        except (TypeError,ValueError):
+            old_meta={}
+        if old_meta.get("public_token") and not meta.get("public_token"):
+            meta["public_token"]=old_meta["public_token"]
+    meta.setdefault("public_token",secrets.token_urlsafe(24))
     return upsert_access_artifact(
         kind,external_key,display_name,protocol,payload.get("native_filename",""),
         access_ops.seal_payload(payload),
-        json.dumps(metadata or {},ensure_ascii=False,separators=(",",":"))
+        json.dumps(meta,ensure_ascii=False,separators=(",",":"))
     )
+
+def _artifact_public_meta(artifact):
+    try:
+        return json.loads((artifact or {}).get("metadata_json") or "{}")
+    except (TypeError,ValueError):
+        return {}
+
+def _ensure_artifact_public_token(kind,key):
+    artifact=get_access_artifact_by_key(str(kind),str(key))
+    if not artifact:
+        return None,""
+    meta=_artifact_public_meta(artifact)
+    token=str(meta.get("public_token") or "").strip()
+    if token:
+        return artifact,token
+    token=secrets.token_urlsafe(24)
+    meta["public_token"]=token
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    upsert_access_artifact(
+        artifact["kind"],artifact["external_key"],artifact["display_name"],artifact.get("protocol") or "",
+        artifact.get("native_filename") or payload.get("native_filename",""),
+        artifact["payload_enc"],json.dumps(meta,ensure_ascii=False,separators=(",",":"))
+    )
+    return get_access_artifact_by_key(str(kind),str(key)),token
+
+def _artifact_by_public_token(token):
+    raw=str(token or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{24,128}",raw):
+        return None
+    for item in list_access_artifacts():
+        meta=_artifact_public_meta(item)
+        if secrets.compare_digest(str(meta.get("public_token") or ""),raw):
+            return get_access_artifact_by_key(item["kind"],item["external_key"])
+    return None
+
+def _portal_language(request:Request):
+    requested=(request.query_params.get("lang") or "").strip().lower()
+    if requested in {"fa","en"}:
+        return requested
+    current=str(get_setting("language","fa") or "fa").lower()
+    return current if current in {"fa","en"} else "fa"
+
+def _public_access_state(kind,key):
+    if kind=="xray":
+        try: row=get_protocol_client(int(key))
+        except Exception: row=None
+        if not row:
+            return {"active":False,"reason":"not_found","usage":None}
+        snap=_subscription_snapshot(row)
+        active=bool(snap.get("enabled") and not snap.get("expired") and not snap.get("quota_exhausted"))
+        reason="active" if active else ("expired" if snap.get("expired") else "quota" if snap.get("quota_exhausted") else "disabled")
+        return {"active":active,"reason":reason,"usage":snap}
+    return {"active":True,"reason":"active","usage":None}
 
 def bearer(request:Request):
     auth=request.headers.get("authorization","")
@@ -331,7 +395,7 @@ def root(request:Request):
 def connection_help(request:Request):
     response=templates.TemplateResponse("client_guide.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
-        "panel_domain":get_setting("panel_domain",""),
+        "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
     })
     response.headers["Cache-Control"]="public, max-age=300"
     response.headers["X-Content-Type-Options"]="nosniff"
@@ -340,19 +404,19 @@ def connection_help(request:Request):
 @app.get("/support/login",response_class=HTMLResponse)
 def support_login_page(request:Request):
     if current_user(request): return RedirectResponse("/",302)
-    return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":None})
+    return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/support/login")
 def support_login(request:Request,code:str=Form(...)):
     remote_ip=ip(request) or "unknown"
     state=login_rate_state("support:"+remote_ip,int(time.time()))
     if int(state.get("blocked_until") or 0)>int(time.time()):
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":"تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید."},status_code=429)
+        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید." if get_setting("language","fa")!="en" else "Too many failed attempts. Try again later.")},status_code=429)
     grant=consume_support_grant(code)
     if not grant:
         state=record_login_failure("support:"+remote_ip,int(time.time()),max_failures=5,window_seconds=900,block_seconds=900)
         audit("remote-support","support_login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":"کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است."},status_code=401)
+        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است." if get_setting("language","fa")!="en" else "The support code is invalid, already used or expired.")},status_code=401)
     clear_login_failures("support:"+remote_ip)
     actor=f"support:{grant['id']}:{grant['scope']}"
     ttl=max(60,int(grant["expires_at"])-int(time.time()))
@@ -372,7 +436,7 @@ def support_logout(request:Request):
 
 @app.get("/login",response_class=HTMLResponse)
 def login_page(request:Request):
-    return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":None})
+    return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/login")
 def login(request:Request,username:str=Form(...),password:str=Form(...)):
@@ -382,18 +446,18 @@ def login(request:Request,username:str=Form(...),password:str=Form(...)):
     if int(rate.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(rate["blocked_until"])-now_ts)
         audit(username or "unknown","login_rate_limited",detail=f"retry_after={wait}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید."},status_code=429)
+        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s).")},status_code=429)
     with connect() as con:
         row=con.execute("SELECT * FROM admins WHERE username=? AND active=1",(username,)).fetchone()
     if not row or not verify_password(password,row["password_hash"]):
         state=record_login_failure(remote_ip,now_ts)
         audit(username or "unknown","login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":"نام کاربری یا رمز عبور صحیح نیست."},status_code=401)
+        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password.")},status_code=401)
     clear_login_failures(remote_ip)
     twofa=get_admin_2fa(username)
     if twofa and twofa.get("totp_enabled"):
         audit(username,"login_password_success_2fa_required",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"token":make_preauth(username),"error":None})
+        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":make_preauth(username),"error":None})
     audit(username,"login_success",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -410,7 +474,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
     valid=bool(state and state.get("totp_enabled") and state.get("totp_secret") and pyotp.TOTP(state["totp_secret"]).verify(code.strip(),valid_window=1))
     if not valid:
         audit(username,"login_2fa_failed",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"token":token,"error":"کد تایید صحیح نیست."},status_code=401)
+        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":token,"error":("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid.")},status_code=401)
     audit(username,"login_success_2fa",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -1141,7 +1205,7 @@ def subscription_page(subscription_id:str,request:Request):
         subscription_qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(sub_url)).decode("ascii")
     response=templates.TemplateResponse("subscription.html",{
         "request":request,"client":snap,"subscription_id":subscription_id,
-        "app_name":APP_NAME,"version":VERSION,
+        "app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),
         "profile_qr":profile_qr,"subscription_qr":subscription_qr,"subscription_url":sub_url,
         "subscription_enabled":subscription_settings["enabled"],
         "guide_url":f"{origin}/help/connect#xray",
@@ -1705,6 +1769,192 @@ def access_entries(request:Request):
     order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
+
+
+@app.get("/api/access/{kind}/{key}/portal")
+def access_portal_link(kind:str,key:str,request:Request):
+    require_access_kind(request,kind)
+    require_local_admin(request)
+    artifact,token=_ensure_artifact_public_token(kind,key)
+    if not artifact or not token:
+        payload,_=_resolve_access_payload(kind,key,request)
+        artifact=get_access_artifact_by_key(kind,key)
+        if not artifact:
+            raise HTTPException(404,"access artifact not available")
+        artifact,token=_ensure_artifact_public_token(kind,key)
+    return {
+        "url":f"{public_origin(request)}/access/{token}",
+        "token":token,
+        "language":get_setting("language","fa"),
+    }
+
+
+
+@app.post("/api/access/{kind}/{key}/portal/rotate")
+def access_portal_rotate(kind:str,key:str,request:Request):
+    actor=require_access_kind(request,kind,True)
+    require_local_admin(request)
+    artifact=get_access_artifact_by_key(kind,key)
+    if not artifact:
+        _resolve_access_payload(kind,key,request)
+        artifact=get_access_artifact_by_key(kind,key)
+    if not artifact:
+        raise HTTPException(404,"access artifact not available")
+    meta=_artifact_public_meta(artifact)
+    token=secrets.token_urlsafe(24)
+    meta["public_token"]=token
+    upsert_access_artifact(
+        artifact["kind"],artifact["external_key"],artifact["display_name"],artifact.get("protocol") or "",
+        artifact.get("native_filename") or "",artifact["payload_enc"],
+        json.dumps(meta,ensure_ascii=False,separators=(",",":"))
+    )
+    audit(actor,"access_portal_rotate",f"{kind}:{key}",ip=ip(request))
+    return {"url":f"{public_origin(request)}/access/{token}","token":token}
+
+
+@app.get("/access/{token}",response_class=HTMLResponse)
+def public_access_portal(token:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    try:
+        payload=access_ops.open_payload(artifact["payload_enc"])
+        payload=_current_delivery_payload(kind,key,payload,request)
+    except access_ops.AccessPackageError as exc:
+        raise HTTPException(404,str(exc))
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        share_text=""
+    else:
+        share_text=str(payload.get("share_text") or payload.get("primary_text") or "")
+    lang=_portal_language(request)
+    summary=dict(payload.get("summary") or {})
+    files=payload.get("files") or {}
+    native_filename=payload.get("native_filename") or ""
+    has_native=bool(native_filename and native_filename in files)
+    public_files=[]
+    for filename,data in files.items():
+        safe_name=str(filename)
+        if "/" in safe_name or "\\" in safe_name or safe_name.endswith("-qr.svg"):
+            continue
+        public_files.append({
+            "name":safe_name,
+            "size":len(data.encode("utf-8") if isinstance(data,str) else bytes(data)),
+            "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
+        })
+    qr=""
+    if share_text and kind in {"xray","wireguard","ssh"}:
+        qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
+    guide_kind="xray" if kind=="xray" else kind
+    protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
+    portal_url=f"{public_origin(request)}/access/{token}"
+    response=templates.TemplateResponse("access_portal.html",{
+        "request":request,"app_name":APP_NAME,"version":VERSION,
+        "lang":lang,"dir":"rtl" if lang=="fa" else "ltr",
+        "kind":kind,"key":key,"name":artifact.get("display_name") or key,
+        "protocol":protocol,"summary":summary,"state":state,
+        "share_text":share_text,"qr":qr,"has_native":has_native,
+        "native_filename":native_filename,"public_files":public_files,
+        "details_text":str(payload.get("primary_text") or "") if kind=="ssh" else "",
+        "portal_url":portal_url,
+        "guide_url":f"{public_origin(request)}/help/connect#{guide_kind}",
+        "download_url":f"/access/{token}/download",
+        "qr_url":f"/access/{token}/qr.svg" if qr else "",
+    })
+    response.headers["Cache-Control"]="no-store, private"
+    response.headers["Pragma"]="no-cache"
+    response.headers["Referrer-Policy"]="no-referrer"
+    response.headers["X-Robots-Tag"]="noindex, nofollow, noarchive"
+    response.headers["X-Content-Type-Options"]="nosniff"
+    return response
+
+
+@app.get("/access/{token}/download")
+def public_access_download(token:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        raise HTTPException(410,"access is no longer active")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    payload=_current_delivery_payload(kind,key,payload,request)
+    filename=payload.get("native_filename") or "makia-access.txt"
+    files=payload.get("files") or {}
+    data=files.get(filename)
+    if data is None:
+        data=(payload.get("primary_text") or "").encode("utf-8")
+    if isinstance(data,str): data=data.encode("utf-8")
+    media="application/octet-stream"
+    if filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
+    elif filename.endswith(".ovpn"): media="application/x-openvpn-profile"
+    safe=access_ops.safe_filename(filename)
+    return Response(content=bytes(data),media_type=media,headers={
+        "Content-Disposition":f'attachment; filename="{safe}"',
+        "Cache-Control":"no-store, private","Pragma":"no-cache",
+        "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
+        "X-Content-Type-Options":"nosniff",
+    })
+
+
+
+@app.get("/access/{token}/files/{filename}")
+def public_access_file(token:str,filename:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        raise HTTPException(410,"access is no longer active")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    payload=_current_delivery_payload(kind,key,payload,request)
+    files=payload.get("files") or {}
+    requested=str(filename or "")
+    if "/" in requested or "\\" in requested or requested not in files:
+        raise HTTPException(404,"file not found")
+    data=files[requested]
+    if isinstance(data,str):data=data.encode("utf-8")
+    media="application/octet-stream"
+    if requested.endswith((".txt",".conf",".json")):media="text/plain; charset=utf-8"
+    elif requested.endswith(".ovpn"):media="application/x-openvpn-profile"
+    elif requested.endswith(".svg"):media="image/svg+xml"
+    return Response(content=bytes(data),media_type=media,headers={
+        "Content-Disposition":f'attachment; filename="{access_ops.safe_filename(requested)}"',
+        "Cache-Control":"no-store, private","Pragma":"no-cache",
+        "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
+        "X-Content-Type-Options":"nosniff",
+    })
+
+
+@app.get("/access/{token}/qr.svg")
+def public_access_qr(token:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        raise HTTPException(410,"access is no longer active")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    payload=_current_delivery_payload(kind,key,payload,request)
+    if kind not in {"xray","wireguard","ssh"}:
+        raise HTTPException(404,"QR is not available for this access type")
+    share=str(payload.get("share_text") or payload.get("primary_text") or "")
+    if not share:
+        raise HTTPException(404,"QR is not available for this access type")
+    return Response(content=access_ops.make_qr_svg(share),media_type="image/svg+xml",headers={
+        "Cache-Control":"no-store, private","Pragma":"no-cache",
+        "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
+        "X-Content-Type-Options":"nosniff",
+    })
+
 
 @app.get("/api/access/{kind}/{key}/share")
 def access_share(kind:str,key:str,request:Request):

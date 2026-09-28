@@ -81,7 +81,7 @@ def main():
             assert portal.locator("#wireguard").count()==1
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
-            assert "اتصال بدون حدس و خطا" in portal.locator("body").inner_text()
+            assert "اتصال روی موبایل و کامپیوتر" in portal.locator("body").inner_text()
             assert portal.locator(".visual-steps").count()==4
             assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
@@ -183,6 +183,25 @@ def main():
             row.locator('[data-action="access-detail"]').click()
             page.locator(".access-detail-drawer").wait_for()
             page.screenshot(path='/tmp/makia-user-detail.png',full_page=True)
+            page.locator('[data-action="client-portal"]').click()
+            page.locator(".client-portal-link-modal").wait_for()
+            portal_url=page.locator("#clientPortalUrl").input_value()
+            assert portal_url.startswith(BASE_URL+"/access/")
+            public_page=browser.new_page()
+            public_page.goto(portal_url,wait_until="networkidle")
+            assert public_page.locator(".access-portal-card").count()==1
+            assert "browser-client" in public_page.locator(".access-portal-card").inner_text()
+            assert public_page.locator(".portal-qr-wrap img").count()==1
+            assert public_page.locator(".portal-file-row").count()>=2
+            assert public_page.locator('a',has_text="راهنمای کامل اتصال").count()==1
+            public_page.goto(portal_url+"?lang=en",wait_until="networkidle")
+            assert "Download files" in public_page.locator(".access-portal-card").inner_text()
+            public_page.close()
+            page.locator('.close-btn[data-action="modal-close"]').click()
+
+            row=page.locator(".pro-user-row",has_text="browser-client")
+            row.locator('[data-action="access-detail"]').click()
+            page.locator(".access-detail-drawer").wait_for()
             page.locator('[data-action="access-share"]').click()
             page.locator(".share-modal").wait_for()
             assert page.locator(".share-qr").count() >= 1
@@ -250,7 +269,7 @@ def main():
             page.locator('[data-action="wizard-next"]').click()
             assert page.locator("#wizSessions").count()==1
             page.locator('[data-action="wizard-next"]').click()
-            assert "Endpoint" in page.locator(".review-grid").text_content()
+            assert "آدرس اتصال" in page.locator(".review-grid").text_content()
             assert "8.8.8.8" in page.locator(".review-grid").text_content()
             page.locator('.close-btn[data-action="modal-close"]').click()
 

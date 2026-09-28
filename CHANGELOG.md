@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.26.0-rc6] - 2026-09-28
+
+### Self-service client access portal
+- Added one private browser link per newly created SSH, Xray, WireGuard and OpenVPN access artifact.
+- The administrator can copy this link immediately after provisioning or from the unified client detail drawer.
+- The client page provides protocol-aware quick instructions, downloadable connection files, QR where the protocol has a reliable QR import flow, and direct share/config text where applicable.
+- SSH client pages expose the account connection details and downloadable files; OpenVPN exposes the OVPN file; WireGuard exposes the .conf file and QR; Xray exposes share link, QR and profile/subscription delivery files.
+- Public client links are bearer-style secrets, use unguessable random tokens, are noindex/noarchive, no-store, referrer-restricted and can be rotated by the administrator to invalidate an exposed link.
+- Revoking an access artifact also removes the public portal because the token lives with the encrypted artifact metadata.
+
+### Persian / English consistency
+- The selected panel language now propagates to the main shell, login, 2FA, support login, legacy Xray client page, connection guide and the new public access portal.
+- Added a panel-wide localization guard for dynamically rendered controls so common Persian/English mixed labels are normalized to the selected language.
+- The public connection guide is now fully bilingual and keeps protocol/app product names only where technically useful.
+
+### Reliability and migration
+- Existing encrypted access artifacts receive a public token lazily when an administrator first requests their client portal link; new artifacts receive one automatically.
+- Client portal files are served only when the requested filename belongs to that artifact; path traversal and unknown files are rejected.
+- OpenVPN does not expose a misleading QR flow; QR is limited to Xray, WireGuard and SSH/NPV where the generated payload is actually importable.
+- Full Migration format-v2 backups from 0.26.0-rc2 through rc5 remain accepted on rc6; unrelated versions remain rejected.
+
+### Release status
+- Release Candidate only. Real VPS portal-link UAT, public-link rotation/revocation checks and inside-Iran protocol field testing remain required before Stable.
+
+
 ## [0.26.0-rc5] - 2026-09-28
 
 ### Xray / V2Ray Inbound Center

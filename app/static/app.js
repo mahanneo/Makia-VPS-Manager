@@ -5,6 +5,118 @@ const pageContext=document.querySelector('#pageContext');
 function htmlEsc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function dataEnc(v){return encodeURIComponent(String(v??''))}
 function dataDec(v){try{return decodeURIComponent(String(v??''))}catch{return String(v??'')}}
+function isFa(){return String(window.MAKIA_LANG||'fa').toLowerCase()!=='en'}
+function tr(fa,en){return isFa()?fa:en}
+const MAKIA_UI_TEXT={
+  'Dashboard':'داشبورد','Clients':'کاربران','Client':'کاربر','Create access':'ساخت دسترسی',
+  'Create Access':'ساخت دسترسی','Access Management':'مدیریت دسترسی','ACCESS MANAGEMENT':'مدیریت دسترسی',
+  'Main':'اصلی','Protocols':'پروتکل‌ها','Protocol management':'مدیریت پروتکل‌ها','Inbounds':'Inboundها',
+  'Infrastructure':'زیرساخت','Server & Network':'سرور و شبکه','System':'سیستم','Maintenance':'نگهداری',
+  'Services':'سرویس‌ها','Network / Ports':'شبکه و پورت‌ها','Live Sessions':'اتصال‌های زنده','Nodes':'نودها',
+  'Logs':'لاگ‌ها','Backups':'بکاپ‌ها','Backup':'بکاپ','Update':'بروزرسانی','Settings':'تنظیمات','Support':'پشتیبانی',
+  'Server online':'سرور آنلاین','ONLINE':'آنلاین','Administrator':'مدیر','Refresh':'بروزرسانی',
+  'Search panel...':'جستجو در پنل...','Open menu':'باز کردن منو','Close menu':'بستن منو','Sign out':'خروج',
+  'Active':'فعال','ACTIVE':'فعال','Disabled':'غیرفعال','DISABLED':'غیرفعال','Expired':'منقضی',
+  'Running':'در حال اجرا','Attention':'نیازمند بررسی','Status':'وضعیت','Endpoint':'آدرس اتصال',
+  'Usage':'مصرف','Used':'مصرف','Quota':'حجم کل','Unlimited':'نامحدود','Expiry':'انقضا','Expires':'انقضا',
+  'IP limit':'محدودیت IP','Device / IP limit':'محدودیت دستگاه / IP',
+  'Management':'مدیریت','Delivery':'تحویل','Close':'بستن','Done':'تمام','Cancel':'انصراف','Save':'ذخیره',
+  'Copy':'کپی','Copied':'کپی شد','Copy link':'کپی لینک','Copy config':'کپی تنظیمات',
+  'Download':'دانلود','Download raw':'دانلود فایل خام','Native file':'فایل اصلی','Native config':'تنظیمات اصلی',
+  'Protected ZIP':'بسته رمزدار','Connection guide':'راهنمای اتصال','Client portal link':'لینک اختصاصی کاربر',
+  'QR / Share':'QR / اشتراک','Profile file':'فایل پروفایل','Config':'تنظیمات','Self-Test':'تست سلامت',
+  'Health check':'بررسی سلامت','Total clients':'کل کاربران','Needs attention':'نیازمند توجه',
+  'Live connections':'اتصال زنده','All access':'همه دسترسی‌ها','Protocol':'پروتکل',
+  'User':'کاربر','Search':'جستجو','Search Makia…  (Ctrl+K)':'جستجو در Makia…  (Ctrl+K)',
+  'System history':'تاریخچه سیستم','Clients by protocol':'کاربران بر اساس پروتکل',
+  'Memory':'حافظه','Disk':'دیسک','Uptime':'زمان فعالیت','Traffic recorded':'ترافیک ثبت‌شده',
+  'Panel endpoint':'آدرس پنل','Server ready':'سرور آماده','Check required':'نیازمند بررسی',
+  'Install':'نصب','Repair & Restart':'تعمیر و راه‌اندازی مجدد','Validate':'اعتبارسنجی',
+  'Validate & Apply':'اعتبارسنجی و اعمال','Validate & Create':'اعتبارسنجی و ساخت',
+  'New Inbound':'Inbound جدید','ADD XRAY CLIENT':'افزودن کاربر Xray','Create client':'ساخت کاربر',
+  'ACCESS PROFILE':'پروفایل دسترسی','CLIENT ACCESS':'دسترسی کاربر','CLIENT SELF-SERVICE LINK':'لینک اختصاصی کاربر',
+  'Private':'محرمانه','Open client page':'باز کردن صفحه کاربر','Download connection file':'دانلود فایل اتصال',
+  'Download QR code':'دانلود QR','Full connection guide':'راهنمای کامل اتصال',
+  'QUICK SCAN':'اسکن سریع','Connection QR':'QR اتصال','MANUAL IMPORT':'ورود دستی',
+  'Connection link / configuration':'لینک / تنظیمات اتصال','QUICK GUIDE':'راهنمای سریع',
+  'How do I connect?':'چطور وصل شوم؟','Server Ready':'سرور آماده'
+};
+Object.assign(MAKIA_UI_TEXT,{
+  'Overview of system status, Xray, resources and access':'نمای کلی وضعیت سیستم، Xray، منابع و دسترسی‌ها',
+  'نمای کلی وضعیت سیستم، Xray، منابع و دسترسی‌ها':'نمای کلی وضعیت سیستم، Xray، منابع و دسترسی‌ها',
+  'Instant CPU usage':'مصرف لحظه‌ای پردازنده','مصرف لحظه‌ای پردازنده':'مصرف لحظه‌ای پردازنده',
+  'System memory usage':'مصرف حافظه سیستم','مصرف حافظه سیستم':'مصرف حافظه سیستم',
+  'Used storage space':'فضای ذخیره‌سازی استفاده‌شده','فضای ذخیره‌سازی استفاده‌شده':'فضای ذخیره‌سازی استفاده‌شده',
+  'System history':'تاریخچه سیستم','CPU and Memory over the last 24 hours':'CPU و حافظه در ۲۴ ساعت گذشته',
+  'Clients by protocol':'کاربران بر اساس پروتکل','Managed access':'دسترسی مدیریت‌شده',
+  'All':'همه','Search user or protocol...':'جستجو نام کاربر یا پروتکل...',
+  'No expiry':'بدون انقضا','Without expiry':'بدون انقضا','Certificate':'گواهی',
+  'Edit settings':'ویرایش تنظیمات','Operational settings for this access':'تنظیمات عملیاتی این دسترسی',
+  'Deliver to client':'تحویل به کاربر','Use these tools only when delivering the configuration.':'فقط هنگام تحویل کانفیگ به کاربر از این ابزارها استفاده کنید.',
+  'Revoke access':'لغو دسترسی','Connection file':'فایل اتصال','Download OVPN file':'دانلود فایل OVPN',
+  'Download config':'دانلود تنظیمات','Choose connection path':'انتخاب مسیر اتصال','Details':'مشخصات',
+  'Client information':'اطلاعات کاربر','Policy':'سیاست','Limits and network':'محدودیت و شبکه',
+  'Review':'تأیید','Create and deliver':'ساخت و تحویل','Fast lightweight access':'دسترسی سریع و سبک',
+  'Multiple profiles and advanced management':'پروفایل‌های چندگانه و مدیریت پیشرفته',
+  'Fast native tunnel':'تونل بومی سریع','PKI with configurable TCP/UDP':'PKI با TCP/UDP قابل تنظیم',
+  'Choose access type':'نوع دسترسی را انتخاب کنید','Ready':'آماده','Setup required':'نیاز به راه‌اندازی',
+  'Choose protocol':'انتخاب پروتکل','Username':'نام کاربری','Generate':'تولید','Advanced settings':'تنظیمات پیشرفته',
+  'Internal note':'یادداشت داخلی','Customer / order name':'نام مشتری / سفارش',
+  'Peer name':'نام Peer','Network settings':'تنظیمات شبکه','Client name':'نام کاربر',
+  'Public VPS IPv4':'IPv4 عمومی VPS','Expiration date':'تاریخ انقضا','7 days':'۷ روز','30 days':'۳۰ روز',
+  '60 days':'۶۰ روز','90 days':'۹۰ روز','Connection limit':'محدودیت اتصال','Concurrent sessions':'نشست همزمان',
+  'Manual Inbound / Client creation':'ساخت دستی Inbound / Client','Network and limits':'شبکه و محدودیت',
+  'Domain required':'نیاز به دامنه','Use simple preset':'استفاده از Preset ساده',
+  'Secure delivery package':'بسته تحویل امن','Package PIN':'PIN بسته',
+  'Client/user name is required.':'نام کاربر لازم است.','Password/PIN must be at least 4 characters.':'رمز/PIN باید حداقل ۴ کاراکتر باشد.',
+  'Domain or public IP is required.':'دامنه یا IP عمومی لازم است.','Enter a valid port.':'Port معتبر وارد کنید.',
+  'Creating…':'در حال ساخت…','Create and prepare':'ساخت و آماده‌سازی',
+  'Profile created on server and delivery packages are ready.':'پروفایل روی سرور ساخته شده و بسته‌های تحویل آماده‌اند.',
+  'Protected ZIP downloaded':'بسته رمزدار دانلود شد','Native file downloaded':'فایل اصلی دانلود شد',
+  'QR downloaded':'QR دانلود شد','Subscription QR downloaded':'QR اشتراک دانلود شد',
+  'SSH users':'کاربران SSH','SSH and NPV user and connection-policy management':'مدیریت کاربران SSH / NPV و سیاست‌های اتصال',
+  'Advanced settings':'تنظیمات پیشرفته','Update / Refresh':'بروزرسانی',
+  'Domain / SNI':'دامنه / SNI','Public IPv4':'IPv4 عمومی','Server address':'آدرس سرور',
+  'Password':'رمز عبور','Package password':'رمز بسته','Traffic quota':'سقف ترافیک',
+  'Traffic reset':'بازنشانی ترافیک','Never':'هرگز','Manual':'دستی','Enabled':'فعال','Inactive':'غیرفعال',
+  'Online IPs':'IPهای آنلاین','Days left':'روز باقی‌مانده','No expiry':'بدون انقضا',
+  'Traffic accounting':'حسابداری ترافیک','Accounting unavailable':'حسابداری در دسترس نیست',
+  'Connection mode':'حالت اتصال','Language':'زبان','Theme':'پوسته','Density':'تراکم',
+  'General':'عمومی','Domain & TLS':'دامنه و TLS','Security':'امنیت','API Access':'دسترسی API',
+  'Session':'نشست','Sessions':'نشست‌ها','Status':'وضعیت','Version':'نسخه'
+});
+function localizeString(value){
+  const raw=String(value??''),trim=raw.trim();if(!trim)return raw;
+  if(isFa()){
+    const out=MAKIA_UI_TEXT[trim];if(!out)return raw;
+    return raw.replace(trim,out);
+  }
+  const pair=Object.entries(MAKIA_UI_TEXT).find(([,fa])=>fa===trim);
+  if(!pair)return raw;
+  return raw.replace(trim,pair[0]);
+}
+function localizeVisibleUi(root=document){
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+  for(const node of nodes){
+    const p=node.parentElement;if(!p||['SCRIPT','STYLE','TEXTAREA','PRE','CODE'].includes(p.tagName))continue;
+    const next=localizeString(node.nodeValue);if(next!==node.nodeValue)node.nodeValue=next;
+  }
+  const scope=root.querySelectorAll?root:document;
+  scope.querySelectorAll?.('[placeholder],[title],[aria-label]').forEach(el=>{
+    for(const attr of ['placeholder','title','aria-label']){
+      const v=el.getAttribute(attr);if(!v)continue;
+      const next=localizeString(v);if(next!==v)el.setAttribute(attr,next);
+    }
+  });
+}
+let __localizeScheduled=false;
+function scheduleUiLocalization(){
+  if(__localizeScheduled)return;__localizeScheduled=true;
+  queueMicrotask(()=>{__localizeScheduled=false;localizeVisibleUi(document)});
+}
+new MutationObserver(scheduleUiLocalization).observe(document.documentElement,{subtree:true,childList:true});
+
 function setPageContext(v){if(pageContext)pageContext.textContent=v||'MAKIA CONTROL CENTER'}
 function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name||'download';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),800)}
 function filenameFromHeaders(r,fallback){const cd=r.headers.get('content-disposition')||'';const m=cd.match(/filename="([^"]+)"/i);return m?.[1]||fallback||'download'}
@@ -93,8 +205,8 @@ let accessCache=[];
 let provisionState=null;
 
 async function access(renderToken=window.__viewRenderToken){
-  title.textContent='کاربران';setPageContext('CLIENTS');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی کاربران…</b></div>';
+  title.textContent=tr('کاربران','Clients');setPageContext(tr('کاربران','CLIENTS'));
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال همگام‌سازی کاربران…','Synchronizing clients…'))+'</b></div>';
   const [rows,stack,sshRows,pcRows,operator]=await Promise.all([
     api('/api/access'),api('/api/protocols'),api('/api/accounts'),api('/api/protocol-clients'),api('/api/settings/operator')
   ]);
@@ -105,8 +217,8 @@ async function access(renderToken=window.__viewRenderToken){
   const online=rows.reduce((n,x)=>n+Number(x.online||0),0);
   content.innerHTML=[
     '<div class="pro-page">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">ACCESS MANAGEMENT</span><h1>کاربران</h1><p>لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">بررسی سلامت</button><button class="primary" data-action="wizard-open">＋ ساخت دسترسی</button></div></section>',
-      '<section class="pro-stat-strip"><div><span>کل کاربران</span><b>'+rows.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>نیازمند توجه</span><b>'+attention+'</b></div><div><span>اتصال زنده</span><b>'+online+'</b></div></section>',
+      '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
+      '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
       '<section class="pro-directory">',
         '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
@@ -164,6 +276,34 @@ function accessCard(a){
   ].join('');
 }
 
+
+
+async function rotateClientPortal(kind,key,name){
+  if(!confirm(tr('لینک فعلی فوراً از کار می‌افتد و لینک جدید ساخته می‌شود. ادامه می‌دهید؟','The current link will stop working immediately and a new link will be created. Continue?')))return;
+  try{
+    await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/portal/rotate',{method:'POST'});
+    toast(tr('لینک جدید ساخته شد','New client link created'));
+    await openClientPortal(kind,key,name);
+  }catch(e){alert(tr('تغییر لینک: ','Rotate link: ')+e.message)}
+}
+
+async function openClientPortal(kind,key,name){
+  try{
+    const r=await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/portal');
+    const url=String(r.url||'');
+    if(!url)throw new Error(tr('لینک کاربر ساخته نشد','Client link could not be created'));
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal client-portal-link-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">'+htmlEsc(tr('لینک اختصاصی کاربر','CLIENT SELF-SERVICE LINK'))+'</div><h3>'+htmlEsc(name||key)+'</h3><p>'+htmlEsc(tr('این لینک را مستقیم برای کاربر بفرست؛ آموزش، فایل و QR در همان صفحه است.','Send this link directly to the client; guide, file and QR are available on the same page.'))+'</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<label>'+htmlEsc(tr('لینک اختصاصی','Private client link'))+'<textarea id="clientPortalUrl" class="config-output small" readonly></textarea></label>',
+      '<div class="wizard-note"><b>'+htmlEsc(tr('محرمانه','Private'))+'</b><span>'+htmlEsc(tr('هر کسی این لینک را داشته باشد می‌تواند اطلاعات اتصال همان کاربر را ببیند. آن را مانند رمز عبور نگه دارید.','Anyone with this link can view this client’s connection data. Treat it like a password.'))+'</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="copy-target" data-target="clientPortalUrl">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><a class="primary link-btn" href="'+htmlEsc(url)+'" target="_blank" rel="noopener noreferrer">'+htmlEsc(tr('باز کردن صفحه کاربر','Open client page'))+'</a><button class="ghost" data-action="client-portal-rotate" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name||key)+'">'+htmlEsc(tr('ساخت لینک جدید','Rotate link'))+'</button><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div>',
+      '</div></div>'
+    ].join('');
+    document.getElementById('clientPortalUrl').value=url;
+  }catch(e){alert(tr('لینک کاربر: ','Client link: ')+e.message)}
+}
+
 async function openAccessDetail(id){
   let a=accessCache.find(x=>String(x.id)===String(id));
   if(!a){
@@ -187,8 +327,9 @@ async function openAccessDetail(id){
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
-    '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Protected ZIP</button>',
-    '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">راهنمای اتصال</button>'
+    '<button class="primary" data-action="client-portal" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button>',
+    '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button>',
+    '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button>'
   ].join(''):'<span class="muted">برای این رکورد خروجی قابل تحویل موجود نیست.</span>';
   modalRoot.innerHTML=[
     '<div class="modal-backdrop detail-backdrop"><aside class="access-detail-drawer">',
@@ -522,8 +663,8 @@ function showProvisionSuccess(kind,key,name,packagePassword,loginSecret,result){
       '<p>پروفایل روی سرور ساخته شده و بسته‌های تحویل آماده دانلود هستند.</p>',
       '<div class="success-grid"><div><span>Protocol</span><b>'+htmlEsc(kind.toUpperCase())+'</b></div><div><span>Package PIN</span><b class="credential-secret">'+htmlEsc(packagePassword)+'</b></div>',
       (loginSecret?'<div><span>Login Password</span><b class="credential-secret">'+htmlEsc(loginSecret)+'</b></div>':'')+'</div>',
-      '<div class="delivery-actions">'+((kind==='xray'||kind==='wireguard'||(kind==='ssh'&&(window.__operatorSettings?.delivery?.npv_enabled!==false)))?'<button class="primary action-lg" data-action="access-share" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+(kind==='ssh'?'NPV QR / Import':'QR / Share')+'</button>':'')+'<button class="primary action-lg" data-action="protected-download-now" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'" data-password="'+dataEnc(packagePassword)+'">Protected ZIP</button>',
-      '<button class="ghost action-lg" data-action="native-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'">Native file</button><button class="ghost action-lg" data-action="client-guide" data-kind="'+htmlEsc(kind)+'">راهنمای اتصال</button></div>',
+      '<div class="delivery-actions"><button class="primary action-lg" data-action="client-portal" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button>'+((kind==='xray'||kind==='wireguard'||(kind==='ssh'&&(window.__operatorSettings?.delivery?.npv_enabled!==false)))?'<button class="ghost action-lg" data-action="access-share" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+(kind==='ssh'?'NPV / QR':'QR / Share')+'</button>':'')+'<button class="ghost action-lg" data-action="protected-download-now" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'" data-password="'+dataEnc(packagePassword)+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button>',
+      '<button class="ghost action-lg" data-action="native-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'">'+htmlEsc(tr('فایل اتصال','Native file'))+'</button><button class="ghost action-lg" data-action="client-guide" data-kind="'+htmlEsc(kind)+'">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button></div>',
       '<div class="wizard-note"><b>تحویل امن</b><span>فایل و PIN را در دو پیام/کانال جداگانه برای کاربر بفرست.</span></div>',
       '<button class="soft wide-btn" data-action="success-done">بازگشت به Access Center</button>',
     '</div></div>'
@@ -1103,7 +1244,7 @@ function xrayCredentialModal(r){
     '<div class="modal-backdrop"><div class="modal credential-modal">',
     '<div class="wizard-head"><div><div class="eyebrow">XRAY PROFILE READY</div><h3>'+htmlEsc(String(r.protocol||'').toUpperCase())+' · '+htmlEsc(r.name)+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
     '<div class="xray-share"><img src="'+htmlEsc(r.qr||'')+'" alt="QR"><div><div class="credential-grid compact"><div><span>Transport</span><b>'+htmlEsc(r.transport||'-')+'</b></div><div><span>Security</span><b>'+htmlEsc(r.security||'none')+'</b></div><div><span>Port</span><b>'+Number(r.port||0)+'</b></div><div><span>Quota</span><b>'+(r.quota_bytes?fmtBytes(r.quota_bytes):'Unlimited')+'</b></div></div><span>Share link</span><textarea id="xrayShare" readonly></textarea></div></div>',
-    '<div class="delivery-actions"><button class="primary" data-action="protected-export" data-kind="xray" data-key="'+dataEnc(String(r.client_id))+'" data-name="'+dataEnc(r.name)+'">Protected ZIP</button><button class="ghost" data-action="native-export" data-kind="xray" data-key="'+dataEnc(String(r.client_id))+'">Profile file</button><button class="ghost" data-action="copy-target" data-target="xrayShare">Copy link</button><button class="ghost" data-action="client-guide" data-kind="xray">راهنمای اتصال</button></div>',
+    '<div class="delivery-actions"><button class="primary" data-action="client-portal" data-kind="xray" data-key="'+dataEnc(String(r.client_id))+'" data-name="'+dataEnc(r.name)+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button><button class="ghost" data-action="protected-export" data-kind="xray" data-key="'+dataEnc(String(r.client_id))+'" data-name="'+dataEnc(r.name)+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button><button class="ghost" data-action="native-export" data-kind="xray" data-key="'+dataEnc(String(r.client_id))+'">'+htmlEsc(tr('فایل پروفایل','Profile file'))+'</button><button class="ghost" data-action="copy-target" data-target="xrayShare">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><button class="ghost" data-action="client-guide" data-kind="xray">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button></div>',
     '<div class="wizard-note"><b>Subscription ready</b><span>Profile/QR/Subscription metadata داخل بسته تحویل هم قرار می‌گیرد.</span></div></div></div>'
   ].join('');
   document.getElementById('xrayShare').value=r.share_link||'';
@@ -2010,6 +2151,8 @@ async function handleMakiaAction(btn){
   }
   if(action==='native-export'){await downloadAccessNative(btn.dataset.kind,dataDec(btn.dataset.key));return}
   if(action==='access-share'){await openAccessShare(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='client-portal'){await openClientPortal(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='client-portal-rotate'){await rotateClientPortal(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='access-detail'){await openAccessDetail(dataDec(btn.dataset.id));return}
@@ -2192,5 +2335,5 @@ function switchView(v){
   return currentView();
 }
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
-applyLanguageShell();ensureSessionContext().catch(()=>{});switchView('dashboard');
+applyLanguageShell();localizeVisibleUi(document);ensureSessionContext().catch(()=>{});switchView('dashboard');
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}

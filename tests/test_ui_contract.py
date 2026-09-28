@@ -125,7 +125,7 @@ def test_v026_login_controls_are_functional_and_single_surface():
     login=(ROOT/"app/templates/login.html").read_text(encoding="utf-8")
     assert 'id="loginLangToggle"' in login
     assert 'id="loginThemeToggle"' in login
-    assert "makia-login-lang" in login
+    assert "let lang='{{language}}'==='en'?'en':'fa'" in login
     assert "makia-login-theme" in login
     assert 'class="pro-login-field"' in login
     assert "pro-login-field input:focus" in (ROOT/"app/static/app.css").read_text(encoding="utf-8")
@@ -204,3 +204,23 @@ def test_xray_inbound_center_has_3x_style_sections():
         "/api/protocols/xray/inbound-capabilities","/api/protocols/xray/inbounds"
     ]:
         assert marker in JS
+
+
+def test_self_service_portal_and_localization_contract():
+    main_text=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    portal=(ROOT/"app/templates/access_portal.html").read_text(encoding="utf-8")
+    dashboard=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    for marker in [
+        "/api/access/{kind}/{key}/portal","/access/{token}","/access/{token}/download",
+        "/access/{token}/qr.svg","access_portal.html","public_token"
+    ]:
+        assert marker in main_text
+    for marker in [
+        "دانلود فایل اتصال","Download connection file","راهنمای سریع","QUICK GUIDE",
+        "Treat this link like a password","این لینک مانند رمز عبور محرمانه است"
+    ]:
+        assert marker in portal
+    assert "localizeVisibleUi" in JS
+    assert "MutationObserver(scheduleUiLocalization)" in JS
+    assert "window.MAKIA_LANG" in JS
+    assert "language == 'en'" in dashboard or 'language == "en"' in dashboard

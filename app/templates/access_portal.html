@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="{{lang}}" dir="{{dir}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08111e">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>{{name}} · Makia</title>
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css?v={{version}}">
+</head>
+<body class="client-page access-portal-page">
+  {% set fa = lang == 'fa' %}
+  <main class="access-portal-shell">
+    <header class="access-portal-head">
+      <div class="client-brand"><div class="brand-mark">M</div><div><b>MAKIA</b><span>{{ 'دسترسی کاربر' if fa else 'CLIENT ACCESS' }}</span></div></div>
+      <div class="access-portal-lang">
+        <a href="?lang=fa" class="{{'active' if fa else ''}}">FA</a>
+        <a href="?lang=en" class="{{'active' if not fa else ''}}">EN</a>
+      </div>
+    </header>
+
+    <section class="client-card access-portal-card">
+      <div class="eyebrow">{{ 'پروفایل اتصال' if fa else 'ACCESS PROFILE' }}</div>
+      <div class="access-portal-title">
+        <div>
+          <h1>{{name}}</h1>
+          <div class="chips">
+            <span class="protocol-pill">{{protocol|upper}}</span>
+            {% if state.active %}
+              <span class="status-chip ok">{{ 'فعال' if fa else 'ACTIVE' }}</span>
+            {% else %}
+              <span class="status-chip bad">{{ 'غیرفعال' if fa else 'INACTIVE' }}</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if not state.active %}
+      <div class="portal-state-danger">
+        {% if state.reason == 'expired' %}
+          <b>{{ 'این دسترسی منقضی شده است.' if fa else 'This access has expired.' }}</b>
+        {% elif state.reason == 'quota' %}
+          <b>{{ 'حجم این دسترسی تمام شده است.' if fa else 'This access has reached its traffic limit.' }}</b>
+        {% else %}
+          <b>{{ 'این دسترسی در حال حاضر فعال نیست.' if fa else 'This access is currently inactive.' }}</b>
+        {% endif %}
+        <span>{{ 'برای فعال‌سازی با مدیر سرویس تماس بگیرید.' if fa else 'Contact the service administrator to reactivate it.' }}</span>
+      </div>
+      {% endif %}
+
+      {% if state.usage %}
+      <div class="client-kpis portal-kpis">
+        <div><span>{{ 'مصرف' if fa else 'Used' }}</span><b id="portalUsed">{{state.usage.used_bytes}}</b></div>
+        <div><span>{{ 'حجم کل' if fa else 'Quota' }}</span><b id="portalQuota">{{state.usage.quota_bytes}}</b></div>
+        <div><span>{{ 'محدودیت IP' if fa else 'IP limit' }}</span><b>{{state.usage.ip_limit}}</b></div>
+        <div><span>{{ 'انقضا' if fa else 'Expires' }}</span><b id="portalExpire">{{state.usage.expire_at}}</b></div>
+      </div>
+      <div class="usage-track large"><i id="portalUsageBar"></i></div>
+      {% endif %}
+
+      {% if state.active %}
+      <section class="portal-action-grid">
+        {% if has_native %}
+        <a class="portal-action primary-card" href="{{download_url}}">
+          <strong>{{ 'دانلود فایل اصلی اتصال' if fa else 'Download primary connection file' }}</strong>
+          <span>{{native_filename}}</span>
+        </a>
+        {% endif %}
+        {% if qr %}
+        <a class="portal-action" href="{{qr_url}}" download="{{name}}-qr.svg">
+          <strong>{{ 'دانلود QR' if fa else 'Download QR code' }}</strong>
+          <span>{{ 'برای اسکن در برنامه سازگار' if fa else 'Scan with a compatible app' }}</span>
+        </a>
+        {% endif %}
+        <a class="portal-action" href="{{guide_url}}" target="_blank" rel="noopener noreferrer">
+          <strong>{{ 'راهنمای کامل اتصال' if fa else 'Full connection guide' }}</strong>
+          <span>{{ 'موبایل، ویندوز و macOS' if fa else 'Mobile, Windows and macOS' }}</span>
+        </a>
+      </section>
+
+      {% if public_files %}
+      <section class="portal-section">
+        <div class="portal-section-head"><div><span class="eyebrow">{{ 'فایل‌های این کاربر' if fa else 'CLIENT FILES' }}</span><h2>{{ 'دانلود فایل‌ها' if fa else 'Download files' }}</h2></div></div>
+        <div class="portal-file-list">
+          {% for file in public_files %}
+          <a href="{{file.url}}" class="portal-file-row">
+            <div><b>{{file.name}}</b><span>{{file.size}} B</span></div>
+            <strong>{{ 'دانلود' if fa else 'Download' }}</strong>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if qr %}
+      <section class="portal-section">
+        <div class="portal-section-head">
+          <div><span class="eyebrow">{{ 'اسکن سریع' if fa else 'QUICK SCAN' }}</span><h2>{{ 'QR اتصال' if fa else 'Connection QR' }}</h2></div>
+        </div>
+        <div class="portal-qr-wrap">
+          <img src="{{qr}}" alt="{{ 'کد QR اتصال' if fa else 'Connection QR code' }}">
+          <p>{{ 'برنامه سازگار را باز کنید و این QR را اسکن کنید.' if fa else 'Open a compatible client and scan this QR code.' }}</p>
+        </div>
+      </section>
+      {% endif %}
+
+      {% if details_text %}
+      <section class="portal-section">
+        <div class="portal-section-head">
+          <div><span class="eyebrow">{{ 'اطلاعات ورود' if fa else 'LOGIN DETAILS' }}</span><h2>{{ 'مشخصات اتصال SSH' if fa else 'SSH connection details' }}</h2></div>
+          <button class="ghost" type="button" id="portalDetailsCopy">{{ 'کپی' if fa else 'Copy' }}</button>
+        </div>
+        <textarea id="portalDetailsText" class="portal-share-text" readonly>{{details_text}}</textarea>
+      </section>
+      {% endif %}
+
+      {% if share_text %}
+      <section class="portal-section">
+        <div class="portal-section-head">
+          <div><span class="eyebrow">{{ 'ورود دستی' if fa else 'MANUAL IMPORT' }}</span><h2>{{ 'لینک / تنظیمات اتصال' if fa else 'Connection link / configuration' }}</h2></div>
+          <button class="ghost" type="button" id="portalCopyBtn">{{ 'کپی' if fa else 'Copy' }}</button>
+        </div>
+        <textarea id="portalShareText" class="portal-share-text" readonly>{{share_text}}</textarea>
+      </section>
+      {% endif %}
+
+      <section class="portal-section portal-guide">
+        <div class="portal-section-head"><div><span class="eyebrow">{{ 'راهنمای سریع' if fa else 'QUICK GUIDE' }}</span><h2>{{ 'چطور وصل شوم؟' if fa else 'How do I connect?' }}</h2></div></div>
+
+        {% if kind == 'openvpn' %}
+          <ol>
+            <li>{{ 'OpenVPN Connect را روی Android، iPhone، Windows یا macOS نصب کنید.' if fa else 'Install OpenVPN Connect on Android, iPhone, Windows or macOS.' }}</li>
+            <li>{{ 'روی «دانلود فایل اتصال» بزنید و فایل .ovpn را ذخیره کنید.' if fa else 'Tap “Download connection file” and save the .ovpn profile.' }}</li>
+            <li>{{ 'در OpenVPN Connect گزینه Import Profile / Upload File را بزنید و فایل را انتخاب کنید.' if fa else 'In OpenVPN Connect choose Import Profile / Upload File and select the downloaded file.' }}</li>
+            <li>{{ 'پروفایل را اضافه کنید و Connect را بزنید.' if fa else 'Add the profile and tap Connect.' }}</li>
+          </ol>
+        {% elif kind == 'wireguard' %}
+          <ol>
+            <li>{{ 'برنامه رسمی WireGuard را نصب کنید.' if fa else 'Install the official WireGuard app.' }}</li>
+            <li>{{ 'در موبایل QR را اسکن کنید یا فایل .conf را دانلود کنید.' if fa else 'On mobile, scan the QR code or download the .conf file.' }}</li>
+            <li>{{ 'در Windows/macOS گزینه Import tunnel(s) from file را انتخاب کنید.' if fa else 'On Windows/macOS choose Import tunnel(s) from file.' }}</li>
+            <li>{{ 'Tunnel را فعال کنید.' if fa else 'Activate the tunnel.' }}</li>
+          </ol>
+        {% elif kind == 'xray' %}
+          <ol>
+            <li>{{ 'یکی از کلاینت‌های سازگار مانند Hiddify، v2rayNG یا NekoBox را نصب کنید.' if fa else 'Install a compatible client such as Hiddify, v2rayNG or NekoBox.' }}</li>
+            <li>{{ 'QR را اسکن کنید یا لینک اتصال را کپی و Import from Clipboard را انتخاب کنید.' if fa else 'Scan the QR code, or copy the connection link and use Import from Clipboard.' }}</li>
+            <li>{{ 'پروفایل ایجادشده را انتخاب و اتصال را فعال کنید.' if fa else 'Select the imported profile and connect.' }}</li>
+            <li>{{ 'UUID، SNI، Public Key، Short ID، Port و Transport را تغییر ندهید.' if fa else 'Do not change UUID, SNI, Public Key, Short ID, port or transport unless instructed.' }}</li>
+          </ol>
+        {% else %}
+          <ol>
+            <li>{{ 'فایل یا QR موجود در همین صفحه را استفاده کنید.' if fa else 'Use the file or QR code available on this page.' }}</li>
+            <li>{{ 'در صورت وجود لینک اتصال، آن را در برنامه سازگار Import کنید.' if fa else 'If a connection link is provided, import it into a compatible client.' }}</li>
+            <li>{{ 'اطلاعات این صفحه را فقط برای صاحب همین حساب نگه دارید.' if fa else 'Keep the information on this page private to the account owner.' }}</li>
+          </ol>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <div class="notice portal-security-note">
+        {{ 'این لینک مانند رمز عبور محرمانه است. آن را در گروه یا کانال عمومی منتشر نکنید. در صورت لو رفتن لینک، از مدیر بخواهید دسترسی را تعویض یا لغو کند.' if fa else 'Treat this link like a password. Do not post it in public groups or channels. If it is exposed, ask the administrator to rotate or revoke the access.' }}
+      </div>
+    </section>
+    <footer>Makia VPS Manager · v{{version}}</footer>
+  </main>
+  <script>
+    (() => {
+      const share=document.getElementById('portalShareText');
+      const copy=document.getElementById('portalCopyBtn');
+      const details=document.getElementById('portalDetailsText');
+      const detailsCopy=document.getElementById('portalDetailsCopy');
+      if(copy&&share)copy.addEventListener('click',async()=>{
+        try{
+          await navigator.clipboard.writeText(share.value);
+          copy.textContent={{ "'کپی شد'" if fa else "'Copied'" }};
+          setTimeout(()=>copy.textContent={{ "'کپی'" if fa else "'Copy'" }},1400);
+        }catch(e){share.select();document.execCommand('copy')}
+      });
+      if(detailsCopy&&details)detailsCopy.addEventListener('click',async()=>{
+        try{
+          await navigator.clipboard.writeText(details.value);
+          detailsCopy.textContent={{ "'کپی شد'" if fa else "'Copied'" }};
+          setTimeout(()=>detailsCopy.textContent={{ "'کپی'" if fa else "'Copy'" }},1400);
+        }catch(e){details.select();document.execCommand('copy')}
+      });
+      const usage={{state.usage|tojson}};
+      if(usage){
+        const fmt=n=>{n=Number(n||0);if(!n)return'0 B';const u=['B','KB','MB','GB','TB'];const i=Math.min(u.length-1,Math.floor(Math.log(n)/Math.log(1024)));return(n/1024**i).toFixed(i?1:0)+' '+u[i]};
+        const used=document.getElementById('portalUsed'),quota=document.getElementById('portalQuota'),exp=document.getElementById('portalExpire'),bar=document.getElementById('portalUsageBar');
+        if(used)used.textContent=fmt(usage.used_bytes);
+        if(quota)quota.textContent=usage.quota_bytes?fmt(usage.quota_bytes):{{ "'نامحدود'" if fa else "'Unlimited'" }};
+        if(exp)exp.textContent=usage.expire_at?new Date(Number(usage.expire_at)*1000).toLocaleDateString({{ "'fa-IR'" if fa else "'en-US'" }}):{{ "'نامحدود'" if fa else "'Unlimited'" }};
+        if(bar)bar.style.width=usage.quota_bytes?Math.min(100,Number(usage.used_bytes||0)/Number(usage.quota_bytes)*100)+'%':'0%';
+      }
+    })();
+  </script>
+</body>
+</html>
