@@ -164,8 +164,18 @@ function accessCard(a){
   ].join('');
 }
 
-function openAccessDetail(id){
-  const a=accessCache.find(x=>String(x.id)===String(id));if(!a)return;
+async function openAccessDetail(id){
+  let a=accessCache.find(x=>String(x.id)===String(id));
+  if(!a){
+    try{
+      accessCache=await api('/api/access');
+      a=accessCache.find(x=>String(x.id)===String(id));
+    }catch(e){
+      alert('Access refresh: '+e.message);
+      return;
+    }
+  }
+  if(!a){alert('این دسترسی دیگر در سرور پیدا نشد. صفحه را بروزرسانی کنید.');return;}
   const kind=htmlEsc(a.kind),key=dataEnc(a.key),name=dataEnc(a.name);
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
@@ -861,7 +871,7 @@ async function xrayWorkspace(renderToken=window.__viewRenderToken){
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی Xray…</b></div>';
   const [stack,clients,accessRows,operator]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='xray')return;
-  window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;
+  window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;accessCache=accessRows;
   const engine=stack.xray||{},managed=clients,rows=accessRows.filter(x=>x.kind==='xray');
   const active=managed.filter(x=>x.enabled&&!x.expired).length;
   const inactive=managed.length-active;
@@ -878,7 +888,7 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی OpenVPN…</b></div>';
   const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
-  window.__protocolData=stack;window.__operatorSettings=operator;
+  window.__protocolData=stack;window.__operatorSettings=operator;accessCache=rows;
   const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn'),opt=engine.options||{};
   const active=engine.service_active?clients.length:0;
   const transport=String(opt.proto||engine.proto||'udp').startsWith('tcp')?'TCP':'UDP';
@@ -1733,7 +1743,7 @@ async function handleMakiaAction(btn){
   if(action==='access-share'){await openAccessShare(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
-  if(action==='access-detail'){openAccessDetail(dataDec(btn.dataset.id));return}
+  if(action==='access-detail'){await openAccessDetail(dataDec(btn.dataset.id));return}
   if(action==='manage-access'){manageAccess(dataDec(btn.dataset.id));return}
   if(action==='revoke-access'){await revokeAccess(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='wg-reissue'){await reissueWireGuard(dataDec(btn.dataset.key));return}
