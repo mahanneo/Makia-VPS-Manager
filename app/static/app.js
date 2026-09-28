@@ -876,14 +876,14 @@ async function openvpnWorkspace(renderToken=window.__viewRenderToken){
   const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='openvpn')return;
   window.__protocolData=stack;window.__operatorSettings=operator;
-  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn'),opt=engine.options||{};
-  const active=engine.service_active?clients.length:0;
-  const transport=String(opt.proto||engine.proto||'udp').startsWith('tcp')?'TCP':'UDP';
+  const engine=stack.openvpn||{},clients=rows.filter(x=>x.kind==='openvpn'),opt=engine.options||{},transports=engine.transports||{};
+  const udp=transports.udp||{},tcp=transports.tcp||{};
+  const udpReady=Boolean(udp.service_active&&udp.listener),tcpReady=Boolean(tcp.service_active&&tcp.listener);
   const dns=(opt.dns||[]).join(' · ')||'1.1.1.1';
   content.innerHTML=[
-    '<section class="protocol-page-header pro-engine-hero"><div class="protocol-page-title">'+protocolGlyph('openvpn')+'<div><span class="pro-kicker">CERTIFICATE VPN</span><h2>OpenVPN</h2><p>PKI، Client profile، TCP/UDP و سیاست‌های Server در یک Workspace</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-configure">Server settings</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت':'راه‌اندازی OpenVPN')+'</button></div></section>',
-    '<section class="wg-workspace-metrics pro-engine-metrics"><div><span>Clients</span><b>'+clients.length+'</b><small>Certificates</small></div><div><span>Runtime</span><b class="'+(engine.service_active?'ok-text':'bad-text')+'">'+(engine.service_active?'ACTIVE':'DOWN')+'</b><small>openvpn-server@server</small></div><div><span>Transport</span><b>'+transport+' / '+htmlEsc(String(opt.port||engine.port||'—'))+'</b><small>IPv4 locked</small></div><div><span>DNS</span><b>'+htmlEsc(dns)+'</b><small>Pushed to clients</small></div></section>',
-    '<section class="engine-feature-grid"><article><span class="feature-icon">↔</span><div><b>TCP / UDP Switch</b><small>تغییر امن Transport با Backup و Rollback</small></div></article><article><span class="feature-icon">⌁</span><div><b>DNS & Gateway</b><small>DNS push و Redirect Gateway قابل تنظیم</small></div></article><article><span class="feature-icon">♢</span><div><b>PKI Lifecycle</b><small>Certificate مستقل و Revoke واقعی</small></div></article><article><span class="feature-icon">✓</span><div><b>Fresh Exports</b><small>OVPN دانلودی با Runtime فعلی بازسازی می‌شود</small></div></article></section>',
+    '<section class="protocol-page-header pro-engine-hero"><div class="protocol-page-title">'+protocolGlyph('openvpn')+'<div><span class="pro-kicker">CERTIFICATE VPN</span><h2>OpenVPN</h2><p>PKI مشترک با Runtime مستقل UDP و TCP؛ هر دو می‌توانند هم‌زمان فعال باشند.</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="openvpn-diagnostics">Diagnostics</button><button class="ghost" data-action="openvpn-configure">Primary server settings</button><button class="primary" data-action="'+(engine.config?'wizard-open':'protocol-setup')+'" data-kind="openvpn">'+(engine.config?'＋ ایجاد کلاینت':'راه‌اندازی OpenVPN')+'</button></div></section>',
+    '<section class="wg-workspace-metrics pro-engine-metrics"><div><span>Clients</span><b>'+clients.length+'</b><small>Shared PKI</small></div><div><span>UDP</span><b class="'+(udpReady?'ok-text':'warn-text')+'">'+(udpReady?('READY / '+htmlEsc(String(udp.port))):'SETUP')+'</b><small>Independent instance</small></div><div><span>TCP</span><b class="'+(tcpReady?'ok-text':'warn-text')+'">'+(tcpReady?('READY / '+htmlEsc(String(tcp.port))):'SETUP')+'</b><small>Independent instance</small></div><div><span>DNS</span><b>'+htmlEsc(dns)+'</b><small>Pushed to clients</small></div></section>',
+    '<section class="engine-feature-grid"><article><span class="feature-icon">↔</span><div><b>Concurrent UDP + TCP</b><small>دو Listener مستقل با PKI مشترک و Subnet مجزا</small></div></article><article><span class="feature-icon">⌁</span><div><b>DNS & Gateway</b><small>DNS push و Redirect Gateway قابل تنظیم</small></div></article><article><span class="feature-icon">♢</span><div><b>PKI Lifecycle</b><small>Certificate و CRL مشترک؛ Credential کاربر ثابت می‌ماند</small></div></article><article><span class="feature-icon">✓</span><div><b>Per-transport exports</b><small>برای هر کاربر فایل UDP و TCP جدا قابل دریافت است</small></div></article></section>',
     '<section class="panel protocol-directory"><div class="panel-head"><div><h3>کلاینت‌های OpenVPN</h3><span>PKI · OVPN · PROTECTED DELIVERY</span></div><div class="toolbar"><button class="ghost" data-action="openvpn-configure">تنظیمات پیشرفته</button><button class="ghost" data-action="refresh">بروزرسانی</button></div></div><div class="access-cards">'+(clients.length?clients.map(accessCard).join(''):'<div class="empty">Client ساخته نشده است.</div>')+'</div><div class="wizard-note"><b>Traffic accounting</b><span>Quota/Reset per-client برای OpenVPN تا زمانی که شمارش Runtime قابل اتکا اضافه نشود نمایش داده نمی‌شود؛ کنترل نمایشی و جعلی اضافه نشده است.</span></div></section>'
   ].join('');
 }
@@ -1307,16 +1307,36 @@ async function backups(renderToken=window.__viewRenderToken){
   title.textContent='Backups';setPageContext('RECOVERY');
   const rows=await api('/api/backups');if(renderToken!==window.__viewRenderToken||activeView!=='backups')return;
   const total=rows.reduce((n,b)=>n+Number(b.size||0),0);
-  content.innerHTML=viewIntro('RECOVERY POINTS','مرکز بکاپ','Snapshot محلی برای rollback و Portable Migration Bundle رمزگذاری‌شده برای انتقال VPS.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+'<button class="ghost" data-action="portable-backup">Portable Migration</button>'+'<button class="primary" data-action="backup-create">＋ Local Backup</button></div>')+
+  content.innerHTML=viewIntro('DISASTER RECOVERY','بکاپ و مهاجرت VPS','Snapshot محلی برای rollback؛ Disaster Recovery Bundle رمزگذاری‌شده برای انتقال کامل کاربران، Keys، PKI و تنظیمات پروتکل‌ها به VPS جایگزین.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+'<button class="primary" data-action="portable-backup">Disaster Recovery Backup</button>'+'<button class="ghost" data-action="backup-create">＋ Local Snapshot</button></div>')+
+    '<div class="panel disaster-cutover-card"><div class="panel-head"><div><h3>Fast VPS Cutover</h3><span>SAME DOMAIN · SAME CREDENTIALS</span></div></div><div class="recovery-flow"><div><b>1</b><span>Bundle را از این پنل دانلود کن</span></div><div><b>2</b><span>همان نسخه Makia را روی VPS جدید نصب و Bundle را Restore کن</span></div><div><b>3</b><span>در Cloudflare رکورد A دامنه را به IP جدید تغییر بده</span></div><div><b>4</b><span>Doctor/UAT را اجرا کن و ترافیک Client را تست کن</span></div></div><div class="wizard-note"><b>Zero-touch شرط دارد</b><span>کانفیگ‌هایی که Endpoint آن‌ها همان دامنه است با حفظ Keys/UUID/PKI بدون تغییر Client قابل ادامه‌اند. کانفیگ‌های Direct-IP باید دوباره صادر شوند. WireGuard/OpenVPN/IKEv2 خام در Cloudflare باید DNS-only باشند.</span></div></div>'+
   '<div class="panel modern-list"><div class="panel-head"><div><h3>Archive</h3><span>'+fmtBytes(total)+' TOTAL</span></div></div><div class="table">'+(rows.length?rows.map(b=>'<div class="row backup-row"><div><b>'+htmlEsc(b.name)+'</b><div class="muted">Makia data snapshot</div></div><div><b>'+fmtBytes(b.size)+'</b><div class="muted">archive size</div></div><div class="muted">'+new Date(b.created_at*1000).toLocaleString()+'</div><div><span class="status-chip">Host-local 0600</span></div></div>').join(''):'<div class="empty">هنوز بکاپی ساخته نشده.</div>')+'</div></div>';
 }
 function openPortableBackup(){
-  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal"><div class="wizard-head"><div><div class="eyebrow">PORTABLE MIGRATION</div><h3>Encrypted VPS migration bundle</h3></div><button class="close-btn" data-action="modal-close">×</button></div><p>این بسته شامل data/.secret، Xray/REALITY، WireGuard keys، OpenVPN PKI، Nginx/Let\'s Encrypt و hash حساب‌های SSH مدیریت‌شده است.</p><label class="single-label">Migration password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password"></label><div class="wizard-note"><b>Cutover</b><span>روی VPS مقصد ابتدا Makia را نصب کن، سپس با makia-restore-portable bundle را Restore کن و در پایان DNS همان دامنه را به IP جدید تغییر بده.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="portable-backup-download">Build & Download</button></div></div></div>';
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop"><div class="modal export-modal disaster-recovery-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">DISASTER RECOVERY / VPS MIGRATION</div><h3>Encrypted full-identity backup</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<p>برای زمانی که VPS فیلتر، مسدود یا از دسترس خارج می‌شود. Bundle طوری ساخته می‌شود که هویت Server و Credentialهای کاربران روی VPS جایگزین حفظ شوند.</p>',
+      '<div class="recovery-scope-grid">',
+        '<div><b>Panel & Users</b><span>DB، data/.secret، Policyها و Access artifacts</span></div>',
+        '<div><b>Xray</b><span>UUIDها، REALITY keys، Inbounds و تنظیمات Core</span></div>',
+        '<div><b>WireGuard</b><span>Server/Peer keys و wg0 configuration</span></div>',
+        '<div><b>OpenVPN</b><span>PKI، CA، Client certs، CRL، UDP/TCP servers</span></div>',
+        '<div><b>IKEv2</b><span>StrongSwan config، EAP users و IPsec key material</span></div>',
+        '<div><b>Stealth / WStunnel</b><span>Stunnel و WStunnel runtime configuration</span></div>',
+        '<div><b>TLS / Nginx</b><span>Let\'s Encrypt material و active site config</span></div>',
+        '<div><b>SSH</b><span>Managed usernames و password hashes / expiry</span></div>',
+      '</div>',
+      '<label class="single-label">Backup password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password" placeholder="حداقل ۱۰ کاراکتر"></label>',
+      '<div class="wizard-note"><b>Cloudflare cutover</b><span>بعد از Restore، همان Domain را نگه دار و فقط A/AAAA را به VPS جدید تغییر بده. برای پروتکل‌های خام VPN رکورد باید DNS-only باشد. Profileهایی که IP قدیمی داخلشان ثبت شده است Zero-touch نیستند.</span></div>',
+      '<div class="wizard-note"><b>Restore ایمن</b><span>Restore عمداً از داخل Session وب اجرا نمی‌شود؛ روی VPS مقصد ابتدا Bundle Validate می‌شود و سپس با sudo makia-restore-portable ... --apply اعمال می‌شود تا قطع سرویس وسط درخواست وب Recovery را خراب نکند.</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="portable-backup-download">Build encrypted backup</button></div>',
+    '</div></div>'
+  ].join('');
 }
 async function downloadPortableBackup(){
   const password=document.getElementById('migrationPassword')?.value||'';
   if(password.length<10){alert('Migration password حداقل ۱۰ کاراکتر باشد.');return}
-  try{await fetchDownload('/api/backups/portable',{method:'POST',headers:{'Content-Type':'application/json','X-Makia-Request':'1'},body:JSON.stringify({password})},'makia-portable-migration.zip');toast('Portable migration bundle آماده شد')}
+  try{await fetchDownload('/api/backups/portable',{method:'POST',headers:{'Content-Type':'application/json','X-Makia-Request':'1'},body:JSON.stringify({password})},'makia-portable-migration.zip');toast('Disaster Recovery bundle آماده شد')}
   catch(e){alert('Portable backup: '+e.message)}
 }
 async function makeBackup(){try{await api('/api/backups',{method:'POST'});toast('Backup created');if(activeView==='settings')await currentView();else await backups()}catch(e){alert(e.message)}}
@@ -1525,9 +1545,9 @@ async function settings(renderToken=window.__viewRenderToken){
   }else{
     const recent=backupRows.slice(0,5);
     body=[
-      '<section class="settings-section-head"><div><div class="eyebrow">RECOVERY</div><h2>Backup / Migration</h2><p>Local Snapshot برای rollback؛ Portable Migration برای انتقال credentialها و keys به VPS جدید.</p></div><div class="toolbar"><button class="ghost" data-action="portable-backup">Portable Migration</button><button class="primary" data-action="backup-create">＋ Local Backup</button></div></section>',
+      '<section class="settings-section-head"><div><div class="eyebrow">DISASTER RECOVERY</div><h2>Backup / VPS Migration</h2><p>Local Snapshot برای rollback؛ Disaster Recovery Backup برای بازسازی کاربران، Keys، PKI و Protocol state روی VPS جدید.</p></div><div class="toolbar"><button class="primary" data-action="portable-backup">Disaster Recovery Backup</button><button class="ghost" data-action="backup-create">＋ Local Snapshot</button></div></section>',
       '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Backups</span><b>'+backupRows.length+'</b></div><div><span>Latest</span><b>'+(recent[0]?htmlEsc(recent[0].name):'None')+'</b></div><div><span>Storage</span><b>'+fmtBytes(backupRows.reduce((n,x)=>n+Number(x.size||0),0))+'</b></div><div><span>Restore</span><b class="warn-text">CLI / validated workflow only</b></div></div>',
-      '<div class="settings-shortcuts"><button data-action="nav" data-view="backups"><b>Open Backup Center</b><span>View all real archives</span></button><button data-action="self-test"><b>Run Self-Test</b><span>Validate crypto, DB and services</span></button></div>',
+      '<div class="settings-shortcuts"><button data-action="nav" data-view="backups"><b>Disaster Recovery Center</b><span>Build encrypted migration bundle</span></button><button data-action="self-test"><b>Run Self-Test</b><span>Validate crypto, DB and services</span></button></div>',
       (recent.length?'<div class="recovery-list">'+recent.map(x=>'<div><b>'+htmlEsc(x.name)+'</b><span>'+fmtBytes(x.size||0)+'</span></div>').join('')+'</div>':'<div class="empty">هنوز Backup ساخته نشده است.</div>')+'</div>'
     ].join('');
   }
