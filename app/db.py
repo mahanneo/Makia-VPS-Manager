@@ -535,6 +535,14 @@ def add_protocol_traffic(client_id,uplink,downlink):
             (up,down,now(),now(),int(client_id))
         )
 
+def set_protocol_traffic_totals(client_id,uplink,downlink):
+    with connect() as con:
+        con.execute(
+            "UPDATE protocol_clients SET used_up_bytes=?,used_down_bytes=?,last_traffic_at=?,updated_at=? WHERE id=?",
+            (max(0,int(uplink or 0)),max(0,int(downlink or 0)),now(),now(),int(client_id))
+        )
+
+
 def reset_protocol_traffic(client_id):
     with connect() as con:
         con.execute(
