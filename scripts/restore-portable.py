@@ -201,7 +201,40 @@ def normalize_destination_runtime():
     if Path("/etc/openvpn/server/server.conf").exists():
         # Rebuilds Makia forwarding scripts for the new uplink without touching
         # CA, server/client certificates, CRL or tls-crypt keys.
-        protocol_ops.repair_openvpn_ipv4_runtime()
+        primary=protocol_ops.repair_openvpn_ipv4_runtime().get("runtime") or {}
+        if primary.get("port"):
+            protocol_ops._ufw_allow_if_active(
+                int(primary["port"]),
+                "tcp" if str(primary.get("proto") or "").startswith("tcp") else "udp",
+                "OpenVPN restored primary",
+            )
+
+    tcp_conf=Path("/etc/openvpn/server/makia-tcp.conf")
+    if tcp_conf.exists():
+        text=tcp_conf.read_text(encoding="utf-8",errors="ignore")
+        match=__import__("re").search(r"(?m)^port\s+(\d+)\s*$",text)
+        tcp_port=int(match.group(1)) if match else 8443
+        # Recreate destination-interface NAT scripts while preserving the same
+        # OpenVPN PKI and client certificates.
+        protocol_ops.ensure_openvpn_tcp_fallback(tcp_port)
+
+    stealth=Path("/etc/stunnel/makia-openvpn.conf")
+    if stealth.exists():
+        text=stealth.read_text(encoding="utf-8",errors="ignore")
+        match=__import__("re").search(r"(?m)^\s*accept\s*=\s*(?:[^:]+:)?(\d+)\s*$",text)
+        if match:
+            protocol_ops._ufw_allow_if_active(int(match.group(1)),"tcp","Stealth restored")
+
+    ws_env=Path("/etc/makia-vps-manager/wstunnel.env")
+    if ws_env.exists():
+        text=ws_env.read_text(encoding="utf-8",errors="ignore")
+        match=__import__("re").search(r"(?m)^WSTUNNEL_LISTEN_PORT=(\d+)\s*$",text)
+        if match:
+            protocol_ops._ufw_allow_if_active(int(match.group(1)),"tcp","WStunnel restored")
+
+    if Path("/etc/ipsec.conf").exists() and "# BEGIN MAKIA IKEV2" in Path("/etc/ipsec.conf").read_text(encoding="utf-8",errors="ignore"):
+        protocol_ops._ufw_allow_if_active(500,"udp","IKEv2 restored")
+        protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T restored")
 
     Path("/etc/sysctl.d/99-makia-recovery.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
     run(["sysctl","-w","net.ipv4.ip_forward=1"],check=False)
