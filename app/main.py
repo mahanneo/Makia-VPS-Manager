@@ -1867,8 +1867,8 @@ def backup_portable(payload:PortableBackupRequest,request:Request):
         access_ops.verify_protected_zip(blob,payload.password,"manifest.json")
     except (system_ops.OperationError,access_ops.AccessPackageError) as e:
         raise HTTPException(400,str(e))
-    filename=f"makia-portable-{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.zip"
-    audit(actor,"portable_backup_export",filename,f"files={len(files)}",ip(request))
+    filename=f"makia-full-migration-{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.zip"
+    audit(actor,"full_migration_backup_export",filename,f"files={len(files)}",ip(request))
     return Response(content=blob,media_type="application/zip",headers={
         "Content-Disposition":f'attachment; filename="{filename}"',
         "Cache-Control":"no-store, private",
