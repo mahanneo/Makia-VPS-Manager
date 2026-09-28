@@ -1991,9 +1991,10 @@ def repair_openvpn_all_runtimes():
     server_dir=OVPN_DIR/"server"
     if not server_dir.exists():
         raise ProtocolError("OpenVPN server directory is not available")
-    configs=sorted(server_dir.glob("*.conf"))
+    managed_stems={"server","transport-udp","transport-tcp"}
+    configs=[p for p in sorted(server_dir.glob("*.conf")) if p.stem in managed_stems]
     if not configs:
-        raise ProtocolError("OpenVPN server config is not available")
+        raise ProtocolError("Makia-managed OpenVPN server config is not available")
     uplink=_default_iface()
     backup_dir=_backup_dir()
     stamp=int(time.time())
@@ -2024,7 +2025,7 @@ def repair_openvpn_all_runtimes():
             net=ipaddress.IPv4Network((server_m.group(1),server_m.group(2)),strict=False)
         except Exception as exc:
             raise ProtocolError(f"OpenVPN {stem} has invalid server subnet") from exc
-        suffix="" if stem=="server" else ("tcp" if transport=="tcp" else "udp")
+        suffix="" if stem=="server" else stem.removeprefix("transport-")
         up,down=_openvpn_forward_scripts(uplink,net.with_prefixlen,suffix)
         if re.search(r"(?m)^up\s+\S+\s*$",updated):
             updated=re.sub(r"(?m)^up\s+\S+\s*$",f"up {up}",updated,count=1)
