@@ -26,6 +26,54 @@ def _run(args: list[str], input_text: str | None = None, timeout: int = 15):
         break
     raise OperationError(last_error)
 
+def remote_backup_scp(local_path,host,user,remote_path,port=22,key_path=""):
+    path=Path(local_path)
+    if not path.is_file():
+        raise OperationError("backup file does not exist")
+    host=str(host or "").strip()
+    user=str(user or "").strip()
+    remote_path=str(remote_path or "").strip()
+    key_path=str(key_path or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,255}",host):
+        raise OperationError("invalid remote backup host")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}",user):
+        raise OperationError("invalid remote backup user")
+    if not re.fullmatch(r"[A-Za-z0-9_./~+-]{1,240}",remote_path):
+        raise OperationError("invalid remote backup path")
+    port=int(port or 22)
+    if not 1<=port<=65535:
+        raise OperationError("invalid remote backup SSH port")
+    args=["scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=12","-P",str(port)]
+    if key_path:
+        kp=Path(key_path)
+        if not kp.is_file():
+            raise OperationError("remote backup SSH key file does not exist")
+        args+=["-i",str(kp)]
+    args += [str(path),f"{user}@{host}:{remote_path.rstrip('/')}/{path.name}"]
+    _run(args,timeout=180)
+    return {"ok":True,"target":f"{user}@{host}:{remote_path.rstrip('/')}/{path.name}"}
+
+
+def prune_backup_files(directory,prefix,keep):
+    root=Path(directory)
+    keep=max(1,min(int(keep or 7),100))
+    if not root.exists():
+        return []
+    rows=sorted(
+        [p for p in root.iterdir() if p.is_file() and p.name.startswith(prefix)],
+        key=lambda p:p.stat().st_mtime,
+        reverse=True
+    )
+    removed=[]
+    for path in rows[keep:]:
+        try:
+            path.unlink()
+            removed.append(path.name)
+        except OSError:
+            pass
+    return removed
+
+
 def metrics():
     disk=psutil.disk_usage("/")
     mem=psutil.virtual_memory()
