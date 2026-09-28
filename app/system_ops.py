@@ -1,4 +1,4 @@
-import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3
+import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3, hashlib
 from datetime import datetime
 from pathlib import Path
 import psutil
