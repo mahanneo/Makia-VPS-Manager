@@ -19,6 +19,7 @@ import pyzipper
 APP=Path("/opt/makia-vps-manager")
 DATA=APP/"data"
 BACKUP_ROOT=Path("/var/backups/makia-vps-manager")
+SSH_DIR=Path(os.getenv("MAKIA_SSH_DIR","/etc/ssh"))
 
 
 def run(args,check=True):
@@ -184,7 +185,7 @@ def restore_ssh_host_keys(payload):
     }
     if not keys:
         return []
-    ssh_dir=Path("/etc/ssh")
+    ssh_dir=SSH_DIR
     ssh_dir.mkdir(parents=True,exist_ok=True)
     stamp=dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir=BACKUP_ROOT/f"ssh-hostkeys-pre-restore-{stamp}"
