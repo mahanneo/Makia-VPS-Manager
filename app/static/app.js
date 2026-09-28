@@ -860,7 +860,7 @@ async function inboundsWorkspace(renderToken=window.__viewRenderToken){
   }).join('');
   content.innerHTML=[
     '<div class="sx-page">',
-      '<section class="sx-page-head"><div><h1>Inboundها</h1><p>ساختار Xray Inboundها، پورت‌ها و Clientهای متصل</p></div><div class="sx-head-actions"><span class="sx-state-pill '+(engine.service_active?'':'warn')+'"><i></i>'+(engine.service_active?'Xray Running':'Xray Attention')+'</span><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="primary" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ افزودن Inbound / Client':'Install Xray')+'</button></div></section>',
+      '<section class="sx-page-head"><div><h1>Inboundها</h1><p>ساختار Xray Inboundها، پورت‌ها و Clientهای متصل</p></div><div class="sx-head-actions"><span class="sx-state-pill '+(engine.service_active?'':'warn')+'"><i></i>'+(engine.service_active?'Xray Running':'Xray Attention')+'</span><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="primary" data-action="'+(engine.installed?'xray-inbound-builder':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ New Inbound':'Install Xray')+'</button></div></section>',
       '<section class="sx-summary-row"><div class="sx-summary"><span>Inbounds</span><b>'+rows.length+'</b><small>Xray runtime</small></div><div class="sx-summary"><span>Clients</span><b>'+totalClients+'</b><small>Core-reported</small></div><div class="sx-summary"><span>Protocols</span><b>'+protocols.length+'</b><small>'+htmlEsc(protocols.join(' · ')||'—')+'</small></div><div class="sx-summary"><span>Managed clients</span><b>'+clients.length+'</b><small>Makia policy records</small></div></section>',
       '<section class="sx-table-wrap"><div class="sx-table-toolbar"><div><h3>Inbound list</h3><small>PORT · PROTOCOL · CLIENTS</small></div><div class="sx-toolbar-right"><button class="ghost" data-action="xray-advanced">Advanced JSON</button><button class="ghost" data-action="refresh">Refresh</button></div></div><div class="sx-inbound-list">'+(list||'<div class="empty">Inbound قابل‌خواندن وجود ندارد. از افزودن Inbound یا Advanced JSON استفاده کنید.</div>')+'</div></section>',
     '</div>'
@@ -878,7 +878,7 @@ async function xrayWorkspace(renderToken=window.__viewRenderToken){
   const inactive=managed.length-active;
   const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">V</span><div><h2>V2Ray / Xray</h2><p>VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'wizard-open':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ ایجاد کاربر جدید':'نصب Xray Core')+'</button></div></section>',
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">V</span><div><h2>V2Ray / Xray</h2><p>VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'xray-inbound-builder':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ New Inbound':'نصب Xray Core')+'</button></div></section>',
     '<section class="wg-workspace-metrics"><div><span>کل کاربران</span><b>'+managed.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+inactive+'</b></div><div><span>مصرف کل</span><b>'+fmtBytes(used)+'</b></div></section>',
     '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران V2Ray / Xray</h3><span>QUOTA · EXPIRY · RESET · IP LIMIT · STATUS</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز کاربری ساخته نشده است.</div>')+'</div></section>',
     '<section class="panel"><div class="panel-head"><div><h3>خروجی و اشتراک کاربران</h3><span>'+rows.length+' PROFILE</span></div><button class="ghost" data-action="client-guide" data-kind="xray">راهنمای اتصال</button></div><div class="access-cards">'+(rows.length?rows.map(accessCard).join(''):'<div class="empty compact">پروفایل قابل تحویل وجود ندارد.</div>')+'</div></section>'
@@ -1108,6 +1108,217 @@ function xrayCredentialModal(r){
   ].join('');
   document.getElementById('xrayShare').value=r.share_link||'';
 }
+
+let xrayBuilderCaps=null;
+
+async function openXrayInboundBuilder(){
+  try{
+    const [caps,defs,stack]=await Promise.all([
+      api('/api/protocols/xray/inbound-capabilities'),
+      api('/api/accounts/new-defaults').catch(()=>({username:'user001'})),
+      api('/api/protocols')
+    ]);
+    xrayBuilderCaps=caps;
+    const defaults=window.__operatorSettings?.defaults||{};
+    const endpoint=window.PANEL_DOMAIN||location.hostname;
+    const endpointMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(endpoint)?'ip':'domain';
+    const used=new Set((stack?.xray?.inbounds||[]).map(x=>Number(x.port)));
+    let port=Number(defaults.xray_port||2087);
+    while(used.has(port)&&port<65535)port++;
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal xray-builder-modal">',
+        '<div class="wizard-head"><div><div class="eyebrow">XRAY INBOUND CENTER</div><h3>ساخت Inbound حرفه‌ای</h3><p>ساختار Inbound → Client → Transport → Security → Sniffing → Sockopt</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+        '<div class="xray-builder-grid">',
+          '<section class="xray-builder-section"><div class="section-title"><b>1. Inbound</b><span>مشخصات سرویس</span></div><div class="form-grid two">',
+            '<label>Remark / نام Inbound<input id="xbRemark" maxlength="80" value="Makia-'+port+'"></label>',
+            '<label>Protocol<select id="xbProtocol"></select></label>',
+            '<label>Listen<input id="xbListen" dir="ltr" value="0.0.0.0"><span class="muted">0.0.0.0 = همه Interfaceها</span></label>',
+            '<label>Port<input id="xbPort" type="number" min="1" max="65535" value="'+port+'"></label>',
+            '<label>Endpoint mode<select id="xbEndpointMode"><option value="domain" '+(endpointMode==='domain'?'selected':'')+'>Domain</option><option value="ip" '+(endpointMode==='ip'?'selected':'')+'>IP</option></select></label>',
+            '<label>Client endpoint<input id="xbEndpoint" dir="ltr" value="'+htmlEsc(endpoint)+'"><span class="muted">در Share Link/QR استفاده می‌شود.</span></label>',
+          '</div></section>',
+          '<section class="xray-builder-section"><div class="section-title"><b>2. Client & limits</b><span>اولین Client این Inbound</span></div><div class="form-grid two">',
+            '<label>Client / Email<input id="xbName" value="'+htmlEsc(defs.username||'user001')+'" maxlength="48"></label>',
+            '<label>Credential (اختیاری)<input id="xbCredential" dir="ltr" placeholder="خالی = تولید خودکار"><span class="muted">برای VLESS/VMess باید UUID معتبر باشد.</span></label>',
+            '<label>Traffic quota GB<input id="xbQuota" type="number" min="0" step="1" value="'+Number(defaults.xray_quota_gb??50)+'"><span class="muted">0 = Unlimited</span></label>',
+            '<label>Expiry days<input id="xbDays" type="number" min="0" max="3650" value="'+Number(defaults.xray_expire_days??30)+'"><span class="muted">0 = بدون انقضا</span></label>',
+            '<label>IP / Device limit<input id="xbIpLimit" type="number" min="1" max="50" value="'+Number(defaults.xray_ip_limit||1)+'"></label>',
+            '<label>Traffic reset days<input id="xbReset" type="number" min="0" max="3650" value="'+Number(defaults.xray_reset_days??30)+'"><span class="muted">0 = دستی</span></label>',
+            '<label id="xbFlowWrap">Flow<select id="xbFlow"><option value="">None</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select></label>',
+            '<label id="xbSsMethodWrap">Shadowsocks method<select id="xbSsMethod"></select></label>',
+          '</div></section>',
+          '<section class="xray-builder-section"><div class="section-title"><b>3. Transport</b><span>Raw/TCP · WS · gRPC · HTTPUpgrade · XHTTP · mKCP · Hysteria</span></div><div class="form-grid two">',
+            '<label>Transport<select id="xbTransport"></select></label>',
+            '<label>Security<select id="xbSecurity"></select></label>',
+          '</div><div id="xbTransportFields" class="form-grid two"></div></section>',
+          '<section class="xray-builder-section"><div class="section-title"><b>4. Security</b><span>None / TLS / REALITY</span></div><div id="xbSecurityFields" class="form-grid two"></div><div id="xbSecurityNote" class="wizard-note"></div></section>',
+          '<section class="xray-builder-section"><div class="section-title"><b>5. Sniffing</b><span>مثل Inboundهای حرفه‌ای 3x-ui</span></div><div class="form-grid two">',
+            '<label class="check-row"><input id="xbSniffEnabled" type="checkbox" checked> Enable sniffing</label>',
+            '<label>Dest override<input id="xbSniffDest" value="http,tls,quic" dir="ltr"></label>',
+            '<label class="check-row"><input id="xbSniffRouteOnly" type="checkbox" checked> Route only</label>',
+            '<label class="check-row"><input id="xbSniffMetadata" type="checkbox"> Metadata only</label>',
+          '</div></section>',
+          '<details class="xray-builder-section pro-advanced"><summary><span>6. Sockopt / Network advanced</span><small>TCP Fast Open · congestion · domain strategy · mark · interface · TProxy</small></summary><div class="form-grid two">',
+            '<label class="check-row"><input id="xbTcpFastOpen" type="checkbox"> TCP Fast Open</label>',
+            '<label class="check-row"><input id="xbTcpNoDelay" type="checkbox"> TCP NoDelay</label>',
+            '<label>TCP congestion<select id="xbCongestion"><option value="">OS default</option><option value="bbr">BBR</option><option value="cubic">Cubic</option><option value="reno">Reno</option></select></label>',
+            '<label>Domain strategy<select id="xbDomainStrategy"><option value="">Default</option><option>AsIs</option><option>UseIP</option><option>UseIPv4</option><option>ForceIP</option><option>ForceIPv4</option></select></label>',
+            '<label>SO_MARK<input id="xbMark" type="number" min="0" value="0"></label>',
+            '<label>Interface<input id="xbInterface" dir="ltr" placeholder="مثلاً eth0"></label>',
+            '<label>TProxy<select id="xbTproxy"><option value="">Off/default</option><option value="off">off</option><option value="redirect">redirect</option><option value="tproxy">tproxy</option></select></label>',
+          '</div></details>',
+          '<details class="xray-builder-section pro-advanced"><summary><span>7. Core options JSON</span><small>برای گزینه‌های خاص Xray که در فرم نیستند</small></summary><div class="wizard-note"><b>Validated, not raw apply</b><span>این JSON فقط داخل streamSettings Merge می‌شود؛ method/security/TLS/REALITY از فیلدهای معتبر بالا کنترل می‌شوند و کل Config با خود Xray Core تست می‌شود.</span></div><textarea id="xbExtraStream" class="config-output small" spellcheck="false">{}</textarea></details>',
+        '</div>',
+        '<div id="xbCompatNote" class="wizard-note"><b>Compatibility</b><span>فقط ترکیب‌های معتبر برای Protocol انتخابی نمایش داده می‌شوند.</span></div>',
+        '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="ghost" data-action="xray-advanced">Advanced JSON</button><button class="primary" data-action="xray-builder-create">Validate & Create</button></div>',
+      '</div></div>'
+    ].join('');
+    const p=document.getElementById('xbProtocol');
+    p.innerHTML=Object.keys(caps.protocols||{}).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x.toUpperCase())+'</option>').join('');
+    const preferred=String(defaults.xray_protocol||'vless').toLowerCase();
+    if(caps.protocols?.[preferred])p.value=preferred;
+    document.getElementById('xbSsMethod').innerHTML=(caps.shadowsocks_methods||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x)+'</option>').join('');
+    p.addEventListener('change',syncXrayInboundBuilder);
+    document.getElementById('xbTransport').addEventListener('change',syncXrayInboundBuilder);
+    document.getElementById('xbSecurity').addEventListener('change',syncXrayInboundBuilder);
+    syncXrayInboundBuilder();
+  }catch(e){alert('Xray Inbound Center: '+e.message)}
+}
+
+function xbValue(id,fallback=''){const el=document.getElementById(id);return el?el.value:fallback}
+function xbChecked(id){const el=document.getElementById(id);return !!(el&&el.checked)}
+
+function syncXrayInboundBuilder(){
+  if(!xrayBuilderCaps)return;
+  const protocol=xbValue('xbProtocol','vless');
+  const spec=xrayBuilderCaps.protocols?.[protocol]||{transports:['tcp'],security:['none']};
+  const t=document.getElementById('xbTransport'),s=document.getElementById('xbSecurity');
+  const oldT=t.value,oldS=s.value;
+  t.innerHTML=(spec.transports||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x==='tcp'?'TCP / RAW':x.toUpperCase())+'</option>').join('');
+  if((spec.transports||[]).includes(oldT))t.value=oldT;
+  s.innerHTML=(spec.security||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x.toUpperCase())+'</option>').join('');
+  if((spec.security||[]).includes(oldS))s.value=oldS;
+  const transport=t.value,security=s.value;
+  if(security==='reality'&&!['tcp','grpc','xhttp'].includes(transport)){
+    const fallback=(spec.security||[]).includes('none')?'none':((spec.security||[]).includes('tls')?'tls':spec.security[0]);
+    s.value=fallback;
+  }
+  const finalSecurity=s.value;
+  const tf=document.getElementById('xbTransportFields');
+  const commonPath='<label>Path / Service<input id="xbPath" dir="ltr" value="/makia"></label>';
+  if(transport==='tcp'){
+    tf.innerHTML=[
+      '<label>RAW header<select id="xbHeaderType"><option value="none">None</option><option value="http">HTTP camouflage</option></select></label>',
+      '<label class="check-row"><input id="xbAcceptProxy" type="checkbox"> Accept PROXY protocol</label>',
+      '<label>HTTP Host<input id="xbHttpHost" dir="ltr" placeholder="example.com"></label>',
+      '<label>HTTP Path<input id="xbHttpPath" dir="ltr" value="/"></label>'
+    ].join('');
+  }else if(transport==='ws'){
+    tf.innerHTML=commonPath+'<label>Host<input id="xbHost" dir="ltr"></label><label>Heartbeat seconds<input id="xbHeartbeat" type="number" min="0" max="3600" value="0"></label><label class="check-row"><input id="xbAcceptProxy" type="checkbox"> Accept PROXY protocol</label><label>Headers JSON<textarea id="xbHeaders" spellcheck="false">{}</textarea></label>';
+  }else if(transport==='grpc'){
+    tf.innerHTML='<label>Service name<input id="xbServiceName" dir="ltr" value="makia"></label><label>Authority<input id="xbAuthority" dir="ltr"></label><label class="check-row"><input id="xbMultiMode" type="checkbox"> Multi mode</label>';
+  }else if(transport==='httpupgrade'){
+    tf.innerHTML=commonPath+'<label>Host<input id="xbHost" dir="ltr"></label><label class="check-row"><input id="xbAcceptProxy" type="checkbox"> Accept PROXY protocol</label><label>Headers JSON<textarea id="xbHeaders" spellcheck="false">{}</textarea></label>';
+  }else if(transport==='xhttp'){
+    tf.innerHTML=commonPath+'<label>Host<input id="xbHost" dir="ltr"></label><label>Mode<select id="xbXhttpMode">'+(xrayBuilderCaps.xhttp_modes||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x)+'</option>').join('')+'</select></label><label>X Padding<input id="xbXPadding" dir="ltr" value="100-1000"></label>';
+  }else if(transport==='kcp'){
+    tf.innerHTML='<label>MTU<input id="xbKcpMtu" type="number" value="1350" min="576" max="1460"></label><label>TTI ms<input id="xbKcpTti" type="number" value="20" min="10" max="100"></label><label>Uplink capacity MB/s<input id="xbKcpUp" type="number" value="5" min="1"></label><label>Downlink capacity MB/s<input id="xbKcpDown" type="number" value="20" min="1"></label><label>CWND multiplier<input id="xbKcpCwnd" type="number" value="1" min="1"></label><label>Max sending window<input id="xbKcpWindow" type="number" value="2097152" min="576"></label>';
+  }else if(transport==='hysteria'){
+    tf.innerHTML='<label>UDP idle timeout<input id="xbHyIdle" type="number" value="60" min="2" max="600"></label>';
+  }else tf.innerHTML='';
+
+  const sf=document.getElementById('xbSecurityFields'),note=document.getElementById('xbSecurityNote');
+  if(finalSecurity==='tls'){
+    sf.innerHTML='<label>Server Name / SNI<input id="xbSni" dir="ltr" placeholder="vpn.example.com"></label><label>ALPN<input id="xbAlpn" dir="ltr" value="'+(transport==='hysteria'?'h3':'h2,http/1.1')+'"></label>';
+    note.innerHTML='<b>TLS</b><span>Certificate همین SNI باید قبلاً در Settings → Domain & TLS موجود باشد. Makia همان Certificate واقعی را به Xray متصل می‌کند.</span>';
+  }else if(finalSecurity==='reality'){
+    sf.innerHTML='<label>Server Name / SNI<input id="xbSni" dir="ltr" value="www.microsoft.com"></label><label>REALITY target<input id="xbRealityDest" dir="ltr" value="www.microsoft.com:443"></label><label>Fingerprint<input id="xbFingerprint" value="chrome"></label><label>Short ID<input id="xbShortId" dir="ltr" placeholder="خالی = تولید خودکار"></label><label>Spider X<input id="xbSpiderX" dir="ltr" value="/"></label><label>xver<select id="xbXver"><option value="0">0</option><option value="1">1</option><option value="2">2</option></select></label>';
+    note.innerHTML='<b>REALITY</b><span>Private/Public X25519 و Short ID در Backend ساخته می‌شوند؛ Private Key در Share Link قرار نمی‌گیرد.</span>';
+  }else{
+    sf.innerHTML='';
+    note.innerHTML='<b>Security = NONE</b><span>هیچ TLS/REALITY اجباری نیست. این انتخاب عمداً Plain transport است و باید خودت مناسب بودنش برای شبکه را تعیین کنی.</span>';
+  }
+  const flowWrap=document.getElementById('xbFlowWrap');
+  if(flowWrap)flowWrap.style.display=(protocol==='vless'&&((transport==='tcp'&&['tls','reality'].includes(finalSecurity))||transport==='xhttp'))?'':'none';
+  if(flowWrap&&flowWrap.style.display==='none')document.getElementById('xbFlow').value='';
+  const ss=document.getElementById('xbSsMethodWrap');
+  if(ss)ss.style.display=protocol==='shadowsocks'?'':'none';
+  const note2=document.getElementById('xbCompatNote');
+  note2.innerHTML='<b>'+htmlEsc(protocol.toUpperCase())+'</b><span>'+htmlEsc(transport.toUpperCase())+' + '+htmlEsc(finalSecurity.toUpperCase())+' · Config قبل از Commit توسط Xray Core validate می‌شود و در Failure Rollback دارد.</span>';
+}
+
+function xrayBuilderJson(id){
+  const raw=xbValue(id,'{}').trim()||'{}';
+  try{
+    const obj=JSON.parse(raw);
+    if(!obj||Array.isArray(obj)||typeof obj!=='object')throw new Error('JSON object لازم است');
+    return obj;
+  }catch(e){throw new Error(id+': '+e.message)}
+}
+
+async function createXrayInboundBuilder(){
+  try{
+    const protocol=xbValue('xbProtocol'),transport=xbValue('xbTransport'),security=xbValue('xbSecurity');
+    const options={
+      path:xbValue('xbPath','/'),
+      host:xbValue('xbHost',''),
+      headers:document.getElementById('xbHeaders')?xrayBuilderJson('xbHeaders'):{},
+      heartbeat_period:Number(xbValue('xbHeartbeat','0')||0),
+      accept_proxy_protocol:xbChecked('xbAcceptProxy'),
+      header_type:xbValue('xbHeaderType','none'),
+      http_host:xbValue('xbHttpHost',''),
+      http_path:xbValue('xbHttpPath','/'),
+      service_name:xbValue('xbServiceName',''),
+      authority:xbValue('xbAuthority',''),
+      multi_mode:xbChecked('xbMultiMode'),
+      xhttp_mode:xbValue('xbXhttpMode','auto'),
+      x_padding_bytes:xbValue('xbXPadding',''),
+      mtu:Number(xbValue('xbKcpMtu','1350')||1350),
+      tti:Number(xbValue('xbKcpTti','20')||20),
+      uplink_capacity:Number(xbValue('xbKcpUp','5')||5),
+      downlink_capacity:Number(xbValue('xbKcpDown','20')||20),
+      cwnd_multiplier:Number(xbValue('xbKcpCwnd','1')||1),
+      max_sending_window:Number(xbValue('xbKcpWindow','2097152')||2097152),
+      udp_idle_timeout:Number(xbValue('xbHyIdle','60')||60),
+      server_name:xbValue('xbSni',''),
+      alpn:xbValue('xbAlpn',''),
+      reality_dest:xbValue('xbRealityDest',''),
+      fingerprint:xbValue('xbFingerprint','chrome'),
+      short_id:xbValue('xbShortId',''),
+      spider_x:xbValue('xbSpiderX','/'),
+      xver:Number(xbValue('xbXver','0')||0),
+      sniffing_enabled:xbChecked('xbSniffEnabled'),
+      sniffing_dest_override:xbValue('xbSniffDest','http,tls,quic'),
+      sniffing_route_only:xbChecked('xbSniffRouteOnly'),
+      sniffing_metadata_only:xbChecked('xbSniffMetadata'),
+      tcp_fast_open:xbChecked('xbTcpFastOpen'),
+      tcp_no_delay:xbChecked('xbTcpNoDelay'),
+      tcp_congestion:xbValue('xbCongestion',''),
+      domain_strategy:xbValue('xbDomainStrategy',''),
+      mark:Number(xbValue('xbMark','0')||0),
+      interface:xbValue('xbInterface',''),
+      tproxy:xbValue('xbTproxy',''),
+      extra_stream:xrayBuilderJson('xbExtraStream')
+    };
+    const payload={
+      protocol,transport,security,
+      remark:xbValue('xbRemark').trim(),listen:xbValue('xbListen','0.0.0.0').trim(),
+      port:Number(xbValue('xbPort','0')),name:xbValue('xbName').trim(),
+      endpoint:xbValue('xbEndpoint').trim(),endpoint_mode:xbValue('xbEndpointMode','auto'),
+      credential:xbValue('xbCredential','').trim(),flow:xbValue('xbFlow',''),
+      shadowsocks_method:xbValue('xbSsMethod','aes-128-gcm'),
+      quota_gb:Number(xbValue('xbQuota','0')||0),expire_days:Number(xbValue('xbDays','0')||0),
+      ip_limit:Number(xbValue('xbIpLimit','1')||1),reset_days:Number(xbValue('xbReset','0')||0),
+      options
+    };
+    if(!payload.remark||!payload.name||!payload.endpoint||!payload.port){alert('Remark، Client، Endpoint و Port الزامی هستند.');return}
+    if(!confirm('این Inbound با Xray Core اعتبارسنجی و سپس اعمال شود؟'))return;
+    const btn=document.querySelector('[data-action="xray-builder-create"]');if(btn){btn.disabled=true;btn.textContent='Validating…'}
+    const result=await api('/api/protocols/xray/inbounds',{method:'POST',body:JSON.stringify(payload)});
+    xrayCredentialModal(result);
+  }catch(e){alert('Xray Inbound: '+e.message)}
+}
+
 function protocolClientRow(c){const quota=Number(c.quota_bytes||0),used=Number(c.usage?.total||0),p=quota?Math.min(100,(used/quota)*100):0;const expiry=c.expire_at?new Date(c.expire_at*1000).toLocaleDateString():'∞';const state=!c.enabled?('Disabled'+(c.disabled_reason?' · '+c.disabled_reason:'')):(c.expired?'Expired':'Active');const sub=location.origin+'/sub/'+c.subscription_id;const ipCount=Number(c.online_ip_count||0),ipState=c.ip_violation?'bad':(ipCount?'ok':'');const accounting=c.accounting_supported!==false;return `<div class="protocol-client-row"><div><div class="client-main"><b>${c.name}</b><span class="protocol-pill">${c.protocol.toUpperCase()}</span><span class="status-chip ${c.enabled&&!c.expired?'ok':'bad'}">${state}</span>${c.ip_violation?'<span class="status-chip bad">IP LIMIT</span>':''}</div><div class="muted">${c.inbound_tag}</div></div><div>${accounting?`<b>${fmtBytes(used)} / ${quota?fmtBytes(quota):'Unlimited'}</b><div class="usage-track"><i style="width:${p}%"></i></div><div class="muted">↑ ${fmtBytes(c.usage?.uplink||0)} · ↓ ${fmtBytes(c.usage?.downlink||0)} · Reset ${c.reset_days?c.reset_days+'d':'manual'}</div>`:'<span class="status-chip warn">Accounting unavailable</span><div class="muted">این پروتکل در این نسخه counter مستقل per-client ندارد.</div>'}</div><div><b>${expiry}</b><div class="muted">${c.days_left===null?'No expiry':c.days_left+' days left'}</div><div class="chips"><button class="status-chip ${ipState}" onclick="showClientIPs(${c.id})">IPs ${ipCount}/${c.ip_limit}</button></div></div><div class="toolbar"><button class="ghost" onclick="copyText('${sub}')">Subscription</button><button class="ghost" onclick="editProtocolClient(${c.id})">Policy</button>${accounting?'<button class="soft" onclick="resetProtocolTraffic('+c.id+')">Reset</button>':''}</div></div>`}
 
 function showClientIPs(id){const c=(window.__protocolClients||[]).find(x=>x.id===id);if(!c)return;const rows=c.online?.ips||[];modalRoot.innerHTML=`<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY ONLINE STATS</div><h3>Live IPs · ${c.name}</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="notice">${c.online?.available?'داده از Xray online-stats API خوانده شده است.':'این Xray Core یا Topology هنوز Online-IP API قابل استفاده ارائه نکرده است.'}</div><div class="ip-list">${rows.length?rows.map(x=>`<div><b>${x.ip}</b><span>${x.last_seen?new Date(x.last_seen*1000).toLocaleString():'-'}</span></div>`).join(''):'<div class="empty">IP آنلاین ثبت نشده است.</div>'}</div></div></div>`}
@@ -1713,6 +1924,8 @@ async function handleMakiaAction(btn){
   const action=btn.dataset.action;if(!action)return;
   if(action==='nav'){closeModal();switchView(btn.dataset.view);return}
   if(action==='nav-settings'){closeModal();window.__settingsTab=btn.dataset.tab||'general';switchView('settings');return}
+  if(action==='xray-inbound-builder'){await openXrayInboundBuilder();return}
+  if(action==='xray-builder-create'){await createXrayInboundBuilder();return}
   if(action==='wizard-open'){await openProvisionWizard(btn.dataset.kind||null);return}
   if(action==='wizard-protocol'){await selectWizardProtocol(btn.dataset.kind);return}
   if(action==='wizard-xray-advanced'){captureWizard();provisionState.simpleMode=false;provisionState.manualXray=true;normalizeXrayProfile(provisionState,false);renderProvisionWizard();return}
