@@ -149,7 +149,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","outline":"outline"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -302,7 +302,7 @@ def _portal_language(request:Request):
     return current if current in {"fa","en"} else "fa"
 
 def _public_access_state(kind,key):
-    if kind=="xray":
+    if kind in {"xray","outline"}:
         try: row=get_protocol_client(int(key))
         except Exception: row=None
         if not row:
@@ -1826,7 +1826,7 @@ def public_access_portal(token:str,request:Request):
     except access_ops.AccessPackageError as exc:
         raise HTTPException(404,str(exc))
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         share_text=""
     else:
         share_text=str(payload.get("share_text") or payload.get("primary_text") or "")
@@ -1880,7 +1880,7 @@ def public_access_download(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -1911,7 +1911,7 @@ def public_access_file(token:str,filename:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -1941,7 +1941,7 @@ def public_access_qr(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
