@@ -2727,12 +2727,12 @@ def nodes_create(payload:NodeCreate,request:Request):
         con.execute("UPDATE nodes SET region=?,endpoint=? WHERE id=?",(payload.region.strip(),payload.endpoint.strip(),result["id"]))
     coordinator=public_origin(request)
     result["agent_env"]={
-        "MAKIA_COORDINATOR_URL":coordinator,
+        "MAKIA_CONTROLLER_URL":coordinator,
         "MAKIA_NODE_TOKEN":result["token"],
         "MAKIA_NODE_REGION":payload.region,
         "MAKIA_NODE_ENDPOINT":payload.endpoint,
     }
-    result["agent_command"]=f"sudo MAKIA_COORDINATOR_URL={coordinator} MAKIA_NODE_TOKEN={result['token']} MAKIA_NODE_REGION={payload.region or '-'} MAKIA_NODE_ENDPOINT={payload.endpoint or '-'} /opt/makia-vps-manager/scripts/install-node-agent.sh"
+    result["agent_command"]=f"sudo MAKIA_CONTROLLER_URL={coordinator} MAKIA_NODE_TOKEN={result['token']} MAKIA_NODE_REGION={payload.region or ''} MAKIA_NODE_ENDPOINT={payload.endpoint or ''} /opt/makia-vps-manager/scripts/install-node-agent.sh"
     audit(actor,"node_create",payload.name,ip=ip(request))
     return result
 
