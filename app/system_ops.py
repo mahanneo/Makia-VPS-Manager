@@ -257,6 +257,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "wstunnel_env":"/etc/makia-vps-manager/wstunnel.env",
         "stunnel_conf":"/etc/stunnel/makia-openvpn.conf",
         "stunnel_defaults":"/etc/default/stunnel4",
+        "ssh_dir":"/etc/ssh",
     }
     paths={**defaults,**(system_paths or {})}
     files={
@@ -289,6 +290,17 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         else:
             components[key]=False
 
+    ssh_dir=Path(paths["ssh_dir"])
+    ssh_host_keys=[]
+    if ssh_dir.is_dir():
+        for src in sorted(ssh_dir.glob("ssh_host_*")):
+            if not src.is_file() or not re.fullmatch(r"ssh_host_[A-Za-z0-9_-]+_key(?:\.pub)?",src.name):
+                continue
+            archive_name=f"payload/ssh-host-keys/{src.name}"
+            files[archive_name]=src.read_bytes()
+            ssh_host_keys.append(src.name)
+    components["ssh_host_keys"]=bool(ssh_host_keys)
+
     checksums={name:hashlib.sha256(blob).hexdigest() for name,blob in files.items()}
     manifest={
         "format":"makia-portable-migration",
@@ -297,6 +309,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "app_version":str(version or ""),
         "panel_domain":str(panel_domain or ""),
         "managed_ssh_users":len(json.loads(files["payload/ssh-users.json"].decode("utf-8"))),
+        "ssh_host_keys":ssh_host_keys,
         "components":components,
         "sha256":checksums,
         "cutover":{
@@ -315,6 +328,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "3) Validate: sudo makia-restore-portable BUNDLE.zip\n"
         "4) Apply:    sudo makia-restore-portable BUNDLE.zip --apply\n"
         "5) Run:      sudo makia-doctor && sudo makia-uat-smoke\n"
+        "   SSH host keys are preserved when available, so the server fingerprint can remain stable.\n"
         "6) Point the existing domain DNS A record to the new VPS.\n"
         "Raw VPN records in Cloudflare must be DNS-only.\n"
     ).encode("utf-8")
