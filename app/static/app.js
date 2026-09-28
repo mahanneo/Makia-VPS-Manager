@@ -222,7 +222,7 @@ async function access(renderToken=window.__viewRenderToken){
       '<div class="access-bulk-bar"><div><b>'+htmlEsc(tr('عملیات گروهی','Bulk actions'))+'</b><small>'+htmlEsc(tr('برای SSH و Xray/Outline','For SSH and Xray/Outline'))+'</small></div><div class="access-bulk-actions"><button class="primary" data-growth-action="bulk-renew">+30d / +50GB</button><button class="ghost" data-growth-action="bulk-enable">'+htmlEsc(tr('فعال','Enable'))+'</button><button class="ghost" data-growth-action="bulk-disable">'+htmlEsc(tr('غیرفعال','Disable'))+'</button><button class="ghost" data-growth-action="bulk-reset">'+htmlEsc(tr('ریست ترافیک','Reset traffic'))+'</button></div></div>',
       '<section class="pro-directory">',
         '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
-        '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
+        '<div class="pro-user-table-head"><span></span><span>'+htmlEsc(tr('کاربر','Client'))+'</span><span>'+htmlEsc(tr('پروتکل','Protocol'))+'</span><span>'+htmlEsc(tr('وضعیت','Status'))+'</span><span>'+htmlEsc(tr('مصرف / انقضا','Usage / Expiry'))+'</span><span></span></div>',
         '<div id="accessRows" class="pro-user-list"></div>',
       '</section>',
     '</div>'
