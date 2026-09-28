@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Makia Scheduled Backup Check Hourly
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=makia-scheduled-backup.service
+
+[Install]
+WantedBy=timers.target
