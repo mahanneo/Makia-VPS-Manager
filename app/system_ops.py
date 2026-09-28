@@ -1,5 +1,5 @@
 import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3, hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import psutil
 from .config import ALLOWED_SERVICES
@@ -293,7 +293,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     manifest={
         "format":"makia-portable-migration",
         "format_version":2,
-        "created_at":datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at":datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "app_version":str(version or ""),
         "panel_domain":str(panel_domain or ""),
         "managed_ssh_users":len(json.loads(files["payload/ssh-users.json"].decode("utf-8"))),
