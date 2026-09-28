@@ -135,6 +135,10 @@ for item in \
   "etc/systemd/system/makia-policy-enforcer.service" \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
+  "etc/systemd/system/makia-scheduled-backup.service" \
+  "etc/systemd/system/makia-scheduled-backup.timer" \
+  "etc/systemd/system/makia-node-agent.service" \
+  "etc/systemd/system/makia-node-agent.timer" \
   "etc/nginx/sites-available/makia-vps-manager"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
@@ -196,6 +200,10 @@ install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/syste
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
+install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
+install -m 0644 "$SRC/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
+install -m 0644 "$SRC/systemd/makia-node-agent.service" /etc/systemd/system/makia-node-agent.service
+install -m 0644 "$SRC/systemd/makia-node-agent.timer" /etc/systemd/system/makia-node-agent.timer
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -216,10 +224,17 @@ install -m 0755 "$SRC/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
 install -m 0755 "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
 install -m 0755 "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
+install -m 0755 "$SRC/scripts/scheduled-backup.py" /usr/local/sbin/makia-scheduled-backup
+install -m 0755 "$SRC/scripts/node-agent.py" /usr/local/sbin/makia-node-agent
+install -m 0755 "$SRC/scripts/connect-node.sh" /usr/local/sbin/makia-node-connect
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
+systemctl enable --now makia-scheduled-backup.timer
+if [[ -f /etc/makia-vps-manager/node.env ]]; then
+  systemctl enable --now makia-node-agent.timer
+fi
 
 echo "Ensuring the complete Makia protocol stack is installed and ready..."
 (
