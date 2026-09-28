@@ -1654,7 +1654,9 @@ def ensure_openvpn_tcp_fallback(port=8443):
         encoding="utf-8",
     )
     os.chmod(conf,0o600)
-    Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    (sysctl_dir/"99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
     _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
     _run(["systemctl","enable","--now",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
     _run(["systemctl","restart",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
