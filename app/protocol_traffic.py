@@ -1,12 +1,39 @@
 import time
-from .db import list_protocol_clients, add_protocol_traffic, reset_protocol_traffic, advance_protocol_reset, set_protocol_client_enabled, audit
-from . import protocol_ops
+from .db import list_protocol_clients, add_protocol_traffic, reset_protocol_traffic, advance_protocol_reset, set_protocol_client_enabled, set_protocol_traffic_totals, audit
+from . import protocol_ops, integration_ops
 
 POLL_SECONDS=30
 
 def collect_once():
     now=int(time.time())
-    for client in list_protocol_clients():
+    clients=list_protocol_clients()
+
+    # Outline exposes authoritative cumulative per-key transfer counters and
+    # native server-side data limits. Synchronize those counters into Makia.
+    outline_clients=[c for c in clients if c.get("engine")=="outline"]
+    if outline_clients:
+        try:
+            metrics=integration_ops.outline_transfer_metrics()
+            for client in outline_clients:
+                key_id=str(client.get("inbound_tag") or "")
+                if key_id in metrics:
+                    total=int(metrics[key_id])
+                    set_protocol_traffic_totals(client["id"],0,total)
+                expire_at=int(client.get("expire_at") or 0)
+                if client.get("enabled") and expire_at and now>=expire_at:
+                    try:
+                        integration_ops.outline_delete_key(key_id)
+                    except Exception as exc:
+                        # If the key is already absent, still mark Makia policy
+                        # disabled; all other API failures remain auditable.
+                        if "not found" not in str(exc).lower() and "404" not in str(exc):
+                            raise
+                    set_protocol_client_enabled(client["id"],False,"expiry")
+                    audit("system","outline_key_auto_expire",client.get("name"),f"key_id={key_id}")
+        except Exception as exc:
+            audit("system","outline_traffic_collect_failed","outline",str(exc)[:240])
+
+    for client in clients:
         if client.get("engine")!="xray" or client.get("protocol") not in {"vless","vmess","trojan","hysteria2"}:
             continue
 
