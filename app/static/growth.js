@@ -68,13 +68,14 @@
 
   window.growthDiagnosticsView=async function(renderToken=window.__viewRenderToken){
     title.textContent=T('عیب‌یابی کاربران','Client Diagnostics');setPageContext('CLIENT DIAGNOSTICS');
-    const clients=await api('/api/protocol-clients');
+    const clients=await api('/api/access');
     if(renderToken!==window.__viewRenderToken||activeView!=='diagnostics')return;
-    content.innerHTML='<div class="pro-page"><section class="pro-page-head"><div><span class="pro-kicker">DIAGNOSTICS</span><h1>'+H(T('عیب‌یابی اتصال کاربر','Client connection diagnostics'))+'</h1><p>'+H(T('Database، Expiry، Quota، Inbound، Listener، DNS و Delivery را یکجا بررسی کن.','Check database, expiry, quota, inbound, listener, DNS and delivery in one place.'))+'</p></div></section><section class="panel"><div class="settings-form-grid two"><label>'+H(T('کاربر Xray','Xray client'))+'<select id="diagClient">'+clients.map(x=>'<option value="'+x.id+'">'+H(x.name+' · '+String(x.protocol).toUpperCase())+'</option>').join('')+'</select></label><div class="settings-actions"><button class="primary" data-growth-action="diagnostic-run">'+H(T('اجرای عیب‌یابی','Run diagnostics'))+'</button></div></div><div id="diagResult"></div></section></div>';
+    content.innerHTML='<div class="pro-page"><section class="pro-page-head"><div><span class="pro-kicker">DIAGNOSTICS</span><h1>'+H(T('عیب‌یابی اتصال کاربر','Client connection diagnostics'))+'</h1><p>'+H(T('Database، Expiry، Quota، Runtime، Listener، DNS، Handshake و Delivery را یکجا بررسی کن.','Check database, expiry, quota, runtime, listener, DNS, handshake and delivery in one place.'))+'</p></div></section><section class="panel"><div class="settings-form-grid two"><label>'+H(T('دسترسی','Access'))+'<select id="diagClient">'+clients.map(x=>'<option value="'+H(x.kind+':'+x.key)+'">'+H(x.name+' · '+String(x.protocol||x.kind).toUpperCase())+'</option>').join('')+'</select></label><div class="settings-actions"><button class="primary" data-growth-action="diagnostic-run">'+H(T('اجرای عیب‌یابی','Run diagnostics'))+'</button></div></div><div id="diagResult"></div></section></div>';
   };
   async function runClientDiagnostic(){
-    const id=Number(document.getElementById('diagClient')?.value||0);if(!id)return;
-    const r=await api('/api/diagnostics/client/'+id);
+    const raw=document.getElementById('diagClient')?.value||'';if(!raw||!raw.includes(':'))return;
+    const i=raw.indexOf(':'),kind=raw.slice(0,i),key=raw.slice(i+1);
+    const r=await api('/api/diagnostics/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key));
     document.getElementById('diagResult').innerHTML='<div class="diagnostic-grid">'+(r.checks||[]).map(x=>'<div class="diagnostic-row"><span class="'+(x.ok?'ok-dot':'bad-dot')+'"></span><div><b>'+H(x.name)+'</b><small>'+H(x.detail)+'</small></div><strong class="'+(x.ok?'ok-text':'bad-text')+'">'+(x.ok?'PASS':'FAIL')+'</strong></div>').join('')+'</div>';
   }
 
