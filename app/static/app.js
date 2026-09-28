@@ -212,7 +212,7 @@ async function openProvisionWizard(protocol){
     endpointValues:{ip:initialMode==='ip'?initialEndpoint:'',domain:initialMode==='domain'?initialEndpoint:''},
     password:'',passwordMode:d.ssh_password_mode||'pin6',
     expireDate:'',plan:'',note:'',sessions:Number(d.ssh_sessions||1),devices:Number(d.ssh_devices||1),
-    xrayProtocol:d.xray_protocol||'vless',port:xrayPort,transport:'tcp',security:'reality',simpleMode:true,path:d.xray_path||'/makia',
+    xrayProtocol:d.xray_protocol||'vless',port:xrayPort,transport:'tcp',security:'reality',simpleMode:true,manualXray:false,path:d.xray_path||'/makia',
     sni:d.xray_sni||'www.microsoft.com',realityDest:d.xray_reality_target||'www.microsoft.com:443',
     quota:Number(d.xray_quota_gb??50),expireDays:Number(d.xray_expire_days??30),resetDays:Number(d.xray_reset_days??30),
     dns:d.wireguard_dns||'1.1.1.1',wgPort:Number(d.wireguard_port||443),wgMtu:Number(d.wireguard_mtu||1280),wgKeepalive:Number(d.wireguard_keepalive??15),wgAllowedIps:d.wireguard_allowed_ips||'0.0.0.0/0',wgCidr:d.wireguard_cidr||'10.66.66.1/24',ovpnProto:String(ovpn.proto||d.openvpn_proto||'udp').startsWith('tcp')?'tcp':'udp',ovpnPort:Number(ovpn.port||d.openvpn_port||1194),
@@ -327,26 +327,36 @@ const XRAY_PROFILE_MATRIX={
   http:{label:'HTTP Proxy',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false},
   socks:{label:'SOCKS5',transports:['tcp'],security:['none'],preset:['tcp','none'],requiresDomain:false}
 };
+const XRAY_MANUAL_MATRIX={
+  vless:{label:'VLESS',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['none','tls','reality'],preset:['tcp','none']},
+  vmess:{label:'VMess',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['none','tls'],preset:['tcp','none']},
+  trojan:{label:'Trojan',transports:['tcp','ws','grpc','httpupgrade','xhttp','kcp'],security:['none','tls'],preset:['tcp','none']},
+  shadowsocks:{label:'Shadowsocks',transports:['tcp'],security:['none'],preset:['tcp','none']},
+  hysteria2:{label:'Hysteria2',transports:['hysteria'],security:['tls'],preset:['hysteria','tls']},
+  http:{label:'HTTP Proxy',transports:['tcp'],security:['none'],preset:['tcp','none']},
+  socks:{label:'SOCKS5',transports:['tcp'],security:['none'],preset:['tcp','none']}
+};
 
 function xrayProfileSpec(protocol){return XRAY_PROFILE_MATRIX[protocol]||XRAY_PROFILE_MATRIX.vless}
+function xrayManualSpec(protocol){return XRAY_MANUAL_MATRIX[protocol]||XRAY_MANUAL_MATRIX.vless}
 
 function normalizeXrayProfile(s,forcePreset=false){
-  const spec=xrayProfileSpec(s.xrayProtocol);
+  const spec=s.manualXray?xrayManualSpec(s.xrayProtocol):xrayProfileSpec(s.xrayProtocol);
   if(forcePreset||!spec.transports.includes(s.transport))s.transport=spec.preset[0];
   if(forcePreset||!spec.security.includes(s.security))s.security=spec.preset[1];
   if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))s.transport='tcp';
-  if((s.security==='tls'||spec.requiresDomain)&&s.endpointMode==='domain'&&s.endpoint)s.sni=s.endpoint;
+  if(s.security==='tls'&&s.endpointMode==='domain'&&s.endpoint&&!s.sni)s.sni=s.endpoint;
   if(s.xrayProtocol==='hysteria2'){s.transport='hysteria';s.security='tls'}
   return s;
 }
 
-function applySimpleXrayPreset(s){return normalizeXrayProfile(s,true)}
+function applySimpleXrayPreset(s){s.manualXray=false;return normalizeXrayProfile(s,true)}
 
 function xrayPrerequisiteMessage(s){
-  const spec=xrayProfileSpec(s.xrayProtocol);
-  if(spec.requiresDomain&&s.endpointMode!=='domain')return spec.label+' برای TLS به Domain معتبر و Certificate نیاز دارد؛ Endpoint را روی Domain بگذار.';
-  if((s.security==='tls')&&s.endpointMode!=='domain')return 'TLS به Domain/SNI دارای Certificate معتبر روی همین VPS نیاز دارد.';
-  if(s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY در Guided mode فقط برای VLESS فعال است.';
+  if(s.security==='tls'&&s.endpointMode!=='domain')return 'TLS به Domain/SNI و Certificate معتبر روی همین VPS نیاز دارد.';
+  if(s.xrayProtocol==='hysteria2'&&s.endpointMode!=='domain')return 'Hysteria2 به Domain/SNI و Certificate معتبر نیاز دارد.';
+  if(s.security==='reality'&&s.xrayProtocol!=='vless')return 'REALITY فقط برای VLESS قابل ساخت است.';
+  if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))return 'REALITY فقط با TCP/RAW، gRPC یا XHTTP قابل ساخت است.';
   return '';
 }
 
@@ -364,12 +374,12 @@ function wizardPolicyFields(s){
   ].join('');
   if(s.protocol==='xray'){
     normalizeXrayProfile(s,false);
-    const spec=xrayProfileSpec(s.xrayProtocol),pre=xrayPrerequisiteMessage(s);
-    const intro='<div class="wizard-section-title"><span class="pro-kicker">NETWORK POLICY</span><h4>شبکه و محدودیت</h4><p>فقط ترکیب‌های معتبر برای '+htmlEsc(spec.label)+' نمایش داده می‌شوند.</p></div>';
+    const spec=s.manualXray?xrayManualSpec(s.xrayProtocol):xrayProfileSpec(s.xrayProtocol),pre=xrayPrerequisiteMessage(s);
+    const intro='<div class="wizard-section-title"><span class="pro-kicker">'+(s.manualXray?'XRAY MANUAL BUILDER':'NETWORK POLICY')+'</span><h4>'+(s.manualXray?'ساخت دستی Inbound / Client':'شبکه و محدودیت')+'</h4><p>'+(s.manualXray?'Protocol، Port، Transport و Security را خودت انتخاب می‌کنی؛ Makia فقط Collision را بررسی می‌کند و Xray Core 26.3.27 قبل از Apply کانفیگ را Validate می‌کند.':'Presetهای تست‌شده برای '+htmlEsc(spec.label)+' نمایش داده می‌شوند.')+'</p></div>';
     if(s.simpleMode)return intro+
       '<div class="recommended-profile"><div><span>پروفایل پیشنهادی</span><b>'+htmlEsc(spec.label.toUpperCase())+' / '+htmlEsc(s.transport.toUpperCase())+' / '+htmlEsc(s.security.toUpperCase())+'</b></div><span class="status-chip '+(pre?'warn':'ok')+'">'+(pre?'نیاز به Domain':'Recommended')+'</span></div>'+
       (pre?'<div class="wizard-note danger-note"><b>پیش‌نیاز</b><span>'+htmlEsc(pre)+'</span></div>':'')+
-      '<div class="pro-info-card"><div><b>حالت ساده</b><span>Preset سازگار پروتکل اعمال شده و گزینه نامعتبر قابل انتخاب نیست.</span></div><small>برای Quota، Expiry، IP Limit یا Transport/Security سازگار وارد تنظیمات پیشرفته شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">باز کردن تنظیمات پیشرفته</button>';
+      '<div class="pro-info-card"><div><b>حالت ساده</b><span>Preset تست‌شده اعمال می‌شود.</span></div><small>برای انتخاب آزاد Port/Transport/Security و حتی VLESS/VMess بدون TLS/REALITY وارد Manual Builder شو.</small></div><button class="soft pro-advanced-open" data-action="wizard-xray-advanced">Manual / Expert Builder</button>';
     const transports=spec.transports.map(x=>'<option value="'+x+'" '+(s.transport===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
     const securities=spec.security.map(x=>'<option value="'+x+'" '+(s.security===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('');
     const fixedTransport=spec.transports.length===1?' disabled':'',fixedSecurity=spec.security.length===1?' disabled':'';
@@ -384,7 +394,8 @@ function wizardPolicyFields(s){
       '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays)+'"></label>',
       '<label>Device / IP Limit<input id="wizDevices" type="number" min="1" max="50" value="'+Number(s.devices)+'"></label>',
       '<label>Traffic reset days<input id="wizResetDays" type="number" min="0" max="3650" value="'+Number(s.resetDays)+'"></label></div>',
-      '<button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button>'
+      (s.manualXray&&s.security==='none'&&s.endpointMode!=='ip'?'<div class="wizard-note danger-note"><b>بدون رمزگذاری Transport</b><span>این انتخاب عمداً TLS/REALITY ندارد. Makia آن را مسدود نمی‌کند؛ امنیت و مناسب‌بودن شبکه بر عهده مدیر است.</span></div>':''),
+      '<div class="toolbar"><button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button><button class="ghost" data-action="xray-advanced">Advanced JSON — همه فیلدهای Core</button></div>'
     ].join('');
   }
   const labels={wireguard:'WireGuard',openvpn:'OpenVPN'};
@@ -448,13 +459,13 @@ function validateWizardStep(){
   if(s.step===3&&s.protocol==='xray'){
     normalizeXrayProfile(s,false);
     const pre=xrayPrerequisiteMessage(s);if(pre)return pre;
-    const spec=xrayProfileSpec(s.xrayProtocol);
-    if(!spec.transports.includes(s.transport)||!spec.security.includes(s.security))return 'ترکیب Transport / Security برای این پروتکل معتبر نیست.';
-    if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))return 'REALITY فقط با TCP/RAW، gRPC یا XHTTP در Guided mode فعال است.';
-    if(['vless','trojan'].includes(s.xrayProtocol)&&s.security==='none'){
+    const spec=s.manualXray?xrayManualSpec(s.xrayProtocol):xrayProfileSpec(s.xrayProtocol);
+    if(!spec.transports.includes(s.transport)||!spec.security.includes(s.security))return 'این ترکیب توسط Builder قابل Export نیست؛ برای تنظیمات خارج از Builder از Advanced JSON استفاده کن.';
+    if(s.security==='reality'&&!['tcp','grpc','xhttp'].includes(s.transport))return 'REALITY فقط با TCP/RAW، gRPC یا XHTTP فعال است.';
+    if(!s.manualXray&&['vless','trojan'].includes(s.xrayProtocol)&&s.security==='none'){
       const ep=(s.endpoint||'').trim();
       const privateIp=/^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ep)||ep==='localhost'||ep.endsWith('.local');
-      if(!privateIp)return 'برای '+s.xrayProtocol.toUpperCase()+' روی Endpoint عمومی TLS یا REALITY لازم است.';
+      if(!privateIp)return 'Guided mode برای Endpoint عمومی TLS/REALITY می‌خواهد؛ Manual / Expert Builder را انتخاب کن تا none مجاز باشد.';
     }
   }
   return '';
@@ -481,7 +492,7 @@ async function createProvisionedAccess(){
       r=await api('/api/accounts',{method:'POST',body:JSON.stringify({username:s.name,password:s.password,password_mode:'manual',endpoint:s.endpoint,endpoint_mode:s.endpointMode,expire_date:s.expireDate||null,plan:s.plan,note:s.note,connection_limit:s.sessions,device_limit:s.devices,quota_mb:0,renewal_days:0})});
       key=s.name;
     }else if(s.protocol==='xray'){
-      r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify({protocol:s.xrayProtocol,port:s.port,name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,transport:s.transport,security:s.security,path_value:s.path,server_name:s.sni,reality_dest:s.realityDest,quota_gb:s.simpleMode?0:s.quota,expire_days:s.simpleMode?0:s.expireDays,ip_limit:s.simpleMode?50:s.devices,reset_days:s.simpleMode?0:s.resetDays})});
+      r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify({protocol:s.xrayProtocol,port:s.port,name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,transport:s.transport,security:s.security,path_value:s.path,server_name:s.sni,reality_dest:s.realityDest,manual:Boolean(s.manualXray),quota_gb:s.simpleMode?0:s.quota,expire_days:s.simpleMode?0:s.expireDays,ip_limit:s.simpleMode?50:s.devices,reset_days:s.simpleMode?0:s.resetDays})});
       kind='xray';key=String(r.client_id);
     }else if(s.protocol==='wireguard'){
       r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,dns:s.dns,mtu:s.wgMtu,keepalive:s.wgKeepalive,allowed_ips:s.wgAllowedIps})});key=s.name;
@@ -1693,8 +1704,8 @@ async function handleMakiaAction(btn){
   if(action==='nav-settings'){closeModal();window.__settingsTab=btn.dataset.tab||'general';switchView('settings');return}
   if(action==='wizard-open'){await openProvisionWizard(btn.dataset.kind||null);return}
   if(action==='wizard-protocol'){await selectWizardProtocol(btn.dataset.kind);return}
-  if(action==='wizard-xray-advanced'){captureWizard();provisionState.simpleMode=false;renderProvisionWizard();return}
-  if(action==='wizard-xray-simple'){captureWizard();provisionState.simpleMode=true;applySimpleXrayPreset(provisionState);renderProvisionWizard();return}
+  if(action==='wizard-xray-advanced'){captureWizard();provisionState.simpleMode=false;provisionState.manualXray=true;normalizeXrayProfile(provisionState,false);renderProvisionWizard();return}
+  if(action==='wizard-xray-simple'){captureWizard();provisionState.simpleMode=true;provisionState.manualXray=false;applySimpleXrayPreset(provisionState);renderProvisionWizard();return}
   if(action==='wizard-next'){await wizardNext();return}
   if(action==='wizard-prev'){wizardPrev();return}
   if(action==='wizard-create'){await createProvisionedAccess();return}

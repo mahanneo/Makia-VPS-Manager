@@ -2611,6 +2611,46 @@ def xray_guided_compatibility():
     }
 
 
+def xray_manual_compatibility():
+    """Form-builder capabilities for expert mode.
+
+    Expert mode removes Makia's opinionated public-endpoint policy and lets the
+    pinned Xray Core be the final syntax authority. We still constrain fields
+    that cannot produce a faithful client export.
+    """
+    return {
+        "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls","reality"]},
+        "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+        "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+        "shadowsocks":{"transports":["tcp"],"security":["none"]},
+        "hysteria2":{"transports":["hysteria"],"security":["tls"]},
+        "http":{"transports":["tcp"],"security":["none"]},
+        "socks":{"transports":["tcp"],"security":["none"]},
+    }
+
+
+def _validate_xray_manual_combo(protocol,transport,security):
+    protocol=str(protocol or "").lower()
+    transport=str(transport or "tcp").lower()
+    security=str(security or "none").lower()
+    aliases={"raw":"tcp","websocket":"ws","mkcp":"kcp"}
+    transport=aliases.get(transport,transport)
+    spec=xray_manual_compatibility().get(protocol)
+    if not spec:
+        raise ProtocolError("unsupported Xray protocol")
+    if protocol=="hysteria2":
+        return "hysteria","tls"
+    if security=="reality" and protocol!="vless":
+        raise ProtocolError("REALITY requires VLESS")
+    if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
+        raise ProtocolError("REALITY requires VLESS with TCP/RAW, gRPC or XHTTP")
+    if transport not in spec["transports"]:
+        raise ProtocolError(f"{protocol.upper()} cannot be exported with transport={transport}")
+    if security not in spec["security"]:
+        raise ProtocolError(f"{protocol.upper()} cannot be exported with security={security}")
+    return transport,security
+
+
 def _validate_xray_guided_combo(protocol,transport,security):
     protocol=str(protocol or "").lower()
     transport=str(transport or "tcp").lower()
@@ -2631,7 +2671,7 @@ def _validate_xray_guided_combo(protocol,transport,security):
     return transport,security
 
 
-def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", security="none", path_value="/", server_name="", reality_dest=""):
+def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", security="none", path_value="/", server_name="", reality_dest="", manual=False):
     protocol=(protocol or "").lower()
     if protocol not in {"vless","vmess","trojan","shadowsocks","hysteria2","http","socks"}:
         raise ProtocolError("unsupported Xray quick protocol")
@@ -2639,9 +2679,13 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid client name")
     endpoint=_validate_endpoint_host(endpoint)
-    transport,security=_validate_xray_guided_combo(protocol,transport,security)
-    if protocol in {"vless","trojan"} and security=="none" and not _endpoint_is_private(endpoint):
-        raise ProtocolError(f"{protocol.upper()} with security=none is not valid for a public endpoint in this guided mode; choose REALITY or TLS")
+    transport,security=(
+        _validate_xray_manual_combo(protocol,transport,security)
+        if manual else
+        _validate_xray_guided_combo(protocol,transport,security)
+    )
+    if (not manual) and protocol in {"vless","trojan"} and security=="none" and not _endpoint_is_private(endpoint):
+        raise ProtocolError(f"{protocol.upper()} with security=none is intentionally blocked in Guided mode on public endpoints; switch to Manual/Expert mode if you explicitly want an unencrypted profile")
     binary=_binary()
     if not binary:
         raise ProtocolError("Xray core is not installed")
@@ -2746,6 +2790,11 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         if not _active("xray"):
             raise ProtocolError("Xray did not become active after restart")
         firewall_proto="udp" if protocol=="hysteria2" or stream.get("method")=="mkcp" else "tcp"
+        if not _listener_present(port,firewall_proto):
+            raise ProtocolError(
+                f"Xray service is active but the requested {firewall_proto.upper()}/{port} listener is not present; "
+                "the previous config has been restored"
+            )
         _ufw_allow_if_active(port,firewall_proto,f"Xray {protocol}")
     except Exception:
         try:
@@ -2793,7 +2842,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     return {
         "protocol":protocol,"tag":tag,"port":port,"name":name,"credential":credential,
         "transport":method,"security":security,"share_link":link,"backup":str(backup) if backup else None,
-        "reality":reality_meta,
+        "reality":reality_meta,"manual":bool(manual),
     }
 
 def create_xray_tunnel(listen_port, target_host, target_port, network="tcp,udp", name="tunnel"):

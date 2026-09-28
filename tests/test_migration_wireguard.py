@@ -252,3 +252,42 @@ def test_stage_restore_rejects_version_mismatch_before_commit(tmp_path,monkeypat
         assert "version mismatch" in str(exc)
     else:
         raise AssertionError("version mismatch must be rejected before staging")
+
+
+def test_protected_zip_preserves_systemd_template_at_sign():
+    files={
+        "manifest.json":b"{}",
+        "payload/systemd/makia-migration-restore@.service":b"[Service]\\nType=oneshot\\n",
+    }
+    blob=access_ops.protected_zip(files,"MigrationPass!2026")
+    import io, pyzipper
+    with pyzipper.AESZipFile(io.BytesIO(blob),"r") as zf:
+        zf.setpassword(b"MigrationPass!2026")
+        assert "payload/systemd/makia-migration-restore@.service" in zf.namelist()
+
+
+def test_migration_inspector_accepts_legacy_sanitized_systemd_template(tmp_path):
+    import hashlib, io, json, pyzipper
+    expected_name="payload/systemd/makia-migration-restore@.service"
+    legacy_name="payload/systemd/makia-migration-restore-.service"
+    unit=b"[Service]\\nType=oneshot\\n"
+    data=b"legacy-data"
+    users=b"[]"
+    manifest={
+        "format":"makia-portable-migration","format_version":2,"app_version":"0.26.0-rc2",
+        "panel_domain":"","components":{"systemd":True},
+        "payload_sha256":{
+            "payload/data.tar.gz":hashlib.sha256(data).hexdigest(),
+            "payload/ssh-users.json":hashlib.sha256(users).hexdigest(),
+            expected_name:hashlib.sha256(unit).hexdigest(),
+        },
+    }
+    files={
+        "manifest.json":json.dumps(manifest).encode(),
+        "payload/data.tar.gz":data,
+        "payload/ssh-users.json":users,
+        legacy_name:unit,
+    }
+    blob=access_ops.protected_zip(files,"MigrationPass!2026")
+    preview=system_ops.inspect_portable_migration_blob(blob,"MigrationPass!2026","0.26.0-rc2")
+    assert preview["compatible"] is True

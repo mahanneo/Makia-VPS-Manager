@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.26.0-rc3] - 2026-09-28
+
+### Xray / V2Ray manual builder
+- Added a Manual / Expert Builder for VLESS, VMess, Trojan and the existing Xray protocols with operator-selected port, transport and security.
+- VLESS/VMess profiles are no longer forced to use TLS or REALITY in Manual mode; security=none is allowed when explicitly selected.
+- Guided mode remains conservative, while Advanced JSON remains available for every Core-level field outside the form builder.
+- New Xray inbounds are committed only after Core validation, service restart and verification that the requested TCP/UDP listener actually exists.
+- Xray Core CI now includes a real VLESS RAW security=none client handshake with routed HTTP traffic in addition to the REALITY data-plane smoke.
+
+### Migration / restore fix
+- Fixed Full Migration archives containing systemd template units: @ is now preserved in ZIP member names.
+- Restore/preview accepts RC2 bundles where the old sanitizer wrote makia-migration-restore-.service, while still verifying the original manifest SHA256.
+- This directly fixes the bundle payload missing: payload/systemd/makia-migration-restore@.service restore error.
+
+### First-install operator handoff
+- The installer now writes the generated admin credential immediately to /root/makia-install-credentials.txt with mode 0600.
+- The final installer output renders a structured Panel / Username / Password box.
+- If installation stops early, the operator is told exactly where the generated credential was preserved.
+
+### Release status
+- Release Candidate only. Stable remains blocked on real VPS upgrade/restore UAT and inside-Iran client data-plane testing.
+
+
 ## [0.26.0-rc2] - 2026-09-27
 
 ### Connection modes
