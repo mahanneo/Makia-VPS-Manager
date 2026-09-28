@@ -1,0 +1,15 @@
+[Unit]
+Description=Makia Health Alert Scanner
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/makia-health-alerts
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/makia-vps-manager
+ReadWritePaths=/opt/makia-vps-manager/data
+ProtectHome=read-only
