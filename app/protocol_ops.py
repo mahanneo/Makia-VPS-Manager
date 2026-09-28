@@ -1576,26 +1576,135 @@ def _local_ipv6_candidates():
         pass
     return sorted(found)
 
-def _openvpn_server_runtime():
-    server_conf=OVPN_DIR/"server/server.conf"
-    result={"config":str(server_conf),"port":None,"proto":None,"service_active":_active("openvpn-server@server"),"listener":False}
+def _openvpn_runtime_for(stem="server"):
+    server_conf=OVPN_DIR/f"server/{stem}.conf"
+    unit=f"openvpn-server@{stem}"
+    result={
+        "name":stem,"config":str(server_conf),"port":None,"proto":None,
+        "service_active":_active(unit),"listener":False,"dev":"","subnet":"",
+    }
     if server_conf.exists():
         text=server_conf.read_text(encoding="utf-8",errors="ignore")
         pm=re.search(r"(?m)^port\s+(\d+)\s*$",text)
         proto_m=re.search(r"(?m)^proto\s+(\S+)\s*$",text)
+        dev_m=re.search(r"(?m)^dev\s+(\S+)\s*$",text)
+        server_m=re.search(r"(?m)^server\s+(\S+)\s+(\S+)\s*$",text)
         result["port"]=int(pm.group(1)) if pm else 1194
         result["proto"]=(proto_m.group(1) if proto_m else "udp4").lower()
+        result["dev"]=dev_m.group(1) if dev_m else "tun"
+        if server_m:
+            try:
+                net=ipaddress.IPv4Network((server_m.group(1),server_m.group(2)),strict=False)
+                result["subnet"]=net.with_prefixlen
+            except Exception:
+                result["subnet"]=""
     if result["port"] and shutil.which("ss"):
-        p=subprocess.run(["ss","-H","-lntu"],text=True,capture_output=True,timeout=8,check=False)
+        flag="-lun" if str(result["proto"]).startswith("udp") else "-ltn"
+        p=subprocess.run(["ss","-H",flag],text=True,capture_output=True,timeout=8,check=False)
         if p.returncode==0:
             wanted=str(result["port"])
-            for line in (p.stdout or "").splitlines():
-                if re.search(rf":{re.escape(wanted)}\b",line):
-                    kind=line.split(None,1)[0].lower() if line.split() else ""
-                    if (str(result["proto"]).startswith("udp") and kind=="udp") or (str(result["proto"]).startswith("tcp") and kind=="tcp"):
-                        result["listener"]=True
-                        break
+            result["listener"]=any(re.search(rf":{re.escape(wanted)}\b",line) for line in (p.stdout or "").splitlines())
     return result
+
+
+def _openvpn_server_runtime():
+    return _openvpn_runtime_for("server")
+
+
+def _openvpn_transport_runtimes():
+    server_dir=OVPN_DIR/"server"
+    found={"udp":None,"tcp":None}
+    if not server_dir.exists():
+        return found
+    # Prefer the legacy primary server when it owns a transport so existing
+    # clients/config remain authoritative. Auxiliary instances fill only the
+    # missing transport.
+    stems=["server"]+[p.stem for p in sorted(server_dir.glob("*.conf")) if p.stem!="server"]
+    for stem in stems:
+        runtime=_openvpn_runtime_for(stem)
+        if not runtime.get("port"):
+            continue
+        transport="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+        if found[transport] is None:
+            found[transport]=runtime
+    return found
+
+
+def ensure_openvpn_transport(proto,port=None):
+    """Ensure UDP or TCP OpenVPN exists without replacing the other transport.
+
+    Existing /etc/openvpn/server/server.conf remains untouched. When the
+    requested transport is missing, Makia creates one auxiliary instance that
+    reuses the same PKI/CRL/tls-crypt identity but has its own tunnel subnet,
+    device, forwarding scripts and systemd unit.
+    """
+    requested="tcp" if str(proto or "").lower().startswith("tcp") else "udp"
+    if str(proto or "").lower() not in {"udp","udp4","tcp","tcp4","tcp4-server","tcp-client","tcp4-client"}:
+        raise ProtocolError("OpenVPN transport must be UDP or TCP")
+    primary=OVPN_DIR/"server/server.conf"
+    if not primary.exists():
+        raise ProtocolError("OpenVPN primary server is not configured")
+    current=_openvpn_transport_runtimes().get(requested)
+    if current and current.get("service_active") and current.get("listener"):
+        return {"ok":True,"created":False,"runtime":current}
+
+    if port is None:
+        if requested=="udp":
+            port=_select_available_port(443,"udp",(1194,51821,8443,2053,2083))
+        else:
+            port=_select_available_port(443,"tcp",(8443,9443,2053,2083))
+    port=_validate_port(port)
+    existing=_openvpn_transport_runtimes().get(requested)
+    if existing and int(existing.get("port") or 0)==port:
+        stem=existing.get("name") or f"transport-{requested}"
+    else:
+        if _port_transport_in_use(port,requested):
+            raise ProtocolError(f"{requested.upper()} port {port} is already in use")
+        stem=f"transport-{requested}"
+
+    target=OVPN_DIR/f"server/{stem}.conf"
+    source=primary.read_text(encoding="utf-8",errors="ignore")
+    original=target.read_bytes() if target.exists() else None
+    transport_proto=_openvpn_proto(requested,server=True)
+    subnet="10.8.1.0/24" if requested=="tcp" else "10.8.2.0/24"
+    network=ipaddress.ip_network(subnet,strict=False)
+    up,down=_openvpn_forward_scripts(_default_iface(),network.with_prefixlen,requested)
+    updated=source
+    updated=re.sub(r"(?m)^port\s+\d+\s*$",f"port {port}",updated,count=1)
+    updated=re.sub(r"(?m)^proto\s+\S+\s*$",f"proto {transport_proto}",updated,count=1)
+    updated=re.sub(r"(?m)^dev\s+\S+\s*$",f"dev tun-makia-{requested}",updated,count=1)
+    updated=re.sub(
+        r"(?m)^server\s+\S+\s+\S+\s*$",
+        f"server {network.network_address} {network.netmask}",updated,count=1
+    )
+    updated=re.sub(r"(?m)^up\s+\S+\s*$",f"up {up}",updated,count=1)
+    updated=re.sub(r"(?m)^down\s+\S+\s*$",f"down {down}",updated,count=1)
+    target.parent.mkdir(parents=True,exist_ok=True)
+    try:
+        target.write_text(updated,encoding="utf-8")
+        os.chmod(target,0o600)
+        unit=f"openvpn-server@{stem}"
+        _run(["systemctl","enable","--now",unit],timeout=30)
+        _run(["systemctl","restart",unit],timeout=30)
+        runtime=_openvpn_runtime_for(stem)
+        actual="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+        if not runtime.get("service_active") or not runtime.get("listener") or actual!=requested or int(runtime.get("port") or 0)!=port:
+            raise ProtocolError(f"OpenVPN {requested.upper()} auxiliary instance did not reach READY state")
+        firewall=_ufw_allow_if_active(port,requested,f"OpenVPN {requested.upper()}")
+        return {"ok":True,"created":True,"runtime":runtime,"firewall":firewall}
+    except Exception:
+        try:
+            _run(["systemctl","disable","--now",f"openvpn-server@{stem}"],timeout=20)
+        except Exception:
+            pass
+        if original is None:
+            target.unlink(missing_ok=True)
+        else:
+            target.write_bytes(original)
+            os.chmod(target,0o600)
+            try:_run(["systemctl","enable","--now",f"openvpn-server@{stem}"],timeout=20)
+            except Exception:pass
+        raise
 
 def _openvpn_forward_scripts(uplink,subnet="10.8.0.0/24",suffix=""):
     """Permit one managed OpenVPN instance to route its own tunnel subnet."""
