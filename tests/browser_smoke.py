@@ -127,6 +127,23 @@ def main():
             leave_sidebar(page)
             page.locator(".protocol-client-list").wait_for()
             page.screenshot(path='/tmp/makia-xray.png',full_page=True)
+            page.evaluate("openXrayInboundBuilder()")
+            page.locator(".xray-builder-modal").wait_for()
+            assert "XRAY INBOUND CENTER" in page.locator(".xray-builder-modal").inner_text()
+            assert page.locator("#xbProtocol").count()==1
+            assert page.locator("#xbTransport").count()==1
+            assert page.locator("#xbSecurity").count()==1
+            assert page.locator("#xbExtraStream").count()==1
+            page.locator("#xbProtocol").select_option("vless")
+            page.locator("#xbTransport").select_option("tcp")
+            page.locator("#xbSecurity").select_option("none")
+            assert "Security = NONE" in page.locator("#xbSecurityNote").inner_text()
+            page.locator("#xbTransport").select_option("xhttp")
+            page.locator("#xbSecurity").select_option("reality")
+            assert page.locator("#xbXhttpMode").count()==1
+            assert page.locator("#xbRealityDest").count()==1
+            page.screenshot(path='/tmp/makia-xray-inbound-center.png',full_page=True)
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.locator('.pro-sidebar button[data-view="openvpn"]').click()
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
