@@ -389,6 +389,7 @@ function protocolGlyph(kind){
     xray:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/></svg>',
     wireguard:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 13 2-4 1 3h3l-3 4"/></svg>',
     openvpn:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13v7h6v-7M12 14v3"/></svg>',
+    outline:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>',
     ikev2:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.3 5.7"/><path d="M4 17v-5h5"/><path d="M10 12h8M14 8v8"/></svg>',
     stealth:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/><path d="M5 19 19 5"/></svg>',
     wstunnel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h5l2-4 4 8 2-4h5"/><path d="M5 5h14v14H5z"/></svg>',
@@ -403,6 +404,7 @@ function wizardProtocolReady(kind){
   if(kind==='xray')return Boolean(s.xray?.installed);
   if(kind==='wireguard')return Boolean(s.wireguard?.installed&&s.wireguard?.config);
   if(kind==='openvpn')return Boolean(s.openvpn?.installed&&s.openvpn?.config);
+  if(kind==='outline')return true;
   return false;
 }
 
@@ -415,7 +417,8 @@ function renderProvisionWizard(){
       ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy'],
       ['xray','Xray / V2Ray','پروفایل‌های چندگانه و مدیریت پیشرفته','VLESS · VMess · Trojan · Hysteria2'],
       ['wireguard','WireGuard','تونل Native سریع','Peer · QR · Handshake · Traffic'],
-      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP']
+      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP'],
+      ['outline','Outline','Access Key ساده و سریع','Official Shadowbox · ss://']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
@@ -2082,7 +2085,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
+const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Outline','outline'],['Plans','plans'],['Expiry','expiry'],['Backup Automation','automation'],['Diagnostics','diagnostics'],['Integrations','integrations'],['Connectivity Lab','connectivity'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -2102,6 +2105,11 @@ async function selectWizardProtocol(kind){
   if(kind==='xray'){
     closeModal();
     await openXrayInboundBuilder();
+    return;
+  }
+  if(kind==='outline'){
+    closeModal();
+    await switchView('outline');
     return;
   }
   provisionState.protocol=kind;provisionState.step=2;
@@ -2231,6 +2239,28 @@ async function handleMakiaAction(btn){
   if(action==='settings-2fa-disable'){await disable2FA();return}
   if(action==='settings-api-new'){createApiToken();return}
   if(action==='settings-api-revoke'){await revokeApiToken(Number(btn.dataset.id));return}
+  if(action==='quick-renew'){openQuickRenew(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='quick-renew-apply'){await applyQuickRenew(btn.dataset.kind,dataDec(btn.dataset.key));return}
+  if(action==='bulk-access-open'){await openBulkAccess();return}
+  if(action==='bulk-access-apply'){await applyBulkAccess();return}
+  if(action==='plan-new'){openPlanEditor();return}
+  if(action==='plan-edit'){openPlanEditor((window.__planRows||[]).find(x=>Number(x.id)===Number(btn.dataset.id)));return}
+  if(action==='plan-save'){await savePlan(Number(btn.dataset.id||0));return}
+  if(action==='plan-use'){await usePlan(Number(btn.dataset.id));return}
+  if(action==='plan-delete'){if(confirm(tr('پلن حذف شود؟','Delete this plan?'))){await api('/api/plans/'+Number(btn.dataset.id),{method:'DELETE'});await currentView()}return}
+  if(action==='backup-schedule-new'){openBackupSchedule();return}
+  if(action==='backup-schedule-save'){await saveBackupSchedule();return}
+  if(action==='backup-schedule-run'){await api('/api/automation/backups/'+Number(btn.dataset.id)+'/run',{method:'POST'});toast(tr('بکاپ اجرا شد','Backup completed'));await currentView();return}
+  if(action==='backup-schedule-delete'){if(confirm(tr('زمان‌بندی حذف شود؟','Delete schedule?'))){await api('/api/automation/backups/'+Number(btn.dataset.id),{method:'DELETE'});await currentView()}return}
+  if(action==='integrations-save'){await saveIntegrations();return}
+  if(action==='cloudflare-test'){try{await api('/api/integrations/cloudflare/test',{method:'POST'});toast('Cloudflare PASS')}catch(e){alert(e.message)}return}
+  if(action==='cloudflare-cutover'){await cloudflareCutover();return}
+  if(action==='telegram-test'){try{await api('/api/integrations/telegram/test',{method:'POST'});toast('Telegram PASS')}catch(e){alert(e.message)}return}
+  if(action==='disaster-readiness'){await disasterView();return}
+  if(action==='outline-setup'){openOutlineSetup();return}
+  if(action==='outline-setup-run'){try{await api('/api/protocols/outline/setup',{method:'POST',body:JSON.stringify({hostname:document.getElementById('outlineHost').value.trim(),keys_port:Number(document.getElementById('outlinePort').value||0)})});closeModal();await currentView()}catch(e){alert(e.message)}return}
+  if(action==='outline-client-new'){openOutlineClient();return}
+  if(action==='outline-client-create'){await createOutlineClient();return}
   if(action==='refresh'){await currentView();return}
 }
 
@@ -2431,14 +2461,14 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
 }
 
 function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline',plans:'پلن‌ها',expiry:'انقضا و تمدید',automation:'اتوماسیون بکاپ',diagnostics:'مرکز عیب‌یابی',integrations:'اتصال‌ها',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline',plans:'Plans',expiry:'Expiry & Renewals',automation:'Backup Automation',diagnostics:'Diagnostics Center',integrations:'Integrations',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;
   document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
   document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav.pro-nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,outline:outlineView,plans:plansView,expiry:expiryView,automation:automationView,diagnostics:diagnosticsView,integrations:integrationsView,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
@@ -2447,7 +2477,7 @@ function switchView(v){
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='operations'&&['plans','expiry','automation','diagnostics','integrations'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
