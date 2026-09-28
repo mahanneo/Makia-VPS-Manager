@@ -404,19 +404,19 @@ def connection_help(request:Request):
 @app.get("/support/login",response_class=HTMLResponse)
 def support_login_page(request:Request):
     if current_user(request): return RedirectResponse("/",302)
-    return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":None})
+    return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/support/login")
 def support_login(request:Request,code:str=Form(...)):
     remote_ip=ip(request) or "unknown"
     state=login_rate_state("support:"+remote_ip,int(time.time()))
     if int(state.get("blocked_until") or 0)>int(time.time()):
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":"تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید."},status_code=429)
+        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید." if get_setting("language","fa")!="en" else "Too many failed attempts. Try again later.")},status_code=429)
     grant=consume_support_grant(code)
     if not grant:
         state=record_login_failure("support:"+remote_ip,int(time.time()),max_failures=5,window_seconds=900,block_seconds=900)
         audit("remote-support","support_login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":"کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است."},status_code=401)
+        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است." if get_setting("language","fa")!="en" else "The support code is invalid, already used or expired.")},status_code=401)
     clear_login_failures("support:"+remote_ip)
     actor=f"support:{grant['id']}:{grant['scope']}"
     ttl=max(60,int(grant["expires_at"])-int(time.time()))
