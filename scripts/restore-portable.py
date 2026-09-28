@@ -76,6 +76,9 @@ MANAGED_RESTORE_PATHS=[
     Path("/etc/default/stunnel4"),
     Path("/etc/nginx/sites-available/makia-vps-manager"),
     Path("/etc/nginx/sites-enabled/makia-vps-manager"),
+    Path("/etc/sysctl.d/99-makia-wireguard.conf"),
+    Path("/etc/sysctl.d/99-makia-openvpn.conf"),
+    Path("/etc/sysctl.d/99-makia-recovery.conf"),
 ]
 for _unit in [
     "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
@@ -147,6 +150,44 @@ def _restore_user_state(row):
                 pass
 
 
+def capture_makia_ufw_rules():
+    if not shutil.which("ufw"):
+        return []
+    p=run(["ufw","status","numbered"],check=False)
+    if p.returncode!=0:
+        return []
+    rules=[]
+    for line in (p.stdout or "").splitlines():
+        if "makia" not in line.lower():
+            continue
+        m=__import__("re").match(
+            r"^\s*\[\s*(\d+)\]\s+(\d+)/(tcp|udp)\s+ALLOW\b.*?#\s*(Makia.*)$",
+            line,__import__("re").I,
+        )
+        if m:
+            rules.append({
+                "number":int(m.group(1)),"port":int(m.group(2)),
+                "proto":m.group(3).lower(),"comment":m.group(4).strip()[:120],
+            })
+    return rules
+
+
+def restore_makia_ufw_rules(previous):
+    if not shutil.which("ufw"):
+        return
+    current=capture_makia_ufw_rules()
+    # Delete only rules explicitly carrying a Makia comment; never touch operator rules.
+    for row in sorted(current,key=lambda x:x["number"],reverse=True):
+        run(["ufw","--force","delete",str(row["number"])],check=False)
+    seen=set()
+    for row in previous or []:
+        key=(int(row["port"]),str(row["proto"]),str(row.get("comment") or "Makia restored"))
+        if key in seen:
+            continue
+        seen.add(key)
+        run(["ufw","allow",f"{key[0]}/{key[1]}","comment",key[2]],check=False)
+
+
 def create_restore_rollback(payload):
     BACKUP_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700)
     root=Path(tempfile.mkdtemp(prefix=".restore-rollback-",dir=BACKUP_ROOT))
@@ -164,10 +205,11 @@ def create_restore_rollback(payload):
     except Exception:
         incoming=[]
     users=[_capture_user_state(str(row.get("username") or "")) for row in incoming if row.get("username")]
-    return root,records,users
+    ufw_rules=capture_makia_ufw_rules()
+    return root,records,users,ufw_rules
 
 
-def rollback_restore(root,records,users):
+def rollback_restore(root,records,users,ufw_rules):
     stop_stack()
     for rec in records:
         target=Path(rec["target"])
@@ -183,6 +225,7 @@ def rollback_restore(root,records,users):
     for row in users:
         try: _restore_user_state(row)
         except Exception: pass
+    restore_makia_ufw_rules(ufw_rules)
     run(["systemctl","daemon-reload"],check=False)
     restart_stack()
 
@@ -511,12 +554,13 @@ def main():
     rollback_root=None
     rollback_records=[]
     rollback_users=[]
+    rollback_ufw=[]
     mutated=False
     try:
         # The restore runner is a separate systemd unit, so it survives this stop.
         # Snapshot only after writers are stopped to keep DB/WAL and runtime files coherent.
         stop_stack()
-        rollback_root,rollback_records,rollback_users=create_restore_rollback(payload)
+        rollback_root,rollback_records,rollback_users,rollback_ufw=create_restore_rollback(payload)
         mutated=True
         restore_data(payload["payload/data.tar.gz"])
         restore_ssh_users(payload["payload/ssh-users.json"])
@@ -535,7 +579,7 @@ def main():
         rollback_error=None
         if mutated:
             try:
-                rollback_restore(rollback_root,rollback_records,rollback_users)
+                rollback_restore(rollback_root,rollback_records,rollback_users,rollback_ufw)
             except Exception as rb_exc:
                 rollback_error=rb_exc
         else:
