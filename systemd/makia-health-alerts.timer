@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Makia health alerts every five minutes
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=300
+AccuracySec=30
+Unit=makia-health-alerts.service
+
+[Install]
+WantedBy=timers.target
