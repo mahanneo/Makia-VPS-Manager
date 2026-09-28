@@ -282,9 +282,13 @@ jobs:
           grep -q 'payload/ipsec.secrets' app/system_ops.py
           grep -q 'payload/wstunnel.env' app/system_ops.py
           grep -q 'payload/stunnel-makia.conf' app/system_ops.py
+          grep -q 'payload/ssh-host-keys/' app/system_ops.py
+          grep -q 'restore_ssh_host_keys' scripts/restore-portable.py
           grep -q 'repair_wireguard_runtime' scripts/restore-portable.py
           grep -q 'repair_openvpn_all_runtimes' scripts/restore-portable.py
           grep -q 'Disaster Recovery Backup' app/static/app.js
+          grep -q '/api/backups/migration-readiness' app/main.py
+          grep -q 'recovery-readiness' app/static/app.js
           grep -q 'DNS-only' app/static/app.js
           grep -q 'Disaster Recovery gate' docs/UAT-0.26.0-RC2.md
 
