@@ -112,6 +112,8 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.service" /etc/system
 install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
 install -m 0644 "$SOURCE_DIR/systemd/makia-node-agent.service" /etc/systemd/system/makia-node-agent.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-node-agent.timer" /etc/systemd/system/makia-node-agent.timer
+install -m 0644 "$SOURCE_DIR/systemd/makia-health-alerts.service" /etc/systemd/system/makia-health-alerts.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-health-alerts.timer" /etc/systemd/system/makia-health-alerts.timer
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
@@ -133,6 +135,7 @@ install -m 0755 "$SOURCE_DIR/scripts/install-wstunnel.sh" /usr/local/sbin/makia-
 install -m 0755 "$SOURCE_DIR/scripts/scheduled-backup.py" /usr/local/sbin/makia-scheduled-backup
 install -m 0755 "$SOURCE_DIR/scripts/node-agent.py" /usr/local/sbin/makia-node-agent
 install -m 0755 "$SOURCE_DIR/scripts/connect-node.sh" /usr/local/sbin/makia-node-connect
+install -m 0755 "$SOURCE_DIR/scripts/health-alerts.py" /usr/local/sbin/makia-health-alerts
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SOURCE_DIR/upgrade.sh" /usr/local/sbin/makia-upgrade
 ln -sfn /usr/local/sbin/makia-update /usr/local/sbin/dragon-update
@@ -145,6 +148,7 @@ systemctl enable --now makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
 systemctl enable --now makia-scheduled-backup.timer
+systemctl enable --now makia-health-alerts.timer
 # Node agent timer is enabled only after 'makia-node-connect' writes its root-only credentials.
 
 # Baseline SSH brute-force protection. We do not enable/modify UFW automatically
