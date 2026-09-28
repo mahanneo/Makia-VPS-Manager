@@ -110,6 +110,8 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-ikev2-network.service" /etc/systemd/s
 install -m 0644 "$SOURCE_DIR/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
+install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.service" /etc/systemd/system/makia-ops-monitor.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
@@ -141,6 +143,7 @@ systemctl enable --now makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
 systemctl enable --now makia-scheduled-backup.timer
+systemctl enable --now makia-ops-monitor.timer
 
 # Baseline SSH brute-force protection. We do not enable/modify UFW automatically
 # because doing so without knowing the operator's SSH path can lock them out.
