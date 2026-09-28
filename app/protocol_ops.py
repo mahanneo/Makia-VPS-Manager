@@ -2723,7 +2723,7 @@ def xray_inbound_builder_capabilities():
         "protocols":{
             "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls","reality"]},
             "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
-            "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["tls","reality"]},
+            "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls","reality"]},
             "shadowsocks":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
             "hysteria2":{"transports":["hysteria"],"security":["tls"]},
             "http":{"transports":["tcp"],"security":["none"]},
@@ -2745,8 +2745,7 @@ def xray_inbound_builder_capabilities():
         "sniffing":["enabled","dest_override","route_only","metadata_only"],
         "sockopt":["tcp_fast_open","tcp_no_delay","tcp_congestion","domain_strategy","mark","interface","tproxy"],
         "shadowsocks_methods":[
-            "aes-128-gcm","aes-256-gcm","chacha20-poly1305",
-            "2022-blake3-aes-128-gcm","2022-blake3-aes-256-gcm"
+            "aes-128-gcm","aes-256-gcm","chacha20-poly1305"
         ],
         "xhttp_modes":["auto","packet-up","stream-up","stream-one"],
         "flow":["","xtls-rprx-vision"],
@@ -2768,6 +2767,8 @@ def _xray_builder_validate_combo(protocol,transport,security):
         raise ProtocolError(f"{protocol.upper()} does not support security={security} in the Makia inbound builder")
     if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
         raise ProtocolError("REALITY is only valid with TCP/RAW, gRPC or XHTTP")
+    if security=="tls" and transport not in {"tcp","ws","grpc","httpupgrade","xhttp","hysteria"}:
+        raise ProtocolError("TLS is only valid with TCP/RAW, WebSocket, gRPC, HTTPUpgrade, XHTTP or Hysteria")
     if protocol=="hysteria2":
         return "hysteria","tls"
     return transport,security
@@ -3087,6 +3088,7 @@ def _xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_m
         q["sni"]=tls.get("serverName") or ""
         alpn=tls.get("alpn") or []
         if alpn:q["alpn"]=",".join(str(x) for x in alpn)
+        if protocol=="vless" and flow:q["flow"]=flow
     elif security=="reality":
         meta=dict(reality_meta or {})
         q.update({
@@ -3142,8 +3144,8 @@ def create_xray_full_inbound(spec):
     flow=str(spec.get("flow") or "").strip()
     if flow not in {"","xtls-rprx-vision"}:
         raise ProtocolError("unsupported Xray flow")
-    if flow and not (protocol=="vless" and ((transport=="tcp" and security in {"tls","reality"}) or transport=="xhttp")):
-        raise ProtocolError("XTLS Vision is only available for supported VLESS transport/security combinations")
+    if flow and not (protocol=="vless" and transport=="tcp" and security in {"tls","reality"}):
+        raise ProtocolError("XTLS Vision in Makia builder currently requires VLESS + TCP/RAW + TLS/REALITY")
     binary=_binary()
     if not binary:
         raise ProtocolError("Xray core is not installed")
@@ -3160,10 +3162,16 @@ def create_xray_full_inbound(spec):
         raise ProtocolError("invalid Xray inbounds collection")
     if any(isinstance(item,dict) and int(item.get("port") or -1)==port for item in inbounds):
         raise ProtocolError("this port is already used by another Xray inbound")
-    transport_proto="udp" if transport in {"kcp","hysteria"} else "tcp"
-    if _port_transport_in_use(port,transport_proto):
-        owner=_port_owner_label(port,transport_proto)
-        raise ProtocolError(f"{transport_proto.upper()}/{port} is already in use by {owner}")
+    if transport in {"kcp","hysteria"}:
+        transport_protos={"udp"}
+    elif protocol in {"shadowsocks","socks"}:
+        transport_protos={"tcp","udp"}
+    else:
+        transport_protos={"tcp"}
+    for transport_proto in sorted(transport_protos):
+        if _port_transport_in_use(port,transport_proto):
+            owner=_port_owner_label(port,transport_proto)
+            raise ProtocolError(f"{transport_proto.upper()}/{port} is already in use by {owner}")
     options=dict(spec.get("options") or {})
     options.setdefault("path",spec.get("path") or "/")
     options.setdefault("server_name",spec.get("server_name") or "")
@@ -3201,9 +3209,10 @@ def create_xray_full_inbound(spec):
         _run(["systemctl","restart","xray"],timeout=30)
         if not _active("xray"):
             raise ProtocolError("Xray did not become active after inbound apply")
-        if not _wait_listener(port,transport_proto,timeout=8.0,interval=0.25):
-            raise ProtocolError(f"Xray {transport_proto.upper()}/{port} did not become ready within 8 seconds")
-        _ufw_allow_if_active(port,transport_proto,f"Xray {protocol}")
+        for transport_proto in sorted(transport_protos):
+            if not _wait_listener(port,transport_proto,timeout=8.0,interval=0.25):
+                raise ProtocolError(f"Xray {transport_proto.upper()}/{port} did not become ready within 8 seconds")
+            _ufw_allow_if_active(port,transport_proto,f"Xray {protocol}")
     except Exception:
         try:
             if tmp.exists():tmp.unlink()
