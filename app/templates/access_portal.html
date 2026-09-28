@@ -64,7 +64,7 @@
       <section class="portal-action-grid">
         {% if has_native %}
         <a class="portal-action primary-card" href="{{download_url}}">
-          <strong>{{ 'دانلود فایل اتصال' if fa else 'Download connection file' }}</strong>
+          <strong>{{ 'دانلود فایل اصلی اتصال' if fa else 'Download primary connection file' }}</strong>
           <span>{{native_filename}}</span>
         </a>
         {% endif %}
@@ -80,6 +80,20 @@
         </a>
       </section>
 
+      {% if public_files %}
+      <section class="portal-section">
+        <div class="portal-section-head"><div><span class="eyebrow">{{ 'فایل‌های این کاربر' if fa else 'CLIENT FILES' }}</span><h2>{{ 'دانلود فایل‌ها' if fa else 'Download files' }}</h2></div></div>
+        <div class="portal-file-list">
+          {% for file in public_files %}
+          <a href="{{file.url}}" class="portal-file-row">
+            <div><b>{{file.name}}</b><span>{{file.size}} B</span></div>
+            <strong>{{ 'دانلود' if fa else 'Download' }}</strong>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
       {% if qr %}
       <section class="portal-section">
         <div class="portal-section-head">
@@ -89,6 +103,16 @@
           <img src="{{qr}}" alt="{{ 'کد QR اتصال' if fa else 'Connection QR code' }}">
           <p>{{ 'برنامه سازگار را باز کنید و این QR را اسکن کنید.' if fa else 'Open a compatible client and scan this QR code.' }}</p>
         </div>
+      </section>
+      {% endif %}
+
+      {% if details_text %}
+      <section class="portal-section">
+        <div class="portal-section-head">
+          <div><span class="eyebrow">{{ 'اطلاعات ورود' if fa else 'LOGIN DETAILS' }}</span><h2>{{ 'مشخصات اتصال SSH' if fa else 'SSH connection details' }}</h2></div>
+          <button class="ghost" type="button" id="portalDetailsCopy">{{ 'کپی' if fa else 'Copy' }}</button>
+        </div>
+        <textarea id="portalDetailsText" class="portal-share-text" readonly>{{details_text}}</textarea>
       </section>
       {% endif %}
 
@@ -146,12 +170,21 @@
     (() => {
       const share=document.getElementById('portalShareText');
       const copy=document.getElementById('portalCopyBtn');
+      const details=document.getElementById('portalDetailsText');
+      const detailsCopy=document.getElementById('portalDetailsCopy');
       if(copy&&share)copy.addEventListener('click',async()=>{
         try{
           await navigator.clipboard.writeText(share.value);
           copy.textContent={{ "'کپی شد'" if fa else "'Copied'" }};
           setTimeout(()=>copy.textContent={{ "'کپی'" if fa else "'Copy'" }},1400);
         }catch(e){share.select();document.execCommand('copy')}
+      });
+      if(detailsCopy&&details)detailsCopy.addEventListener('click',async()=>{
+        try{
+          await navigator.clipboard.writeText(details.value);
+          detailsCopy.textContent={{ "'کپی شد'" if fa else "'Copied'" }};
+          setTimeout(()=>detailsCopy.textContent={{ "'کپی'" if fa else "'Copy'" }},1400);
+        }catch(e){details.select();document.execCommand('copy')}
       });
       const usage={{state.usage|tojson}};
       if(usage){
