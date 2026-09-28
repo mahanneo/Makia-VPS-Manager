@@ -1331,7 +1331,7 @@ function openPortableBackup(){
         '<div><b>IKEv2</b><span>StrongSwan config، EAP users و IPsec key material</span></div>',
         '<div><b>Stealth / WStunnel</b><span>Stunnel و WStunnel runtime configuration</span></div>',
         '<div><b>TLS / Nginx</b><span>Let\'s Encrypt material و active site config</span></div>',
-        '<div><b>SSH</b><span>Managed usernames و password hashes / expiry</span></div>',
+        '<div><b>SSH</b><span>Managed usernames، password hashes و SSH host fingerprint keys</span></div>',
       '</div>',
       '<label class="single-label">Backup password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password" placeholder="حداقل ۱۰ کاراکتر"></label>',
       '<div class="wizard-note"><b>Cloudflare cutover</b><span>بعد از Restore، همان Domain را نگه دار و فقط A/AAAA را به VPS جدید تغییر بده. برای پروتکل‌های خام VPN رکورد باید DNS-only باشد. Profileهایی که IP قدیمی داخلشان ثبت شده است Zero-touch نیستند.</span></div>',
