@@ -148,7 +148,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","outline":"outline"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -301,7 +301,7 @@ def _portal_language(request:Request):
     return current if current in {"fa","en"} else "fa"
 
 def _public_access_state(kind,key):
-    if kind=="xray":
+    if kind in {"xray","outline"}:
         try: row=get_protocol_client(int(key))
         except Exception: row=None
         if not row:
@@ -1682,6 +1682,18 @@ def _resolve_access_payload(kind,key,request):
         })
         artifact=get_access_artifact_by_key("xray",str(row["id"]))
         return payload,artifact
+    if kind=="outline":
+        try: row=get_protocol_client(int(key))
+        except Exception: row=None
+        if not row or row.get("engine")!="outline":
+            raise HTTPException(404,"Outline client not found")
+        payload=access_ops.outline_payload(
+            row["name"],row.get("share_link") or "",row.get("inbound_tag") or "",row.get("quota_bytes") or 0
+        )
+        artifact_save("outline",str(row["id"]),row["name"],"outline",payload,{
+            "client_id":row["id"],"outline_key_id":row.get("inbound_tag") or "",
+        })
+        return payload,get_access_artifact_by_key("outline",str(row["id"]))
     if kind=="openvpn":
         try:
             rendered=protocol_ops.render_openvpn_client(key,public_host(request))
@@ -1749,7 +1761,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -1786,15 +1798,19 @@ def access_entries(request:Request):
 
     protocol_rows=protocol_clients_get(request)
     for item in protocol_rows:
+        engine=str(item.get("engine") or "xray").lower()
+        if engine not in {"xray","outline"}:
+            continue
+        kind=engine
         key=str(item["id"])
-        art=artifacts.get(("xray",key))
+        art=artifacts.get((kind,key))
         rows.append({
-            "id":f"xray:{key}","kind":"xray","key":key,"name":item["name"],"protocol":item["protocol"],
+            "id":f"{kind}:{key}","kind":kind,"key":key,"name":item["name"],"protocol":item["protocol"],
             "status":"expired" if item.get("expired") else ("active" if item.get("enabled") else "disabled"),
-            "online":item.get("online_ip_count",0),"device_limit":item.get("ip_limit",1),
+            "online":item.get("online_ip_count",0) if kind=="xray" else None,"device_limit":item.get("ip_limit",1),
             "quota_bytes":item.get("quota_bytes",0),"used_bytes":item.get("usage",{}).get("total",0),
             "expire_at":item.get("expire_at",0),"can_export":True,
-            "artifact_id":art["id"] if art else None,"subscription_id":item.get("subscription_id",""),
+            "artifact_id":art["id"] if art else None,"subscription_id":item.get("subscription_id","") if kind=="xray" else "",
             "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
@@ -1827,7 +1843,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -1886,7 +1902,7 @@ def public_access_portal(token:str,request:Request):
     except access_ops.AccessPackageError as exc:
         raise HTTPException(404,str(exc))
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         share_text=""
     else:
         share_text=str(payload.get("share_text") or payload.get("primary_text") or "")
@@ -1906,7 +1922,7 @@ def public_access_portal(token:str,request:Request):
             "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
         })
     qr=""
-    if share_text and kind in {"xray","wireguard","ssh"}:
+    if share_text and kind in {"xray","wireguard","ssh","outline"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
@@ -1940,7 +1956,7 @@ def public_access_download(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -1971,7 +1987,7 @@ def public_access_file(token:str,filename:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -2001,11 +2017,11 @@ def public_access_qr(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind=="xray" and not state.get("active"):
+    if kind in {"xray","outline"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
-    if kind not in {"xray","wireguard","ssh"}:
+    if kind not in {"xray","wireguard","ssh","outline"}:
         raise HTTPException(404,"QR is not available for this access type")
     share=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not share:
@@ -2021,7 +2037,7 @@ def public_access_qr(token:str,request:Request):
 def access_share(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
     require_local_admin(request)
-    if kind not in {"ssh","xray","wireguard"}:
+    if kind not in {"ssh","xray","wireguard","outline"}:
         raise HTTPException(404,"share view is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -2060,7 +2076,7 @@ def access_share(kind:str,key:str,request:Request):
 @app.get("/api/access/{kind}/{key}/qr.svg")
 def access_qr(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
-    if kind not in {"ssh","xray","wireguard"}:
+    if kind not in {"ssh","xray","wireguard","outline"}:
         raise HTTPException(404,"QR is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
