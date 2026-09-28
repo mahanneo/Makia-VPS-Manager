@@ -797,7 +797,7 @@ def ikev2_user_delete(name:str,request:Request):
 
 class StealthBootstrap(BaseModel):
     domain:str=Field(min_length=3,max_length=253)
-    port:int=Field(default=8443,ge=1,le=65535)
+    port:int=Field(default=9443,ge=1,le=65535)
 
 @app.post("/api/protocols/stealth/bootstrap")
 def stealth_bootstrap(payload:StealthBootstrap,request:Request):
@@ -1459,7 +1459,13 @@ def _current_delivery_payload(kind,key,payload,request):
                 endpoint=""
             endpoint=endpoint or public_host(request)
             try:
-                rendered=protocol_ops.render_openvpn_client(str(key),endpoint)
+                metadata={}
+                try:
+                    metadata=json.loads(artifact.get("metadata_json") or "{}")
+                except (TypeError,ValueError):
+                    metadata={}
+                transport=str(metadata.get("transport") or "") or None
+                rendered=protocol_ops.render_openvpn_client(str(key),endpoint,transport)
                 result=access_ops.openvpn_payload(str(key),rendered["config"])
             except protocol_ops.ProtocolError:
                 result=payload
