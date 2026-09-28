@@ -653,6 +653,198 @@ def accounts(request:Request):
     require_user(request)
     return account_rows()
 
+
+class PlanTemplatePayload(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    protocol:str=Field(default="xray",max_length=32)
+    days:int=Field(default=30,ge=0,le=3650)
+    quota_gb:float=Field(default=50,ge=0,le=1_000_000)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    reset_days:int=Field(default=30,ge=0,le=3650)
+    defaults:dict=Field(default_factory=dict)
+    active:bool=True
+
+@app.get("/api/plans")
+def plans_get(request:Request,active_only:bool=False):
+    require_user(request)
+    return list_plan_templates(active_only)
+
+@app.post("/api/plans")
+def plans_create(payload:PlanTemplatePayload,request:Request):
+    actor=require_mutation(request)
+    protocol=payload.protocol.lower().strip()
+    if protocol not in {"ssh","xray","wireguard","openvpn","outline"}:
+        raise HTTPException(400,"unsupported plan protocol")
+    try:
+        plan_id=upsert_plan_template(
+            None,payload.name,protocol,payload.days,payload.quota_gb,
+            payload.ip_limit,payload.reset_days,payload.defaults,payload.active
+        )
+    except Exception as exc:
+        if "UNIQUE" in str(exc).upper():
+            raise HTTPException(409,"plan name already exists")
+        raise
+    audit(actor,"plan_create",str(plan_id),payload.name,ip(request))
+    return get_plan_template(plan_id)
+
+@app.put("/api/plans/{plan_id}")
+def plans_update(plan_id:int,payload:PlanTemplatePayload,request:Request):
+    actor=require_mutation(request)
+    if not get_plan_template(plan_id):
+        raise HTTPException(404,"plan not found")
+    protocol=payload.protocol.lower().strip()
+    if protocol not in {"ssh","xray","wireguard","openvpn","outline"}:
+        raise HTTPException(400,"unsupported plan protocol")
+    try:
+        upsert_plan_template(
+            plan_id,payload.name,protocol,payload.days,payload.quota_gb,
+            payload.ip_limit,payload.reset_days,payload.defaults,payload.active
+        )
+    except Exception as exc:
+        if "UNIQUE" in str(exc).upper():
+            raise HTTPException(409,"plan name already exists")
+        raise
+    audit(actor,"plan_update",str(plan_id),payload.name,ip(request))
+    return get_plan_template(plan_id)
+
+@app.delete("/api/plans/{plan_id}")
+def plans_delete(plan_id:int,request:Request):
+    actor=require_mutation(request)
+    if not get_plan_template(plan_id):
+        raise HTTPException(404,"plan not found")
+    delete_plan_template(plan_id)
+    audit(actor,"plan_delete",str(plan_id),ip=ip(request))
+    return {"ok":True}
+
+class ManagedRenewPayload(BaseModel):
+    kind:str
+    key:str
+    days:int=Field(default=30,ge=0,le=3650)
+    add_quota_gb:float=Field(default=0,ge=0,le=1_000_000)
+    reset_usage:bool=False
+    enable:bool=True
+
+def _renew_managed_access(payload:ManagedRenewPayload):
+    kind=payload.kind.lower().strip()
+    if kind=="ssh":
+        row=next((x for x in account_rows() if x["username"]==payload.key),None)
+        if not row:
+            raise HTTPException(404,"SSH account not found")
+        current=row.get("expire_date")
+        base=date.today()
+        if current:
+            try: base=max(base,date.fromisoformat(str(current)))
+            except Exception: pass
+        new_expire=(base+timedelta(days=payload.days)).isoformat() if payload.days else current
+        quota_mb=int(row.get("quota_mb") or 0)
+        if payload.add_quota_gb>0:
+            quota_mb=quota_mb+int(payload.add_quota_gb*1024) if quota_mb else int(payload.add_quota_gb*1024)
+        try:
+            system_ops.update_ssh_user(payload.key,expire=new_expire)
+            if payload.enable: system_ops.lock_user(payload.key,False)
+        except system_ops.OperationError as exc:
+            raise HTTPException(400,str(exc))
+        upsert_profile(
+            payload.key,row.get("plan",""),row.get("note",""),new_expire,
+            row.get("connection_limit",1),quota_mb,1 if payload.enable else int(row.get("enabled",1)),
+            row.get("device_limit",1),row.get("renewal_days",0)
+        )
+        return {"kind":"ssh","key":payload.key,"expire_date":new_expire,"quota_mb":quota_mb,"enabled":payload.enable}
+    if kind=="xray":
+        try: client_id=int(payload.key)
+        except ValueError: raise HTTPException(400,"invalid Xray client id")
+        row=get_protocol_client(client_id)
+        if not row:
+            raise HTTPException(404,"Xray client not found")
+        now_ts=int(time.time())
+        expire_at=int(row.get("expire_at") or 0)
+        if payload.days:
+            base=max(now_ts,expire_at) if expire_at else now_ts
+            expire_at=base+payload.days*86400
+        quota=int(row.get("quota_bytes") or 0)
+        add_bytes=int(payload.add_quota_gb*1024*1024*1024)
+        if add_bytes:
+            quota=quota+add_bytes if quota else add_bytes
+        if payload.reset_usage:
+            try: protocol_ops.xray_client_traffic(row["name"],reset=True)
+            except Exception: pass
+            reset_protocol_traffic(client_id)
+        if payload.enable and not bool(row.get("enabled")):
+            try:
+                protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+            except Exception as exc:
+                raise HTTPException(400,f"unable to re-enable Xray client: {exc}")
+        update_protocol_client_state(client_id,enabled=payload.enable,quota_bytes=quota,expire_at=expire_at)
+        return {"kind":"xray","key":str(client_id),"expire_at":expire_at,"quota_bytes":quota,"enabled":payload.enable}
+    raise HTTPException(400,"quick renew is enforced only for SSH and Xray managed clients")
+
+@app.post("/api/renew")
+def managed_renew(payload:ManagedRenewPayload,request:Request):
+    actor=require_mutation(request)
+    result=_renew_managed_access(payload)
+    audit(actor,"managed_renew",f"{payload.kind}:{payload.key}",f"days={payload.days}; quota_gb={payload.add_quota_gb}; reset={payload.reset_usage}",ip(request))
+    return result
+
+class BulkManagedRenewPayload(BaseModel):
+    targets:list[dict]=Field(min_length=1,max_length=200)
+    days:int=Field(default=30,ge=0,le=3650)
+    add_quota_gb:float=Field(default=0,ge=0,le=1_000_000)
+    reset_usage:bool=False
+    enable:bool=True
+
+@app.post("/api/renew/bulk")
+def managed_renew_bulk(payload:BulkManagedRenewPayload,request:Request):
+    actor=require_mutation(request)
+    results=[]; failed=[]
+    for target in payload.targets:
+        kind=str(target.get("kind") or "")
+        key=str(target.get("key") or "")
+        try:
+            results.append(_renew_managed_access(ManagedRenewPayload(
+                kind=kind,key=key,days=payload.days,add_quota_gb=payload.add_quota_gb,
+                reset_usage=payload.reset_usage,enable=payload.enable
+            )))
+        except HTTPException as exc:
+            failed.append({"kind":kind,"key":key,"error":str(exc.detail)})
+    audit(actor,"managed_renew_bulk",str(len(payload.targets)),f"ok={len(results)}; failed={len(failed)}",ip(request))
+    return {"ok":results,"failed":failed}
+
+@app.get("/api/expiry-center")
+def expiry_center(request:Request,days:int=30):
+    require_user(request)
+    horizon=max(0,min(int(days),3650))
+    now_ts=int(time.time())
+    rows=[]
+    for item in account_rows():
+        left=item.get("days_left")
+        if left is None: continue
+        if left<=horizon:
+            rows.append({
+                "kind":"ssh","key":item["username"],"name":item["username"],"protocol":"ssh",
+                "days_left":left,"expire_at":item.get("expire_date"),"enabled":bool(item.get("enabled")),
+                "enforced":True,"quota_bytes":int(item.get("quota_mb") or 0)*1024*1024,
+            })
+    for item in list_protocol_clients():
+        if item.get("engine")!="xray": continue
+        expire_at=int(item.get("expire_at") or 0)
+        if not expire_at: continue
+        left=int((expire_at-now_ts)//86400)
+        if left<=horizon:
+            rows.append({
+                "kind":"xray","key":str(item["id"]),"name":item["name"],"protocol":item.get("protocol"),
+                "days_left":left,"expire_at":expire_at,"enabled":bool(item.get("enabled")),
+                "enforced":True,"quota_bytes":int(item.get("quota_bytes") or 0),
+            })
+    rows.sort(key=lambda x:(x["days_left"],x["name"].lower()))
+    return {
+        "horizon_days":horizon,
+        "items":rows,
+        "expired":sum(1 for x in rows if x["days_left"]<0),
+        "today":sum(1 for x in rows if x["days_left"]==0),
+        "soon":sum(1 for x in rows if 0<x["days_left"]<=7),
+    }
+
+
 class AccountCreate(BaseModel):
     username:str
     endpoint:str|None=Field(default=None,max_length=255)
