@@ -262,7 +262,7 @@ Makia برای SSH می‌تواند:
 - Stealth/Stunnel configuration
 - WStunnel runtime configuration
 - Nginx و Let's Encrypt
-- SSH password hashes و expiry کاربران مدیریت‌شده
+- SSH password hashes و expiry کاربران مدیریت‌شده، به‌همراه SSH Host Keys برای حفظ Fingerprint سرور
 - Manifest نسخه‌دار و SHA256 هر payload برای تشخیص Bundle خراب/دستکاری‌شده
 
 روی VPS مقصد ابتدا همان نسخه Makia را نصب کنید و سپس:
@@ -276,7 +276,7 @@ sudo makia-uat-smoke
 
 بعد از PASS شدن مقصد، **همان Domain قبلی** را نگه دارید و رکورد A/AAAA را به IP جدید تغییر دهید. Restore، Ruleهای NAT/FORWARD وابسته به Host را با Interface واقعی VPS جدید بازسازی می‌کند؛ بنابراین تفاوت `eth0`/`ens3` بین Providerها نباید Credential کاربران را عوض کند.
 
-هدف Migration، **حفظ Credential کاربران و Server identity** است. این Zero-touch فقط برای Profileهایی صدق می‌کند که Endpoint آن‌ها دامنه حفظ‌شده باشد. Profileهایی که IP قدیمی را مستقیماً داخل Client دارند باید دوباره صادر شوند. برای WireGuard/OpenVPN/IKEv2 خام، رکورد Cloudflare باید **DNS only** باشد؛ Orange-cloud این پروتکل‌ها را Proxy نمی‌کند.
+هدف Migration، **حفظ Credential کاربران و Server identity** است؛ SSH Host Keys نیز در صورت دسترسی داخل Bundle قرار می‌گیرند تا Fingerprint سرور پس از Failover ثابت بماند. این Zero-touch فقط برای Profileهایی صدق می‌کند که Endpoint آن‌ها دامنه حفظ‌شده باشد. Profileهایی که IP قدیمی را مستقیماً داخل Client دارند باید دوباره صادر شوند. برای WireGuard/OpenVPN/IKEv2 خام، رکورد Cloudflare باید **DNS only** باشد؛ Orange-cloud این پروتکل‌ها را Proxy نمی‌کند.
 
 ## عیب‌یابی
 
