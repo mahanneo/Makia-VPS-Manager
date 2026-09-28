@@ -173,7 +173,7 @@ jobs:
           grep -q '/api/protocols/openvpn/repair' app/main.py
           grep -q 'openvpn_endpoint_diagnostics' app/protocol_ops.py
           grep -q 'repair_openvpn_ipv4_runtime' app/protocol_ops.py
-          grep -q 'proto {transport}' app/protocol_ops.py
+          grep -q 'proto {client_proto}' app/protocol_ops.py
           grep -q 'verify-x509-name server name' app/protocol_ops.py
           grep -q '"openvpn-server@server": "OpenVPN"' app/config.py
           grep -q '"wg-quick@wg0": "WireGuard"' app/config.py
@@ -271,6 +271,22 @@ jobs:
           grep -q 'checksum mismatch' scripts/install-wstunnel.sh
           grep -q 'IKEv2/strongSwan tooling installed' scripts/uat-smoke.sh
           grep -q 'WStunnel tooling installed' scripts/uat-smoke.sh
+          grep -q 'openvpn_dual_transport' app/protocol_ops.py
+          grep -q 'ensure_openvpn_transport' app/protocol_ops.py
+          grep -q '/api/protocols/openvpn/transports/{proto}/ensure' app/main.py
+
+      - name: Disaster recovery v2 contract
+        run: |
+          grep -q '"format_version":2' app/system_ops.py
+          grep -q '"sha256":checksums' app/system_ops.py
+          grep -q 'payload/ipsec.secrets' app/system_ops.py
+          grep -q 'payload/wstunnel.env' app/system_ops.py
+          grep -q 'payload/stunnel-makia.conf' app/system_ops.py
+          grep -q 'repair_wireguard_runtime' scripts/restore-portable.py
+          grep -q 'repair_openvpn_all_runtimes' scripts/restore-portable.py
+          grep -q 'Disaster Recovery Backup' app/static/app.js
+          grep -q 'DNS-only' app/static/app.js
+          grep -q 'Disaster Recovery gate' docs/UAT-0.26.0-RC2.md
 
       - name: UAT v0.17 contract
         run: |
