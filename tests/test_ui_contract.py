@@ -132,9 +132,11 @@ def test_v026_login_controls_are_functional_and_single_surface():
 
 
 def test_xray_guided_ui_has_compatibility_matrix():
-    for marker in ["XRAY_PROFILE_MATRIX","normalizeXrayProfile","xrayPrerequisiteMessage","hysteria2","shadowsocks"]:
+    for marker in ["XRAY_PROFILE_MATRIX","XRAY_MANUAL_MATRIX","normalizeXrayProfile","xrayPrerequisiteMessage","hysteria2","shadowsocks"]:
         assert marker in JS
-    assert "ترکیب Transport / Security برای این پروتکل معتبر نیست" in JS
+    assert "Manual / Expert Builder" in JS
+    assert "این ترکیب توسط Builder قابل Export نیست" in JS
+    assert "Advanced JSON" in JS
 
 
 def test_openvpn_exposes_real_tcp_udp_advanced_server_controls():
