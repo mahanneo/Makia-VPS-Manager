@@ -290,9 +290,9 @@ def test_migration_inspector_accepts_legacy_sanitized_systemd_template(tmp_path,
         legacy_name:unit,
     }
     blob=access_ops.protected_zip(files,"MigrationPass!2026")
-    preview=system_ops.inspect_portable_migration_blob(blob,"MigrationPass!2026","0.26.0-rc3")
+    preview=system_ops.inspect_portable_migration_blob(blob,"MigrationPass!2026","0.26.0-rc5")
     assert preview["compatible"] is True
-    staged=system_ops.stage_migration_restore(blob,"MigrationPass!2026","0.26.0-rc3")
+    staged=system_ops.stage_migration_restore(blob,"MigrationPass!2026","0.26.0-rc5")
     assert staged["bundle_version"]=="0.26.0-rc2"
     assert staged["restore_ready"] is True
 
