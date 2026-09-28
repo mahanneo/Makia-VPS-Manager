@@ -47,7 +47,7 @@ def test_private_ipv4_is_private():
     assert _endpoint_is_private("10.10.0.2") is True
 
 def test_public_vless_none_is_rejected_before_core_mutation():
-    with pytest.raises(ProtocolError, match="choose REALITY or TLS"):
+    with pytest.raises(ProtocolError, match="Manual/Expert"):
         create_xray_inbound("vless",2087,"mahan","178.83.45.215","xhttp","none","/makia","","")
 
 def test_explicit_endpoint_mode_rejects_wrong_type_and_private_ip():
