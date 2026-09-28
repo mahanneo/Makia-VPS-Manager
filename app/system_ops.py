@@ -297,7 +297,10 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
             if not src.is_file() or not re.fullmatch(r"ssh_host_[A-Za-z0-9_-]+_key(?:\.pub)?",src.name):
                 continue
             archive_name=f"payload/ssh-host-keys/{src.name}"
-            files[archive_name]=src.read_bytes()
+            try:
+                files[archive_name]=src.read_bytes()
+            except OSError:
+                continue
             ssh_host_keys.append(src.name)
     components["ssh_host_keys"]=bool(ssh_host_keys)
 
