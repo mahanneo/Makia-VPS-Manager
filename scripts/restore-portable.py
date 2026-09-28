@@ -289,12 +289,18 @@ def main():
         if key in payload:
             restore_file(payload[key],target,mode)
 
-    # Normalize restored Xray ownership/TLS paths for the destination
-    # systemd user before the final stack restart.
+    # Reconcile host-specific runtime state without changing client identity.
+    # Protocol keys/UUID/PKI are restored byte-for-byte, while ownership,
+    # interface-specific NAT/FORWARD rules and destination NIC names are
+    # rebuilt for the new VPS before the final validation.
+    sys.path.insert(0,str(APP))
+    from app import protocol_ops
     if shutil.which("xray") and (Path("/usr/local/etc/xray/config.json").exists() or Path("/etc/xray/config.json").exists()):
-        sys.path.insert(0,str(APP))
-        from app import protocol_ops
         protocol_ops.repair_xray_runtime()
+    if Path("/etc/wireguard/wg0.conf").exists():
+        protocol_ops.repair_wireguard_runtime("wg0")
+    if Path("/etc/openvpn/server").exists() and list(Path("/etc/openvpn/server").glob("*.conf")):
+        protocol_ops.repair_openvpn_all_runtimes()
 
     restart_stack()
     checks=validate_restored(payload)
