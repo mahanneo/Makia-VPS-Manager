@@ -1659,7 +1659,8 @@ def _openvpn_transport_runtimes():
     # Prefer the legacy primary server when it owns a transport so existing
     # clients/config remain authoritative. Auxiliary instances fill only the
     # missing transport.
-    stems=["server"]+[p.stem for p in sorted(server_dir.glob("*.conf")) if p.stem!="server"]
+    managed_stems=["server","transport-udp","transport-tcp"]
+    stems=[stem for stem in managed_stems if (server_dir/f"{stem}.conf").exists()]
     for stem in stems:
         runtime=_openvpn_runtime_for(stem)
         if not runtime.get("port"):
