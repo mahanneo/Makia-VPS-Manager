@@ -108,6 +108,10 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-protocol-traffic.service" /etc/system
 install -m 0644 "$SOURCE_DIR/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
+install -m 0644 "$SOURCE_DIR/systemd/makia-node-agent.service" /etc/systemd/system/makia-node-agent.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-node-agent.timer" /etc/systemd/system/makia-node-agent.timer
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
@@ -126,6 +130,9 @@ install -m 0755 "$SOURCE_DIR/scripts/reset-admin.sh" /usr/local/sbin/makia-reset
 install -m 0755 "$SOURCE_DIR/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
 install -m 0755 "$SOURCE_DIR/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
 install -m 0755 "$SOURCE_DIR/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
+install -m 0755 "$SOURCE_DIR/scripts/scheduled-backup.py" /usr/local/sbin/makia-scheduled-backup
+install -m 0755 "$SOURCE_DIR/scripts/node-agent.py" /usr/local/sbin/makia-node-agent
+install -m 0755 "$SOURCE_DIR/scripts/connect-node.sh" /usr/local/sbin/makia-node-connect
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SOURCE_DIR/upgrade.sh" /usr/local/sbin/makia-upgrade
 ln -sfn /usr/local/sbin/makia-update /usr/local/sbin/dragon-update
@@ -137,6 +144,8 @@ systemctl enable --now makia-vps-manager
 systemctl enable --now makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
+systemctl enable --now makia-scheduled-backup.timer
+# Node agent timer is enabled only after 'makia-node-connect' writes its root-only credentials.
 
 # Baseline SSH brute-force protection. We do not enable/modify UFW automatically
 # because doing so without knowing the operator's SSH path can lock them out.
