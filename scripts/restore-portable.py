@@ -538,9 +538,18 @@ def main():
                 rollback_restore(rollback_root,rollback_records,rollback_users)
             except Exception as rb_exc:
                 rollback_error=rb_exc
+        else:
+            # Snapshot creation itself may fail after services were stopped.
+            # No target data was mutated yet, so simply bring the original stack back.
+            try:
+                restart_stack()
+            except Exception as rb_exc:
+                rollback_error=rb_exc
         if rollback_error:
-            raise SystemExit(f"Restore failed ({exc}); automatic rollback also failed ({rollback_error}).")
-        raise SystemExit(f"Restore failed and automatic rollback completed: {exc}")
+            raise SystemExit(f"Restore failed ({exc}); automatic rollback/restart also failed ({rollback_error}).")
+        if mutated:
+            raise SystemExit(f"Restore failed and automatic rollback completed: {exc}")
+        raise SystemExit(f"Restore aborted before mutation; original services restarted: {exc}")
     finally:
         if rollback_root:
             shutil.rmtree(rollback_root,ignore_errors=True)
