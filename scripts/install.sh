@@ -40,6 +40,25 @@ if [[ ${#ADMIN_PASSWORD} -lt 16 ]]; then
   exit 1
 fi
 
+CREDENTIAL_FILE=/root/makia-install-credentials.txt
+umask 077
+cat >"$CREDENTIAL_FILE" <<EOF
+Makia VPS Manager
+Username: admin
+Bootstrap password: $ADMIN_PASSWORD
+Panel: pending until installation completes
+EOF
+chmod 0600 "$CREDENTIAL_FILE"
+
+install_failure_hint() {
+  rc=$?
+  printf '\n[MAKIA] Installation stopped before the final success screen (exit %s).\n' "$rc" >&2
+  printf '[MAKIA] The generated admin credential is preserved at: %s\n' "$CREDENTIAL_FILE" >&2
+  printf '[MAKIA] Fix the reported error and re-run the installer; existing Makia data is not intentionally deleted.\n\n' >&2
+  exit "$rc"
+}
+trap install_failure_hint ERR
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban wireguard openvpn easy-rsa iptables stunnel4 certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
@@ -164,12 +183,28 @@ echo "Running full-stack installation smoke gate..."
 /usr/local/sbin/makia-uat-smoke
 
 SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
-printf '\nMakia VPS Manager installed successfully.\n'
-printf 'Panel: http://%s/\n' "${SERVER_IP:-SERVER_IP}"
-printf 'Username: admin\n'
-printf 'Bootstrap password: %s\n' "$ADMIN_PASSWORD"
-printf '\nIMPORTANT: change the administrator password immediately.\n'
-printf 'For public exposure, enable HTTPS and review Security Center first.\n'
+PANEL_URL="http://${SERVER_IP:-SERVER_IP}/"
+cat >"$CREDENTIAL_FILE" <<EOF
+Makia VPS Manager
+Panel: $PANEL_URL
+Username: admin
+Bootstrap password: $ADMIN_PASSWORD
+Credential file: $CREDENTIAL_FILE
+EOF
+chmod 0600 "$CREDENTIAL_FILE"
+trap - ERR
+
+printf '\n'
+printf '+------------------------------------------------------------------+\n'
+printf '|                 MAKIA VPS MANAGER - INSTALL READY                |\n'
+printf '+------------------------------------------------------------------+\n'
+printf '| Panel    : %-53s |\n' "$PANEL_URL"
+printf '| Username : %-53s |\n' "admin"
+printf '| Password : %-53s |\n' "$ADMIN_PASSWORD"
+printf '+------------------------------------------------------------------+\n'
+printf '| Credentials saved (root-only): %-32s |\n' "$CREDENTIAL_FILE"
+printf '+------------------------------------------------------------------+\n'
+printf '\nIMPORTANT: save the password now, then change it after first login.\n'
+printf 'For public exposure, configure Domain + HTTPS and review Security Center.\n'
 printf 'Protocol stack: Xray + WireGuard + OpenVPN are preinstalled and bootstrapped.\n'
-printf 'You can create users immediately after login.\n'
-printf 'Run makia-doctor for host diagnostics.\n\n'
+printf 'Run: makia-doctor   for host diagnostics.\n\n'
