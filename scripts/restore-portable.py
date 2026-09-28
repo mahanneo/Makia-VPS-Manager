@@ -66,6 +66,23 @@ def install_components(payload):
         protocol_ops.install_component("openvpn")
     if ("payload/xray.tar.gz" in payload or "payload/xray_alt.tar.gz" in payload) and not shutil.which("xray"):
         protocol_ops.install_component("xray")
+    if any(k in payload for k in ("payload/ipsec.conf","payload/ipsec.secrets","payload/ipsec_d.tar.gz")) and not shutil.which("ipsec"):
+        run(["apt-get","update"])
+        run(["apt-get","install","-y","strongswan","strongswan-pki","libcharon-extra-plugins"])
+    if "payload/stunnel-makia.conf" in payload and not (shutil.which("stunnel4") or shutil.which("stunnel")):
+        run(["apt-get","update"])
+        run(["apt-get","install","-y","stunnel4"])
+    if "payload/wstunnel.env" in payload and not shutil.which("wstunnel"):
+        installer=shutil.which("makia-install-wstunnel")
+        if not installer:
+            raise RuntimeError("WStunnel state is present but makia-install-wstunnel is unavailable")
+        run([installer])
+
+
+def restore_file(blob:bytes,target:Path,mode=0o600):
+    target.parent.mkdir(parents=True,exist_ok=True)
+    target.write_bytes(blob)
+    os.chmod(target,mode)
 
 
 def restore_tree(blob:bytes,archive_root:str,target:Path):
