@@ -103,6 +103,9 @@ jobs:
           test -f docs/UAT-0.25.0-RC1.md
           test -f docs/UAT-0.26.0-RC1.md
           test -f docs/UAT-0.26.0-RC2.md
+          test -f docs/UAT-0.26.0-RC3.md
+          grep -q 'CREDENTIAL_FILE=/root/makia-install-credentials.txt' scripts/install.sh
+          grep -q 'MAKIA VPS MANAGER - INSTALL READY' scripts/install.sh
           test -f docs/UAT-PROTOCOL-MODES.md
           test -f docs/IRAN-CONNECTIVITY-FIELD-TEST.md
           test -f scripts/iran-field-preflight.sh
