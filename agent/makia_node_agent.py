@@ -4,6 +4,8 @@ import json, os, shutil, socket, time, urllib.request
 CONTROLLER=os.environ.get("MAKIA_CONTROLLER_URL","").rstrip("/")
 TOKEN=os.environ.get("MAKIA_NODE_TOKEN","")
 INTERVAL=max(15,int(os.environ.get("MAKIA_NODE_INTERVAL","30")))
+REGION=os.environ.get("MAKIA_NODE_REGION","")
+PUBLIC_URL=os.environ.get("MAKIA_NODE_PUBLIC_URL","")
 
 def cpu_times():
     with open("/proc/stat","r",encoding="utf-8") as f:
@@ -30,6 +32,43 @@ def disk_percent():
     d=shutil.disk_usage("/")
     return round(d.used/d.total*100,1) if d.total else 0.0
 
+def network_bytes():
+    rx=tx=0
+    try:
+        with open("/proc/net/dev","r",encoding="utf-8") as f:
+            for line in f:
+                if ":" not in line:continue
+                name,data=line.split(":",1)
+                if name.strip()=="lo":continue
+                p=data.split()
+                rx+=int(p[0]);tx+=int(p[8])
+    except Exception:pass
+    return rx,tx
+
+def service_state(name):
+    try:
+        import subprocess
+        p=subprocess.run(["systemctl","is-active",name],text=True,capture_output=True,timeout=3,check=False)
+        return (p.stdout or "").strip()=="active"
+    except Exception:return False
+
+def managed_counts():
+    users=online=0
+    try:
+        import sqlite3
+        db="/opt/makia-vps-manager/data/makia.db"
+        if os.path.isfile(db):
+            con=sqlite3.connect(db)
+            users=int(con.execute("SELECT COUNT(*) FROM protocol_clients WHERE enabled=1").fetchone()[0])
+            con.close()
+    except Exception:pass
+    try:
+        import subprocess
+        p=subprocess.run(["who"],text=True,capture_output=True,timeout=3,check=False)
+        online=len({line.split()[0] for line in (p.stdout or "").splitlines() if line.split()})
+    except Exception:pass
+    return users,online
+
 def version():
     for p in ("/opt/makia-vps-manager/VERSION","/etc/makia-node-version"):
         try:
@@ -38,12 +77,27 @@ def version():
     return "node-agent"
 
 def heartbeat():
+    rx,tx=network_bytes();users,online=managed_counts()
+    started=time.time()
     payload=json.dumps({
         "hostname":socket.gethostname(),
         "version":version(),
         "cpu":cpu_percent(),
         "memory":mem_percent(),
         "disk":disk_percent(),
+        "region":REGION,
+        "public_url":PUBLIC_URL,
+        "users":users,
+        "online_users":online,
+        "rx":rx,
+        "tx":tx,
+        "latency_ms":round(max(0,(time.time()-started)*1000),1),
+        "services":{
+            "makia":service_state("makia-vps-manager"),
+            "xray":service_state("xray"),
+            "wireguard":service_state("wg-quick@wg0"),
+            "nginx":service_state("nginx"),
+        },
     }).encode()
     req=urllib.request.Request(
         CONTROLLER+"/api/node/heartbeat",
