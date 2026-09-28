@@ -186,3 +186,11 @@ def test_protocol_hub_exposes_six_real_connection_modes():
         assert marker in JS
     assert "هر Mode به Backend واقعی متصل است" in JS
     assert "TCP fallback جداست" in JS
+
+
+def test_protocol_workspace_access_actions_refresh_their_cache():
+    assert "async function openAccessDetail(id)" in JS
+    assert "accessCache=await api('/api/access')" in JS
+    assert "window.__protocolData=stack;window.__operatorSettings=operator;accessCache=rows;" in JS
+    assert "window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;accessCache=accessRows;" in JS
+    assert "if(action==='access-detail'){await openAccessDetail" in JS
