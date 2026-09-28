@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import date, datetime, timedelta
-import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress
+import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket
 import pyotp, qrcode
 import qrcode.image.svg
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
@@ -1885,8 +1885,10 @@ def backup_download(name:str,request:Request):
         path=system_ops.backup_download_path(name)
     except system_ops.OperationError as e:
         raise HTTPException(404,str(e))
+    if not path.name.endswith(".zip"):
+        raise HTTPException(409,"Quick Backup is host-local only. Build a password-protected Full Migration Backup for download.")
     audit(actor,"backup_download",name,ip=ip(request))
-    media="application/zip" if path.name.endswith(".zip") else "application/gzip"
+    media="application/zip"
     return FileResponse(
         path,media_type=media,filename=path.name,
         headers={"Cache-Control":"no-store, private","X-Content-Type-Options":"nosniff"},
@@ -1950,6 +1952,21 @@ def backup_restore_status(job_id:str,request:Request):
     domain=str(status.get("panel_domain") or "")
     if domain:
         status["cutover_instruction"]=f"Cloudflare A record: {domain} → NEW_VPS_IP"
+        resolved=[]
+        try:
+            resolved=sorted({
+                item[4][0] for item in socket.getaddrinfo(domain,443,socket.AF_INET,socket.SOCK_STREAM)
+                if item and item[4]
+            })
+        except OSError:
+            resolved=[]
+        local=sorted(set(protocol_ops._local_ipv4_candidates()))
+        status["dns_propagation"]={
+            "resolved_ipv4":resolved,
+            "vps_ipv4":local,
+            "points_to_this_vps":bool(set(resolved)&set(local)),
+            "note":"For raw VPN/SSH transports the Cloudflare record must be DNS only.",
+        }
     status["ip_based_warning"]="Profiles containing the old literal VPS IP cannot be preserved by DNS cutover and must be re-exported."
     return status
 
