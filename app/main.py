@@ -1354,8 +1354,8 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
 
 def _subscription_snapshot(row):
     usage={"uplink":0,"downlink":0,"total":0,"available":False}
-    if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2"} and row.get("enabled"):
-        try: usage=protocol_ops.xray_client_traffic(row["name"])
+    if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2","outline"} and row.get("enabled"):
+        try: usage=(protocol_ops.xray_inbound_traffic(row["inbound_tag"]) if row.get("protocol")=="outline" else protocol_ops.xray_client_traffic(row["name"]))
         except Exception: pass
     stored_up=int(row.get("used_up_bytes") or 0)
     stored_down=int(row.get("used_down_bytes") or 0)
@@ -1434,8 +1434,8 @@ def protocol_clients_get(request:Request):
     now_ts=int(time.time())
     for item in list_protocol_clients():
         usage={"uplink":0,"downlink":0,"total":0,"available":False,"error":None}
-        if item.get("engine")=="xray" and item.get("protocol") in {"vless","vmess","trojan","hysteria2"} and item.get("enabled"):
-            try: usage=protocol_ops.xray_client_traffic(item["name"])
+        if item.get("engine")=="xray" and item.get("protocol") in {"vless","vmess","trojan","hysteria2","outline"} and item.get("enabled"):
+            try: usage=(protocol_ops.xray_inbound_traffic(item["inbound_tag"]) if item.get("protocol")=="outline" else protocol_ops.xray_client_traffic(item["name"]))
             except Exception as exc: usage={"uplink":0,"downlink":0,"total":0,"available":False,"error":str(exc)[:160]}
         stored_up=int(item.get("used_up_bytes") or 0)
         stored_down=int(item.get("used_down_bytes") or 0)
@@ -1453,7 +1453,7 @@ def protocol_clients_get(request:Request):
         quota=int(item.get("quota_bytes") or 0)
         expire_at=int(item.get("expire_at") or 0)
         ip_limit=max(1,int(item.get("ip_limit") or 1))
-        accounting_supported=item.get("protocol") in {"vless","vmess","trojan","hysteria2"}
+        accounting_supported=item.get("protocol") in {"vless","vmess","trojan","hysteria2","outline"}
         rows.append({
             **item,
             "accounting_supported":accounting_supported,
@@ -1483,9 +1483,11 @@ def protocol_client_update(client_id:int,payload:ProtocolClientPolicy,request:Re
     expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days is not None and payload.expire_days>0 else (0 if payload.expire_days==0 else None)
 
     if payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
-        if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2","http","socks"}:
+        if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2","http","socks","outline"}:
             try:
-                if payload.enabled:
+                if row.get("protocol")=="outline":
+                    protocol_ops.set_outline_inbound_enabled(row["inbound_tag"],bool(payload.enabled))
+                elif payload.enabled:
                     protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
                 else:
                     protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
