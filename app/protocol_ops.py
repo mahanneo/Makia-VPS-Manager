@@ -2090,12 +2090,13 @@ def create_openvpn_client(name, endpoint, port=1194, proto="udp"):
         raise ProtocolError("invalid OpenVPN protocol")
     if not (OVPN_EASYRSA/"pki/ca.crt").exists():
         raise ProtocolError("OpenVPN server is not bootstrapped")
-    runtime=_openvpn_server_runtime()
-    server_port=int(runtime.get("port") or 0)
-    server_proto="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
     requested_proto="tcp" if proto.startswith("tcp") else "udp"
-    if port!=server_port or requested_proto!=server_proto:
-        raise ProtocolError(f"Client port/transport must match the OpenVPN server ({server_proto}/{server_port})")
+    runtime=_openvpn_transport_runtimes().get(requested_proto) or {}
+    server_port=int(runtime.get("port") or 0)
+    if not runtime.get("service_active") or not runtime.get("listener"):
+        raise ProtocolError(f"OpenVPN {requested_proto.upper()} transport is not active")
+    if port!=server_port:
+        raise ProtocolError(f"Client port must match the active OpenVPN {requested_proto.upper()} server ({server_port})")
     env=os.environ.copy(); env["EASYRSA_BATCH"]="1"
     p=subprocess.run([str(OVPN_EASYRSA/"easyrsa"),"build-client-full",name,"nopass"],cwd=str(OVPN_EASYRSA),env=env,text=True,capture_output=True,timeout=180,check=False)
     if p.returncode!=0:
@@ -2130,11 +2131,20 @@ def list_openvpn_clients():
         out.append({"name":cert.stem,"certificate":str(cert)})
     return out
 
-def render_openvpn_client(name,endpoint):
+def render_openvpn_client(name,endpoint,transport=None):
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid client name")
     endpoint=_validate_endpoint_host(endpoint)
-    server_conf=OVPN_DIR/"server/server.conf"
+    requested=None
+    if transport is not None:
+        requested="tcp" if str(transport).lower().startswith("tcp") else "udp"
+        runtime=_openvpn_transport_runtimes().get(requested) or {}
+        if not runtime.get("config") or not runtime.get("service_active") or not runtime.get("listener"):
+            raise ProtocolError(f"OpenVPN {requested.upper()} transport is not active")
+        server_conf=Path(runtime["config"])
+    else:
+        runtime=_openvpn_server_runtime()
+        server_conf=OVPN_DIR/"server/server.conf"
     pki=OVPN_EASYRSA/"pki"
     cert=pki/f"issued/{name}.crt"
     key=pki/f"private/{name}.key"
@@ -2145,7 +2155,10 @@ def render_openvpn_client(name,endpoint):
     proto_m=re.search(r"(?m)^proto\s+(\S+)\s*$",text)
     port=int(pm.group(1)) if pm else 1194
     server_proto=(proto_m.group(1) if proto_m else "udp").lower()
-    transport="tcp4-client" if server_proto.startswith("tcp") else "udp4"
+    resolved_transport="tcp" if server_proto.startswith("tcp") else "udp"
+    if requested and resolved_transport!=requested:
+        raise ProtocolError(f"OpenVPN {requested.upper()} runtime/config mismatch")
+    client_proto="tcp4-client" if resolved_transport=="tcp" else "udp4"
     ca=(pki/"ca.crt").read_text(encoding="utf-8")
     cert_text=cert.read_text(encoding="utf-8")
     key_text=key.read_text(encoding="utf-8")
@@ -2153,7 +2166,7 @@ def render_openvpn_client(name,endpoint):
     remotes,fallback_ipv4,hybrid=_openvpn_remote_block(endpoint,port)
     client=(
         "client\ndev tun\n"
-        f"proto {transport}\n"
+        f"proto {client_proto}\n"
         +remotes+
         ("resolv-retry 5\nserver-poll-timeout 8\n" if hybrid else "resolv-retry infinite\n")+
         "connect-retry 2 30\nnobind\npersist-key\npersist-tun\nauth-nocache\n"
@@ -2161,7 +2174,7 @@ def render_openvpn_client(name,endpoint):
         "data-ciphers AES-256-GCM:AES-128-GCM\nauth SHA256\nverb 3\n"
         f"<ca>\n{ca}</ca>\n<cert>\n{cert_text}</cert>\n<key>\n{key_text}</key>\n<tls-crypt>\n{ta}</tls-crypt>\n"
     )
-    return {"name":name,"config":client,"endpoint":endpoint,"fallback_ipv4":fallback_ipv4,"hybrid_endpoint":hybrid,"port":port,"proto":"tcp" if transport.startswith("tcp") else "udp","client_proto":transport}
+    return {"name":name,"config":client,"endpoint":endpoint,"fallback_ipv4":fallback_ipv4,"hybrid_endpoint":hybrid,"port":port,"proto":resolved_transport,"client_proto":client_proto,"server":runtime.get("name") or "server"}
 
 def revoke_openvpn_client(name):
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
