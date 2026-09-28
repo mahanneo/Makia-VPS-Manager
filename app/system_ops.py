@@ -342,6 +342,19 @@ def arm_migration_restore(job_id,password,expected_version=""):
     return status
 
 
+def discard_migration_restore_password(job_id):
+    job_id=str(job_id or "")
+    if not re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}",job_id):
+        return
+    path=_backup_root(create=False)/"restore-jobs"/job_id/"password"
+    try:
+        if path.is_file():
+            path.write_text("",encoding="utf-8")
+            path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def migration_restore_status(job_id):
     job_id=str(job_id or "")
     if not re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}",job_id):
