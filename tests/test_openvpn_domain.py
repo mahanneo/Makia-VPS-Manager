@@ -156,9 +156,12 @@ def test_openvpn_client_rejects_wrong_port_before_issuing_certificate(tmp_path,m
     ovpn,easy=_write_openvpn_fixture(tmp_path,"udp4")
     monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
     monkeypatch.setattr(protocol_ops,"OVPN_EASYRSA",easy)
-    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{"port":1194,"proto":"udp4"})
+    monkeypatch.setattr(protocol_ops,"_openvpn_transport_runtimes",lambda:{
+        "udp":{"port":1194,"proto":"udp4","service_active":True,"listener":True,"name":"server"},
+        "tcp":None,
+    })
     monkeypatch.setattr(protocol_ops.subprocess,"run",lambda *args,**kw:(_ for _ in ()).throw(AssertionError("must not issue certificate")))
-    with pytest.raises(protocol_ops.ProtocolError,match="match the OpenVPN server"):
+    with pytest.raises(protocol_ops.ProtocolError,match="must match the active OpenVPN UDP server"):
         protocol_ops.create_openvpn_client("client02","8.8.8.8",443,"udp")
 
 
@@ -227,3 +230,24 @@ def test_openvpn_repair_restores_gateway_scripts_if_restart_fails(tmp_path,monke
     assert up.read_text()=="#!/bin/sh\nold-up\n"
     assert down.read_text()=="#!/bin/sh\nold-down\n"
     assert len(calls)==2
+
+
+def test_render_openvpn_client_can_select_auxiliary_tcp_runtime(tmp_path,monkeypatch):
+    ovpn,easy=_write_openvpn_fixture(tmp_path,"udp4")
+    tcp_conf=ovpn/"server"/"transport-tcp.conf"
+    tcp_conf.write_text("port 8443\nproto tcp4-server\ndev tun-makia-tcp\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"OVPN_EASYRSA",easy)
+    monkeypatch.setattr(protocol_ops,"_openvpn_transport_runtimes",lambda:{
+        "udp":{"name":"server","config":str(ovpn/"server"/"server.conf"),"port":1194,"proto":"udp4","service_active":True,"listener":True},
+        "tcp":{"name":"transport-tcp","config":str(tcp_conf),"port":8443,"proto":"tcp4-server","service_active":True,"listener":True},
+    })
+    monkeypatch.setattr(protocol_ops,"_openvpn_remote_block",lambda endpoint,port:(
+        f"remote vpn.example.com {port}\n","",False
+    ))
+    result=protocol_ops.render_openvpn_client("client01","vpn.example.com","tcp")
+    assert "proto tcp4-client\n" in result["config"]
+    assert "remote vpn.example.com 8443\n" in result["config"]
+    assert result["server"]=="transport-tcp"
+    assert result["port"]==8443
+    assert result["proto"]=="tcp"
