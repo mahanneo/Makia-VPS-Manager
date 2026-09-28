@@ -76,6 +76,19 @@ def main():
             "streamSettings":simple_stream,
         })
 
+        # Manual/Expert profile: VLESS RAW with security=none.
+        # This is intentionally allowed by Makia expert mode and must carry
+        # real traffic, not merely pass JSON validation.
+        manual_id=str(uuid.uuid4())
+        manual_stream,_=protocol_ops._build_xray_stream(
+            binary,"vless","tcp","none","/","","",
+        )
+        data["inbounds"].append({
+            "tag":"makia-ci-manual-none","listen":"127.0.0.1","port":21009,"protocol":"vless",
+            "settings":{"clients":[{"id":manual_id,"email":"ci-manual-none","level":0}],"decryption":"none"},
+            "streamSettings":manual_stream,
+        })
+
         # VMess + WebSocket
         vmess_stream,_=protocol_ops._build_xray_stream(binary,"vmess","ws","none","/vmess","","")
         data["inbounds"].append({
@@ -163,6 +176,7 @@ def main():
         try:
             protocol_ops._xray_test_config(binary,target)
             verify_simple_connection(binary,target,root,simple_id,simple_meta)
+            verify_manual_none_connection(binary,target,root,manual_id)
         finally:
             target.unlink(missing_ok=True)
 
@@ -329,6 +343,62 @@ def verify_simple_connection(binary,server_config,root,client_id,meta):
                         error=str(exc)
                     time.sleep(.25)
                 raise AssertionError(f"VLESS client traffic failed: {error}; server={server_log.read_text()[-1500:]}; client={client_log.read_text()[-1500:]}")
+            finally:
+                client.terminate();server.terminate()
+                client.wait(timeout=5);server.wait(timeout=5)
+    finally:
+        target.shutdown();target.server_close()
+
+
+
+
+def verify_manual_none_connection(binary,server_config,root,client_id):
+    class Target(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"makia-vless-none-connected")
+        def log_message(self,*args): pass
+
+    target=ThreadingHTTPServer(("127.0.0.1",0),Target)
+    thread=threading.Thread(target=target.serve_forever,daemon=True)
+    thread.start()
+    client_config=root/"client-none.json"
+    client_config.write_text(json.dumps({
+        "log":{"loglevel":"debug"},
+        "inbounds":[{"listen":"127.0.0.1","port":21020,"protocol":"http","settings":{}}],
+        "outbounds":[{"protocol":"vless","settings":{"vnext":[{
+            "address":"127.0.0.1","port":21009,
+            "users":[{"id":client_id,"encryption":"none"}],
+        }]},"streamSettings":{"method":"raw","security":"none"}}],
+    }),encoding="utf-8")
+    protocol_ops._xray_test_config(binary,client_config)
+    server_log=root/"server-none.log"
+    client_log=root/"client-none.log"
+    try:
+        with server_log.open("w") as srv_log,client_log.open("w") as cli_log:
+            server=subprocess.Popen([binary,"run","-config",str(server_config)],stdout=srv_log,stderr=subprocess.STDOUT)
+            client=subprocess.Popen([binary,"run","-config",str(client_config)],stdout=cli_log,stderr=subprocess.STDOUT)
+            try:
+                deadline=time.monotonic()+12
+                error=None
+                while time.monotonic()<deadline:
+                    if server.poll() is not None or client.poll() is not None:
+                        break
+                    try:
+                        conn=http.client.HTTPConnection("127.0.0.1",21020,timeout=2)
+                        conn.request("GET",f"http://127.0.0.1:{target.server_port}/")
+                        response=conn.getresponse()
+                        body=response.read()
+                        conn.close()
+                        if response.status==200 and body==b"makia-vless-none-connected":
+                            print("VLESS RAW security=none client handshake and traffic PASS")
+                            return
+                        error=f"HTTP {response.status}: {body[:100]!r}"
+                    except (OSError,http.client.HTTPException) as exc:
+                        error=str(exc)
+                    time.sleep(.25)
+                raise AssertionError(f"VLESS none traffic failed: {error}; server={server_log.read_text()[-1500:]}; client={client_log.read_text()[-1500:]}")
             finally:
                 client.terminate();server.terminate()
                 client.wait(timeout=5);server.wait(timeout=5)
