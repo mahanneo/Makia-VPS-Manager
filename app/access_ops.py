@@ -207,12 +207,44 @@ def client_guide_text(kind,protocol=""):
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
         )
+    if kind=="outline":
+        return common+(
+            "Outline\n"
+            "1) Outline Client را نصب کنید.\n"
+            "2) Access Key با ss:// شروع می‌شود؛ آن را Copy و داخل Outline Client اضافه کنید.\n"
+            "3) اگر Client از QR پشتیبانی می‌کند می‌توانید همان Access Key را از QR Import کنید.\n"
+            "4) Access Key را عمومی نکنید؛ این کلید معادل Credential کاربر است.\n"
+        )
     return common+(
         "SSH / NPV Tunnel\n"
         "1) برای NPV Tunnel / NapsternetV سازگار، لینک npvt-ssh:// را Import from Clipboard کنید یا QR را اسکن کنید.\n"
         "2) برای SSH معمولی از Server, Port, Username و Password داخل credentials.txt استفاده کنید.\n"
         "3) OpenSSH رمز عبور را داخل config ذخیره نمی‌کند.\n"
     )
+
+
+def outline_payload(name,access_url):
+    name=str(name or "outline").strip() or "outline"
+    access_url=str(access_url or "").strip()
+    if not access_url.startswith("ss://"):
+        raise AccessPackageError("Outline access URL must be a static ss:// key")
+    safe=safe_filename(name,"outline")
+    guide=client_guide_text("outline","outline")
+    return {
+        "kind":"outline",
+        "protocol":"outline",
+        "summary":{"name":name,**describe_xray_share(access_url,"shadowsocks")},
+        "primary_text":access_url,
+        "share_text":access_url,
+        "native_filename":f"{safe}-outline.txt",
+        "files":{
+            f"{safe}-outline.txt":(access_url+"\n").encode("utf-8"),
+            "connection-guide.txt":guide.encode("utf-8"),
+            f"{safe}-qr.svg":make_qr_svg(access_url),
+        },
+        "guide_text":guide,
+    }
+
 
 def ssh_payload(host,username,password,port=22,npv_options=None):
     host=str(host or "").strip()
