@@ -583,3 +583,25 @@ def test_repair_openvpn_all_runtimes_ignores_non_makia_server_configs(monkeypatc
     assert result["ok"] is True
     assert [row["server"] for row in result["servers"]]==["server"]
     assert custom.read_text(encoding="utf-8")==custom_text
+
+
+def test_openvpn_transport_discovery_ignores_custom_config(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"
+    server.mkdir(parents=True)
+    (server/"server.conf").write_text("port 1194\nproto udp4\n",encoding="utf-8")
+    (server/"customer-custom.conf").write_text("port 7443\nproto tcp4-server\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    def runtime(stem):
+        conf=server/f"{stem}.conf"
+        text=conf.read_text()
+        return {
+            "name":stem,"config":str(conf),
+            "port":1194 if stem=="server" else 7443,
+            "proto":"udp4" if stem=="server" else "tcp4-server",
+            "service_active":True,"listener":True,
+        }
+    monkeypatch.setattr(protocol_ops,"_openvpn_runtime_for",runtime)
+    runtimes=protocol_ops._openvpn_transport_runtimes()
+    assert runtimes["udp"]["name"]=="server"
+    assert runtimes["tcp"] is None
