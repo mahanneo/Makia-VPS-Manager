@@ -6,6 +6,7 @@ import io
 import json
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -175,6 +176,54 @@ def restore_ssh_users(blob:bytes):
     return restored
 
 
+def restore_ssh_host_keys(payload):
+    keys={
+        name.split("/")[-1]:blob
+        for name,blob in payload.items()
+        if name.startswith("payload/ssh-host-keys/")
+    }
+    if not keys:
+        return []
+    ssh_dir=Path("/etc/ssh")
+    ssh_dir.mkdir(parents=True,exist_ok=True)
+    stamp=dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir=BACKUP_ROOT/f"ssh-hostkeys-pre-restore-{stamp}"
+    backup_dir.mkdir(parents=True,exist_ok=True)
+    restored=[]
+    originals={}
+    try:
+        for name,blob in sorted(keys.items()):
+            if not re.fullmatch(r"ssh_host_[A-Za-z0-9_-]+_key(?:\.pub)?",name):
+                raise RuntimeError(f"invalid SSH host key filename: {name}")
+            target=ssh_dir/name
+            originals[name]=target.read_bytes() if target.exists() else None
+            if target.exists():
+                shutil.copy2(target,backup_dir/name)
+            target.write_bytes(blob)
+            os.chown(target,0,0)
+            os.chmod(target,0o644 if name.endswith(".pub") else 0o600)
+            restored.append(name)
+        sshd=shutil.which("sshd")
+        if not sshd:
+            raise RuntimeError("sshd is unavailable after SSH host key restore")
+        test=run([sshd,"-t"],check=False)
+        if test.returncode!=0:
+            raise RuntimeError((test.stderr or test.stdout or "sshd validation failed").strip())
+        service="ssh" if run(["systemctl","status","ssh"],check=False).returncode in {0,3} else "sshd"
+        run(["systemctl","reload",service])
+        return restored
+    except Exception:
+        for name,blob in originals.items():
+            target=ssh_dir/name
+            if blob is None:
+                target.unlink(missing_ok=True)
+            else:
+                target.write_bytes(blob)
+                os.chown(target,0,0)
+                os.chmod(target,0o644 if name.endswith(".pub") else 0o600)
+        raise
+
+
 def restart_stack():
     run(["systemctl","daemon-reload"],check=False)
     if Path("/etc/wireguard/wg0.conf").exists():
@@ -283,6 +332,7 @@ def main():
     install_components(payload)
     restore_data(payload["payload/data.tar.gz"])
     restore_ssh_users(payload["payload/ssh-users.json"])
+    restore_ssh_host_keys(payload)
 
     mappings=[
         ("payload/wireguard.tar.gz","wireguard",Path("/etc/wireguard")),
