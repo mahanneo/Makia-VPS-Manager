@@ -1741,7 +1741,7 @@ def access_entries(request:Request):
         })
 
     protocol_rows=protocol_clients_get(request)
-    for item in protocol_rows:
+    for item in [x for x in protocol_rows if x.get("engine")=="xray"]:
         key=str(item["id"])
         art=artifacts.get(("xray",key))
         rows.append({
@@ -1751,6 +1751,18 @@ def access_entries(request:Request):
             "quota_bytes":item.get("quota_bytes",0),"used_bytes":item.get("usage",{}).get("total",0),
             "expire_at":item.get("expire_at",0),"can_export":True,
             "artifact_id":art["id"] if art else None,"subscription_id":item.get("subscription_id",""),
+            "legacy":not bool(art),"endpoint":saved_endpoint(art)
+        })
+
+    for item in [x for x in protocol_rows if x.get("engine")=="outline"]:
+        key=str(item["id"])
+        art=artifacts.get(("outline",key))
+        rows.append({
+            "id":f"outline:{key}","kind":"outline","key":key,"name":item["name"],"protocol":"outline",
+            "status":"expired" if item.get("expired") else ("active" if item.get("enabled") else "disabled"),
+            "online":None,"device_limit":1,"quota_bytes":item.get("quota_bytes",0),
+            "used_bytes":item.get("usage",{}).get("total",0),"expire_at":item.get("expire_at",0),
+            "can_export":bool(art),"artifact_id":art["id"] if art else None,
             "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
@@ -1783,7 +1795,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
