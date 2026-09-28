@@ -808,6 +808,39 @@ def protocol_modes():
     }
 
 
+def repair_protocol_firewall_runtime():
+    """Recreate only Makia-owned protocol UFW rules from live restored state."""
+    rules=set()
+    xcfg=_config_path()
+    if xcfg:
+        try:
+            data=json.loads(Path(xcfg).read_text(encoding="utf-8"))
+            rules.update(_xray_firewall_rules(data))
+        except Exception:
+            pass
+    wg=wireguard_status()
+    if wg.get("port"):
+        rules.add((int(wg["port"]),"udp","WireGuard"))
+    for transport,runtime in _openvpn_transport_runtimes().items():
+        if runtime and runtime.get("port"):
+            rules.add((int(runtime["port"]),transport,f"OpenVPN {transport.upper()}"))
+    ike=ikev2_status()
+    if ike.get("configured"):
+        rules.add((500,"udp","IKEv2"))
+        rules.add((4500,"udp","IKEv2 NAT-T"))
+    st=stealth_status()
+    if st.get("configured") and st.get("port"):
+        rules.add((int(st["port"]),"tcp","OpenVPN Stealth"))
+    ws=wstunnel_status()
+    if ws.get("configured") and ws.get("port"):
+        rules.add((int(ws["port"]),"tcp","WStunnel WSS"))
+    applied=[]
+    for port,proto,label in sorted(rules):
+        result=_ufw_allow_if_active(port,proto,label)
+        applied.append({"port":port,"proto":proto,"label":label,**result})
+    return {"ok":True,"rules":applied}
+
+
 def ssh_status():
     return {
         "installed":_installed("sshd") or _installed("ssh"),
@@ -2015,7 +2048,8 @@ def repair_openvpn_all_runtimes():
             runtime=_openvpn_runtime_for(stem)
             if not runtime.get("service_active") or not runtime.get("listener"):
                 raise ProtocolError(f"OpenVPN {stem} did not become ready after host-network rebind")
-            results.append({"server":stem,"backup":str(backup),"runtime":runtime,"subnet":net.with_prefixlen,"uplink":uplink})
+            firewall=_ufw_allow_if_active(int(runtime.get("port") or 0),transport,f"OpenVPN {transport.upper()}")
+            results.append({"server":stem,"backup":str(backup),"runtime":runtime,"subnet":net.with_prefixlen,"uplink":uplink,"firewall":firewall})
         except Exception:
             shutil.copy2(backup,conf)
             try:_run(["systemctl","restart",f"openvpn-server@{stem}"],timeout=30)
