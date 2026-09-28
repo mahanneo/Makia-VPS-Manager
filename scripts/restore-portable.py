@@ -478,6 +478,11 @@ def restart_stack():
         run(["systemctl","enable","--now","makia-wstunnel"],check=False)
         run(["systemctl","restart","makia-wstunnel"],check=False)
 
+    outline_start=Path("/opt/outline/persisted-state/start_container.sh")
+    if Path("/opt/outline/access.txt").exists() and shutil.which("docker") and outline_start.is_file():
+        run(["systemctl","enable","--now","docker"],check=False)
+        run(["bash",str(outline_start)],check=False)
+
     for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","fail2ban"]:
         run(["systemctl","enable","--now",svc],check=False)
         run(["systemctl","restart",svc],check=False)
@@ -516,6 +521,9 @@ def validate_restored(panel_domain=""):
 
     if Path("/etc/makia-vps-manager/wstunnel.env").exists():
         checks.append(("wstunnel",run(["systemctl","is-active","makia-wstunnel"],check=False).returncode==0))
+
+    if Path("/opt/outline/access.txt").exists():
+        checks.append(("outline",run(["docker","inspect","-f","{{.State.Running}}","shadowbox"],check=False).stdout.strip()=="true" if shutil.which("docker") else False))
 
     if panel_domain and Path(f"/etc/letsencrypt/live/{panel_domain}/fullchain.pem").exists():
         p=run(["curl","-fsS","--max-time","8","--resolve",f"{panel_domain}:443:127.0.0.1",f"https://{panel_domain}/healthz"],check=False)
