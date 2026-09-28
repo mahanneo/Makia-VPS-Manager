@@ -233,6 +233,16 @@ function accessCard(a){
 }
 
 
+
+async function rotateClientPortal(kind,key,name){
+  if(!confirm(tr('لینک فعلی فوراً از کار می‌افتد و لینک جدید ساخته می‌شود. ادامه می‌دهید؟','The current link will stop working immediately and a new link will be created. Continue?')))return;
+  try{
+    await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/portal/rotate',{method:'POST'});
+    toast(tr('لینک جدید ساخته شد','New client link created'));
+    await openClientPortal(kind,key,name);
+  }catch(e){alert(tr('تغییر لینک: ','Rotate link: ')+e.message)}
+}
+
 async function openClientPortal(kind,key,name){
   try{
     const r=await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/portal');
@@ -243,7 +253,7 @@ async function openClientPortal(kind,key,name){
       '<div class="wizard-head"><div><div class="eyebrow">'+htmlEsc(tr('لینک اختصاصی کاربر','CLIENT SELF-SERVICE LINK'))+'</div><h3>'+htmlEsc(name||key)+'</h3><p>'+htmlEsc(tr('این لینک را مستقیم برای کاربر بفرست؛ آموزش، فایل و QR در همان صفحه است.','Send this link directly to the client; guide, file and QR are available on the same page.'))+'</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
       '<label>'+htmlEsc(tr('لینک اختصاصی','Private client link'))+'<textarea id="clientPortalUrl" class="config-output small" readonly></textarea></label>',
       '<div class="wizard-note"><b>'+htmlEsc(tr('محرمانه','Private'))+'</b><span>'+htmlEsc(tr('هر کسی این لینک را داشته باشد می‌تواند اطلاعات اتصال همان کاربر را ببیند. آن را مانند رمز عبور نگه دارید.','Anyone with this link can view this client’s connection data. Treat it like a password.'))+'</span></div>',
-      '<div class="wizard-footer"><button class="ghost" data-action="copy-target" data-target="clientPortalUrl">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><a class="primary link-btn" href="'+htmlEsc(url)+'" target="_blank" rel="noopener noreferrer">'+htmlEsc(tr('باز کردن صفحه کاربر','Open client page'))+'</a><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="copy-target" data-target="clientPortalUrl">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><a class="primary link-btn" href="'+htmlEsc(url)+'" target="_blank" rel="noopener noreferrer">'+htmlEsc(tr('باز کردن صفحه کاربر','Open client page'))+'</a><button class="ghost" data-action="client-portal-rotate" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name||key)+'">'+htmlEsc(tr('ساخت لینک جدید','Rotate link'))+'</button><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div>',
       '</div></div>'
     ].join('');
     document.getElementById('clientPortalUrl').value=url;
@@ -2098,6 +2108,7 @@ async function handleMakiaAction(btn){
   if(action==='native-export'){await downloadAccessNative(btn.dataset.kind,dataDec(btn.dataset.key));return}
   if(action==='access-share'){await openAccessShare(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='client-portal'){await openClientPortal(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='client-portal-rotate'){await rotateClientPortal(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='access-detail'){await openAccessDetail(dataDec(btn.dataset.id));return}
