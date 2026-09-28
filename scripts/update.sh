@@ -204,6 +204,8 @@ install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/syste
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
 install -m 0644 "$SRC/systemd/makia-node-agent.service" /etc/systemd/system/makia-node-agent.service
 install -m 0644 "$SRC/systemd/makia-node-agent.timer" /etc/systemd/system/makia-node-agent.timer
+install -m 0644 "$SRC/systemd/makia-health-alerts.service" /etc/systemd/system/makia-health-alerts.service
+install -m 0644 "$SRC/systemd/makia-health-alerts.timer" /etc/systemd/system/makia-health-alerts.timer
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -227,11 +229,13 @@ install -m 0755 "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install
 install -m 0755 "$SRC/scripts/scheduled-backup.py" /usr/local/sbin/makia-scheduled-backup
 install -m 0755 "$SRC/scripts/node-agent.py" /usr/local/sbin/makia-node-agent
 install -m 0755 "$SRC/scripts/connect-node.sh" /usr/local/sbin/makia-node-connect
+install -m 0755 "$SRC/scripts/health-alerts.py" /usr/local/sbin/makia-health-alerts
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
 systemctl enable --now makia-scheduled-backup.timer
+systemctl enable --now makia-health-alerts.timer
 if [[ -f /etc/makia-vps-manager/node.env ]]; then
   systemctl enable --now makia-node-agent.timer
 fi
