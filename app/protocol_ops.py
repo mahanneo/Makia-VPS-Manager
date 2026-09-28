@@ -27,6 +27,8 @@ IKEV2_ENV=Path("/etc/makia-vps-manager/ikev2.env")
 STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
 WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
 WSTUNNEL_SERVICE="makia-wstunnel"
+OVPN_TCP_FALLBACK_CONF=OVPN_DIR/"server/makia-tcp.conf"
+OVPN_TCP_FALLBACK_SERVICE="openvpn-server@makia-tcp"
 
 
 def _backup_dir():
@@ -678,10 +680,10 @@ def bootstrap_stealth(domain, listen_port=8443):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     listen_port=_validate_port(listen_port)
-    runtime=_openvpn_server_runtime()
-    if not runtime.get("service_active") or not str(runtime.get("proto") or "").startswith("tcp"):
-        raise ProtocolError("Stealth requires the active OpenVPN server to use TCP first")
-    backend_port=int(runtime.get("port") or 0)
+    fallback=_openvpn_named_runtime("makia-tcp")
+    if not fallback.get("service_active") or not fallback.get("listener"):
+        fallback=ensure_openvpn_tcp_fallback(8443)["status"]
+    backend_port=int(fallback.get("port") or 0)
     if listen_port==backend_port:
         raise ProtocolError("Stealth public port must differ from the OpenVPN TCP backend port")
     existing=stealth_status()
@@ -784,19 +786,21 @@ def protocol_modes():
     ike=ikev2_status()
     st=stealth_status()
     ws=wstunnel_status()
+    tcp=_openvpn_named_runtime("makia-tcp")
     return {
         "modes":[
             {"id":"ikev2","label":"IKEv2","ports":[500,4500],"transport":"UDP/IPsec","ready":bool(ike.get("configured") and ike.get("service_active")),"status":ike},
             {"id":"wireguard","label":"WireGuard","ports":[wg.get("port")] if wg.get("port") else [],"transport":"UDP","ready":bool(wg.get("service_active") and wg.get("config")),"status":wg},
             {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
-            {"id":"tcp","label":"TCP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else [],"transport":"OpenVPN TCP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp")),"status":ov},
+            {"id":"tcp","label":"TCP","ports":[tcp.get("port")] if tcp.get("port") else ([ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else []),"transport":"OpenVPN TCP fallback","ready":bool((tcp.get("service_active") and tcp.get("listener")) or (ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp"))),"status":tcp if tcp.get("config") else ov},
             {"id":"stealth","label":"Stealth","ports":[st.get("port")] if st.get("port") else [],"transport":"OpenVPN over TLS/Stunnel","ready":bool(st.get("service_active") and st.get("listener")),"status":st},
             {"id":"wstunnel","label":"WStunnel","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
         ],
         "constraints":{
-            "openvpn_single_active_transport":True,
+            "openvpn_primary_transport_switch":True,
+            "tcp_fallback_parallel":True,
             "tcp_443_reserved_for_https":True,
-            "note":"UDP and TCP cards select the single active OpenVPN server transport. Stealth and WStunnel use separate TCP listeners to avoid faking simultaneous TCP/443 ownership.",
+            "note":"Primary OpenVPN can remain UDP while Makia runs a separate TCP fallback. Stealth reuses that TCP backend, so enabling it no longer disconnects UDP users.",
         }
     }
 
@@ -1575,6 +1579,91 @@ def _local_ipv6_candidates():
     except Exception:
         pass
     return sorted(found)
+
+def _openvpn_named_runtime(stem):
+    conf=OVPN_DIR/"server"/f"{stem}.conf"
+    service=f"openvpn-server@{stem}"
+    result={"config":str(conf),"port":None,"proto":None,"service_active":_active(service),"listener":False,"service":service}
+    if conf.exists():
+        text=conf.read_text(encoding="utf-8",errors="ignore")
+        pm=re.search(r"(?m)^port\s+(\d+)\s*$",text)
+        proto_m=re.search(r"(?m)^proto\s+(\S+)\s*$",text)
+        result["port"]=int(pm.group(1)) if pm else None
+        result["proto"]=(proto_m.group(1) if proto_m else "").lower()
+    if result["port"] and shutil.which("ss"):
+        flag="-ltn" if str(result["proto"]).startswith("tcp") else "-lun"
+        p=subprocess.run(["ss","-H",flag],text=True,capture_output=True,timeout=8,check=False)
+        if p.returncode==0:
+            result["listener"]=any(re.search(rf":{int(result['port'])}\b",line) for line in (p.stdout or "").splitlines())
+    return result
+
+
+def _openvpn_aux_forward_scripts(stem,network):
+    uplink=_default_iface()
+    up=OVPN_DIR/f"makia-{stem}-up.sh"
+    down=OVPN_DIR/f"makia-{stem}-down.sh"
+    up.write_text(
+        "#!/bin/sh\n"
+        'iptables -C FORWARD -i "$dev" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$dev" -j ACCEPT\n'
+        'iptables -C FORWARD -o "$dev" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o "$dev" -j ACCEPT\n'
+        f"iptables -t nat -C POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || "
+        f"iptables -t nat -A POSTROUTING -s {network} -o {uplink} -j MASQUERADE\n",
+        encoding="utf-8",
+    )
+    down.write_text(
+        "#!/bin/sh\n"
+        'iptables -D FORWARD -i "$dev" -j ACCEPT 2>/dev/null || true\n'
+        'iptables -D FORWARD -o "$dev" -j ACCEPT 2>/dev/null || true\n'
+        f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
+        encoding="utf-8",
+    )
+    os.chmod(up,0o700); os.chmod(down,0o700)
+    return up,down
+
+
+def ensure_openvpn_tcp_fallback(port=8443):
+    """Run a parallel TCP OpenVPN listener without changing the primary UDP server."""
+    port=_validate_port(port)
+    server_dir=OVPN_DIR/"server"
+    required=[server_dir/"ca.crt",server_dir/"server.crt",server_dir/"server.key",server_dir/"dh.pem",server_dir/"crl.pem",server_dir/"ta.key"]
+    if not all(p.exists() for p in required):
+        raise ProtocolError("OpenVPN primary server/PKI must be configured before enabling TCP fallback")
+
+    current=_openvpn_named_runtime("makia-tcp")
+    if current.get("config") and Path(current["config"]).exists():
+        existing_port=int(current.get("port") or 0)
+        if existing_port!=port and _port_transport_in_use(port,"tcp"):
+            raise ProtocolError(f"TCP port {port} is already in use")
+    elif _port_transport_in_use(port,"tcp"):
+        raise ProtocolError(f"TCP port {port} is already in use; choose another fallback port")
+
+    network="10.9.0.0/24"
+    up,down=_openvpn_aux_forward_scripts("tcp",network)
+    conf=OVPN_TCP_FALLBACK_CONF
+    conf.parent.mkdir(parents=True,exist_ok=True)
+    conf.write_text(
+        f"port {port}\nproto tcp4-server\nlocal 0.0.0.0\ndev tun-tcp\n"
+        "topology subnet\nserver 10.9.0.0 255.255.255.0\n"
+        f"ca {server_dir/'ca.crt'}\ncert {server_dir/'server.crt'}\nkey {server_dir/'server.key'}\n"
+        f"dh {server_dir/'dh.pem'}\ncrl-verify {server_dir/'crl.pem'}\ntls-crypt {server_dir/'ta.key'}\n"
+        'push "redirect-gateway def1 bypass-dhcp"\n'
+        'push "dhcp-option DNS 1.1.1.1"\npush "dhcp-option DNS 8.8.8.8"\n'
+        "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
+        "data-ciphers AES-256-GCM:AES-128-GCM\ndata-ciphers-fallback AES-256-GCM\nauth SHA256\nverb 3\n"
+        f"script-security 2\nup {up}\ndown {down}\n",
+        encoding="utf-8",
+    )
+    os.chmod(conf,0o600)
+    Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+    _run(["systemctl","enable","--now",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
+    _run(["systemctl","restart",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
+    _ufw_allow_if_active(port,"tcp","OpenVPN TCP fallback")
+    status=_openvpn_named_runtime("makia-tcp")
+    if not status.get("service_active") or not status.get("listener"):
+        raise ProtocolError("OpenVPN TCP fallback did not reach the requested listener")
+    return {"ok":True,"status":status,"port":port,"proto":"tcp"}
+
 
 def _openvpn_server_runtime():
     server_conf=OVPN_DIR/"server/server.conf"
