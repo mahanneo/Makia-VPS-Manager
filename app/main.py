@@ -2484,6 +2484,332 @@ def backup_restore_status(job_id:str,request:Request):
     return status
 
 
+
+class OutlineInstallPayload(BaseModel):
+    hostname:str=Field(default="",max_length=255)
+    keys_port:int=Field(default=0,ge=0,le=65535)
+
+class OutlineKeyCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+
+@app.get("/api/protocols/outline/status")
+def outline_status_get(request:Request):
+    require_capability(request,"outline")
+    return integration_ops.outline_status()
+
+@app.post("/api/protocols/outline/install")
+def outline_install(payload:OutlineInstallPayload,request:Request):
+    actor=require_local_admin(request)
+    require_mutation(request)
+    script=Path("/usr/local/sbin/makia-install-outline")
+    if not script.is_file():
+        script=Path(__file__).resolve().parents[1]/"scripts/install-outline.sh"
+    if not script.is_file():
+        raise HTTPException(500,"Outline installer wrapper is missing")
+    args=[str(script)]
+    if payload.hostname:
+        args+=["--hostname",payload.hostname]
+    if payload.keys_port:
+        args+=["--keys-port",str(payload.keys_port)]
+    try:
+        output=system_ops._run(args,timeout=300)
+        status=integration_ops.outline_status()
+    except (system_ops.OperationError,integration_ops.IntegrationError) as exc:
+        audit(actor,"outline_install_failed","outline",str(exc)[:500],ip(request))
+        raise HTTPException(400,str(exc))
+    if not status.get("api_ok"):
+        raise HTTPException(409,"Outline installer completed but the Management API is not ready")
+    audit(actor,"outline_install","outline",f"keys_port={payload.keys_port}",ip=request.client.host if request.client else None)
+    return {"ok":True,"output":output[-1200:],"status":status}
+
+@app.get("/api/protocols/outline/keys")
+def outline_keys_get(request:Request):
+    require_capability(request,"outline")
+    try:
+        keys=integration_ops.outline_list_keys()
+    except integration_ops.IntegrationError as exc:
+        raise HTTPException(400,str(exc))
+    managed={str(row.get("inbound_tag") or ""):row for row in list_protocol_clients() if row.get("engine")=="outline"}
+    return [{**item,"managed":managed.get(str(item.get("id") or ""))} for item in keys]
+
+@app.post("/api/protocols/outline/keys")
+def outline_key_create(payload:OutlineKeyCreate,request:Request):
+    actor=require_capability(request,"outline",True)
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+    created=None
+    client_id=None
+    try:
+        created=integration_ops.outline_create_key(payload.name,quota_bytes)
+        key_id=str(created.get("id") or "")
+        access_url=str(created.get("accessUrl") or "")
+        client_id=create_protocol_client(
+            payload.name,"outline","outline",key_id,key_id,access_url,
+            quota_bytes,expire_at,1,0
+        )
+        delivery=access_ops.outline_payload(payload.name,access_url,key_id,quota_bytes)
+        artifact_id=artifact_save("outline",str(client_id),payload.name,"outline",delivery,{
+            "client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes
+        })
+    except (integration_ops.IntegrationError,Exception) as exc:
+        if created and created.get("id"):
+            try:integration_ops.outline_delete_key(created["id"])
+            except Exception:pass
+        if client_id:
+            try:delete_protocol_client(client_id)
+            except Exception:pass
+        if isinstance(exc,HTTPException):raise
+        raise HTTPException(400,str(exc))
+    audit(actor,"outline_key_create",str(created.get("id") or ""),f"name={payload.name}; quota={quota_bytes}; expire_at={expire_at}",ip(request))
+    qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(created["accessUrl"])).decode("ascii")
+    return {
+        "id":created.get("id"),"name":payload.name,"access_url":created.get("accessUrl"),
+        "client_id":client_id,"artifact_id":artifact_id,"quota_bytes":quota_bytes,
+        "expire_at":expire_at,"qr":qr
+    }
+
+@app.delete("/api/protocols/outline/keys/{key_id}")
+def outline_key_delete(key_id:str,request:Request):
+    actor=require_capability(request,"outline",True)
+    row=next((x for x in list_protocol_clients() if x.get("engine")=="outline" and str(x.get("inbound_tag"))==str(key_id)),None)
+    try:
+        result=integration_ops.outline_delete_key(key_id)
+    except integration_ops.IntegrationError as exc:
+        raise HTTPException(400,str(exc))
+    if row:
+        delete_access_artifact_by_key("outline",str(row["id"]))
+        delete_protocol_client(row["id"])
+    audit(actor,"outline_key_delete",key_id,ip=ip(request))
+    return result
+
+
+class ManagedBulkItem(BaseModel):
+    kind:str
+    key:str
+
+class ManagedBulkAction(BaseModel):
+    items:list[ManagedBulkItem]=Field(min_length=1,max_length=200)
+    action:str
+    days:int=Field(default=0,ge=0,le=3650)
+    quota_add_gb:float=Field(default=0,ge=0,le=100000)
+
+def _renew_managed_item(kind,key,days,quota_add_gb,actor,request):
+    now_ts=int(time.time())
+    if kind=="ssh":
+        profile=all_profiles().get(key)
+        if not profile:
+            raise RuntimeError("SSH profile not found")
+        base=date.today()
+        raw=profile.get("expire_date")
+        if raw:
+            try:
+                d=date.fromisoformat(str(raw))
+                if d>base:base=d
+            except Exception:pass
+        expire=(base+timedelta(days=max(1,days))).isoformat()
+        system_ops.update_ssh_user(key,expire=expire)
+        upsert_profile(
+            key,profile.get("plan",""),profile.get("note",""),expire,
+            profile.get("connection_limit",1),profile.get("quota_mb",0),1,
+            profile.get("device_limit",1),profile.get("renewal_days",0)
+        )
+        try:system_ops.lock_user(key,False)
+        except Exception:pass
+        return {"kind":kind,"key":key,"expire_date":expire}
+    if kind in {"xray","outline"}:
+        try:row=get_protocol_client(int(key))
+        except Exception:row=None
+        if not row or row.get("engine")!=kind:
+            raise RuntimeError(f"{kind} client not found")
+        base=max(now_ts,int(row.get("expire_at") or 0))
+        expire_at=base+max(1,days)*86400
+        quota=int(row.get("quota_bytes") or 0)+int(float(quota_add_gb or 0)*1024*1024*1024)
+        if kind=="xray":
+            if not row.get("enabled"):
+                protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+            update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
+        else:
+            key_id=str(row.get("inbound_tag") or "")
+            if row.get("enabled"):
+                integration_ops.outline_set_limit(key_id,quota)
+                update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
+            else:
+                # Expired Outline keys are revoked because Outline has no pause API.
+                # Renewal therefore reissues a new key and refreshes the same Makia client/artifact.
+                created=integration_ops.outline_create_key(row["name"],quota)
+                new_id=str(created.get("id") or "")
+                access_url=str(created.get("accessUrl") or "")
+                with connect() as con:
+                    con.execute(
+                        "UPDATE protocol_clients SET inbound_tag=?,credential=?,share_link=?,quota_bytes=?,expire_at=?,enabled=1,disabled_reason='',updated_at=? WHERE id=?",
+                        (new_id,new_id,access_url,quota,expire_at,datetime.utcnow().isoformat(),row["id"])
+                    )
+                delivery=access_ops.outline_payload(row["name"],access_url,new_id,quota)
+                artifact_save("outline",str(row["id"]),row["name"],"outline",delivery,{
+                    "client_id":row["id"],"outline_key_id":new_id,"quota_bytes":quota
+                })
+                key_id=new_id
+            return {"kind":kind,"key":key,"expire_at":expire_at,"quota_bytes":quota,"outline_key_id":key_id}
+        return {"kind":kind,"key":key,"expire_at":expire_at,"quota_bytes":quota}
+    raise RuntimeError("renew is not enforceable for this access type")
+
+@app.post("/api/access/bulk")
+def managed_bulk_action(payload:ManagedBulkAction,request:Request):
+    actor=require_mutation(request)
+    if payload.action not in {"renew","enable","disable"}:
+        raise HTTPException(400,"unsupported bulk action")
+    if payload.action=="renew" and payload.days<1:
+        raise HTTPException(400,"renewal days must be at least 1")
+    done=[];failed=[]
+    for item in payload.items:
+        kind=str(item.kind or "").lower()
+        key=str(item.key or "")
+        try:
+            if payload.action=="renew":
+                result=_renew_managed_item(kind,key,payload.days,payload.quota_add_gb,actor,request)
+            elif kind=="ssh":
+                system_ops.lock_user(key,payload.action=="disable")
+                p=all_profiles().get(key,{})
+                upsert_profile(key,p.get("plan",""),p.get("note",""),p.get("expire_date"),p.get("connection_limit",1),p.get("quota_mb",0),1 if payload.action=="enable" else 0,p.get("device_limit",1),p.get("renewal_days",0))
+                result={"kind":kind,"key":key}
+            elif kind=="xray":
+                row=get_protocol_client(int(key))
+                if not row:raise RuntimeError("client not found")
+                if payload.action=="enable":
+                    protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+                else:
+                    protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
+                update_protocol_client_state(row["id"],payload.action=="enable",None,None,None,None)
+                result={"kind":kind,"key":key}
+            elif kind=="outline":
+                row=get_protocol_client(int(key))
+                if not row or row.get("engine")!="outline":raise RuntimeError("client not found")
+                if payload.action=="disable":
+                    integration_ops.outline_delete_key(row["inbound_tag"])
+                    update_protocol_client_state(row["id"],False,None,None,None,None)
+                else:
+                    raise RuntimeError("disabled Outline keys must be renewed/reissued")
+                result={"kind":kind,"key":key}
+            else:
+                raise RuntimeError("bulk enable/disable is not supported for this access type")
+            done.append(result)
+        except Exception as exc:
+            failed.append({"kind":kind,"key":key,"error":str(exc)[:200]})
+    audit(actor,f"access_bulk_{payload.action}",str(len(done)),f"failed={len(failed)}; days={payload.days}; quota_add_gb={payload.quota_add_gb}",ip(request))
+    return {"done":done,"failed":failed}
+
+
+@app.get("/api/expiry")
+def expiry_center(request:Request,days:int=30):
+    require_user(request)
+    horizon=max(0,min(int(days),3650))
+    today=date.today()
+    now_ts=int(time.time())
+    rows=[]
+    for username,p in all_profiles().items():
+        raw=p.get("expire_date")
+        if not raw:continue
+        try:d=date.fromisoformat(str(raw))
+        except Exception:continue
+        left=(d-today).days
+        if left<=horizon:
+            rows.append({"kind":"ssh","key":username,"name":username,"protocol":"ssh","days_left":left,"expire_date":str(raw),"expired":left<0,"renew_supported":True})
+    for row in list_protocol_clients():
+        expire_at=int(row.get("expire_at") or 0)
+        if not expire_at:continue
+        left=(expire_at-now_ts)//86400
+        if left<=horizon:
+            rows.append({
+                "kind":row.get("engine"),"key":str(row.get("id")),"name":row.get("name"),"protocol":row.get("protocol"),
+                "days_left":left,"expire_at":expire_at,"expired":expire_at<now_ts,"renew_supported":row.get("engine") in {"xray","outline"},
+                "enabled":bool(row.get("enabled"))
+            })
+    rows.sort(key=lambda x:x.get("days_left",999999))
+    return {"days":horizon,"count":len(rows),"expired":sum(1 for x in rows if x.get("expired")),"rows":rows}
+
+
+@app.get("/api/notifications")
+def notifications_get(request:Request):
+    require_user(request)
+    events=list_notification_events(100)
+    expiry=expiry_center(request,7)
+    stale=[]
+    now=time.time()
+    for node in list_nodes():
+        seen=node.get("last_seen_at")
+        age=None
+        if seen:
+            try:age=max(0,int(now-datetime.fromisoformat(str(seen)).timestamp()))
+            except Exception:age=None
+        if node.get("active") and (age is None or age>180):
+            stale.append({"id":node.get("id"),"name":node.get("name"),"age":age})
+    return {
+        "events":events,
+        "summary":{"expiring_7d":expiry["count"],"expired":expiry["expired"],"nodes_offline":len(stale)},
+        "nodes_offline":stale,
+    }
+
+
+@app.get("/api/diagnostics/access/{kind}/{key}")
+def access_diagnostics(kind:str,key:str,request:Request):
+    require_access_kind(request,kind)
+    checks=[]
+    def add(name,ok,detail=""):
+        checks.append({"name":name,"ok":bool(ok),"detail":str(detail or "")[:500]})
+    artifact=get_access_artifact_by_key(kind,key)
+    add("artifact",bool(artifact),"encrypted delivery artifact available" if artifact else "delivery artifact missing")
+    payload=None
+    if artifact:
+        try:
+            payload=access_ops.open_payload(artifact["payload_enc"])
+            add("artifact_decrypt",True,"payload decrypt PASS")
+        except Exception as exc:add("artifact_decrypt",False,exc)
+    state=_public_access_state(kind,key)
+    add("policy_active",state.get("active"),state.get("reason"))
+    if payload:
+        files=payload.get("files") or {}
+        add("native_file",bool(payload.get("native_filename") in files),payload.get("native_filename") or "none")
+        share=str(payload.get("share_text") or "")
+        add("share_payload",bool(share) if kind in {"xray","wireguard","ssh","outline"} else True,"available" if share else "not applicable")
+    endpoint=""
+    meta=_artifact_public_meta(artifact) if artifact else {}
+    endpoint=str(meta.get("endpoint") or "")
+    if endpoint:
+        try:
+            resolved=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET)})
+            add("endpoint_dns",bool(resolved),", ".join(resolved))
+        except Exception as exc:add("endpoint_dns",False,exc)
+    if kind=="xray":
+        try:
+            row=get_protocol_client(int(key))
+            diag=protocol_ops.xray_diagnostics()
+            add("xray_service",bool(diag.get("service_active")),diag.get("journal") or "")
+            if row:
+                config=protocol_ops.read_xray_config()
+                inbound=next((x for x in config.get("inbounds",[]) if x.get("tag")==row.get("inbound_tag")),None)
+                add("inbound",bool(inbound),row.get("inbound_tag"))
+                if inbound:add("listener",protocol_ops._listener_present(int(inbound.get("port") or 0),"udp" if (inbound.get("streamSettings") or {}).get("method") in {"mkcp","hysteria"} else "tcp"),str(inbound.get("port")))
+        except Exception as exc:add("xray_runtime",False,exc)
+    elif kind=="wireguard":
+        try:
+            d=protocol_ops.wireguard_endpoint_diagnostics(endpoint or public_host(request))
+            add("wireguard_runtime",bool(d.get("runtime_ok")),"; ".join(d.get("warnings") or []))
+        except Exception as exc:add("wireguard_runtime",False,exc)
+    elif kind=="openvpn":
+        try:
+            d=protocol_ops.openvpn_endpoint_diagnostics(endpoint or public_host(request))
+            add("openvpn_runtime",bool(d.get("service_active") and d.get("listener")),"; ".join(d.get("warnings") or []))
+        except Exception as exc:add("openvpn_runtime",False,exc)
+    elif kind=="outline":
+        try:
+            d=integration_ops.outline_status()
+            add("outline_api",bool(d.get("api_ok")),d.get("error") or f"{d.get('key_count',0)} keys")
+        except Exception as exc:add("outline_api",False,exc)
+    return {"kind":kind,"key":key,"ok":all(x["ok"] for x in checks),"checks":checks,"state":state}
+
+
 @app.get("/api/audit")
 def audit_list(request:Request,limit:int=100):
     require_user(request); limit=max(1,min(limit,500))
