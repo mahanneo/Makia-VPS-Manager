@@ -225,7 +225,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v0260rc2' app/static/sw.js
+          grep -q 'makia-shell-v0260rc3' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
