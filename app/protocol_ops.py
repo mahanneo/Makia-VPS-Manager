@@ -2788,6 +2788,11 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         if not _active("xray"):
             raise ProtocolError("Xray did not become active after restart")
         firewall_proto="udp" if protocol=="hysteria2" or stream.get("method")=="mkcp" else "tcp"
+        if not _listener_present(port,firewall_proto):
+            raise ProtocolError(
+                f"Xray service is active but the requested {firewall_proto.upper()}/{port} listener is not present; "
+                "the previous config has been restored"
+            )
         _ufw_allow_if_active(port,firewall_proto,f"Xray {protocol}")
     except Exception:
         try:
