@@ -240,15 +240,18 @@ def main():
             page.evaluate("window.__protocolData.xray.installed=true")
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
-            page.locator("#wizXrayProtocol").select_option("vmess")
+            page.locator("#wizXrayProtocol").select_option("vless")
             page.locator("#wizEndpoint").fill("8.8.8.8")
             page.locator('[data-action="wizard-next"]').click()
-            assert "VMESS" in page.locator(".recommended-profile").text_content()
-            assert "WS" in page.locator(".recommended-profile").text_content()
-            assert "NONE" in page.locator(".recommended-profile").text_content()
+            assert "VLESS" in page.locator(".recommended-profile").text_content()
+            assert "REALITY" in page.locator(".recommended-profile").text_content()
             assert page.locator("#wizSecurity").count()==0
             page.locator('[data-action="wizard-xray-advanced"]').click()
             assert page.locator("#wizSecurity").count()==1
+            page.locator("#wizSecurity").select_option("none")
+            page.locator('[data-action="wizard-next"]').click()
+            assert "NONE" in page.locator(".review-grid").text_content()
+            page.locator('[data-action="wizard-prev"]').click()
             page.locator('[data-action="wizard-xray-simple"]').click()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
