@@ -2408,6 +2408,90 @@ def access_revoke(kind:str,key:str,request:Request):
     audit(actor,"access_revoke",f"{kind}:{key}",ip=ip(request))
     return {"ok":True}
 
+
+@app.get("/api/diagnostics/access/{kind}/{key}")
+def diagnostics_access(kind:str,key:str,request:Request):
+    require_access_kind(request,kind)
+    checks=[]
+    def add(name,ok,detail="",level="error"):
+        checks.append({"name":name,"ok":bool(ok),"detail":str(detail)[:500],"level":"ok" if ok else level})
+    artifact=get_access_artifact_by_key(kind,key)
+    add("artifact",bool(artifact),"Encrypted delivery artifact available" if artifact else "No exportable artifact","warn")
+    meta={}
+    if artifact:
+        try:
+            meta=json.loads(artifact.get("metadata_json") or "{}")
+            access_ops.open_payload(artifact["payload_enc"])
+            add("artifact_crypto",True,"Encrypted payload decrypts successfully")
+        except Exception as exc:
+            add("artifact_crypto",False,exc)
+    endpoint=str(meta.get("endpoint") or "").strip()
+    port=int(meta.get("port") or 0)
+    if endpoint:
+        host=endpoint.strip("[]")
+        try:
+            ipaddress.ip_address(host)
+            add("endpoint",True,f"Literal IP: {host}","warn")
+        except ValueError:
+            try:
+                resolved=sorted({x[4][0] for x in socket.getaddrinfo(host,port or 443,socket.AF_INET,socket.SOCK_STREAM) if x and x[4]})
+                add("dns",bool(resolved),", ".join(resolved) or "No IPv4 A record","warn")
+            except OSError as exc:
+                add("dns",False,exc,"warn")
+    if kind=="ssh":
+        account=next((x for x in account_rows() if x["username"]==key),None)
+        add("account",bool(account),"Linux account exists" if account else "Linux account missing")
+        svc=system_ops.service_status("ssh")
+        add("runtime",svc.get("active"),f"OpenSSH: {svc.get('state')}")
+        if account:
+            add("expiry",not account.get("expired"),f"days_left={account.get('days_left')}","warn")
+            add("session_limit",account.get("online",0)<=account.get("connection_limit",1),f"online={account.get('online',0')} limit={account.get('connection_limit',1)}","warn")
+    elif kind=="xray":
+        try: row=get_protocol_client(int(key))
+        except Exception: row=None
+        add("client_db",bool(row),"Managed Xray client exists" if row else "Managed Xray client missing")
+        diag=protocol_ops.xray_diagnostics()
+        add("core_config",bool(diag.get("root_validation")),"Xray config validation PASS" if diag.get("root_validation") else diag.get("root_error","invalid config"))
+        add("runtime",bool(diag.get("service_active")),"Xray active" if diag.get("service_active") else "Xray inactive")
+        if row:
+            snap=_subscription_snapshot(row)
+            add("enabled",bool(snap.get("enabled")),snap.get("disabled_reason") or "enabled","warn")
+            add("expiry",not snap.get("expired"),f"expire_at={snap.get('expire_at')}","warn")
+            add("quota",not snap.get("quota_exhausted"),f"used={snap.get('used_bytes')} quota={snap.get('quota_bytes')}","warn")
+            inbound=next((x for x in (diag.get("inbounds") or []) if x.get("tag")==row.get("inbound_tag")),None)
+            add("inbound",bool(inbound),row.get("inbound_tag") or "missing")
+    elif kind=="wireguard":
+        peer=next((x for x in protocol_ops.list_wireguard_peers() if x.get("name")==key),None)
+        add("peer",bool(peer),"WireGuard peer exists" if peer else "Peer missing")
+        wg=protocol_ops.wireguard_status()
+        add("runtime",bool(wg.get("service_active")),f"wg0 port={wg.get('port')}")
+        runtime=next((x for x in protocol_ops._wireguard_peer_runtime() if peer and x.get("public_key")==peer.get("public_key")),None)
+        if runtime:
+            add("handshake",runtime.get("handshake_age") is not None,f"age={runtime.get('handshake_age')}s; rx={runtime.get('rx')}; tx={runtime.get('tx')}","warn")
+    elif kind=="openvpn":
+        exists=any(x.get("name")==key for x in protocol_ops.list_openvpn_clients())
+        add("client",exists,"OpenVPN PKI client exists" if exists else "Client certificate missing")
+        target=endpoint or public_host(request)
+        try:
+            diag=protocol_ops.openvpn_endpoint_diagnostics(target)
+            add("runtime",bool(diag.get("service_active") and diag.get("listener")),f"{diag.get('proto')}:{diag.get('port')}")
+            add("endpoint",bool(diag.get("endpoint_ok")),("; ".join(diag.get("warnings") or [])) or "Endpoint ready","warn")
+        except Exception as exc:add("runtime",False,exc)
+    elif kind=="outline":
+        cfg=_secret_config_get("outline")
+        add("integration",bool(cfg),"Outline API configured" if cfg else "Outline API is not configured")
+        if cfg:
+            try:
+                status=system_ops.outline_status(cfg["api_url"],cfg["cert_sha256"])
+                live=next((x for x in status.get("keys",[]) if str(x.get("id"))==str(key)),None)
+                add("api",True,f"{status.get('count',0)} keys reachable")
+                add("key",bool(live),"Outline access key exists" if live else "Outline key not found")
+            except Exception as exc:add("api",False,exc)
+    critical=[x for x in checks if not x["ok"] and x["level"]=="error"]
+    warnings=[x for x in checks if not x["ok"] and x["level"]=="warn"]
+    return {"kind":kind,"key":key,"ok":not critical,"critical":len(critical),"warnings":len(warnings),"checks":checks}
+
+
 @app.get("/api/diagnostics/self-test")
 def diagnostics_self_test(request:Request):
     require_user(request)
