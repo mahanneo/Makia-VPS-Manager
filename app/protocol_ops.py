@@ -3127,6 +3127,141 @@ def _xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_m
     return ""
 
 
+
+def _xray_find_inbound(data,inbound_tag):
+    for inbound in data.get("inbounds",[]) if isinstance(data,dict) else []:
+        if isinstance(inbound,dict) and inbound.get("tag")==inbound_tag:
+            return inbound
+    return None
+
+
+def _xray_inbound_protocol(inbound):
+    protocol=str((inbound or {}).get("protocol") or "").lower()
+    settings=(inbound or {}).get("settings") or {}
+    if protocol=="hysteria" and int(settings.get("version") or 0)==2:
+        return "hysteria2"
+    return protocol
+
+
+def _xray_inbound_reality_meta(binary,inbound):
+    stream=(inbound or {}).get("streamSettings") or {}
+    if stream.get("security")!="reality":
+        return {}
+    rs=stream.get("realitySettings") or {}
+    names=rs.get("serverNames") or []
+    ids=rs.get("shortIds") or []
+    private=rs.get("privateKey") or ""
+    return {
+        "public_key":_xray_public_from_private(binary,private) if private else "",
+        "short_id":str(ids[0]) if ids else "",
+        "server_name":str(names[0]) if names else "",
+        "fingerprint":"chrome",
+        "spider_x":"/",
+    }
+
+
+def add_xray_client_to_inbound(inbound_tag,name,endpoint,credential="",flow=""):
+    binary=_binary()
+    config_path=_config_path()
+    if not binary or not config_path:
+        raise ProtocolError("Xray core/config is not available")
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name):
+        raise ProtocolError("client name must use letters, numbers, dot, dash or underscore")
+    endpoint=_validate_endpoint_host(endpoint)
+    path=Path(config_path)
+    try:
+        data=json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ProtocolError(f"cannot parse Xray config: {exc}") from exc
+    inbound=_xray_find_inbound(data,inbound_tag)
+    if not inbound:
+        raise ProtocolError("target Xray inbound not found")
+    protocol=_xray_inbound_protocol(inbound)
+    if protocol not in {"vless","vmess","trojan","hysteria2"}:
+        raise ProtocolError("this inbound protocol does not support multiple managed clients in Makia")
+    settings=inbound.setdefault("settings",{})
+    stream=inbound.get("streamSettings") or {}
+    method=stream.get("method") or stream.get("network") or "raw"
+    security=stream.get("security") or "none"
+    flow=str(flow or "").strip()
+    if flow and not (protocol=="vless" and method in {"raw","tcp"} and security in {"tls","reality"}):
+        raise ProtocolError("XTLS Vision requires VLESS + TCP/RAW + TLS/REALITY")
+    credential=_xray_builder_credential(protocol,credential)
+
+    if protocol in {"vless","vmess","trojan"}:
+        clients=settings.setdefault("clients",[])
+        if not isinstance(clients,list):
+            raise ProtocolError("target inbound client collection is invalid")
+        if any(isinstance(item,dict) and item.get("email")==name for item in clients):
+            raise ProtocolError("client name already exists in this inbound")
+        if protocol in {"vless","vmess"}:
+            item={"id":credential,"email":name,"level":0}
+            if protocol=="vless" and flow:item["flow"]=flow
+        else:
+            item={"password":credential,"email":name,"level":0}
+        clients.append(item)
+    else:
+        users=settings.setdefault("users",[])
+        if not isinstance(users,list):
+            raise ProtocolError("target inbound user collection is invalid")
+        if any(isinstance(item,dict) and item.get("email")==name for item in users):
+            raise ProtocolError("client name already exists in this inbound")
+        users.append({"auth":credential,"email":name,"level":0})
+
+    reality_meta=_xray_inbound_reality_meta(binary,inbound)
+    tls=stream.get("tlsSettings") or {}
+    server_name=str(tls.get("serverName") or "")
+    if not server_name and reality_meta:
+        server_name=reality_meta.get("server_name") or ""
+    fingerprint=reality_meta.get("fingerprint") or "chrome"
+    spider_x=reality_meta.get("spider_x") or "/"
+
+    backup_dir=_backup_dir()
+    backup=backup_dir/f"xray-add-client-{int(time.time())}.json"
+    shutil.copy2(path,backup)
+    tmp=_xray_temp_json_path(path,"add-client")
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(tmp,0o600)
+    transport_proto="udp" if method in {"mkcp","hysteria"} else "tcp"
+    try:
+        _xray_test_config(binary,tmp)
+        os.replace(tmp,path)
+        _xray_secure_runtime_file(path)
+        _xray_test_config_as_service(binary,path)
+        _run(["systemctl","restart","xray"],timeout=30)
+        if not _active("xray"):
+            raise ProtocolError("Xray did not become active after client add")
+        if not _wait_listener(int(inbound.get("port") or 0),transport_proto,timeout=8.0,interval=0.25):
+            raise ProtocolError("Xray inbound listener did not recover after client add")
+    except Exception:
+        try:
+            if tmp.exists():tmp.unlink()
+            shutil.copy2(backup,path)
+            _xray_secure_runtime_file(path)
+            _run(["systemctl","restart","xray"],timeout=30)
+        except Exception:
+            pass
+        raise
+
+    share=_xray_builder_share_link(
+        protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x
+    )
+    return {
+        "protocol":protocol,"tag":inbound_tag,"port":int(inbound.get("port") or 0),
+        "name":name,"credential":credential,"transport":method,"security":security,
+        "share_link":share,"reality":reality_meta,"backup":str(backup),
+    }
+
+
+def remove_xray_client_from_inbound(inbound_tag,email):
+    """Remove one managed client while keeping the inbound and other clients."""
+    result=disable_xray_client(inbound_tag,email)
+    if not result.get("disabled"):
+        raise ProtocolError(result.get("reason") or "Xray client not found in inbound")
+    return {"removed":True,**result}
+
+
 def create_xray_full_inbound(spec):
     if not isinstance(spec,dict):
         raise ProtocolError("invalid Xray inbound payload")
