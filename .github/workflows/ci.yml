@@ -317,6 +317,7 @@ jobs:
     env:
       PYTHONPATH: .
       MAKIA_DATA_DIR: /tmp/makia-browser
+      MAKIA_BACKUP_DIR: /tmp/makia-browser-backups
       MAKIA_INITIAL_ADMIN_PASSWORD: BrowserTestPass!123
     steps:
       - uses: actions/checkout@v5
