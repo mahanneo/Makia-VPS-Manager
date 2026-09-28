@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.26.0-rc5] - 2026-09-28
+
+### Xray / V2Ray Inbound Center
+- Replaced the confusing Xray creation path with one inbound-centric workflow inspired by current MHSanaei/3x-ui: Inbound → Client → Transport → Security → Sniffing → Sockopt.
+- All Xray creation entry points now open the same Inbound Center instead of mixing the old quick wizard and manual builder.
+- Added first-class VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP and SOCKS inbound creation with capability-filtered transport/security choices.
+- Added structured TCP/RAW, WebSocket, gRPC, HTTPUpgrade, XHTTP, mKCP and Hysteria transport options that are validated against the pinned Xray Core 26.3.27.
+- Added TLS and REALITY fields, including SNI, target, X25519/Short ID generation, fingerprint, SpiderX and xver where supported.
+- Added Sniffing and common Sockopt controls plus a validated extra stream JSON surface for Core options not represented by the form.
+- Preserved the global Advanced JSON editor for routing, outbounds, fallbacks and uncommon Core-level features.
+
+### Multi-client inbounds
+- VLESS, VMess, Trojan and Hysteria2 inbounds can now hold multiple Makia-managed clients with independent credentials, subscriptions, QR/share links, quota, expiry and IP limits.
+- Revoking one client no longer removes the whole inbound when sibling clients remain.
+- Shadowsocks/HTTP/SOCKS remain one-managed-client-per-inbound unless their protocol-specific multi-user model is implemented and validated; Makia does not expose fake controls.
+
+### Reliability
+- Every structured inbound is validated by Xray Core before commit, applied transactionally, restarted, listener-verified and rolled back on failure.
+- The RC5 Core smoke validates structured profiles including VLESS RAW/NONE, VLESS WS/TLS, VLESS gRPC/REALITY, VLESS XHTTP/REALITY, VLESS mKCP/NONE, Trojan RAW/REALITY and Shadowsocks RAW/TLS.
+- Existing real data-plane tests for VLESS REALITY and VLESS security=none remain mandatory and passing in CI.
+
+### Release status
+- Release Candidate only. Stable remains blocked on real VPS RC5 upgrade/UAT and inside-Iran client tests.
+
+
 ## [0.26.0-rc4] - 2026-09-28
 
 ### Xray runtime listener reliability
