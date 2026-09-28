@@ -1329,6 +1329,7 @@ function openPortableBackup(){
       '<label class="single-label">Backup password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password" placeholder="حداقل ۱۰ کاراکتر"></label>',
       '<div class="wizard-note"><b>Cloudflare cutover</b><span>بعد از Restore، همان Domain را نگه دار و فقط A/AAAA را به VPS جدید تغییر بده. برای پروتکل‌های خام VPN رکورد باید DNS-only باشد. Profileهایی که IP قدیمی داخلشان ثبت شده است Zero-touch نیستند.</span></div>',
       '<div class="wizard-note"><b>Restore ایمن</b><span>Restore عمداً از داخل Session وب اجرا نمی‌شود؛ روی VPS مقصد ابتدا Bundle Validate می‌شود و سپس با sudo makia-restore-portable ... --apply اعمال می‌شود تا قطع سرویس وسط درخواست وب Recovery را خراب نکند.</span></div>',
+      '<div class="wizard-note"><b>Host-specific items</b><span>قوانین NAT/FORWARD متعلق به Makia برای Interface جدید بازسازی می‌شوند، اما Firewall پنل Provider باید روی VPS جدید جداگانه باز شود. فایل root-only /etc/makia-vps-manager/makia.env شامل Tokenهای Release/Support عمداً داخل Backup قرار نمی‌گیرد.</span></div>',
       '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="portable-backup-download">Build encrypted backup</button></div>',
     '</div></div>'
   ].join('');
