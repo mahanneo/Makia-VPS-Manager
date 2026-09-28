@@ -573,3 +573,41 @@ def test_xray_builder_listen_accepts_blank_and_ip():
     assert protocol_ops._xray_builder_listen("127.0.0.1")=="127.0.0.1"
     with pytest.raises(ProtocolError):
         protocol_ops._xray_builder_listen("example.com")
+
+
+def test_add_xray_client_preserves_existing_inbound(monkeypatch,tmp_path):
+    config=tmp_path/"config.json"
+    config.write_text(
+        '{"inbounds":[{"tag":"makia-team-2087","listen":"0.0.0.0","port":2087,"protocol":"vless",'
+        '"settings":{"clients":[{"id":"11111111-1111-4111-8111-111111111111","email":"first","level":0}],"decryption":"none"},'
+        '"streamSettings":{"method":"raw","security":"none"}}],"outbounds":[{"protocol":"freedom","tag":"direct"}]}',
+        encoding="utf-8"
+    )
+    monkeypatch.setattr(protocol_ops,"_binary",lambda:"/usr/local/bin/xray")
+    monkeypatch.setattr(protocol_ops,"_config_path",lambda:str(config))
+    monkeypatch.setattr(protocol_ops,"_xray_test_config",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_xray_test_config_as_service",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_xray_secure_runtime_file",lambda *args,**kwargs:"root")
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_active",lambda *args,**kwargs:True)
+    monkeypatch.setattr(protocol_ops,"_wait_listener",lambda *args,**kwargs:True)
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    result=protocol_ops.add_xray_client_to_inbound(
+        "makia-team-2087","second","203.0.113.10",
+        "22222222-2222-4222-8222-222222222222",""
+    )
+    data=__import__("json").loads(config.read_text(encoding="utf-8"))
+    clients=data["inbounds"][0]["settings"]["clients"]
+    assert [x["email"] for x in clients]==["first","second"]
+    assert result["share_link"].startswith("vless://22222222-2222-4222-8222-222222222222@")
+
+
+def test_builder_does_not_expose_unimplemented_ss2022_or_xhttp_vision():
+    caps=protocol_ops.xray_inbound_builder_capabilities()
+    assert all(not x.startswith("2022-") for x in caps["shadowsocks_methods"])
+    with pytest.raises(ProtocolError,match="XTLS Vision"):
+        protocol_ops.create_xray_full_inbound({
+            "protocol":"vless","transport":"xhttp","security":"none","port":24090,
+            "remark":"no-fake-flow","name":"client","endpoint":"203.0.113.10",
+            "flow":"xtls-rprx-vision","options":{"path":"/x"}
+        })
