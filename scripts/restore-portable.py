@@ -4,6 +4,7 @@ import datetime as dt
 import getpass
 import io
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -44,9 +45,15 @@ def read_bundle(path:Path,password:str):
         if "manifest.json" not in names:
             raise RuntimeError("manifest.json is missing")
         manifest=json.loads(zf.read("manifest.json").decode("utf-8"))
-        if manifest.get("format")!="makia-portable-migration" or int(manifest.get("format_version") or 0)!=1:
+        fmt=int(manifest.get("format_version") or 0)
+        if manifest.get("format")!="makia-portable-migration" or fmt not in {1,2}:
             raise RuntimeError("unsupported Makia migration format")
         payload={name:zf.read(name) for name in names if name.startswith("payload/")}
+        if fmt>=2:
+            expected=manifest.get("sha256") or {}
+            for name,blob in payload.items():
+                if expected.get(name)!=hashlib.sha256(blob).hexdigest():
+                    raise RuntimeError(f"checksum mismatch for {name}")
     return manifest,payload
 
 
