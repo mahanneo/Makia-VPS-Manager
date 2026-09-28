@@ -242,11 +242,74 @@ def ssh_npv_options(username):
     }
 
 def artifact_save(kind,external_key,display_name,protocol,payload,metadata=None):
+    meta=dict(metadata or {})
+    existing=get_access_artifact_by_key(str(kind),str(external_key))
+    if existing:
+        try:
+            old_meta=json.loads(existing.get("metadata_json") or "{}")
+        except (TypeError,ValueError):
+            old_meta={}
+        if old_meta.get("public_token") and not meta.get("public_token"):
+            meta["public_token"]=old_meta["public_token"]
+    meta.setdefault("public_token",secrets.token_urlsafe(24))
     return upsert_access_artifact(
         kind,external_key,display_name,protocol,payload.get("native_filename",""),
         access_ops.seal_payload(payload),
-        json.dumps(metadata or {},ensure_ascii=False,separators=(",",":"))
+        json.dumps(meta,ensure_ascii=False,separators=(",",":"))
     )
+
+def _artifact_public_meta(artifact):
+    try:
+        return json.loads((artifact or {}).get("metadata_json") or "{}")
+    except (TypeError,ValueError):
+        return {}
+
+def _ensure_artifact_public_token(kind,key):
+    artifact=get_access_artifact_by_key(str(kind),str(key))
+    if not artifact:
+        return None,""
+    meta=_artifact_public_meta(artifact)
+    token=str(meta.get("public_token") or "").strip()
+    if token:
+        return artifact,token
+    token=secrets.token_urlsafe(24)
+    meta["public_token"]=token
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    upsert_access_artifact(
+        artifact["kind"],artifact["external_key"],artifact["display_name"],artifact.get("protocol") or "",
+        artifact.get("native_filename") or payload.get("native_filename",""),
+        artifact["payload_enc"],json.dumps(meta,ensure_ascii=False,separators=(",",":"))
+    )
+    return get_access_artifact_by_key(str(kind),str(key)),token
+
+def _artifact_by_public_token(token):
+    raw=str(token or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{24,128}",raw):
+        return None
+    for item in list_access_artifacts():
+        meta=_artifact_public_meta(item)
+        if secrets.compare_digest(str(meta.get("public_token") or ""),raw):
+            return get_access_artifact_by_key(item["kind"],item["external_key"])
+    return None
+
+def _portal_language(request:Request):
+    requested=(request.query_params.get("lang") or "").strip().lower()
+    if requested in {"fa","en"}:
+        return requested
+    current=str(get_setting("language","fa") or "fa").lower()
+    return current if current in {"fa","en"} else "fa"
+
+def _public_access_state(kind,key):
+    if kind=="xray":
+        try: row=get_protocol_client(int(key))
+        except Exception: row=None
+        if not row:
+            return {"active":False,"reason":"not_found","usage":None}
+        snap=_subscription_snapshot(row)
+        active=bool(snap.get("enabled") and not snap.get("expired") and not snap.get("quota_exhausted"))
+        reason="active" if active else ("expired" if snap.get("expired") else "quota" if snap.get("quota_exhausted") else "disabled")
+        return {"active":active,"reason":reason,"usage":snap}
+    return {"active":True,"reason":"active","usage":None}
 
 def bearer(request:Request):
     auth=request.headers.get("authorization","")
@@ -1705,6 +1768,124 @@ def access_entries(request:Request):
     order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
+
+
+@app.get("/api/access/{kind}/{key}/portal")
+def access_portal_link(kind:str,key:str,request:Request):
+    require_access_kind(request,kind)
+    require_local_admin(request)
+    artifact,token=_ensure_artifact_public_token(kind,key)
+    if not artifact or not token:
+        payload,_=_resolve_access_payload(kind,key,request)
+        artifact=get_access_artifact_by_key(kind,key)
+        if not artifact:
+            raise HTTPException(404,"access artifact not available")
+        artifact,token=_ensure_artifact_public_token(kind,key)
+    return {
+        "url":f"{public_origin(request)}/access/{token}",
+        "token":token,
+        "language":get_setting("language","fa"),
+    }
+
+
+@app.get("/access/{token}",response_class=HTMLResponse)
+def public_access_portal(token:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    try:
+        payload=access_ops.open_payload(artifact["payload_enc"])
+        payload=_current_delivery_payload(kind,key,payload,request)
+    except access_ops.AccessPackageError as exc:
+        raise HTTPException(404,str(exc))
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        share_text=""
+    else:
+        share_text=str(payload.get("share_text") or payload.get("primary_text") or "")
+    lang=_portal_language(request)
+    summary=dict(payload.get("summary") or {})
+    files=payload.get("files") or {}
+    native_filename=payload.get("native_filename") or ""
+    has_native=bool(native_filename and native_filename in files)
+    qr=""
+    if share_text:
+        qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
+    guide_kind="xray" if kind=="xray" else kind
+    protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
+    portal_url=f"{public_origin(request)}/access/{token}"
+    response=templates.TemplateResponse("access_portal.html",{
+        "request":request,"app_name":APP_NAME,"version":VERSION,
+        "lang":lang,"dir":"rtl" if lang=="fa" else "ltr",
+        "kind":kind,"key":key,"name":artifact.get("display_name") or key,
+        "protocol":protocol,"summary":summary,"state":state,
+        "share_text":share_text,"qr":qr,"has_native":has_native,
+        "native_filename":native_filename,"portal_url":portal_url,
+        "guide_url":f"{public_origin(request)}/help/connect#{guide_kind}",
+        "download_url":f"/access/{token}/download",
+        "qr_url":f"/access/{token}/qr.svg" if qr else "",
+    })
+    response.headers["Cache-Control"]="no-store, private"
+    response.headers["Pragma"]="no-cache"
+    response.headers["Referrer-Policy"]="no-referrer"
+    response.headers["X-Robots-Tag"]="noindex, nofollow, noarchive"
+    response.headers["X-Content-Type-Options"]="nosniff"
+    return response
+
+
+@app.get("/access/{token}/download")
+def public_access_download(token:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        raise HTTPException(410,"access is no longer active")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    payload=_current_delivery_payload(kind,key,payload,request)
+    filename=payload.get("native_filename") or "makia-access.txt"
+    files=payload.get("files") or {}
+    data=files.get(filename)
+    if data is None:
+        data=(payload.get("primary_text") or "").encode("utf-8")
+    if isinstance(data,str): data=data.encode("utf-8")
+    media="application/octet-stream"
+    if filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
+    elif filename.endswith(".ovpn"): media="application/x-openvpn-profile"
+    safe=access_ops.safe_filename(filename)
+    return Response(content=bytes(data),media_type=media,headers={
+        "Content-Disposition":f'attachment; filename="{safe}"',
+        "Cache-Control":"no-store, private","Pragma":"no-cache",
+        "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
+        "X-Content-Type-Options":"nosniff",
+    })
+
+
+@app.get("/access/{token}/qr.svg")
+def public_access_qr(token:str,request:Request):
+    artifact=_artifact_by_public_token(token)
+    if not artifact:
+        raise HTTPException(404,"access link not found")
+    kind=str(artifact.get("kind") or "")
+    key=str(artifact.get("external_key") or "")
+    state=_public_access_state(kind,key)
+    if kind=="xray" and not state.get("active"):
+        raise HTTPException(410,"access is no longer active")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    payload=_current_delivery_payload(kind,key,payload,request)
+    share=str(payload.get("share_text") or payload.get("primary_text") or "")
+    if not share:
+        raise HTTPException(404,"QR is not available for this access type")
+    return Response(content=access_ops.make_qr_svg(share),media_type="image/svg+xml",headers={
+        "Cache-Control":"no-store, private","Pragma":"no-cache",
+        "Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow, noarchive",
+        "X-Content-Type-Options":"nosniff",
+    })
+
 
 @app.get("/api/access/{kind}/{key}/share")
 def access_share(kind:str,key:str,request:Request):
