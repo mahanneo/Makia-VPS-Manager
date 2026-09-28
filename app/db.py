@@ -161,6 +161,45 @@ def init_db():
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_support_grants_expires_at ON support_grants(expires_at);
+        CREATE TABLE IF NOT EXISTS service_plans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          protocol TEXT NOT NULL DEFAULT '',
+          config_json TEXT NOT NULL DEFAULT '{}',
+          quota_bytes INTEGER NOT NULL DEFAULT 0,
+          expire_days INTEGER NOT NULL DEFAULT 0,
+          ip_limit INTEGER NOT NULL DEFAULT 1,
+          reset_days INTEGER NOT NULL DEFAULT 0,
+          price INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS backup_schedules (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          frequency TEXT NOT NULL DEFAULT 'daily',
+          hour INTEGER NOT NULL DEFAULT 4,
+          keep_last INTEGER NOT NULL DEFAULT 7,
+          remote_type TEXT NOT NULL DEFAULT 'local',
+          remote_secret_enc TEXT NOT NULL DEFAULT '',
+          last_run_at TEXT,
+          last_status TEXT NOT NULL DEFAULT '',
+          last_detail TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          level TEXT NOT NULL DEFAULT 'info',
+          category TEXT NOT NULL DEFAULT 'system',
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          acknowledged INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
         ''')
         # Migration-safe columns for future profile growth.
         _add_column(con, "account_profiles", "plan TEXT NOT NULL DEFAULT ''")
@@ -183,6 +222,14 @@ def init_db():
         _add_column(con, "protocol_clients", "disabled_reason TEXT NOT NULL DEFAULT ''")
         _add_column(con, "admins", "totp_secret TEXT")
         _add_column(con, "admins", "totp_enabled INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "endpoint TEXT NOT NULL DEFAULT ''")
+        _add_column(con, "nodes", "region TEXT NOT NULL DEFAULT ''")
+        _add_column(con, "nodes", "users INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "online INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "rx INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "tx INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "latency_ms REAL")
+        _add_column(con, "nodes", "role TEXT NOT NULL DEFAULT 'node'")
 
         rows_missing_sub=con.execute("SELECT id FROM protocol_clients WHERE subscription_id IS NULL OR subscription_id=''").fetchall()
         for item in rows_missing_sub:
@@ -323,7 +370,7 @@ def create_node(name):
 
 def list_nodes():
     with connect() as con:
-        rows=con.execute("SELECT id,name,token_last4,active,created_at,last_seen_at,hostname,version,cpu,memory,disk FROM nodes ORDER BY id DESC").fetchall()
+        rows=con.execute("SELECT id,name,token_last4,active,created_at,last_seen_at,hostname,version,cpu,memory,disk,endpoint,region,users,online,rx,tx,latency_ms,role FROM nodes ORDER BY id DESC").fetchall()
         return [dict(r) for r in rows]
 
 def revoke_node(node_id):
@@ -336,11 +383,14 @@ def node_by_token(token):
         row=con.execute("SELECT id,name,active FROM nodes WHERE token_hash=? AND active=1",(h,)).fetchone()
         return dict(row) if row else None
 
-def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk):
+def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk,endpoint="",region="",users=0,online=0,rx=0,tx=0,latency_ms=None):
     with connect() as con:
         con.execute(
-            "UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=? WHERE id=?",
-            (now(),hostname,version,float(cpu),float(memory),float(disk),int(node_id))
+            """UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=?,endpoint=?,region=?,
+               users=?,online=?,rx=?,tx=?,latency_ms=? WHERE id=?""",
+            (now(),hostname,version,float(cpu),float(memory),float(disk),str(endpoint or "")[:255],str(region or "")[:80],
+             max(0,int(users or 0)),max(0,int(online or 0)),max(0,int(rx or 0)),max(0,int(tx or 0)),
+             None if latency_ms is None else max(0,float(latency_ms)),int(node_id))
         )
 
 
@@ -560,6 +610,121 @@ def delete_access_artifact(artifact_id):
 def delete_access_artifact_by_key(kind,external_key):
     with connect() as con:
         con.execute("DELETE FROM access_artifacts WHERE kind=? AND external_key=?",(str(kind),str(external_key)))
+
+
+
+def create_service_plan(name,protocol="",config=None,quota_bytes=0,expire_days=0,ip_limit=1,reset_days=0,price=0,active=True):
+    ts=now()
+    with connect() as con:
+        cur=con.execute(
+            """INSERT INTO service_plans(name,protocol,config_json,quota_bytes,expire_days,ip_limit,reset_days,price,active,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (str(name).strip(),str(protocol or "").strip().lower(),json_dumps(config or {}),
+             max(0,int(quota_bytes or 0)),max(0,int(expire_days or 0)),max(1,int(ip_limit or 1)),
+             max(0,int(reset_days or 0)),max(0,int(price or 0)),1 if active else 0,ts,ts)
+        )
+        return int(cur.lastrowid)
+
+def update_service_plan(plan_id,**values):
+    allowed={"name","protocol","config_json","quota_bytes","expire_days","ip_limit","reset_days","price","active"}
+    fields=[];params=[]
+    for key,value in values.items():
+        if key not in allowed: continue
+        fields.append(f"{key}=?")
+        if key=="active": value=1 if value else 0
+        params.append(value)
+    if not fields:return
+    fields.append("updated_at=?");params.append(now());params.append(int(plan_id))
+    with connect() as con:
+        con.execute("UPDATE service_plans SET "+",".join(fields)+" WHERE id=?",params)
+
+def delete_service_plan(plan_id):
+    with connect() as con: con.execute("DELETE FROM service_plans WHERE id=?",(int(plan_id),))
+
+def list_service_plans(active_only=False):
+    with connect() as con:
+        sql="SELECT * FROM service_plans"
+        args=()
+        if active_only:
+            sql+=" WHERE active=1"
+        sql+=" ORDER BY id DESC"
+        rows=con.execute(sql,args).fetchall()
+        out=[]
+        for r in rows:
+            item=dict(r)
+            try:item["config"]=json_loads(item.pop("config_json") or "{}")
+            except Exception:item["config"]={}
+            out.append(item)
+        return out
+
+def get_service_plan(plan_id):
+    with connect() as con:
+        r=con.execute("SELECT * FROM service_plans WHERE id=?",(int(plan_id),)).fetchone()
+        if not r:return None
+        item=dict(r)
+        try:item["config"]=json_loads(item.pop("config_json") or "{}")
+        except Exception:item["config"]={}
+        return item
+
+def create_backup_schedule(name,frequency="daily",hour=4,keep_last=7,remote_type="local",remote_secret_enc="",enabled=True):
+    ts=now()
+    with connect() as con:
+        cur=con.execute(
+            """INSERT INTO backup_schedules(name,enabled,frequency,hour,keep_last,remote_type,remote_secret_enc,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (str(name).strip(),1 if enabled else 0,str(frequency),max(0,min(23,int(hour))),max(1,min(90,int(keep_last))),
+             str(remote_type),str(remote_secret_enc or ""),ts,ts)
+        )
+        return int(cur.lastrowid)
+
+def list_backup_schedules():
+    with connect() as con:
+        return [dict(r) for r in con.execute("SELECT * FROM backup_schedules ORDER BY id DESC").fetchall()]
+
+def get_backup_schedule(schedule_id):
+    with connect() as con:
+        r=con.execute("SELECT * FROM backup_schedules WHERE id=?",(int(schedule_id),)).fetchone()
+        return dict(r) if r else None
+
+def update_backup_schedule(schedule_id,**values):
+    allowed={"name","enabled","frequency","hour","keep_last","remote_type","remote_secret_enc","last_run_at","last_status","last_detail"}
+    fields=[];params=[]
+    for key,value in values.items():
+        if key not in allowed:continue
+        fields.append(f"{key}=?");params.append(1 if key=="enabled" and value else 0 if key=="enabled" else value)
+    if not fields:return
+    fields.append("updated_at=?");params.append(now());params.append(int(schedule_id))
+    with connect() as con:con.execute("UPDATE backup_schedules SET "+",".join(fields)+" WHERE id=?",params)
+
+def delete_backup_schedule(schedule_id):
+    with connect() as con:con.execute("DELETE FROM backup_schedules WHERE id=?",(int(schedule_id),))
+
+def add_notification(level,category,title,message):
+    with connect() as con:
+        cur=con.execute(
+            "INSERT INTO notifications(level,category,title,message,acknowledged,created_at) VALUES(?,?,?,?,0,?)",
+            (str(level or "info")[:20],str(category or "system")[:40],str(title)[:160],str(message)[:2000],now())
+        )
+        return int(cur.lastrowid)
+
+def list_notifications(limit=100,unread_only=False):
+    with connect() as con:
+        sql="SELECT * FROM notifications"
+        args=[]
+        if unread_only:sql+=" WHERE acknowledged=0"
+        sql+=" ORDER BY id DESC LIMIT ?";args.append(max(1,min(int(limit),500)))
+        return [dict(r) for r in con.execute(sql,args).fetchall()]
+
+def acknowledge_notification(notification_id):
+    with connect() as con:con.execute("UPDATE notifications SET acknowledged=1 WHERE id=?",(int(notification_id),))
+
+def json_dumps(value):
+    import json
+    return json.dumps(value,ensure_ascii=False,separators=(",",":"))
+
+def json_loads(value):
+    import json
+    return json.loads(value)
 
 
 def create_support_grant(created_by,minutes=30,scope="operator"):

@@ -219,9 +219,10 @@ async function access(renderToken=window.__viewRenderToken){
     '<div class="pro-page">',
       '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
       '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
+      '<div class="access-bulk-bar"><div><b>'+htmlEsc(tr('عملیات گروهی','Bulk actions'))+'</b><small>'+htmlEsc(tr('برای SSH و Xray/Outline','For SSH and Xray/Outline'))+'</small></div><div class="access-bulk-actions"><button class="primary" data-growth-action="bulk-renew">+30d / +50GB</button><button class="ghost" data-growth-action="bulk-enable">'+htmlEsc(tr('فعال','Enable'))+'</button><button class="ghost" data-growth-action="bulk-disable">'+htmlEsc(tr('غیرفعال','Disable'))+'</button><button class="ghost" data-growth-action="bulk-reset">'+htmlEsc(tr('ریست ترافیک','Reset traffic'))+'</button></div></div>',
       '<section class="pro-directory">',
         '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
-        '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
+        '<div class="pro-user-table-head"><span></span><span>'+htmlEsc(tr('کاربر','Client'))+'</span><span>'+htmlEsc(tr('پروتکل','Protocol'))+'</span><span>'+htmlEsc(tr('وضعیت','Status'))+'</span><span>'+htmlEsc(tr('مصرف / انقضا','Usage / Expiry'))+'</span><span></span></div>',
         '<div id="accessRows" class="pro-user-list"></div>',
       '</section>',
     '</div>'
@@ -265,8 +266,10 @@ function accessCard(a){
   const proto=String(a.protocol||a.kind||'').toUpperCase();
   const stateClass=a.status==='active'?'ok':a.status==='expired'?'bad':'warn';
   const label=dataEnc(a.name),id=dataEnc(a.id);
+  const bulkTarget=a.kind==='xray'?'protocol:'+a.key:a.kind==='ssh'?'ssh:'+a.key:'';
   return [
     '<article class="pro-user-row">',
+      '<div class="access-select-wrap">'+(bulkTarget?'<input class="access-select" type="checkbox" data-target="'+htmlEsc(bulkTarget)+'" aria-label="'+htmlEsc(tr('انتخاب','Select'))+'">':'')+'</div>',
       '<div class="pro-user-id"><span class="pro-user-avatar">'+htmlEsc(String(a.name||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(a.name)+'</b><small>'+htmlEsc(a.endpoint||a.plan||'Managed access')+'</small></div></div>',
       '<div><span class="pro-protocol-badge '+htmlEsc(a.kind)+'">'+htmlEsc(proto)+'</span></div>',
       '<div><span class="status-chip '+stateClass+'">'+htmlEsc(a.status||'unknown')+'</span></div>',
@@ -320,9 +323,10 @@ async function openAccessDetail(id){
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
   const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
+  const renewTarget=a.kind==='xray'?'protocol:'+a.key:a.kind==='ssh'?'ssh:'+a.key:'';
   const manage=(a.kind==='ssh'||a.kind==='xray')
-    ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
-    : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
+    ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">'+htmlEsc(tr('ویرایش تنظیمات','Edit settings'))+'</button>'+(renewTarget?'<button class="ghost" data-growth-action="quick-renew" data-target="'+dataEnc(renewTarget)+'">+30d / +50GB</button>':'')
+    : '<button class="primary" data-action="nav" data-view="'+kind+'">'+htmlEsc(tr('مدیریت','Manage'))+' '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
   const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
@@ -346,11 +350,12 @@ async function openAccessDetail(id){
 
 async function openProvisionWizard(protocol){
   if(!window.__protocolData) window.__protocolData=await api('/api/protocols');
-  const [defs,operator]=await Promise.all([
+  const [defs,operator,plans]=await Promise.all([
     api('/api/accounts/new-defaults').catch(()=>({username:'user001'})),
-    api('/api/settings/operator').catch(()=>({defaults:{},delivery:{}}))
+    api('/api/settings/operator').catch(()=>({defaults:{},delivery:{}})),
+    api('/api/plans').catch(()=>[])
   ]);
-  window.__operatorSettings=operator;
+  window.__operatorSettings=operator;window.__servicePlans=plans;
   const d=operator.defaults||{};
   const initialEndpoint=window.PANEL_DOMAIN||location.hostname;
   const initialMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(initialEndpoint)?'ip':'domain';
@@ -359,7 +364,7 @@ async function openProvisionWizard(protocol){
   let xrayPort=Number(d.xray_port||2087);
   while(usedXrayPorts.has(xrayPort)&&xrayPort<65535)xrayPort++;
   provisionState={
-    step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',
+    step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',planId:'',
     endpoint:initialEndpoint,endpointMode:initialMode,
     endpointValues:{ip:initialMode==='ip'?initialEndpoint:'',domain:initialMode==='domain'?initialEndpoint:''},
     password:'',passwordMode:d.ssh_password_mode||'pin6',
@@ -389,6 +394,7 @@ function protocolGlyph(kind){
     xray:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/></svg>',
     wireguard:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 13 2-4 1 3h3l-3 4"/></svg>',
     openvpn:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13v7h6v-7M12 14v3"/></svg>',
+    outline:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 7v10l7 4 7-4V7z"/><path d="M8 12h8M12 8v8"/></svg>',
     ikev2:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.3 5.7"/><path d="M4 17v-5h5"/><path d="M10 12h8M14 8v8"/></svg>',
     stealth:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/><path d="M5 19 19 5"/></svg>',
     wstunnel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h5l2-4 4 8 2-4h5"/><path d="M5 5h14v14H5z"/></svg>',
@@ -422,7 +428,7 @@ function renderProvisionWizard(){
       return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+x[4]+'</span><div><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
     }).join('')+'</div>';
   }else if(s.step===2){
-    body=wizardIdentityFields(s);
+    body=wizardPlanField(s)+wizardIdentityFields(s);
   }else if(s.step===3){
     body=wizardPolicyFields(s);
   }else{
@@ -440,6 +446,36 @@ function renderProvisionWizard(){
       '<footer class="wizard-footer">'+footer+'</footer>',
     '</aside></div>'
   ].join('');
+}
+function wizardPlanField(s){
+  const plans=(window.__servicePlans||[]).filter(p=>p.active!==0&&(!p.protocol||p.protocol===s.protocol||(s.protocol==='xray'&&p.protocol==='xray')));
+  if(!plans.length)return '';
+  return '<div class="wizard-section-title plan-picker-title"><span class="pro-kicker">PLAN TEMPLATE</span><h4>'+htmlEsc(tr('شروع سریع با پلن','Start from a plan'))+'</h4><p>'+htmlEsc(tr('اختیاری؛ با انتخاب پلن حجم، مدت و محدودیت‌ها خودکار پر می‌شوند.','Optional; selecting a plan pre-fills quota, duration and limits.'))+'</p></div><label class="wizard-plan-select">'+htmlEsc(tr('پلن','Plan'))+'<select id="wizServicePlan"><option value="">'+htmlEsc(tr('بدون پلن / دستی','No plan / Manual'))+'</option>'+plans.map(p=>'<option value="'+p.id+'" '+(String(s.planId)===String(p.id)?'selected':'')+'>'+htmlEsc(p.name)+'</option>').join('')+'</select></label>';
+}
+function applyWizardPlan(planId){
+  const s=provisionState,plan=(window.__servicePlans||[]).find(p=>String(p.id)===String(planId));
+  s.planId=planId||'';
+  if(!plan)return;
+  const cfg=plan.config||{};
+  if(s.protocol==='ssh'){
+    s.plan=plan.name||'';
+    s.expireDate=Number(plan.expire_days||0)?dateAfterDays(Number(plan.expire_days)):''; 
+    s.devices=Number(plan.ip_limit||1);s.sessions=Number(cfg.connection_limit||s.sessions||1);
+  }else if(s.protocol==='xray'){
+    s.quota=Number(plan.quota_bytes||0)/1024**3;s.expireDays=Number(plan.expire_days||0);s.devices=Number(plan.ip_limit||1);s.resetDays=Number(plan.reset_days||0);
+    if(cfg.protocol&&XRAY_PROFILE_MATRIX[cfg.protocol])s.xrayProtocol=cfg.protocol;
+    if(cfg.port)s.port=Number(cfg.port);
+    if(cfg.transport)s.transport=String(cfg.transport);
+    if(cfg.security)s.security=String(cfg.security);
+    if(cfg.path)s.path=String(cfg.path);
+    if(cfg.sni)s.sni=String(cfg.sni);
+    if(cfg.reality_target)s.realityDest=String(cfg.reality_target);
+    s.simpleMode=false;s.manualXray=true;normalizeXrayProfile(s,false);
+  }else if(s.protocol==='wireguard'){
+    if(cfg.dns)s.dns=String(cfg.dns);if(cfg.mtu)s.wgMtu=Number(cfg.mtu);if(cfg.keepalive!==undefined)s.wgKeepalive=Number(cfg.keepalive);if(cfg.allowed_ips)s.wgAllowedIps=String(cfg.allowed_ips);
+  }else if(s.protocol==='openvpn'){
+    if(cfg.proto)s.ovpnProto=String(cfg.proto).startsWith('tcp')?'tcp':'udp';if(cfg.port)s.ovpnPort=Number(cfg.port);
+  }
 }
 function wizardIdentityFields(s){
   if(s.protocol==='ssh') return [
@@ -569,6 +605,7 @@ function wizardReview(s){
 function captureWizard(){
   const s=provisionState;if(!s)return;
   const val=id=>document.getElementById(id)?.value;
+  if(val('wizServicePlan')!==undefined)s.planId=val('wizServicePlan');
   if(val('wizName')!==undefined)s.name=val('wizName').trim();
   if(val('wizEndpoint')!==undefined)s.endpoint=val('wizEndpoint').trim();
   if(s.endpointValues)s.endpointValues[s.endpointMode]=s.endpoint;
@@ -924,18 +961,26 @@ async function sessions(renderToken=window.__viewRenderToken){
 async function disconnectSession(tty,user){if(!confirm('قطع اتصال '+user+' ؟'))return;try{await api('/api/sessions/disconnect',{method:'POST',body:JSON.stringify({tty,username:user})});await sessions()}catch(e){alert(e.message)}}
 function relativeSeen(v){if(!v)return'Never';const t=Date.parse(v);if(Number.isNaN(t))return v;const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 async function nodes(renderToken=window.__viewRenderToken){
-  title.textContent='Nodes';setPageContext('FLEET CONTROL');
+  title.textContent=tr('نودها','Nodes');setPageContext('FLEET CONTROL');
   const rows=await api('/api/nodes');if(renderToken!==window.__viewRenderToken||activeView!=='nodes')return;
-  content.innerHTML=viewIntro('MULTI-NODE','مدیریت نودها','VPSهای متصل را با Token مستقل، Heartbeat و Telemetry مرکزی مدیریت کن.','<button class="primary action-lg" data-action="node-create">＋ Add Node</button>')+
-  '<div class="panel modern-list"><div class="notice">برای Nodeهای خارج از شبکه محلی، Controller را فقط با HTTPS در دسترس قرار بده.</div><div class="table">'+(rows.length?rows.map(n=>'<div class="row"><div><b>'+htmlEsc(n.name)+'</b><div class="muted">'+htmlEsc(n.hostname||'Waiting for heartbeat')+'</div></div><div><span class="status-chip '+(n.last_seen_at?'ok':'warn')+'">'+htmlEsc(relativeSeen(n.last_seen_at))+'</span><div class="muted">token …'+htmlEsc(n.token_last4)+'</div></div><div><b>'+htmlEsc(n.cpu??'-')+'% / '+htmlEsc(n.memory??'-')+'%</b><div class="muted">CPU / RAM · Disk '+htmlEsc(n.disk??'-')+'%</div></div><div class="toolbar"><span class="status-chip">'+htmlEsc(n.version||'-')+'</span><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">Revoke</button></div></div>').join(''):'<div class="empty">هنوز Nodeای ثبت نشده است.</div>')+'</div></div>';
+  const cards=rows.map(n=>{
+    const age=n.last_seen_at?Math.max(0,(Date.now()-Date.parse(n.last_seen_at))/1000):1e9;
+    const online=age<150&&Number(n.active||0)!==0;
+    return '<article class="node-card"><div class="node-card-head"><div><h3>'+htmlEsc(n.name)+'</h3><div class="node-meta">'+htmlEsc((n.region||tr('بدون منطقه','No region'))+' · '+(n.hostname||tr('در انتظار Heartbeat','Waiting for heartbeat')))+'</div></div><span class="status-chip '+(online?'ok':'warn')+'">'+htmlEsc(online?tr('آنلاین','ONLINE'):relativeSeen(n.last_seen_at))+'</span></div><div class="node-metrics"><div><span>CPU</span><b>'+htmlEsc(n.cpu??'—')+'%</b></div><div><span>RAM</span><b>'+htmlEsc(n.memory??'—')+'%</b></div><div><span>Disk</span><b>'+htmlEsc(n.disk??'—')+'%</b></div><div><span>'+htmlEsc(tr('کاربر / فعال','Users / active'))+'</span><b>'+Number(n.users||0)+' / '+Number(n.online||0)+'</b></div><div><span>Traffic</span><b>'+fmtBytes(Number(n.rx||0)+Number(n.tx||0))+'</b></div><div><span>Endpoint</span><b>'+htmlEsc(n.endpoint||'—')+'</b></div></div><div class="toolbar" style="margin-top:12px"><span class="status-chip">'+htmlEsc(n.version||'—')+'</span><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">'+htmlEsc(tr('لغو','Revoke'))+'</button></div></article>';
+  }).join('');
+  const totalUsers=rows.reduce((a,n)=>a+Number(n.users||0),0),totalOnline=rows.reduce((a,n)=>a+Number(n.online||0),0);
+  content.innerHTML=viewIntro('MULTI-VPS FLEET',tr('داشبورد چند سرور','Multi-VPS dashboard'),tr('VPSهای متصل را با Token مستقل، Heartbeat، Region، منابع و تعداد کاربر یکجا ببین.','Monitor connected VPS nodes with independent tokens, heartbeat, region, resources and client counts.'),'<button class="primary action-lg" data-action="node-create">＋ '+htmlEsc(tr('افزودن نود','Add Node'))+'</button>')+
+  '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('نودها','Nodes'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('کاربران','Clients'))+'</span><b>'+totalUsers+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+totalOnline+'</b></div><div><span>'+htmlEsc(tr('گزارش‌دهی','Reporting'))+'</span><b>'+rows.filter(n=>n.last_seen_at&&Date.now()-Date.parse(n.last_seen_at)<150000).length+'</b></div></section><div class="notice">'+htmlEsc(tr('برای Nodeهای بیرونی فقط Controller HTTPS استفاده شود. Agent فقط Telemetry ارسال می‌کند و دسترسی مدیریتی معکوس ایجاد نمی‌کند.','Use HTTPS-only controller URLs for remote nodes. The agent only sends telemetry and does not create reverse administrative access.'))+'</div><section class="node-fleet-grid">'+(cards||'<div class="empty">'+htmlEsc(tr('هنوز نودی ثبت نشده است.','No nodes enrolled yet.'))+'</div>')+'</section>';
 }
 async function createNode(){
-  const name=prompt('نام Node:','node-01');if(!name)return;
+  const name=prompt(tr('نام Node:','Node name:'),'node-01');if(!name)return;
+  const region=prompt(tr('منطقه / کشور اختیاری:','Optional region / country:'),'')||'';
+  const endpoint=prompt(tr('Endpoint اختیاری این VPS:','Optional VPS endpoint:'),'')||'';
   try{
-    const r=await api('/api/nodes',{method:'POST',body:JSON.stringify({name})});
-    const cmd='MAKIA_CONTROLLER_URL='+location.origin+' MAKIA_NODE_TOKEN='+r.token+' bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/scripts/install-node-agent.sh)';
+    const r=await api('/api/nodes',{method:'POST',body:JSON.stringify({name,region,endpoint})});
+    const cmd='MAKIA_CONTROLLER_URL='+location.origin+' MAKIA_NODE_TOKEN='+r.token+' MAKIA_NODE_REGION='+JSON.stringify(region)+' MAKIA_NODE_ENDPOINT='+JSON.stringify(endpoint)+' bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/scripts/install-node-agent.sh)';
     window.__lastNodeCommand=cmd;
-    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">NODE ENROLLMENT</div><h3>Node token created</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="notice">Token فقط همین یک‌بار نمایش داده می‌شود.</div><div class="quick-card"><b style="word-break:break-all">'+htmlEsc(r.token)+'</b><span>Node token</span></div><textarea id="nodeInstallCommand" class="config-output small" readonly></textarea><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="nodeInstallCommand">Copy command</button><button class="ghost" data-action="modal-close-refresh" data-view="nodes">Done</button></div></div></div>';
+    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">NODE ENROLLMENT</div><h3>'+htmlEsc(tr('توکن نود ساخته شد','Node token created'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="notice">'+htmlEsc(tr('Token فقط همین یک‌بار نمایش داده می‌شود.','The token is shown only once.'))+'</div><div class="quick-card"><b style="word-break:break-all">'+htmlEsc(r.token)+'</b><span>Node token</span></div><textarea id="nodeInstallCommand" class="config-output small" readonly></textarea><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="nodeInstallCommand">'+htmlEsc(tr('کپی دستور','Copy command'))+'</button><button class="ghost" data-action="modal-close-refresh" data-view="nodes">'+htmlEsc(tr('تمام','Done'))+'</button></div></div></div>';
     document.getElementById('nodeInstallCommand').value=cmd;
   }catch(e){alert(e.message)}
 }
@@ -1254,11 +1299,13 @@ let xrayBuilderCaps=null;
 
 async function openXrayInboundBuilder(){
   try{
-    const [caps,defs,stack]=await Promise.all([
+    const [caps,defs,stack,plans]=await Promise.all([
       api('/api/protocols/xray/inbound-capabilities'),
       api('/api/accounts/new-defaults').catch(()=>({username:'user001'})),
-      api('/api/protocols')
+      api('/api/protocols'),
+      api('/api/plans').catch(()=>[])
     ]);
+    window.__servicePlans=plans;
     xrayBuilderCaps=caps;
     const defaults=window.__operatorSettings?.defaults||{};
     const endpoint=window.PANEL_DOMAIN||location.hostname;
@@ -1272,6 +1319,7 @@ async function openXrayInboundBuilder(){
         '<div class="xray-builder-grid">',
           '<section class="xray-builder-section"><div class="section-title"><b>1. Inbound</b><span>مشخصات سرویس</span></div><div class="form-grid two">',
             '<label>Remark / نام Inbound<input id="xbRemark" maxlength="80" value="Makia-'+port+'"></label>',
+            '<label>'+htmlEsc(tr('Plan template','Plan template'))+'<select id="xbPlan"><option value="">'+htmlEsc(tr('بدون پلن / دستی','No plan / Manual'))+'</option>'+(plans||[]).filter(p=>p.active!==0&&(!p.protocol||p.protocol==='xray')).map(p=>'<option value="'+p.id+'">'+htmlEsc(p.name)+'</option>').join('')+'</select></label>',
             '<label>Protocol<select id="xbProtocol"></select></label>',
             '<label>Listen<input id="xbListen" dir="ltr" value="0.0.0.0"><span class="muted">0.0.0.0 = همه Interfaceها</span></label>',
             '<label>Port<input id="xbPort" type="number" min="1" max="65535" value="'+port+'"></label>',
@@ -1320,12 +1368,23 @@ async function openXrayInboundBuilder(){
     if(caps.protocols?.[preferred])p.value=preferred;
     document.getElementById('xbSsMethod').innerHTML=(caps.shadowsocks_methods||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x)+'</option>').join('');
     p.addEventListener('change',syncXrayInboundBuilder);
+    document.getElementById('xbPlan')?.addEventListener('change',e=>applyXrayBuilderPlan(e.target.value));
     document.getElementById('xbTransport').addEventListener('change',syncXrayInboundBuilder);
     document.getElementById('xbSecurity').addEventListener('change',syncXrayInboundBuilder);
     syncXrayInboundBuilder();
   }catch(e){alert('Xray Inbound Center: '+e.message)}
 }
 
+function applyXrayBuilderPlan(planId){
+  const p=(window.__servicePlans||[]).find(x=>String(x.id)===String(planId));if(!p)return;
+  const cfg=p.config||{};
+  if(cfg.protocol&&xrayBuilderCaps?.protocols?.[cfg.protocol])document.getElementById('xbProtocol').value=cfg.protocol;
+  syncXrayInboundBuilder();
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!==null&&v!=='')el.value=v};
+  set('xbQuota',Number(p.quota_bytes||0)/1024**3);set('xbDays',Number(p.expire_days||0));set('xbIpLimit',Number(p.ip_limit||1));set('xbReset',Number(p.reset_days||0));
+  set('xbPort',cfg.port);set('xbTransport',cfg.transport);syncXrayInboundBuilder();set('xbSecurity',cfg.security);syncXrayInboundBuilder();
+  set('xbPath',cfg.path);set('xbSni',cfg.sni);set('xbRealityDest',cfg.reality_target);
+}
 function xbValue(id,fallback=''){const el=document.getElementById(id);return el?el.value:fallback}
 function xbChecked(id){const el=document.getElementById(id);return !!(el&&el.checked)}
 
@@ -2252,6 +2311,9 @@ document.addEventListener('click',e=>{
   if(btn){e.preventDefault();Promise.resolve(handleMakiaAction(btn)).catch(err=>alert(err?.message||String(err)))}
 });
 document.addEventListener('change',e=>{
+  if(e.target.id==='wizServicePlan'&&provisionState){
+    captureWizard();applyWizardPlan(e.target.value);renderProvisionWizard();return;
+  }
   if(e.target.id==='wizEndpointMode'&&provisionState){
     const next=e.target.value;
     captureWizard();
@@ -2311,23 +2373,23 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
 }
 
 function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',plans:'پلن‌ها',expiry:'انقضا و تمدید',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',diagnostics:'عیب‌یابی کاربران',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',automation:'اتوماسیون',migration:'مهاجرت VPS',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',plans:'Plans',expiry:'Expiry & Renew',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',diagnostics:'Client Diagnostics',backups:'Backup',audit:'Logs',updates:'Update',automation:'Automation',migration:'VPS Migration',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;
   document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
   document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav.pro-nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter,...(window.MAKIA_GROWTH_VIEWS||{})};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='plans'?'PLANS':v==='expiry'?'EXPIRY CENTER':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='outline'?'OUTLINE':v==='connectivity'?'CONNECTIVITY LAB':v==='diagnostics'?'CLIENT DIAGNOSTICS':v==='automation'?'AUTOMATION':v==='migration'?'VPS MIGRATION':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics'].includes(v))||(name==='system'&&['audit','backups','updates','automation','migration'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');

@@ -12,6 +12,8 @@ cat >/etc/makia-node-agent.env <<EOF
 MAKIA_CONTROLLER_URL=$CONTROLLER_URL
 MAKIA_NODE_TOKEN=$NODE_TOKEN
 MAKIA_NODE_INTERVAL=30
+MAKIA_NODE_REGION=${MAKIA_NODE_REGION:-}
+MAKIA_NODE_ENDPOINT=${MAKIA_NODE_ENDPOINT:-}
 EOF
 chmod 0600 /etc/makia-node-agent.env
 curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/systemd/makia-node-agent.service -o /etc/systemd/system/makia-node-agent.service

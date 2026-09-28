@@ -7,7 +7,7 @@ POLL_SECONDS=30
 def collect_once():
     now=int(time.time())
     for client in list_protocol_clients():
-        if client.get("engine")!="xray" or client.get("protocol") not in {"vless","vmess","trojan","hysteria2"}:
+        if client.get("engine")!="xray" or client.get("protocol") not in {"vless","vmess","trojan","hysteria2","outline"}:
             continue
 
         reset_days=max(0,int(client.get("reset_days") or 0))
@@ -19,11 +19,16 @@ def collect_once():
         if not enabled:
             if disabled_reason=="quota" and reset_days and next_reset_at and now>=next_reset_at:
                 try:
-                    protocol_ops.reset_xray_client_traffic(client["name"])
-                    reset_protocol_traffic(client["id"])
-                    protocol_ops.enable_xray_client(
-                        client["inbound_tag"],client["name"],client["protocol"],client["credential"]
-                    )
+                    if client.get("protocol")=="outline":
+                        protocol_ops.xray_inbound_traffic(client["inbound_tag"],reset=True)
+                        reset_protocol_traffic(client["id"])
+                        protocol_ops.set_outline_inbound_enabled(client["inbound_tag"],True)
+                    else:
+                        protocol_ops.reset_xray_client_traffic(client["name"])
+                        reset_protocol_traffic(client["id"])
+                        protocol_ops.enable_xray_client(
+                            client["inbound_tag"],client["name"],client["protocol"],client["credential"]
+                        )
                     set_protocol_client_enabled(client["id"],True)
                     advance_protocol_reset(client["id"],reset_days)
                     audit("system","protocol_client_auto_renew",client["name"],f"reset_days={reset_days}")
@@ -34,7 +39,10 @@ def collect_once():
         # Active recurring plans reset counters on schedule.
         if reset_days and next_reset_at and now>=next_reset_at:
             try:
-                protocol_ops.xray_client_traffic(client["name"],reset=True)
+                if client.get("protocol")=="outline":
+                    protocol_ops.xray_inbound_traffic(client["inbound_tag"],reset=True)
+                else:
+                    protocol_ops.xray_client_traffic(client["name"],reset=True)
                 reset_protocol_traffic(client["id"])
                 advance_protocol_reset(client["id"],reset_days)
                 audit("system","protocol_client_period_reset",client["name"],f"reset_days={reset_days}")
@@ -43,7 +51,9 @@ def collect_once():
                 audit("system","protocol_client_period_reset_failed",client["name"],str(exc)[:240])
 
         try:
-            stats=protocol_ops.xray_client_traffic(client["name"],reset=True)
+            stats=(protocol_ops.xray_inbound_traffic(client["inbound_tag"],reset=True)
+                   if client.get("protocol")=="outline"
+                   else protocol_ops.xray_client_traffic(client["name"],reset=True))
         except Exception as exc:
             audit("system","traffic_collect_failed",client.get("name"),str(exc)[:240])
             continue
@@ -66,7 +76,9 @@ def collect_once():
 
         if reason:
             try:
-                result=protocol_ops.disable_xray_client(client["inbound_tag"],client["name"])
+                result=(protocol_ops.set_outline_inbound_enabled(client["inbound_tag"],False)
+                        if client.get("protocol")=="outline"
+                        else protocol_ops.disable_xray_client(client["inbound_tag"],client["name"]))
                 set_protocol_client_enabled(client["id"],False,disable_reason)
                 audit("system","protocol_client_auto_disable",client["name"],reason+"; "+str(result)[:180])
             except Exception as exc:

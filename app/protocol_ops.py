@@ -2536,6 +2536,69 @@ def xray_client_traffic(email, reset=False):
             if name.endswith(">>>uplink"): up+=value
             elif name.endswith(">>>downlink"): down+=value
     return {"uplink":up,"downlink":down,"total":up+down,"available":True,"error":None}
+
+def xray_inbound_traffic(tag, reset=False):
+    binary=_binary()
+    if not binary:
+        raise ProtocolError("Xray core is not installed")
+    pattern=f"inbound>>>{tag}>>>traffic>>>"
+    args=[binary,"api","statsquery","--server=127.0.0.1:10085","-pattern",pattern]
+    if reset:
+        args += ["-reset=true"]
+    p=subprocess.run(args,text=True,capture_output=True,timeout=8,check=False)
+    if p.returncode!=0:
+        return {"uplink":0,"downlink":0,"total":0,"available":False,"error":(p.stderr or p.stdout or "")[:240]}
+    up=down=0
+    text=p.stdout or ""
+    try:
+        payload=json.loads(text)
+        rows=payload.get("stat") or payload.get("stats") or []
+        for item in rows if isinstance(rows,list) else []:
+            name=str((item or {}).get("name") or "")
+            value=int((item or {}).get("value") or 0)
+            if name.endswith(">>>uplink"):up+=value
+            elif name.endswith(">>>downlink"):down+=value
+    except Exception:
+        for name,value in re.findall(r'name["\']?\s*:\s*"([^"]+)".*?value["\']?\s*:\s*"?(\d+)',text,re.S):
+            if name.endswith(">>>uplink"):up+=int(value)
+            elif name.endswith(">>>downlink"):down+=int(value)
+    return {"uplink":up,"downlink":down,"total":up+down,"available":True,"error":None}
+
+
+def set_outline_inbound_enabled(tag,enabled):
+    """Enable/disable one Outline-compatible inbound without deleting its credential."""
+    binary=_binary(); config_path=_config_path()
+    if not binary or not config_path:raise ProtocolError("Xray core/config is not available")
+    path=Path(config_path)
+    try:data=json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:raise ProtocolError(f"cannot parse Xray config: {exc}") from exc
+    inbound=next((x for x in data.get("inbounds",[]) if isinstance(x,dict) and x.get("tag")==tag),None)
+    if not inbound:raise ProtocolError("Outline inbound not found")
+    if str(inbound.get("protocol") or "")!="shadowsocks":
+        raise ProtocolError("target inbound is not Outline/Shadowsocks")
+    current=str(inbound.get("listen") or "0.0.0.0")
+    if enabled:
+        if current=="127.0.0.1":inbound["listen"]="0.0.0.0"
+    else:
+        inbound["listen"]="127.0.0.1"
+    tmp=_xray_temp_json_path(path,"outline-state")
+    backup=_backup_dir()/f"xray-outline-state-{int(time.time())}.json"
+    shutil.copy2(path,backup)
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(tmp,0o600)
+    try:
+        _xray_test_config(binary,tmp)
+        os.replace(tmp,path);_xray_secure_runtime_file(path);_xray_test_config_as_service(binary,path)
+        _run(["systemctl","restart","xray"],timeout=30)
+        if not _active("xray"):raise ProtocolError("Xray did not become active after Outline state change")
+    except Exception:
+        try:
+            shutil.copy2(backup,path);_xray_secure_runtime_file(path);_run(["systemctl","restart","xray"],timeout=30)
+        except Exception:pass
+        raise
+    return {"tag":tag,"enabled":bool(enabled),"listen":"0.0.0.0" if enabled else "127.0.0.1"}
+
+
 def xray_client_online_ips(email):
     binary=_binary()
     if not binary:
@@ -2725,6 +2788,7 @@ def xray_inbound_builder_capabilities():
             "vmess":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
             "trojan":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls","reality"]},
             "shadowsocks":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["none","tls"]},
+            "outline":{"transports":["tcp"],"security":["none"]},
             "hysteria2":{"transports":["hysteria"],"security":["tls"]},
             "http":{"transports":["tcp"],"security":["none"]},
             "socks":{"transports":["tcp"],"security":["none"]},
@@ -3266,7 +3330,9 @@ def create_xray_full_inbound(spec):
     if not isinstance(spec,dict):
         raise ProtocolError("invalid Xray inbound payload")
     protocol=str(spec.get("protocol") or "").lower()
+    requested_protocol=protocol
     transport,security=_xray_builder_validate_combo(protocol,spec.get("transport"),spec.get("security"))
+    core_protocol="shadowsocks" if protocol=="outline" else protocol
     port=_validate_port(spec.get("port"))
     listen=_xray_builder_listen(spec.get("listen"))
     remark=str(spec.get("remark") or "").strip()
@@ -3279,7 +3345,7 @@ def create_xray_full_inbound(spec):
     flow=str(spec.get("flow") or "").strip()
     if flow not in {"","xtls-rprx-vision"}:
         raise ProtocolError("unsupported Xray flow")
-    if flow and not (protocol=="vless" and transport=="tcp" and security in {"tls","reality"}):
+    if flow and not (core_protocol=="vless" and transport=="tcp" and security in {"tls","reality"}):
         raise ProtocolError("XTLS Vision in Makia builder currently requires VLESS + TCP/RAW + TLS/REALITY")
     binary=_binary()
     if not binary:
@@ -3299,7 +3365,7 @@ def create_xray_full_inbound(spec):
         raise ProtocolError("this port is already used by another Xray inbound")
     if transport in {"kcp","hysteria"}:
         transport_protos={"udp"}
-    elif protocol in {"shadowsocks","socks"}:
+    elif core_protocol in {"shadowsocks","socks"}:
         transport_protos={"tcp","udp"}
     else:
         transport_protos={"tcp"}
@@ -3311,19 +3377,19 @@ def create_xray_full_inbound(spec):
     options.setdefault("path",spec.get("path") or "/")
     options.setdefault("server_name",spec.get("server_name") or "")
     options.setdefault("reality_dest",spec.get("reality_dest") or "")
-    stream,reality_meta=_xray_builder_stream(binary,protocol,transport,security,options)
-    credential=_xray_builder_credential(protocol,spec.get("credential"))
+    stream,reality_meta=_xray_builder_stream(binary,core_protocol,transport,security,options)
+    credential=_xray_builder_credential(core_protocol,spec.get("credential"))
     ss_method=str(spec.get("shadowsocks_method") or "aes-128-gcm")
-    if protocol=="shadowsocks" and ss_method not in xray_inbound_builder_capabilities()["shadowsocks_methods"]:
+    if core_protocol=="shadowsocks" and ss_method not in xray_inbound_builder_capabilities()["shadowsocks_methods"]:
         raise ProtocolError("unsupported Shadowsocks method in Makia builder")
-    settings,client_obj=_xray_builder_client(protocol,name,credential,flow,ss_method)
+    settings,client_obj=_xray_builder_client(core_protocol,name,credential,flow,ss_method)
     tag_base=re.sub(r"[^A-Za-z0-9_.-]+","-",remark).strip(".-")[:40] or protocol
     tag=f"makia-{tag_base}-{port}"
     if any(isinstance(item,dict) and item.get("tag")==tag for item in inbounds):
         tag=f"{tag}-{secrets.token_hex(2)}"
     inbound={
         "tag":tag,"listen":listen,"port":port,
-        "protocol":"hysteria" if protocol=="hysteria2" else protocol,
+        "protocol":"hysteria" if core_protocol=="hysteria2" else core_protocol,
         "settings":settings,"streamSettings":stream,
         "sniffing":_xray_builder_sniffing(options),
     }
@@ -3347,7 +3413,7 @@ def create_xray_full_inbound(spec):
         for transport_proto in sorted(transport_protos):
             if not _wait_listener(port,transport_proto,timeout=8.0,interval=0.25):
                 raise ProtocolError(f"Xray {transport_proto.upper()}/{port} did not become ready within 8 seconds")
-            _ufw_allow_if_active(port,transport_proto,f"Xray {protocol}")
+            _ufw_allow_if_active(port,transport_proto,f"Xray {requested_protocol}")
     except Exception:
         try:
             if tmp.exists():tmp.unlink()
@@ -3360,9 +3426,9 @@ def create_xray_full_inbound(spec):
         raise
     fingerprint=str(options.get("fingerprint") or "chrome")
     spider_x=str(options.get("spider_x") or "/")
-    share=_xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x)
+    share=_xray_builder_share_link(core_protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x)
     return {
-        "protocol":protocol,"tag":tag,"remark":remark,"listen":listen,"port":port,
+        "protocol":requested_protocol,"core_protocol":core_protocol,"tag":tag,"remark":remark,"listen":listen,"port":port,
         "name":name,"credential":credential,"transport":stream.get("method"),
         "security":stream.get("security"),"share_link":share,
         "reality":reality_meta,"backup":str(backup) if backup else None,

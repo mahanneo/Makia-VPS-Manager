@@ -4,6 +4,8 @@ import json, os, shutil, socket, time, urllib.request
 CONTROLLER=os.environ.get("MAKIA_CONTROLLER_URL","").rstrip("/")
 TOKEN=os.environ.get("MAKIA_NODE_TOKEN","")
 INTERVAL=max(15,int(os.environ.get("MAKIA_NODE_INTERVAL","30")))
+REGION=os.environ.get("MAKIA_NODE_REGION","")
+ENDPOINT=os.environ.get("MAKIA_NODE_ENDPOINT","")
 
 def cpu_times():
     with open("/proc/stat","r",encoding="utf-8") as f:
@@ -38,12 +40,36 @@ def version():
     return "node-agent"
 
 def heartbeat():
+    users=online=0
+    try:
+        import sqlite3
+        db="/var/lib/makia-vps-manager/makia.db"
+        if os.path.exists(db):
+            con=sqlite3.connect(db)
+            users=int(con.execute("SELECT COUNT(*) FROM protocol_clients").fetchone()[0])
+            online=int(con.execute("SELECT COUNT(*) FROM protocol_clients WHERE enabled=1").fetchone()[0])
+            con.close()
+    except Exception:
+        pass
+    try:
+        with open("/proc/net/dev","r",encoding="utf-8") as f:
+            rows=[x.split(":",1)[1].split() for x in f if ":" in x and not x.strip().startswith(("lo:","Inter-"))]
+        rx=sum(int(x[0]) for x in rows); tx=sum(int(x[8]) for x in rows)
+    except Exception:
+        rx=tx=0
     payload=json.dumps({
         "hostname":socket.gethostname(),
         "version":version(),
         "cpu":cpu_percent(),
         "memory":mem_percent(),
         "disk":disk_percent(),
+        "endpoint":ENDPOINT,
+        "region":REGION,
+        "users":users,
+        "online":online,
+        "rx":rx,
+        "tx":tx,
+        "latency_ms":None,
     }).encode()
     req=urllib.request.Request(
         CONTROLLER+"/api/node/heartbeat",
