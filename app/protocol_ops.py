@@ -2590,8 +2590,8 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
     if security not in {"none","tls","reality"}:
         raise ProtocolError("unsupported transport security")
     if security=="reality":
-        if protocol!="vless":
-            raise ProtocolError("Makia currently enables REALITY only for VLESS")
+        if protocol not in {"vless","trojan"}:
+            raise ProtocolError("REALITY is only available for VLESS or Trojan")
         if transport not in {"raw","grpc","xhttp"}:
             raise ProtocolError("REALITY is only compatible with TCP/RAW, gRPC or XHTTP here")
     stream={"method":transport,"security":security}
