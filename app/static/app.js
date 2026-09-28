@@ -217,10 +217,10 @@ async function access(renderToken=window.__viewRenderToken){
   const online=rows.reduce((n,x)=>n+Number(x.online||0),0);
   content.innerHTML=[
     '<div class="pro-page">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
+      '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="bulk-access-open">'+htmlEsc(tr('عملیات گروهی','Bulk actions'))+'</button><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
       '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
       '<section class="pro-directory">',
-        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
+        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="outline">Outline</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
         '<div id="accessRows" class="pro-user-list"></div>',
       '</section>',
@@ -247,7 +247,7 @@ function renderAccessRows(){
 }
 
 function accessUsageText(a){
-  if(a.kind==='xray'){
+  if(a.kind==='xray'||a.kind==='outline'){
     const used=fmtBytes(a.used_bytes||0),quota=a.quota_bytes?fmtBytes(a.quota_bytes):'∞';
     return used+' / '+quota;
   }
@@ -257,7 +257,7 @@ function accessUsageText(a){
 }
 function accessExpiryText(a){
   if(a.kind==='ssh')return a.expire_date||'بدون انقضا';
-  if(a.kind==='xray')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
+  if(a.kind==='xray'||a.kind==='outline')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
   if(a.kind==='wireguard')return a.address||'Peer';
   return 'Certificate';
 }
@@ -319,8 +319,8 @@ async function openAccessDetail(id){
   const kind=htmlEsc(a.kind),key=dataEnc(a.key),name=dataEnc(a.name);
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
-  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
-  const manage=(a.kind==='ssh'||a.kind==='xray')
+  const shareLabel=a.kind==='ssh'?'NPV / QR':(a.kind==='xray'||a.kind==='outline')?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
+  const manage=(a.kind==='ssh'||a.kind==='xray'||a.kind==='outline')
     ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
     : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
   const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
@@ -336,7 +336,7 @@ async function openAccessDetail(id){
       '<header><div><span class="pro-kicker">ACCESS PROFILE</span><h3>'+htmlEsc(a.name)+'</h3><p>'+htmlEsc(String(a.protocol||a.kind).toUpperCase())+'</p></div><button class="close-btn" data-action="modal-close">×</button></header>',
       '<div class="access-detail-body">',
         '<section class="access-detail-summary"><div><span>وضعیت</span><b>'+htmlEsc(a.status||'unknown')+'</b></div><div><span>Endpoint</span><b>'+htmlEsc(a.endpoint||'—')+'</b></div><div><span>مصرف</span><b>'+htmlEsc(accessUsageText(a))+'</b></div><div><span>انقضا / نوع</span><b>'+htmlEsc(accessExpiryText(a))+'</b></div></section>',
-        '<section class="detail-section"><div class="detail-section-head"><div><h4>مدیریت</h4><p>تنظیمات عملیاتی این دسترسی</p></div></div><div class="detail-actions">'+manage+'</div></section>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>مدیریت</h4><p>تنظیمات عملیاتی این دسترسی</p></div></div><div class="detail-actions">'+manage+((['ssh','xray','outline'].includes(a.kind))?'<button class="ghost" data-action="quick-renew" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('تمدید سریع','Quick renew'))+'</button>':'')+'</div></section>',
         '<section class="detail-section"><div class="detail-section-head"><div><h4>تحویل به کاربر</h4><p>فقط در زمان ارسال کانفیگ از این ابزارها استفاده کن.</p></div></div><div class="detail-actions">'+deliveryButtons+'</div></section>',
       '</div>',
       '<footer><button class="danger" data-action="revoke-access" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">لغو دسترسی</button><button class="ghost" data-action="modal-close">بستن</button></footer>',
