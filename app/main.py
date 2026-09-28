@@ -1364,6 +1364,9 @@ def openvpn_client_create(payload:OpenVPNClient,request:Request):
 @app.get("/api/protocols/openvpn/clients/{name}/profile")
 def openvpn_client_transport_profile(name:str,request:Request,transport:str="udp"):
     require_capability(request,"openvpn")
+    transport=str(transport or "").strip().lower()
+    if transport not in {"udp","tcp"}:
+        raise HTTPException(400,"OpenVPN profile transport must be udp or tcp")
     endpoint=public_host(request)
     artifact=get_access_artifact_by_key("openvpn",name)
     if artifact:
