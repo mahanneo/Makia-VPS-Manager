@@ -395,7 +395,7 @@ def root(request:Request):
 def connection_help(request:Request):
     response=templates.TemplateResponse("client_guide.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
-        "panel_domain":get_setting("panel_domain",""),
+        "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
     })
     response.headers["Cache-Control"]="public, max-age=300"
     response.headers["X-Content-Type-Options"]="nosniff"
@@ -436,7 +436,7 @@ def support_logout(request:Request):
 
 @app.get("/login",response_class=HTMLResponse)
 def login_page(request:Request):
-    return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":None})
+    return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/login")
 def login(request:Request,username:str=Form(...),password:str=Form(...)):
@@ -446,18 +446,18 @@ def login(request:Request,username:str=Form(...),password:str=Form(...)):
     if int(rate.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(rate["blocked_until"])-now_ts)
         audit(username or "unknown","login_rate_limited",detail=f"retry_after={wait}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید."},status_code=429)
+        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s).")},status_code=429)
     with connect() as con:
         row=con.execute("SELECT * FROM admins WHERE username=? AND active=1",(username,)).fetchone()
     if not row or not verify_password(password,row["password_hash"]):
         state=record_login_failure(remote_ip,now_ts)
         audit(username or "unknown","login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"error":"نام کاربری یا رمز عبور صحیح نیست."},status_code=401)
+        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password.")},status_code=401)
     clear_login_failures(remote_ip)
     twofa=get_admin_2fa(username)
     if twofa and twofa.get("totp_enabled"):
         audit(username,"login_password_success_2fa_required",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"token":make_preauth(username),"error":None})
+        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":make_preauth(username),"error":None})
     audit(username,"login_success",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -474,7 +474,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
     valid=bool(state and state.get("totp_enabled") and state.get("totp_secret") and pyotp.TOTP(state["totp_secret"]).verify(code.strip(),valid_window=1))
     if not valid:
         audit(username,"login_2fa_failed",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"token":token,"error":"کد تایید صحیح نیست."},status_code=401)
+        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":token,"error":("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid.")},status_code=401)
     audit(username,"login_success_2fa",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -1205,7 +1205,7 @@ def subscription_page(subscription_id:str,request:Request):
         subscription_qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(sub_url)).decode("ascii")
     response=templates.TemplateResponse("subscription.html",{
         "request":request,"client":snap,"subscription_id":subscription_id,
-        "app_name":APP_NAME,"version":VERSION,
+        "app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),
         "profile_qr":profile_qr,"subscription_qr":subscription_qr,"subscription_url":sub_url,
         "subscription_enabled":subscription_settings["enabled"],
         "guide_url":f"{origin}/help/connect#xray",
