@@ -319,10 +319,11 @@ async function openAccessDetail(id){
   const kind=htmlEsc(a.kind),key=dataEnc(a.key),name=dataEnc(a.name);
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
-  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
-  const manage=(a.kind==='ssh'||a.kind==='xray')
+  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':a.kind==='outline'?'Access Key / QR':'';
+  const manage=((a.kind==='ssh'||a.kind==='xray')
     ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
-    : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
+    : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>')+
+    '<button class="ghost" data-action="diagnose-access" data-kind="'+kind+'" data-key="'+key+'">'+htmlEsc(tr('عیب‌یابی','Diagnose'))+'</button>';
   const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
@@ -389,6 +390,7 @@ function protocolGlyph(kind){
     xray:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/></svg>',
     wireguard:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 13 2-4 1 3h3l-3 4"/></svg>',
     openvpn:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13v7h6v-7M12 14v3"/></svg>',
+    outline:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10l3 4v8l-3 4H7l-3-4V8z"/><path d="M9 8h6v8H9z"/></svg>',
     ikev2:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.3 5.7"/><path d="M4 17v-5h5"/><path d="M10 12h8M14 8v8"/></svg>',
     stealth:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/><path d="M5 19 19 5"/></svg>',
     wstunnel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h5l2-4 4 8 2-4h5"/><path d="M5 5h14v14H5z"/></svg>',
@@ -403,6 +405,7 @@ function wizardProtocolReady(kind){
   if(kind==='xray')return Boolean(s.xray?.installed);
   if(kind==='wireguard')return Boolean(s.wireguard?.installed&&s.wireguard?.config);
   if(kind==='openvpn')return Boolean(s.openvpn?.installed&&s.openvpn?.config);
+  if(kind==='outline')return Boolean(s.outline?.ready);
   return false;
 }
 
@@ -415,7 +418,8 @@ function renderProvisionWizard(){
       ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy'],
       ['xray','Xray / V2Ray','پروفایل‌های چندگانه و مدیریت پیشرفته','VLESS · VMess · Trojan · Hysteria2'],
       ['wireguard','WireGuard','تونل Native سریع','Peer · QR · Handshake · Traffic'],
-      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP']
+      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP'],
+      ['outline','Outline','Shadowsocks با Outline Server رسمی','Official API · Access Key · QR']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
@@ -702,11 +706,12 @@ async function downloadAccessNative(kind,key){
 async function openAccessShare(kind,key,name){
   try{
     const r=await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/share');
-    const isSsh=kind==='ssh',isXray=kind==='xray';
-    const directTitle=isSsh?'NPV Tunnel / NapsternetV Import':isXray?'Xray Share Center':'WireGuard QR';
+    const isSsh=kind==='ssh',isXray=kind==='xray',isOutline=kind==='outline';
+    const directTitle=isSsh?'NPV Tunnel / NapsternetV Import':isXray?'Xray Share Center':isOutline?'Outline Access Key':'WireGuard QR';
     const directHelp=isSsh
       ?'در NPV Tunnel از Scan QR یا Import from Clipboard استفاده کن. لینک npvt-ssh شامل Host/User/Password همین اکانت است.'
       :isXray?'QR را در v2rayNG / Hiddify / NPV یا کلاینت سازگار اسکن کن؛ Copy Link نیز همان Share URI را می‌دهد.'
+      :isOutline?'Access Key رسمی ss:// را در Outline Client وارد کن؛ QR همان Key را نمایش می‌دهد.'
       :'این QR همان WireGuard config است و در کلاینت رسمی WireGuard قابل اسکن است.';
     const qrVisible=window.__operatorSettings?.delivery?.show_qr!==false;
     const c=r.connection||{};
@@ -924,18 +929,25 @@ async function sessions(renderToken=window.__viewRenderToken){
 async function disconnectSession(tty,user){if(!confirm('قطع اتصال '+user+' ؟'))return;try{await api('/api/sessions/disconnect',{method:'POST',body:JSON.stringify({tty,username:user})});await sessions()}catch(e){alert(e.message)}}
 function relativeSeen(v){if(!v)return'Never';const t=Date.parse(v);if(Number.isNaN(t))return v;const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 async function nodes(renderToken=window.__viewRenderToken){
-  title.textContent='Nodes';setPageContext('FLEET CONTROL');
+  title.textContent=tr('نودها','Nodes');setPageContext('MULTI-VPS FLEET');
   const rows=await api('/api/nodes');if(renderToken!==window.__viewRenderToken||activeView!=='nodes')return;
-  content.innerHTML=viewIntro('MULTI-NODE','مدیریت نودها','VPSهای متصل را با Token مستقل، Heartbeat و Telemetry مرکزی مدیریت کن.','<button class="primary action-lg" data-action="node-create">＋ Add Node</button>')+
-  '<div class="panel modern-list"><div class="notice">برای Nodeهای خارج از شبکه محلی، Controller را فقط با HTTPS در دسترس قرار بده.</div><div class="table">'+(rows.length?rows.map(n=>'<div class="row"><div><b>'+htmlEsc(n.name)+'</b><div class="muted">'+htmlEsc(n.hostname||'Waiting for heartbeat')+'</div></div><div><span class="status-chip '+(n.last_seen_at?'ok':'warn')+'">'+htmlEsc(relativeSeen(n.last_seen_at))+'</span><div class="muted">token …'+htmlEsc(n.token_last4)+'</div></div><div><b>'+htmlEsc(n.cpu??'-')+'% / '+htmlEsc(n.memory??'-')+'%</b><div class="muted">CPU / RAM · Disk '+htmlEsc(n.disk??'-')+'%</div></div><div class="toolbar"><span class="status-chip">'+htmlEsc(n.version||'-')+'</span><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">Revoke</button></div></div>').join(''):'<div class="empty">هنوز Nodeای ثبت نشده است.</div>')+'</div></div>';
+  const now=Date.now(),online=rows.filter(n=>n.last_seen_at&&now-Date.parse(n.last_seen_at)<180000).length;
+  const cards=rows.map(n=>{
+    const fresh=n.last_seen_at&&now-Date.parse(n.last_seen_at)<180000;
+    const svc=n.services||{},svcOk=Object.values(svc).filter(Boolean).length,svcAll=Object.keys(svc).length;
+    return '<article class="node-fleet-card"><div class="ops-card-head"><div><span class="pro-kicker">'+htmlEsc(n.hostname||tr('در انتظار Heartbeat','Waiting for heartbeat'))+'</span><h3>'+htmlEsc(n.name)+'</h3></div><span class="status-chip '+(fresh?'ok':'warn')+'">'+(fresh?'ONLINE':'OFFLINE')+'</span></div><div class="ops-metrics"><div><span>CPU</span><b>'+htmlEsc(n.cpu??'—')+'%</b></div><div><span>RAM</span><b>'+htmlEsc(n.memory??'—')+'%</b></div><div><span>Disk</span><b>'+htmlEsc(n.disk??'—')+'%</b></div><div><span>'+tr('کاربران','Users')+'</span><b>'+Number(n.users||0)+'</b></div><div><span>'+tr('آنلاین','Online')+'</span><b>'+Number(n.online_users||0)+'</b></div><div><span>'+tr('سرویس‌ها','Services')+'</span><b>'+svcOk+'/'+svcAll+'</b></div></div><div class="node-traffic"><span>↓ '+fmtBytes(n.rx||0)+'</span><span>↑ '+fmtBytes(n.tx||0)+'</span><span>v'+htmlEsc(n.version||'—')+'</span></div><div class="toolbar">'+(n.public_url?'<a class="ghost link-btn" target="_blank" rel="noopener" href="'+htmlEsc(n.public_url)+'">'+tr('باز کردن پنل','Open panel')+'</a>':'')+'<button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">'+tr('لغو','Revoke')+'</button></div></article>';
+  }).join('');
+  content.innerHTML=viewIntro('MULTI-VPS FLEET',tr('داشبورد چند سرور','Multi-VPS dashboard'),tr('Heartbeat واقعی CPU/RAM/Disk، کاربران، Traffic و سرویس‌ها را از VPSهای Makia جمع می‌کند.','Real heartbeats collect CPU/RAM/Disk, users, traffic and services from Makia VPS nodes.'),'<div class="view-intro-actions"><div class="view-intro-stat"><b>'+online+'/'+rows.length+'</b><span>ONLINE</span></div><button class="primary" data-action="node-create">＋ '+tr('افزودن VPS','Add VPS')+'</button></div>')+
+  '<div class="ops-grid">'+(cards||'<div class="empty">'+tr('هنوز VPS دیگری متصل نشده است.','No other VPS connected yet.')+'</div>')+'</div><div class="wizard-note"><b>'+tr('Enrollment امن','Secure enrollment')+'</b><span>'+tr('روی VPS مقصد ابتدا Makia را نصب کن، سپس دستور makia-node-connect را با Token یکبارنمایش اجرا کن.','Install Makia on the target VPS, then run makia-node-connect with the one-time displayed token.')+'</span></div>';
 }
 async function createNode(){
-  const name=prompt('نام Node:','node-01');if(!name)return;
+  const name=prompt(tr('نام VPS / Node','VPS / Node name'),'node-01');if(!name)return;
   try{
     const r=await api('/api/nodes',{method:'POST',body:JSON.stringify({name})});
-    const cmd='MAKIA_CONTROLLER_URL='+location.origin+' MAKIA_NODE_TOKEN='+r.token+' bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/scripts/install-node-agent.sh)';
+    const publicUrl=prompt(tr('آدرس عمومی پنل Node اختیاری','Optional public panel URL'),'')||'';
+    const cmd='sudo makia-node-connect '+location.origin+' '+r.token+(publicUrl?' '+publicUrl:'');
     window.__lastNodeCommand=cmd;
-    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">NODE ENROLLMENT</div><h3>Node token created</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="notice">Token فقط همین یک‌بار نمایش داده می‌شود.</div><div class="quick-card"><b style="word-break:break-all">'+htmlEsc(r.token)+'</b><span>Node token</span></div><textarea id="nodeInstallCommand" class="config-output small" readonly></textarea><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="nodeInstallCommand">Copy command</button><button class="ghost" data-action="modal-close-refresh" data-view="nodes">Done</button></div></div></div>';
+    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">NODE ENROLLMENT</div><h3>'+tr('Token نود ساخته شد','Node token created')+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="notice">'+tr('Token فقط همین یک‌بار نمایش داده می‌شود. روی VPS مقصد که Makia نصب است این دستور را اجرا کن.','The token is shown only once. Run this command on the target VPS where Makia is installed.')+'</div><textarea id="nodeInstallCommand" class="config-output small" readonly></textarea><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="nodeInstallCommand">'+tr('کپی دستور','Copy command')+'</button><button class="ghost" data-action="modal-close-refresh" data-view="nodes">'+tr('تمام','Done')+'</button></div></div></div>';
     document.getElementById('nodeInstallCommand').value=cmd;
   }catch(e){alert(e.message)}
 }
@@ -1741,7 +1753,7 @@ async function backups(renderToken=window.__viewRenderToken){
     return '<div class="backup-history-row"><div><b>'+htmlEsc(b.name)+'</b><small>'+htmlEsc(b.type==='full_migration'?'Full Migration Backup':'Quick Backup')+'</small></div><div><b>'+new Date(Number(b.created_at||0)*1000).toLocaleString()+'</b><small>'+fmtBytes(b.size)+'</small></div><div><b>'+htmlEsc(b.version||'—')+'</b><small title="'+htmlEsc(sha)+'">SHA256 '+htmlEsc(sha?sha.slice(0,12)+'…':'—')+'</small></div><div><span class="status-chip '+(b.encrypted?'ok':'warn')+'">'+(b.encrypted?'AES-256 Encrypted':'Local 0600')+'</span><small>'+(b.restore_ready?'Restore ready':'Check required')+'</small></div><div>'+download+'</div></div>';
   }).join('');
   const restoreState=lastRestore?'<section class="panel restore-job-card"><div class="panel-head"><div><h3>Latest Restore Job</h3><span>'+htmlEsc(lastRestore.job_id||'')+'</span></div><span class="status-chip '+(lastRestore.state==='passed'?'ok':lastRestore.state==='failed'?'bad':'warn')+'">'+htmlEsc(String(lastRestore.state||'unknown').toUpperCase())+'</span></div><p>'+htmlEsc(lastRestore.message||'')+'</p>'+(lastRestore.cutover_instruction?'<div class="wizard-note"><b>DNS cutover</b><span>'+htmlEsc(lastRestore.cutover_instruction)+'</span></div>':'')+'</section>':'';
-  content.innerHTML=viewIntro('DISASTER RECOVERY','مرکز بکاپ و مهاجرت','Quick Backup برای rollback محلی است؛ Full Migration Backup رمزگذاری‌شده برای انتقال کامل هویت، PKI، Keys و تنظیمات به VPS جایگزین.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>BACKUPS</span></div><button class="ghost" data-action="backup-create">Quick Backup</button><button class="primary" data-action="portable-backup">Full Migration Backup</button><button class="ghost" data-action="migration-restore-open">Upload & Restore</button></div>')+
+  content.innerHTML=viewIntro('DISASTER RECOVERY','مرکز بکاپ و مهاجرت','Quick Backup برای rollback محلی است؛ Full Migration Backup رمزگذاری‌شده برای انتقال کامل هویت، PKI، Keys و تنظیمات به VPS جایگزین.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>BACKUPS</span></div><button class="ghost" data-action="backup-create">Quick Backup</button><button class="primary" data-action="portable-backup">Full Migration Backup</button><button class="ghost" data-action="migration-restore-open">Upload & Restore</button><button class="ghost" data-action="disaster-wizard">DR Assistant</button></div>')+
   '<section class="migration-readiness-grid"><article><span>Preflight Migration Check</span><b class="'+(ready.same_config_cutover_ready?'ok-text':'warn-text')+'">'+htmlEsc(migrationState)+'</b><small>'+Number(ready.domain_based||0)+' domain-based · '+Number(ready.ip_based||0)+' IP-based · '+Number(ready.unknown||0)+' unknown</small></article><article><span>Panel domain</span><b>'+htmlEsc(ready.panel_domain||'Not configured')+'</b><small>'+(ready.panel_domain?('Cloudflare A record: '+htmlEsc(ready.panel_domain)+' → NEW_VPS_IP'):'Configure a stable hostname before an incident')+'</small></article><article><span>Portable backups</span><b>'+full.length+'</b><small>'+quick.length+' host-local quick snapshot(s)</small></article></section>'+
   (Number(ready.ip_based||0)>0?'<div class="wizard-note danger-note"><b>IP-based configs cannot survive DNS-only cutover</b><span>'+Number(ready.ip_based)+' خروجی مستقیماً IP قدیمی را ذخیره کرده‌اند. تغییر A record آن‌ها را اصلاح نمی‌کند؛ قبل از حادثه Endpoint را Domain-based کن یا بعداً re-export انجام بده.</span></div>':'')+
   '<section class="panel migration-flow-panel"><div class="panel-head"><div><h3>Migration Wizard</h3><span>BACKUP → VERIFY → RESTORE → UAT</span></div></div><div class="guide-flow"><div><b>1</b><span>Preflight و Full Migration Backup با Password.</span></div><div><b>2</b><span>روی VPS جدید همان نسخه Makia را نصب کن و Upload & Restore را باز کن.</span></div><div><b>3</b><span>Integrity + Version + Components قبل از Commit بررسی می‌شوند؛ Restore در Job مستقل با rollback اجرا می‌شود.</span></div><div><b>4</b><span>پس از Runtime PASS، A/AAAA دامنه را به IP جدید تغییر بده و UAT واقعی Client را انجام بده.</span></div></div></section>'+
@@ -2082,7 +2094,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
+const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry & Renew','expiry'],['Outline','outline'],['Client Diagnostics','diagnostics'],['Automation & Integrations','operations'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -2102,6 +2114,11 @@ async function selectWizardProtocol(kind){
   if(kind==='xray'){
     closeModal();
     await openXrayInboundBuilder();
+    return;
+  }
+  if(kind==='outline'){
+    closeModal();
+    await openOutlineCreate();
     return;
   }
   provisionState.protocol=kind;provisionState.step=2;
@@ -2206,6 +2223,27 @@ async function handleMakiaAction(btn){
   if(action==='account-disconnect'){await accountAction(dataDec(btn.dataset.user),'disconnect');return}
   if(action==='account-delete'){await accountAction(dataDec(btn.dataset.user),'delete');return}
   if(action==='session-disconnect'){await disconnectSession(dataDec(btn.dataset.tty),dataDec(btn.dataset.user));return}
+  if(action==='plan-new'){await openPlanEditor();return}
+  if(action==='plan-edit'){await openPlanEditor(Number(btn.dataset.id));return}
+  if(action==='plan-save'){await savePlan(Number(btn.dataset.id));return}
+  if(action==='plan-delete'){await deletePlan(Number(btn.dataset.id));return}
+  if(action==='plan-use'){await usePlan(Number(btn.dataset.id));return}
+  if(action==='quick-renew'){await quickRenew(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='expiry-select-all'){document.querySelectorAll('.expiry-check').forEach(x=>x.checked=true);return}
+  if(action==='bulk-renew'){await bulkRenew();return}
+  if(action==='outline-create'){await openOutlineCreate();return}
+  if(action==='outline-create-save'){await createOutlineKey();return}
+  if(action==='outline-delete'){await deleteOutlineKey(dataDec(btn.dataset.id));return}
+  if(action==='client-diagnose'){await runClientDiagnostics();return}
+  if(action==='diagnose-access'){closeModal();switchView('diagnostics');setTimeout(()=>{const s=document.getElementById('diagClient');if(s){s.value=dataEnc(btn.dataset.kind+':'+dataDec(btn.dataset.key));runClientDiagnostics()}},150);return}
+  if(action==='access-detail-by-key'){const id=btn.dataset.kind+':'+dataDec(btn.dataset.key);await openAccessDetail(id);return}
+  if(action==='integration-outline'){await configureIntegration('outline');return}
+  if(action==='integration-cloudflare'){await configureIntegration('cloudflare');return}
+  if(action==='integration-telegram'){await configureIntegration('telegram');return}
+  if(action==='integration-backup'){await configureIntegration('backup');return}
+  if(action==='integration-test'){await testIntegration(btn.dataset.kind);return}
+  if(action==='disaster-wizard'){await openDisasterRecoveryWizard();return}
+  if(action==='cloudflare-cutover'){await cloudflareCutover();return}
   if(action==='node-create'){await createNode();return}
   if(action==='node-revoke'){await revokeNode(Number(btn.dataset.id));return}
   if(action==='service-action'){await svc(dataDec(btn.dataset.service),btn.dataset.serviceAction);return}
@@ -2446,14 +2484,14 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
 }
 
 function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',plans:'پلن‌ها',expiry:'انقضا و تمدید',outline:'Outline',diagnostics:'عیب‌یابی کاربر',operations:'اتوماسیون و اتصال‌ها',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',plans:'Plans',expiry:'Expiry & Renew',outline:'Outline',diagnostics:'Client Diagnostics',operations:'Automation & Integrations',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;
   document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
   document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav.pro-nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,plans:plansView,expiry:expiryView,outline:outlineWorkspace,diagnostics:diagnosticsView,operations:operationsView,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
@@ -2462,7 +2500,7 @@ function switchView(v){
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics'].includes(v))||(name==='system'&&['audit','backups','updates','operations'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
