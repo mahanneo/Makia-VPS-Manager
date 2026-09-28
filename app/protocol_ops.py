@@ -2261,7 +2261,10 @@ def render_openvpn_client(name,endpoint,transport=None):
     endpoint=_validate_endpoint_host(endpoint)
     requested=None
     if transport is not None:
-        requested="tcp" if str(transport).lower().startswith("tcp") else "udp"
+        raw_transport=str(transport or "").strip().lower()
+        if raw_transport not in {"udp","udp4","tcp","tcp4","tcp4-client","tcp-client"}:
+            raise ProtocolError("OpenVPN profile transport must be UDP or TCP")
+        requested="tcp" if raw_transport.startswith("tcp") else "udp"
         runtime=_openvpn_transport_runtimes().get(requested) or {}
         if not runtime.get("config") or not runtime.get("service_active") or not runtime.get("listener"):
             raise ProtocolError(f"OpenVPN {requested.upper()} transport is not active")
