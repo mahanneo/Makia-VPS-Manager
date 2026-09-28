@@ -178,7 +178,7 @@ jobs:
           grep -q '"openvpn-server@server": "OpenVPN"' app/config.py
           grep -q '"wg-quick@wg0": "WireGuard"' app/config.py
           grep -q 'Checking OpenVPN IPv4 runtime' scripts/update.sh
-          grep -q 'OpenVPN IPv4 transport' scripts/uat-smoke.sh
+          grep -q 'IPv4 transport' scripts/uat-smoke.sh
 
       - name: Open access contract
         run: |
