@@ -1789,6 +1789,29 @@ def access_portal_link(kind:str,key:str,request:Request):
     }
 
 
+
+@app.post("/api/access/{kind}/{key}/portal/rotate")
+def access_portal_rotate(kind:str,key:str,request:Request):
+    actor=require_access_kind(request,kind,True)
+    require_local_admin(request)
+    artifact=get_access_artifact_by_key(kind,key)
+    if not artifact:
+        _resolve_access_payload(kind,key,request)
+        artifact=get_access_artifact_by_key(kind,key)
+    if not artifact:
+        raise HTTPException(404,"access artifact not available")
+    meta=_artifact_public_meta(artifact)
+    token=secrets.token_urlsafe(24)
+    meta["public_token"]=token
+    upsert_access_artifact(
+        artifact["kind"],artifact["external_key"],artifact["display_name"],artifact.get("protocol") or "",
+        artifact.get("native_filename") or "",artifact["payload_enc"],
+        json.dumps(meta,ensure_ascii=False,separators=(",",":"))
+    )
+    audit(actor,"access_portal_rotate",f"{kind}:{key}",ip=ip(request))
+    return {"url":f"{public_origin(request)}/access/{token}","token":token}
+
+
 @app.get("/access/{token}",response_class=HTMLResponse)
 def public_access_portal(token:str,request:Request):
     artifact=_artifact_by_public_token(token)
