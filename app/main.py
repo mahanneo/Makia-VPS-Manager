@@ -855,6 +855,7 @@ class XrayQuickInbound(BaseModel):
     expire_days:int=Field(default=0,ge=0,le=3650)
     ip_limit:int=Field(default=1,ge=1,le=50)
     reset_days:int=Field(default=0,ge=0,le=3650)
+    manual:bool=False
 
 @app.post("/api/protocols/xray/quick-inbound")
 def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
@@ -865,7 +866,8 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
         endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
         result=protocol_ops.create_xray_inbound(
             payload.protocol,payload.port,payload.name,endpoint,
-            payload.transport,payload.security,payload.path_value,payload.server_name,payload.reality_dest
+            payload.transport,payload.security,payload.path_value,payload.server_name,payload.reality_dest,
+            manual=payload.manual
         )
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
@@ -890,7 +892,7 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
     )
     artifact_id=artifact_save("xray",str(client_id),payload.name,payload.protocol,delivery,{
         "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
-        "transport":result.get("transport",""),"security":result.get("security",""),
+        "transport":result.get("transport",""),"security":result.get("security",""),"manual":bool(payload.manual),
         "subscription_id":sub_id,"endpoint":endpoint,"endpoint_mode":payload.endpoint_mode
     })
     result["client_id"]=client_id
