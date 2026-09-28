@@ -508,10 +508,15 @@ def main():
     if shutil.which("makia-backup"):
         run(["makia-backup"],check=False)
 
-    rollback_root,rollback_records,rollback_users=create_restore_rollback(payload)
+    rollback_root=None
+    rollback_records=[]
+    rollback_users=[]
     mutated=False
     try:
+        # The restore runner is a separate systemd unit, so it survives this stop.
+        # Snapshot only after writers are stopped to keep DB/WAL and runtime files coherent.
         stop_stack()
+        rollback_root,rollback_records,rollback_users=create_restore_rollback(payload)
         mutated=True
         restore_data(payload["payload/data.tar.gz"])
         restore_ssh_users(payload["payload/ssh-users.json"])
@@ -537,7 +542,8 @@ def main():
             raise SystemExit(f"Restore failed ({exc}); automatic rollback also failed ({rollback_error}).")
         raise SystemExit(f"Restore failed and automatic rollback completed: {exc}")
     finally:
-        shutil.rmtree(rollback_root,ignore_errors=True)
+        if rollback_root:
+            shutil.rmtree(rollback_root,ignore_errors=True)
 
     print("\nFULL MIGRATION RESTORE: PASS")
     if domain:
