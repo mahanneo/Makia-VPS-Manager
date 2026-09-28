@@ -429,6 +429,7 @@ def test_tcp_fallback_uses_existing_pki_and_parallel_service(monkeypatch,tmp_pat
     monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
     monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_CONF",server/"makia-tcp.conf")
     monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_SERVICE","openvpn-server@makia-tcp")
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
     monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl"))
     monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
     monkeypatch.setattr(protocol_ops,"_openvpn_aux_forward_scripts",lambda stem,network:(ovpn/"up.sh",ovpn/"down.sh"))
