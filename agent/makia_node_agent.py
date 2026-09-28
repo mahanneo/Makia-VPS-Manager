@@ -72,10 +72,15 @@ def db_counts():
     try:
         con=sqlite3.connect(f"file:{db}?mode=ro",uri=True)
         users=int(con.execute("SELECT COUNT(*) FROM protocol_clients").fetchone()[0])
-        # Current live-online counters are protocol-specific; report known active managed clients.
-        online=int(con.execute("SELECT COUNT(*) FROM protocol_clients WHERE enabled=1").fetchone()[0])
+        recent=0
+        cutoff=time.time()-120
+        for (raw,) in con.execute("SELECT last_traffic_at FROM protocol_clients WHERE last_traffic_at IS NOT NULL AND last_traffic_at!=''"):
+            try:
+                stamp=time.mktime(time.strptime(str(raw).split(".")[0],"%Y-%m-%dT%H:%M:%S"))
+                if stamp>=cutoff:recent+=1
+            except Exception:pass
         con.close()
-        return users,online
+        return users,recent
     except Exception:return 0,0
 
 def service_state(unit):
