@@ -484,3 +484,51 @@ def test_openvpn_transport_runtime_prefers_primary_and_discovers_aux(monkeypatch
     runtimes=protocol_ops._openvpn_transport_runtimes()
     assert runtimes["udp"]["name"]=="server"
     assert runtimes["tcp"]["name"]=="transport-tcp"
+
+
+def test_repair_openvpn_all_runtimes_rebinds_destination_uplink(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"
+    server.mkdir(parents=True)
+    primary=server/"server.conf"
+    tcp=server/"transport-tcp.conf"
+    primary.write_text(
+        "port 1194\nproto udp\ndev tun\nserver 10.8.0.0 255.255.255.0\n"
+        "script-security 2\nup /etc/openvpn/old-up.sh\ndown /etc/openvpn/old-down.sh\n",
+        encoding="utf-8",
+    )
+    tcp.write_text(
+        "port 8443\nproto tcp-server\ndev tun-old\nserver 10.8.1.0 255.255.255.0\n"
+        "script-security 2\nup /etc/openvpn/old-tcp-up.sh\ndown /etc/openvpn/old-tcp-down.sh\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl"))
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"ens3")
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_run",lambda args,**kwargs:calls.append(args) or "")
+
+    def fake_runtime(stem="server"):
+        conf=server/f"{stem}.conf"
+        text=conf.read_text(encoding="utf-8")
+        import re
+        return {
+            "name":stem,"config":str(conf),
+            "port":int(re.search(r"(?m)^port\s+(\d+)",text).group(1)),
+            "proto":re.search(r"(?m)^proto\s+(\S+)",text).group(1),
+            "service_active":True,"listener":True,
+        }
+    monkeypatch.setattr(protocol_ops,"_openvpn_runtime_for",fake_runtime)
+
+    result=protocol_ops.repair_openvpn_all_runtimes()
+    assert result["ok"] is True
+    assert result["uplink"]=="ens3"
+    assert len(result["servers"])==2
+    assert "proto udp4" in primary.read_text()
+    assert "proto tcp4-server" in tcp.read_text()
+    assert "-s 10.8.0.0/24 -o ens3 -j MASQUERADE" in (ovpn/"makia-up.sh").read_text()
+    assert "-s 10.8.1.0/24 -o ens3 -j MASQUERADE" in (ovpn/"makia-up-tcp.sh").read_text()
+    assert (tmp_path/"sysctl"/"99-makia-openvpn.conf").read_text()=="net.ipv4.ip_forward=1\n"
+    assert ["systemctl","restart","openvpn-server@server"] in calls
+    assert ["systemctl","restart","openvpn-server@transport-tcp"] in calls
