@@ -1337,6 +1337,7 @@ async function downloadPortableBackup(){
   catch(e){alert('Portable backup: '+e.message)}
 }
 function openMigrationRestore(){
+  window.__migrationRestorePassword=null;
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal migration-restore-modal"><div class="wizard-head"><div><div class="eyebrow">RESTORE / MIGRATE</div><h3>Upload encrypted Full Migration Backup</h3></div><button class="close-btn" data-action="modal-close">×</button></div><p>Bundle ابتدا بدون تغییر Runtime از نظر AES password، SHA256 payloadها، Manifest و Version بررسی می‌شود. Restore فقط بعد از Preview و تأیید جداگانه شروع می‌شود.</p><label class="single-label">Encrypted backup<input id="migrationRestoreFile" type="file" accept=".zip,application/zip"></label><label class="single-label">Migration password<input id="migrationRestorePassword" type="password" minlength="10" autocomplete="current-password"></label><div class="wizard-note"><b>Safety</b><span>Password فقط در staging روت با Permission 0600 ذخیره می‌شود و Restore runner آن را پس از اجرا حذف می‌کند. Bundle روی دیسک رمزگذاری‌شده باقی می‌ماند.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="migration-restore-verify">Verify & Preview</button></div></div></div>';
 }
 async function verifyMigrationRestore(){
@@ -1349,12 +1350,16 @@ async function verifyMigrationRestore(){
   let j={};try{j=await r.json()}catch{}
   if(!r.ok)throw new Error(j?.detail||'Migration verification failed');
   window.__migrationRestore=j;
+  window.__migrationRestorePassword=password;
   const components=Object.entries(j.components||{}).filter(x=>x[1]).map(x=>x[0]).join(', ')||'core data';
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal migration-restore-modal"><div class="wizard-head"><div><div class="eyebrow">RESTORE PREVIEW</div><h3>Integrity & compatibility PASS</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="migration-preview-grid"><div><span>Version</span><b>'+htmlEsc(j.bundle_version||'—')+'</b></div><div><span>Payloads</span><b>'+Number(j.payload_count||0)+'</b></div><div><span>SHA256</span><b title="'+htmlEsc(j.sha256||'')+'">'+htmlEsc(String(j.sha256||'').slice(0,16))+'…</b></div><div><span>Domain</span><b>'+htmlEsc(j.panel_domain||'—')+'</b></div></div><div class="wizard-note"><b>Components</b><span>'+htmlEsc(components)+'</span></div><div class="wizard-note"><b>Cutover after PASS</b><span>'+htmlEsc(j.cutover_instruction||'Update DNS only after restore verification.')+'</span></div><div class="wizard-note danger-note"><b>Commit changes this VPS</b><span>Restore سرویس‌ها را restart می‌کند. اگر Runtime validation شکست بخورد، Restore engine به Snapshot قبل از Restore برمی‌گردد.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="migration-restore-apply" data-job="'+dataEnc(j.job_id)+'">Restore Now</button></div></div></div>';
 }
 async function applyMigrationRestore(jobId){
   if(!confirm('Restore روی این VPS اجرا شود؟ سرویس Makia حین عملیات restart می‌شود.'))return;
-  const r=await api('/api/backups/restore/'+encodeURIComponent(jobId)+'/apply',{method:'POST',body:'{}'});
+  const password=window.__migrationRestorePassword||'';
+  if(password.length<10){alert('Migration password برای Commit در حافظه موجود نیست؛ Bundle را دوباره Verify کن.');return}
+  const r=await api('/api/backups/restore/'+encodeURIComponent(jobId)+'/apply',{method:'POST',body:JSON.stringify({password})});
+  window.__migrationRestorePassword=null;
   localStorage.setItem('makiaRestoreJob',jobId);
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">RESTORE JOB</div><h3>Restore started</h3></div></div><p>Job مستقل systemd شروع شد. پنل ممکن است هنگام Restart موقتاً در دسترس نباشد. بعد از برگشت پنل، Backup Center وضعیت PASS/FAIL و DNS cutover را نشان می‌دهد.</p><div class="wizard-note"><b>Job ID</b><span>'+htmlEsc(jobId)+'</span></div><div class="wizard-footer"><button class="primary" data-action="modal-close-refresh" data-view="backups">Check status</button></div></div></div>';
   return r;
@@ -1752,7 +1757,7 @@ async function handleMakiaAction(btn){
   if(action==='client-guide-copy'){copyClientGuide(btn.dataset.kind||'xray');return}
   if(action==='self-test'){await runSelfTest();return}
   if(action==='success-done'){closeModal();switchView('access');return}
-  if(action==='modal-close'){closeModal();return}
+  if(action==='modal-close'){if(document.querySelector('.migration-restore-modal'))window.__migrationRestorePassword=null;closeModal();return}
   if(action==='modal-close-refresh'){const v=btn.dataset.view;closeModal();if(v&&views[v])await views[v]();return}
   if(action==='copy-target'){const el=document.getElementById(btn.dataset.target);if(el)copyText('value' in el?el.value:el.textContent||'');return}
   if(action==='copy-last-credential'){
