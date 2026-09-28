@@ -896,7 +896,7 @@ async function protocols(renderToken=window.__viewRenderToken){
       ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button><button class="soft" data-action="ikev2-users">Users</button>',
       wireguard:'<button class="ghost" data-action="nav" data-view="wireguard">Manage</button>',
       udp:'<button class="ghost" data-action="openvpn-mode" data-proto="udp">Use UDP</button>',
-      tcp:'<button class="ghost" data-action="openvpn-mode" data-proto="tcp">Use TCP</button>',
+      tcp:'<button class="ghost" data-action="openvpn-tcp-fallback">Enable TCP fallback</button>',
       stealth:'<button class="ghost" data-action="stealth-setup">Configure</button>',
       wstunnel:'<button class="ghost" data-action="wstunnel-setup">Configure</button>'
     }[m.id]||'';
@@ -982,7 +982,8 @@ async function selectProtocolMode(mode){
     return;
   }
   if(mode==='wireguard'){await switchView('wireguard');return}
-  if(mode==='udp'||mode==='tcp'){await switchOpenVPNMode(mode);return}
+  if(mode==='udp'){await switchOpenVPNMode('udp');return}
+  if(mode==='tcp'){await ensureOpenVPNTCPFallback();return}
   if(mode==='stealth'){await setupStealth();return}
   if(mode==='wstunnel'){await setupWStunnel();return}
 }
@@ -1016,9 +1017,20 @@ async function switchOpenVPNMode(proto){
   const payload={port,proto,dns_servers:opts.dns_servers||['1.1.1.1','8.8.8.8'],keepalive_ping:Number(opts.keepalive_ping||10),keepalive_timeout:Number(opts.keepalive_timeout||120),redirect_gateway:opts.redirect_gateway!==false,client_to_client:Boolean(opts.client_to_client)};
   try{await api('/api/protocols/openvpn/configure',{method:'POST',body:JSON.stringify(payload)});toast('OpenVPN switched to '+proto.toUpperCase());await protocols()}catch(e){alert('OpenVPN '+proto.toUpperCase()+': '+e.message)}
 }
+async function ensureOpenVPNTCPFallback(){
+  const current=window.__protocolModes?.modes?.find(x=>x.id==='tcp');
+  const suggested=Number(current?.ports?.[0]||8443);
+  const port=Number(prompt('OpenVPN TCP fallback port',String(suggested)));if(!port)return;
+  try{
+    await api('/api/protocols/openvpn/tcp-fallback',{method:'POST',body:JSON.stringify({port})});
+    toast('OpenVPN TCP fallback active without changing UDP users');
+    if(activeView==='protocols')await protocols(); else await currentView();
+  }catch(e){alert('OpenVPN TCP fallback: '+e.message)}
+}
+
 async function setupStealth(){
   const domain=prompt('Stealth TLS domain',window.PANEL_DOMAIN||'');if(!domain)return;
-  const port=Number(prompt('Public Stealth TCP port','8443'));if(!port)return;
+  const port=Number(prompt('Public Stealth TLS port (443 only if HTTPS is not using it)','9443'));if(!port)return;
   try{const r=await api('/api/protocols/stealth/bootstrap',{method:'POST',body:JSON.stringify({domain,port})});configModal('Stealth TLS client',r.client_stunnel_config,'makia-stealth-stunnel.conf');toast('Stealth listener ready')}catch(e){alert('Stealth: '+e.message)}
 }
 async function setupWStunnel(){
@@ -1290,18 +1302,22 @@ async function security(renderToken=window.__viewRenderToken){
 }
 async function backups(renderToken=window.__viewRenderToken){
   title.textContent='Backups';setPageContext('RECOVERY');
-  const rows=await api('/api/backups');if(renderToken!==window.__viewRenderToken||activeView!=='backups')return;
+  const [rows,ready]=await Promise.all([api('/api/backups'),api('/api/backups/migration-readiness').catch(()=>({}))]);if(renderToken!==window.__viewRenderToken||activeView!=='backups')return;
   const total=rows.reduce((n,b)=>n+Number(b.size||0),0);
-  content.innerHTML=viewIntro('RECOVERY POINTS','مرکز بکاپ','Snapshot محلی برای rollback و Portable Migration Bundle رمزگذاری‌شده برای انتقال VPS.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+'<button class="ghost" data-action="portable-backup">Portable Migration</button>'+'<button class="primary" data-action="backup-create">＋ Local Backup</button></div>')+
-  '<div class="panel modern-list"><div class="panel-head"><div><h3>Archive</h3><span>'+fmtBytes(total)+' TOTAL</span></div></div><div class="table">'+(rows.length?rows.map(b=>'<div class="row backup-row"><div><b>'+htmlEsc(b.name)+'</b><div class="muted">Makia data snapshot</div></div><div><b>'+fmtBytes(b.size)+'</b><div class="muted">archive size</div></div><div class="muted">'+new Date(b.created_at*1000).toLocaleString()+'</div><div><span class="status-chip">Host-local 0600</span></div></div>').join(''):'<div class="empty">هنوز بکاپی ساخته نشده.</div>')+'</div></div>';
+  const migrationState=ready.same_config_cutover_ready?'READY':ready.ip_based?'IP-BASED CLIENTS':'CHECK';
+  content.innerHTML=viewIntro('DISASTER RECOVERY','مرکز بکاپ و مهاجرت','Local Snapshot برای rollback و Full VPS Migration رمزگذاری‌شده برای انتقال سریع کاربران، Keys، PKI و تنظیمات به سرور جدید.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+'<button class="primary" data-action="portable-backup">Full VPS Backup</button>'+'<button class="ghost" data-action="backup-create">＋ Local Snapshot</button></div>')+
+  '<section class="migration-readiness-grid"><article><span>Cutover readiness</span><b class="'+(ready.same_config_cutover_ready?'ok-text':'warn-text')+'">'+htmlEsc(migrationState)+'</b><small>'+Number(ready.domain_based||0)+' domain-based · '+Number(ready.ip_based||0)+' IP-based</small></article><article><span>Panel domain</span><b>'+htmlEsc(ready.panel_domain||'Not configured')+'</b><small>Keep this hostname on the replacement VPS</small></article><article><span>Cloudflare</span><b>DNS ONLY</b><small>برای WireGuard / OpenVPN / SSH از Proxy نارنجی استفاده نکن.</small></article></section>'+
+  (Number(ready.ip_based||0)>0?'<div class="wizard-note danger-note"><b>کانفیگ IP-based پیدا شد</b><span>'+Number(ready.ip_based)+' خروجی قدیمی مستقیماً IP را ذخیره کرده‌اند؛ این Clientها فقط با تغییر DNS مهاجرت نمی‌کنند و باید Endpoint آن‌ها به دامنه تبدیل/دوباره Export شود.</span></div>':'')+
+  '<section class="panel migration-flow-panel"><div class="panel-head"><div><h3>Fast replacement VPS flow</h3><span>FULL IDENTITY PRESERVATION</span></div></div><div class="guide-flow"><div><b>1</b><span>Full VPS Backup را دانلود و Password آن را جدا نگهداری کن.</span></div><div><b>2</b><span>روی VPS جدید همان نسخه Makia را نصب کن.</span></div><div><b>3</b><span>Bundle را کپی و با <code>sudo makia-restore-portable ... --apply</code> Restore کن.</span></div><div><b>4</b><span>بعد از PASS شدن Validation، فقط A/AAAA دامنه را به IP جدید تغییر بده.</span></div></div></section>'+
+  '<div class="panel modern-list"><div class="panel-head"><div><h3>Local rollback snapshots</h3><span>'+fmtBytes(total)+' TOTAL</span></div></div><div class="table">'+(rows.length?rows.map(b=>'<div class="row backup-row"><div><b>'+htmlEsc(b.name)+'</b><div class="muted">Makia data snapshot</div></div><div><b>'+fmtBytes(b.size)+'</b><div class="muted">archive size</div></div><div class="muted">'+new Date(b.created_at*1000).toLocaleString()+'</div><div><span class="status-chip">Host-local 0600</span></div></div>').join(''):'<div class="empty">هنوز بکاپی ساخته نشده.</div>')+'</div></div>';
 }
 function openPortableBackup(){
-  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal"><div class="wizard-head"><div><div class="eyebrow">PORTABLE MIGRATION</div><h3>Encrypted VPS migration bundle</h3></div><button class="close-btn" data-action="modal-close">×</button></div><p>این بسته شامل data/.secret، Xray/REALITY، WireGuard keys، OpenVPN PKI، Nginx/Let\'s Encrypt و hash حساب‌های SSH مدیریت‌شده است.</p><label class="single-label">Migration password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password"></label><div class="wizard-note"><b>Cutover</b><span>روی VPS مقصد ابتدا Makia را نصب کن، سپس با makia-restore-portable bundle را Restore کن و در پایان DNS همان دامنه را به IP جدید تغییر بده.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="portable-backup-download">Build & Download</button></div></div></div>';
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal"><div class="wizard-head"><div><div class="eyebrow">FULL VPS MIGRATION</div><h3>Encrypted disaster-recovery bundle</h3></div><button class="close-btn" data-action="modal-close">×</button></div><p>این Bundle شامل DB و .secret، SSH password hashes و authorized_keys، Xray/REALITY، WireGuard keys/peers، OpenVPN PKI، IKEv2، Stealth/Stunnel، WStunnel، Nginx و Let\'s Encrypt است. Payloadها SHA-256 دارند.</p><label class="single-label">Migration password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password"></label><div class="wizard-note"><b>Restore contract</b><span>روی VPS مقصد همان نسخه Makia را نصب کن، Bundle را Restore کن؛ Runtime شبکه برای Interface جدید بازسازی می‌شود و سپس DNS همان دامنه را به IP جدید تغییر بده.</span></div><div class="wizard-note"><b>Cloudflare</b><span>برای ترافیک خام VPN/SSH رکورد باید DNS only باشد. فقط وب پنل می‌تواند پشت Proxy سازگار قرار بگیرد.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="portable-backup-download">Build Full Backup</button></div></div></div>';
 }
 async function downloadPortableBackup(){
   const password=document.getElementById('migrationPassword')?.value||'';
   if(password.length<10){alert('Migration password حداقل ۱۰ کاراکتر باشد.');return}
-  try{await fetchDownload('/api/backups/portable',{method:'POST',headers:{'Content-Type':'application/json','X-Makia-Request':'1'},body:JSON.stringify({password})},'makia-portable-migration.zip');toast('Portable migration bundle آماده شد')}
+  try{await fetchDownload('/api/backups/portable',{method:'POST',headers:{'Content-Type':'application/json','X-Makia-Request':'1'},body:JSON.stringify({password})},'makia-full-migration.zip');toast('Full VPS migration bundle آماده شد')}
   catch(e){alert('Portable backup: '+e.message)}
 }
 async function makeBackup(){try{await api('/api/backups',{method:'POST'});toast('Backup created');if(activeView==='settings')await currentView();else await backups()}catch(e){alert(e.message)}}
@@ -1510,7 +1526,7 @@ async function settings(renderToken=window.__viewRenderToken){
   }else{
     const recent=backupRows.slice(0,5);
     body=[
-      '<section class="settings-section-head"><div><div class="eyebrow">RECOVERY</div><h2>Backup / Migration</h2><p>Local Snapshot برای rollback؛ Portable Migration برای انتقال credentialها و keys به VPS جدید.</p></div><div class="toolbar"><button class="ghost" data-action="portable-backup">Portable Migration</button><button class="primary" data-action="backup-create">＋ Local Backup</button></div></section>',
+      '<section class="settings-section-head"><div><div class="eyebrow">RECOVERY</div><h2>Backup / Migration</h2><p>Local Snapshot برای rollback؛ Full VPS Migration برای انتقال کاربران، credentialها، keys، PKI و تنظیمات به VPS جدید.</p></div><div class="toolbar"><button class="ghost" data-action="portable-backup">Full VPS Backup</button><button class="primary" data-action="backup-create">＋ Local Backup</button></div></section>',
       '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Backups</span><b>'+backupRows.length+'</b></div><div><span>Latest</span><b>'+(recent[0]?htmlEsc(recent[0].name):'None')+'</b></div><div><span>Storage</span><b>'+fmtBytes(backupRows.reduce((n,x)=>n+Number(x.size||0),0))+'</b></div><div><span>Restore</span><b class="warn-text">CLI / validated workflow only</b></div></div>',
       '<div class="settings-shortcuts"><button data-action="nav" data-view="backups"><b>Open Backup Center</b><span>View all real archives</span></button><button data-action="self-test"><b>Run Self-Test</b><span>Validate crypto, DB and services</span></button></div>',
       (recent.length?'<div class="recovery-list">'+recent.map(x=>'<div><b>'+htmlEsc(x.name)+'</b><span>'+fmtBytes(x.size||0)+'</span></div>').join('')+'</div>':'<div class="empty">هنوز Backup ساخته نشده است.</div>')+'</div>'
@@ -1672,6 +1688,7 @@ async function handleMakiaAction(btn){
   if(action==='ikev2-users'){await openIKEv2Users();return}
   if(action==='ikev2-user-delete'){await revokeIKEv2User(dataDec(btn.dataset.name));return}
   if(action==='openvpn-mode'){await switchOpenVPNMode(btn.dataset.proto||'udp');return}
+  if(action==='openvpn-tcp-fallback'){await ensureOpenVPNTCPFallback();return}
   if(action==='stealth-setup'){await setupStealth();return}
   if(action==='wstunnel-setup'){await setupWStunnel();return}
   if(action==='protocol-bootstrap'){await performProtocolBootstrap(btn.dataset.kind,btn.dataset.installed==='1');return}
