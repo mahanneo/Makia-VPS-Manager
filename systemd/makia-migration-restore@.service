@@ -1,0 +1,21 @@
+[Unit]
+Description=Makia transactional migration restore job %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/makia-run-migration-restore %i
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectSystem=false
+ProtectHome=false
+RestrictRealtime=true
+LockPersonality=true
+TimeoutStartSec=35min
+
+[Install]
+WantedBy=multi-user.target

@@ -43,6 +43,21 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
+      - name: Backup restore and migration compatibility tests
+        run: |
+          pytest -q tests/test_migration_wireguard.py
+          python -m py_compile scripts/restore-portable.py scripts/run-migration-restore.py
+      - name: Migration security hardening
+        run: |
+          grep -q 'NoNewPrivileges=true' systemd/makia-vps-manager.service
+          grep -q 'NoNewPrivileges=true' systemd/makia-migration-restore@.service
+          grep -q 'UMask=0077' systemd/makia-migration-restore@.service
+          grep -q -- '--password-file' scripts/restore-portable.py
+          grep -q 'password.unlink' scripts/run-migration-restore.py
+          grep -q 'automatic rollback' scripts/restore-portable.py
+          grep -q 'makia-migration-restore@.service' scripts/install.sh
+          grep -q 'makia-migration-restore@.service' scripts/update.sh
+          ! grep -R --line-number -E 'chmod[[:space:]]+777|ProtectSystem=false.*makia-vps-manager' systemd scripts/run-migration-restore.py
       - name: Dangerous pattern guard
         run: |
           ! grep -R --line-number -E 'chmod[[:space:]]+777|shell=True|os\.system\(' app scripts tools install.sh systemd nginx
@@ -302,6 +317,7 @@ jobs:
     env:
       PYTHONPATH: .
       MAKIA_DATA_DIR: /tmp/makia-browser
+      MAKIA_BACKUP_DIR: /tmp/makia-browser-backups
       MAKIA_INITIAL_ADMIN_PASSWORD: BrowserTestPass!123
     steps:
       - uses: actions/checkout@v5

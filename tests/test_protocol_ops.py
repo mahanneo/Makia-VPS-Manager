@@ -429,6 +429,7 @@ def test_tcp_fallback_uses_existing_pki_and_parallel_service(monkeypatch,tmp_pat
     monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
     monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_CONF",server/"makia-tcp.conf")
     monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_SERVICE","openvpn-server@makia-tcp")
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
     monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl"))
     monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
     monkeypatch.setattr(protocol_ops,"_openvpn_aux_forward_scripts",lambda stem,network:(ovpn/"up.sh",ovpn/"down.sh"))
@@ -443,3 +444,63 @@ def test_tcp_fallback_uses_existing_pki_and_parallel_service(monkeypatch,tmp_pat
     assert "proto tcp4-server" in text
     assert "server 10.9.0.0 255.255.255.0" in text
     assert "server.conf" not in text
+
+
+def test_stealth_default_public_port_is_not_tcp_backend_default():
+    import inspect
+    default=inspect.signature(protocol_ops.bootstrap_stealth).parameters["listen_port"].default
+    assert default==9443
+    assert default!=8443
+
+
+def test_stealth_backend_allocator_excludes_public_listener(monkeypatch):
+    occupied={(8443,"tcp")}
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:(int(port),str(proto)) in occupied)
+    port=protocol_ops._select_available_port_excluding(
+        8443,"tcp",(9443,10443,11940),exclude_ports={9443}
+    )
+    assert port==10443
+
+
+def test_tcp_fallback_collision_reports_owner_and_real_alternative(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"; server=ovpn/"server"; server.mkdir(parents=True)
+    for name in ["ca.crt","server.crt","server.key","dh.pem","crl.pem","ta.key"]:
+        (server/name).write_text(name,encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_CONF",server/"makia-tcp.conf")
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem:{
+        "config":str(server/"makia-tcp.conf"),"port":None,"proto":None,"service_active":False,"listener":False
+    })
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:int(port)==8443)
+    monkeypatch.setattr(protocol_ops,"_port_owner_label",lambda port,proto:"Xray inbound vless")
+    monkeypatch.setattr(protocol_ops,"_suggest_free_port",lambda *args,**kwargs:10443)
+    with pytest.raises(ProtocolError,match=r"TCP/8443.*Xray.*10443"):
+        protocol_ops.ensure_openvpn_tcp_fallback(8443)
+
+
+def test_tcp_fallback_rolls_back_config_when_restart_fails(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"; server=ovpn/"server"; server.mkdir(parents=True)
+    for name in ["ca.crt","server.crt","server.key","dh.pem","crl.pem","ta.key"]:
+        (server/name).write_text(name,encoding="utf-8")
+    conf=server/"makia-tcp.conf"
+    conf.write_text("port 8443\nproto tcp4-server\n# old\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_CONF",conf)
+    monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_SERVICE","openvpn-server@makia-tcp")
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl"))
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
+    monkeypatch.setattr(protocol_ops,"_openvpn_aux_forward_scripts",lambda stem,network:(ovpn/"makia-tcp-up.sh",ovpn/"makia-tcp-down.sh"))
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem:{
+        "config":str(conf),"port":8443,"proto":"tcp4-server","service_active":True,"listener":False
+    })
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *args,**kwargs:{"active":False})
+    def fail_restart(args,**kwargs):
+        if args[:2]==["systemctl","restart"]:
+            raise ProtocolError("simulated restart failure")
+        return ""
+    monkeypatch.setattr(protocol_ops,"_run",fail_restart)
+    with pytest.raises(ProtocolError,match="simulated"):
+        protocol_ops.ensure_openvpn_tcp_fallback(8443)
+    assert conf.read_text(encoding="utf-8")=="port 8443\nproto tcp4-server\n# old\n"

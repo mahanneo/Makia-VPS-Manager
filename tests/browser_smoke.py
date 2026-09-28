@@ -365,6 +365,17 @@ def main():
                 assert "payload_sha256" in manifest_obj
             page.locator('.close-btn[data-action="modal-close"]').click()
 
+            page.evaluate("switchView('backups')")
+            page.locator(".backup-history-panel").wait_for()
+            assert page.locator('[data-action="backup-create"]').count()>=1
+            assert page.locator('[data-action="portable-backup"]').count()>=1
+            assert page.locator('[data-action="migration-restore-open"]').count()==1
+            page.locator('[data-action="migration-restore-open"]').click()
+            page.locator("#migrationRestoreFile").wait_for()
+            assert page.locator("#migrationRestorePassword").count()==1
+            assert page.locator('[data-action="migration-restore-verify"]').count()==1
+            page.locator('.close-btn[data-action="modal-close"]').click()
+
             for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
                 page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)

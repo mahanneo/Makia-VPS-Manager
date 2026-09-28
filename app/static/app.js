@@ -891,7 +891,10 @@ async function protocols(renderToken=window.__viewRenderToken){
   window.__protocolData=d;window.__protocolClients=clients;window.__protocolModes=modesData;
   const x=d.xray||{},w=d.wireguard||{},o=d.openvpn||{},s=d.stunnel||{},ssh=d.ssh||{};
   const protocolModeCards=(modesData.modes||[]).map(m=>{
-    const ports=(m.ports||[]).filter(Boolean).join(', ')||'—';
+    const suggestionKey=m.id==='tcp'?'openvpn_tcp':m.id;
+    const suggested=Number(modesData.port_plan?.suggested?.[suggestionKey]||0);
+    const assigned=(m.ports||[]).filter(Boolean);
+    const ports=assigned.length?assigned.join(', '):(suggested?('suggested '+suggested):'—');
     const actions={
       ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button><button class="soft" data-action="ikev2-users">Users</button>',
       wireguard:'<button class="ghost" data-action="nav" data-view="wireguard">Manage</button>',
@@ -923,7 +926,8 @@ async function protocols(renderToken=window.__viewRenderToken){
   ].map(e=>'<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc(e[0].slice(0,1))+'</div><div><b>'+htmlEsc(e[0])+'</b><span>'+(e[1]?'نصب شده':'نصب نشده')+'</span></div><span class="status-chip '+(e[2]?'ok':e[1]?'warn':'bad')+'">'+(e[2]?'در حال اجرا':e[1]?'متوقف':'Missing')+'</span><button class="ghost" data-action="nav" data-view="'+e[3]+'">تنظیمات</button></div>').join('');
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">⌘</span><div><h2>مدیریت پورت‌ها</h2><p>نمایش پورت‌های فعال و کنترل Engineهای شبکه بدون تداخل TCP / UDP</p></div></div><div class="protocol-header-actions"><button class="primary" data-action="change-protocol">Change Protocol</button><button class="ghost" data-action="endpoint-matrix">بررسی Endpoint</button><button class="ghost" data-action="protocol-refresh">بروزرسانی</button></div></section>',
-    '<section class="panel protocol-modes-panel"><div class="panel-head"><div><h3>Connection Modes</h3><span>IKEV2 · WIREGUARD · UDP · TCP · STEALTH · WSTUNNEL</span></div></div><div class="protocol-mode-grid">'+(protocolModeCards||'<div class="empty">Mode data unavailable.</div>')+'</div><div class="port-safe-note">هر Mode به Backend واقعی متصل است. UDP/TCP دو حالت یک OpenVPN Server فعال هستند؛ Stealth و WStunnel Listener مستقل می‌گیرند تا TCP/443 جعلی نمایش داده نشود.</div></section>',
+    '<section class="panel protocol-modes-panel"><div class="panel-head"><div><h3>Connection Modes</h3><span>IKEV2 · WIREGUARD · UDP · TCP · STEALTH · WSTUNNEL</span></div></div><div class="protocol-mode-grid">'+(protocolModeCards||'<div class="empty">Mode data unavailable.</div>')+'</div><div class="port-safe-note">هر Mode به Backend واقعی متصل است. OpenVPN UDP مستقل می‌ماند؛ TCP fallback جداست و Stealth فقط روی Listener عمومی جدا به آن وصل می‌شود.</div></section>',
+    '<section class="panel port-plan-panel"><div class="panel-head"><div><h3>TCP Port Ownership</h3><span>REAL LISTENER PREFLIGHT</span></div></div><div class="port-plan-grid">'+((modesData.port_plan?.rows||[]).map(r=>'<article><span>'+htmlEsc(r.service)+'</span><b>TCP/'+Number(r.port||0)+'</b><small class="'+(r.occupied?'warn-text':'ok-text')+'">'+(r.occupied?('Owned: '+htmlEsc(r.owner||'host service')):'Free now')+'</small></article>').join('')||'<div class="empty">Port plan unavailable.</div>')+'</div>'+((modesData.port_plan?.blockers?.openvpn_tcp||[]).length?'<div class="wizard-note danger-note"><b>OpenVPN TCP blockers</b><span>'+htmlEsc(modesData.port_plan.blockers.openvpn_tcp.join(' · '))+'</span></div>':'')+((modesData.port_plan?.blockers?.stealth||[]).length?'<div class="wizard-note danger-note"><b>Stealth blockers</b><span>'+htmlEsc(modesData.port_plan.blockers.stealth.join(' · '))+'</span></div>':'')+'<div class="port-safe-note">'+htmlEsc(modesData.port_plan?.note||'TCP/443 has one owner; UDP/443 may coexist independently.')+'</div></section>',
     '<section class="panel port-management-panel"><div class="panel-head"><div><h3>لیست پورت‌های فعال</h3><span>TRANSPORT-AWARE ALLOCATION</span></div></div><div class="port-table-head"><span>پروتکل</span><span>پورت</span><span>نوع اتصال</span><span>وضعیت</span><span>عملیات</span></div><div class="port-table-body">'+(portRows||'<div class="empty">پورت مدیریت‌شده‌ای پیدا نشد.</div>')+'</div><div class="port-safe-note">✓ بررسی تداخل پورت‌ها بر اساس Transport انجام می‌شود؛ TCP/443 و UDP/443 می‌توانند هم‌زمان فعال باشند.</div></section>',
     '<section class="split-grid"><div class="panel"><div class="panel-head"><div><h3>Engineها</h3><span>INSTALL / RUNTIME</span></div></div><div class="service-control-list">'+engineRows+'</div></div><div class="panel"><div class="panel-head"><div><h3>Xray Inbounds</h3><span>'+Number((x.inbounds||[]).length)+' DETECTED</span></div></div><div class="engine-inbounds">'+((x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(String(i.protocol||'').toUpperCase())+'</b><span>'+htmlEsc(i.tag||'Inbound')+'</span></div><div><b>:'+Number(i.port||0)+'</b><span>'+Number(i.clients||0)+' users</span></div></div>').join(''):'<div class="empty compact">Inbound وجود ندارد.</div>')+'</div></div></section>',
     '<section class="panel"><div class="panel-head"><div><h3>Client Policy Snapshot</h3><span>'+clients.length+' XRAY RECORDS</span></div><button class="ghost" data-action="nav" data-view="xray">مدیریت کاربران Xray</button></div><div class="protocol-policy-mini">'+(clients.length?clients.slice(0,8).map(pc=>'<div><div><b>'+htmlEsc(pc.name)+'</b><span>'+htmlEsc(String(pc.protocol||'').toUpperCase())+'</span></div><strong class="'+(pc.enabled&&!pc.expired?'ok-text':'bad-text')+'">'+(pc.enabled&&!pc.expired?'Active':'Attention')+'</strong></div>').join(''):'<div class="empty compact">Client ثبت نشده است.</div>')+'</div></section>'
@@ -1302,15 +1306,27 @@ async function security(renderToken=window.__viewRenderToken){
 }
 async function backups(renderToken=window.__viewRenderToken){
   title.textContent='Backups';setPageContext('RECOVERY');
-  const [rows,ready]=await Promise.all([api('/api/backups'),api('/api/backups/migration-readiness').catch(()=>({}))]);if(renderToken!==window.__viewRenderToken||activeView!=='backups')return;
-  const total=rows.reduce((n,b)=>n+Number(b.size||0),0);
+  const [rows,ready]=await Promise.all([api('/api/backups'),api('/api/backups/migration-readiness').catch(()=>({}))]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='backups')return;
+  const full=rows.filter(x=>x.type==='full_migration'),quick=rows.filter(x=>x.type!=='full_migration');
   const migrationState=ready.same_config_cutover_ready?'READY':ready.ip_based?'IP-BASED CLIENTS':'CHECK';
-  content.innerHTML=viewIntro('DISASTER RECOVERY','مرکز بکاپ و مهاجرت','Local Snapshot برای rollback و Full VPS Migration رمزگذاری‌شده برای انتقال سریع کاربران، Keys، PKI و تنظیمات به سرور جدید.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>LOCAL BACKUPS</span></div>'+'<button class="primary" data-action="portable-backup">Full VPS Backup</button>'+'<button class="ghost" data-action="backup-create">＋ Local Snapshot</button></div>')+
-  '<section class="migration-readiness-grid"><article><span>Cutover readiness</span><b class="'+(ready.same_config_cutover_ready?'ok-text':'warn-text')+'">'+htmlEsc(migrationState)+'</b><small>'+Number(ready.domain_based||0)+' domain-based · '+Number(ready.ip_based||0)+' IP-based</small></article><article><span>Panel domain</span><b>'+htmlEsc(ready.panel_domain||'Not configured')+'</b><small>Keep this hostname on the replacement VPS</small></article><article><span>Cloudflare</span><b>DNS ONLY</b><small>برای WireGuard / OpenVPN / SSH از Proxy نارنجی استفاده نکن.</small></article></section>'+
-  (Number(ready.ip_based||0)>0?'<div class="wizard-note danger-note"><b>کانفیگ IP-based پیدا شد</b><span>'+Number(ready.ip_based)+' خروجی قدیمی مستقیماً IP را ذخیره کرده‌اند؛ این Clientها فقط با تغییر DNS مهاجرت نمی‌کنند و باید Endpoint آن‌ها به دامنه تبدیل/دوباره Export شود.</span></div>':'')+
-  '<section class="panel migration-flow-panel"><div class="panel-head"><div><h3>Fast replacement VPS flow</h3><span>FULL IDENTITY PRESERVATION</span></div></div><div class="guide-flow"><div><b>1</b><span>Full VPS Backup را دانلود و Password آن را جدا نگهداری کن.</span></div><div><b>2</b><span>روی VPS جدید همان نسخه Makia را نصب کن.</span></div><div><b>3</b><span>Bundle را کپی و با <code>sudo makia-restore-portable ... --apply</code> Restore کن.</span></div><div><b>4</b><span>بعد از PASS شدن Validation، فقط A/AAAA دامنه را به IP جدید تغییر بده.</span></div></div></section>'+
-  '<div class="panel modern-list"><div class="panel-head"><div><h3>Local rollback snapshots</h3><span>'+fmtBytes(total)+' TOTAL</span></div></div><div class="table">'+(rows.length?rows.map(b=>'<div class="row backup-row"><div><b>'+htmlEsc(b.name)+'</b><div class="muted">Makia data snapshot</div></div><div><b>'+fmtBytes(b.size)+'</b><div class="muted">archive size</div></div><div class="muted">'+new Date(b.created_at*1000).toLocaleString()+'</div><div><span class="status-chip">Host-local 0600</span></div></div>').join(''):'<div class="empty">هنوز بکاپی ساخته نشده.</div>')+'</div></div>';
+  let lastRestore=null;
+  const restoreJob=localStorage.getItem('makiaRestoreJob')||'';
+  if(restoreJob){try{lastRestore=await api('/api/backups/restore/'+encodeURIComponent(restoreJob)+'/status')}catch{}}
+  const history=rows.map(b=>{
+    const sha=String(b.sha256||'');
+    const download=b.type==='full_migration'?'<button class="ghost" data-action="backup-download" data-name="'+dataEnc(b.name)+'">Download Backup</button>':'<span class="muted">Host-local only</span>';
+    return '<div class="backup-history-row"><div><b>'+htmlEsc(b.name)+'</b><small>'+htmlEsc(b.type==='full_migration'?'Full Migration Backup':'Quick Backup')+'</small></div><div><b>'+new Date(Number(b.created_at||0)*1000).toLocaleString()+'</b><small>'+fmtBytes(b.size)+'</small></div><div><b>'+htmlEsc(b.version||'—')+'</b><small title="'+htmlEsc(sha)+'">SHA256 '+htmlEsc(sha?sha.slice(0,12)+'…':'—')+'</small></div><div><span class="status-chip '+(b.encrypted?'ok':'warn')+'">'+(b.encrypted?'AES-256 Encrypted':'Local 0600')+'</span><small>'+(b.restore_ready?'Restore ready':'Check required')+'</small></div><div>'+download+'</div></div>';
+  }).join('');
+  const restoreState=lastRestore?'<section class="panel restore-job-card"><div class="panel-head"><div><h3>Latest Restore Job</h3><span>'+htmlEsc(lastRestore.job_id||'')+'</span></div><span class="status-chip '+(lastRestore.state==='passed'?'ok':lastRestore.state==='failed'?'bad':'warn')+'">'+htmlEsc(String(lastRestore.state||'unknown').toUpperCase())+'</span></div><p>'+htmlEsc(lastRestore.message||'')+'</p>'+(lastRestore.cutover_instruction?'<div class="wizard-note"><b>DNS cutover</b><span>'+htmlEsc(lastRestore.cutover_instruction)+'</span></div>':'')+'</section>':'';
+  content.innerHTML=viewIntro('DISASTER RECOVERY','مرکز بکاپ و مهاجرت','Quick Backup برای rollback محلی است؛ Full Migration Backup رمزگذاری‌شده برای انتقال کامل هویت، PKI، Keys و تنظیمات به VPS جایگزین.','<div class="view-intro-actions"><div class="view-intro-stat"><b>'+rows.length+'</b><span>BACKUPS</span></div><button class="ghost" data-action="backup-create">Quick Backup</button><button class="primary" data-action="portable-backup">Full Migration Backup</button><button class="ghost" data-action="migration-restore-open">Upload & Restore</button></div>')+
+  '<section class="migration-readiness-grid"><article><span>Preflight Migration Check</span><b class="'+(ready.same_config_cutover_ready?'ok-text':'warn-text')+'">'+htmlEsc(migrationState)+'</b><small>'+Number(ready.domain_based||0)+' domain-based · '+Number(ready.ip_based||0)+' IP-based · '+Number(ready.unknown||0)+' unknown</small></article><article><span>Panel domain</span><b>'+htmlEsc(ready.panel_domain||'Not configured')+'</b><small>'+(ready.panel_domain?('Cloudflare A record: '+htmlEsc(ready.panel_domain)+' → NEW_VPS_IP'):'Configure a stable hostname before an incident')+'</small></article><article><span>Portable backups</span><b>'+full.length+'</b><small>'+quick.length+' host-local quick snapshot(s)</small></article></section>'+
+  (Number(ready.ip_based||0)>0?'<div class="wizard-note danger-note"><b>IP-based configs cannot survive DNS-only cutover</b><span>'+Number(ready.ip_based)+' خروجی مستقیماً IP قدیمی را ذخیره کرده‌اند. تغییر A record آن‌ها را اصلاح نمی‌کند؛ قبل از حادثه Endpoint را Domain-based کن یا بعداً re-export انجام بده.</span></div>':'')+
+  '<section class="panel migration-flow-panel"><div class="panel-head"><div><h3>Migration Wizard</h3><span>BACKUP → VERIFY → RESTORE → UAT</span></div></div><div class="guide-flow"><div><b>1</b><span>Preflight و Full Migration Backup با Password.</span></div><div><b>2</b><span>روی VPS جدید همان نسخه Makia را نصب کن و Upload & Restore را باز کن.</span></div><div><b>3</b><span>Integrity + Version + Components قبل از Commit بررسی می‌شوند؛ Restore در Job مستقل با rollback اجرا می‌شود.</span></div><div><b>4</b><span>پس از Runtime PASS، A/AAAA دامنه را به IP جدید تغییر بده و UAT واقعی Client را انجام بده.</span></div></div></section>'+
+  restoreState+
+  '<section class="panel backup-history-panel"><div class="panel-head"><div><h3>Backup History</h3><span>DATE · SIZE · VERSION · SHA256 · ENCRYPTION · READINESS</span></div></div><div class="backup-history-list">'+(history||'<div class="empty">هنوز بکاپی ساخته نشده است.</div>')+'</div></section>';
 }
+
 function openPortableBackup(){
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal"><div class="wizard-head"><div><div class="eyebrow">FULL VPS MIGRATION</div><h3>Encrypted disaster-recovery bundle</h3></div><button class="close-btn" data-action="modal-close">×</button></div><p>این Bundle شامل DB و .secret، SSH password hashes و authorized_keys، Xray/REALITY، WireGuard keys/peers، OpenVPN PKI، IKEv2، Stealth/Stunnel، WStunnel، Nginx و Let\'s Encrypt است. Payloadها SHA-256 دارند.</p><label class="single-label">Migration password<input id="migrationPassword" type="password" minlength="10" autocomplete="new-password"></label><div class="wizard-note"><b>Restore contract</b><span>روی VPS مقصد همان نسخه Makia را نصب کن، Bundle را Restore کن؛ Runtime شبکه برای Interface جدید بازسازی می‌شود و سپس DNS همان دامنه را به IP جدید تغییر بده.</span></div><div class="wizard-note"><b>Cloudflare</b><span>برای ترافیک خام VPN/SSH رکورد باید DNS only باشد. فقط وب پنل می‌تواند پشت Proxy سازگار قرار بگیرد.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="portable-backup-download">Build Full Backup</button></div></div></div>';
 }
@@ -1320,6 +1336,38 @@ async function downloadPortableBackup(){
   try{await fetchDownload('/api/backups/portable',{method:'POST',headers:{'Content-Type':'application/json','X-Makia-Request':'1'},body:JSON.stringify({password})},'makia-full-migration.zip');toast('Full VPS migration bundle آماده شد')}
   catch(e){alert('Portable backup: '+e.message)}
 }
+function openMigrationRestore(){
+  window.__migrationRestorePassword=null;
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal migration-restore-modal"><div class="wizard-head"><div><div class="eyebrow">RESTORE / MIGRATE</div><h3>Upload encrypted Full Migration Backup</h3></div><button class="close-btn" data-action="modal-close">×</button></div><p>Bundle ابتدا بدون تغییر Runtime از نظر AES password، SHA256 payloadها، Manifest و Version بررسی می‌شود. Restore فقط بعد از Preview و تأیید جداگانه شروع می‌شود.</p><label class="single-label">Encrypted backup<input id="migrationRestoreFile" type="file" accept=".zip,application/zip"></label><label class="single-label">Migration password<input id="migrationRestorePassword" type="password" minlength="10" autocomplete="current-password"></label><div class="wizard-note"><b>Safety</b><span>Password در مرحله Verify روی دیسک ذخیره نمی‌شود؛ فقط هنگام Restore Now با Permission 0600 ساخته می‌شود و Restore runner آن را پس از اجرا حذف می‌کند. Bundle روی دیسک رمزگذاری‌شده باقی می‌ماند.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="migration-restore-verify">Verify & Preview</button></div></div></div>';
+}
+async function verifyMigrationRestore(){
+  const input=document.getElementById('migrationRestoreFile'),password=document.getElementById('migrationRestorePassword')?.value||'';
+  const file=input?.files?.[0];
+  if(!file){alert('فایل Full Migration Backup را انتخاب کن.');return}
+  if(password.length<10){alert('Migration password حداقل ۱۰ کاراکتر باشد.');return}
+  const body=new FormData();body.append('bundle',file);body.append('password',password);
+  const r=await fetch('/api/backups/restore/verify',{method:'POST',credentials:'same-origin',headers:{'X-Makia-Request':'1'},body});
+  let j={};try{j=await r.json()}catch{}
+  if(!r.ok)throw new Error(j?.detail||'Migration verification failed');
+  window.__migrationRestore=j;
+  window.__migrationRestorePassword=password;
+  const components=Object.entries(j.components||{}).filter(x=>x[1]).map(x=>x[0]).join(', ')||'core data';
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal export-modal migration-restore-modal"><div class="wizard-head"><div><div class="eyebrow">RESTORE PREVIEW</div><h3>Integrity & compatibility PASS</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="migration-preview-grid"><div><span>Version</span><b>'+htmlEsc(j.bundle_version||'—')+'</b></div><div><span>Payloads</span><b>'+Number(j.payload_count||0)+'</b></div><div><span>SHA256</span><b title="'+htmlEsc(j.sha256||'')+'">'+htmlEsc(String(j.sha256||'').slice(0,16))+'…</b></div><div><span>Domain</span><b>'+htmlEsc(j.panel_domain||'—')+'</b></div></div><div class="wizard-note"><b>Components</b><span>'+htmlEsc(components)+'</span></div><div class="wizard-note"><b>Cutover after PASS</b><span>'+htmlEsc(j.cutover_instruction||'Update DNS only after restore verification.')+'</span></div><div class="wizard-note danger-note"><b>Commit changes this VPS</b><span>Restore سرویس‌ها را restart می‌کند. اگر Runtime validation شکست بخورد، Restore engine به Snapshot قبل از Restore برمی‌گردد.</span></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">Cancel</button><button class="primary" data-action="migration-restore-apply" data-job="'+dataEnc(j.job_id)+'">Restore Now</button></div></div></div>';
+}
+async function applyMigrationRestore(jobId){
+  if(!confirm('Restore روی این VPS اجرا شود؟ سرویس Makia حین عملیات restart می‌شود.'))return;
+  const password=window.__migrationRestorePassword||'';
+  if(password.length<10){alert('Migration password برای Commit در حافظه موجود نیست؛ Bundle را دوباره Verify کن.');return}
+  const r=await api('/api/backups/restore/'+encodeURIComponent(jobId)+'/apply',{method:'POST',body:JSON.stringify({password})});
+  window.__migrationRestorePassword=null;
+  localStorage.setItem('makiaRestoreJob',jobId);
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">RESTORE JOB</div><h3>Restore started</h3></div></div><p>Job مستقل systemd شروع شد. پنل ممکن است هنگام Restart موقتاً در دسترس نباشد. بعد از برگشت پنل، Backup Center وضعیت PASS/FAIL و DNS cutover را نشان می‌دهد.</p><div class="wizard-note"><b>Job ID</b><span>'+htmlEsc(jobId)+'</span></div><div class="wizard-footer"><button class="primary" data-action="modal-close-refresh" data-view="backups">Check status</button></div></div></div>';
+  return r;
+}
+async function downloadBackup(name){
+  await fetchDownload('/api/backups/'+encodeURIComponent(name)+'/download',{},name);
+}
+
 async function makeBackup(){try{await api('/api/backups',{method:'POST'});toast('Backup created');if(activeView==='settings')await currentView();else await backups()}catch(e){alert(e.message)}}
 async function auditView(renderToken=window.__viewRenderToken){
   title.textContent='Audit Logs';setPageContext('ACCOUNTING & TRACE');
@@ -1709,7 +1757,7 @@ async function handleMakiaAction(btn){
   if(action==='client-guide-copy'){copyClientGuide(btn.dataset.kind||'xray');return}
   if(action==='self-test'){await runSelfTest();return}
   if(action==='success-done'){closeModal();switchView('access');return}
-  if(action==='modal-close'){closeModal();return}
+  if(action==='modal-close'){if(document.querySelector('.migration-restore-modal'))window.__migrationRestorePassword=null;closeModal();return}
   if(action==='modal-close-refresh'){const v=btn.dataset.view;closeModal();if(v&&views[v])await views[v]();return}
   if(action==='copy-target'){const el=document.getElementById(btn.dataset.target);if(el)copyText('value' in el?el.value:el.textContent||'');return}
   if(action==='copy-last-credential'){
@@ -1731,6 +1779,10 @@ async function handleMakiaAction(btn){
   if(action==='backup-create'){await makeBackup();return}
   if(action==='portable-backup'){openPortableBackup();return}
   if(action==='portable-backup-download'){await downloadPortableBackup();return}
+  if(action==='backup-download'){await downloadBackup(dataDec(btn.dataset.name));return}
+  if(action==='migration-restore-open'){openMigrationRestore();return}
+  if(action==='migration-restore-verify'){await verifyMigrationRestore();return}
+  if(action==='migration-restore-apply'){await applyMigrationRestore(dataDec(btn.dataset.job));return}
   if(action==='wg-compat-preset'){const values={opWgPort:443,opWgMtu:1280,opWgKeepalive:15,opWgAllowedIps:'0.0.0.0/0',opWgDns:'1.1.1.1'};for(const [id,v] of Object.entries(values)){const el=document.getElementById(id);if(el)el.value=v}toast('Compatibility preset applied; Save to persist');return}
   if(action==='support-grant-create'){await createRemoteSupportGrant();return}
   if(action==='support-grant-revoke'){await revokeRemoteSupportGrant(Number(btn.dataset.id));return}

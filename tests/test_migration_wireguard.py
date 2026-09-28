@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from app import protocol_ops, system_ops
+from app import protocol_ops, system_ops, access_ops
 
 
 def test_wireguard_allowed_ips_validation():
@@ -167,3 +167,88 @@ def test_portable_migration_v2_includes_protocol_identity_trees(tmp_path,monkeyp
     assert manifest["components"]["makia_etc"] is True
     assert manifest["components"]["stunnel"] is True
     assert manifest["components"]["ipsec_conf"] is True
+
+
+def test_full_migration_bundle_is_encrypted_verified_and_listed(tmp_path,monkeypatch):
+    data=tmp_path/"data"; data.mkdir()
+    (data/".secret").write_text("server-secret",encoding="utf-8")
+    db=sqlite3.connect(data/"makia.db"); db.execute("create table t(x integer)"); db.commit(); db.close()
+    monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[])
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    missing=tmp_path/"missing"
+    files=system_ops.portable_migration_files(
+        str(data),[],panel_domain="p.example.com",version="0.26.0-rc2",
+        system_paths={
+            "wireguard":str(missing),"openvpn":str(missing),"letsencrypt":str(missing),
+            "xray":str(missing),"xray_alt":str(missing),"nginx_site":str(missing),
+            "makia_etc":str(missing),"stunnel":str(missing),"ipsec_d":str(missing),
+            "ipsec_conf":str(missing),"ipsec_secrets":str(missing),"stunnel_defaults":str(missing),
+        },
+    )
+    password="MigrationPass!2026"
+    blob=access_ops.protected_zip(files,password)
+    preview=system_ops.inspect_portable_migration_blob(blob,password,"0.26.0-rc2")
+    assert preview["compatible"] is True
+    assert preview["manifest"]["panel_domain"]=="p.example.com"
+    assert preview["sha256"]
+    saved=system_ops.save_full_migration_backup(blob,"0.26.0-rc2",preview["manifest"])
+    assert Path(saved["path"]).stat().st_mode & 0o077 == 0
+    rows=system_ops.backup_list()
+    assert rows[0]["type"]=="full_migration"
+    assert rows[0]["encrypted"] is True
+    assert rows[0]["restore_ready"] is True
+    assert rows[0]["version"]=="0.26.0-rc2"
+    assert rows[0]["sha256"]==preview["sha256"]
+    staged=system_ops.stage_migration_restore(blob,password,"0.26.0-rc2")
+    job_dir=Path(system_ops._backup_root())/"restore-jobs"/staged["job_id"]
+    assert not (job_dir/"password").exists(), "verify/preview must not persist the password"
+    armed=system_ops.arm_migration_restore(staged["job_id"],password,"0.26.0-rc2")
+    assert armed["state"]=="armed"
+    assert (job_dir/"password").stat().st_mode & 0o077 == 0
+    system_ops.discard_migration_restore_password(staged["job_id"])
+    assert not (job_dir/"password").exists()
+
+
+def test_migration_bundle_wrong_password_is_rejected(tmp_path,monkeypatch):
+    data=tmp_path/"data"; data.mkdir(); (data/".secret").write_text("secret",encoding="utf-8")
+    monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[])
+    missing=tmp_path/"missing"
+    files=system_ops.portable_migration_files(
+        str(data),[],version="0.26.0-rc2",
+        system_paths={
+            "wireguard":str(missing),"openvpn":str(missing),"letsencrypt":str(missing),
+            "xray":str(missing),"xray_alt":str(missing),"nginx_site":str(missing),
+            "makia_etc":str(missing),"stunnel":str(missing),"ipsec_d":str(missing),
+            "ipsec_conf":str(missing),"ipsec_secrets":str(missing),"stunnel_defaults":str(missing),
+        },
+    )
+    blob=access_ops.protected_zip(files,"CorrectPass!2026")
+    try:
+        system_ops.inspect_portable_migration_blob(blob,"WrongPass!2026","0.26.0-rc2")
+    except system_ops.OperationError:
+        pass
+    else:
+        raise AssertionError("wrong migration password must fail verification")
+
+
+def test_stage_restore_rejects_version_mismatch_before_commit(tmp_path,monkeypatch):
+    data=tmp_path/"data"; data.mkdir(); (data/".secret").write_text("secret",encoding="utf-8")
+    monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[])
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    missing=tmp_path/"missing"
+    files=system_ops.portable_migration_files(
+        str(data),[],version="0.25.0",
+        system_paths={
+            "wireguard":str(missing),"openvpn":str(missing),"letsencrypt":str(missing),
+            "xray":str(missing),"xray_alt":str(missing),"nginx_site":str(missing),
+            "makia_etc":str(missing),"stunnel":str(missing),"ipsec_d":str(missing),
+            "ipsec_conf":str(missing),"ipsec_secrets":str(missing),"stunnel_defaults":str(missing),
+        },
+    )
+    blob=access_ops.protected_zip(files,"MigrationPass!2026")
+    try:
+        system_ops.stage_migration_restore(blob,"MigrationPass!2026","0.26.0-rc2")
+    except system_ops.OperationError as exc:
+        assert "version mismatch" in str(exc)
+    else:
+        raise AssertionError("version mismatch must be rejected before staging")

@@ -7,8 +7,15 @@
 - IKEv2 is backed by strongSwan with EAP-MSCHAPv2 users, UDP/500 + UDP/4500, certificate reuse, NAT/forwarding and host diagnostics.
 - Stealth is a real OpenVPN TCP-over-TLS mode using Stunnel; it requires a valid panel certificate and a distinct public TCP listener.
 - WStunnel is a real WireGuard-over-WSS mode using pinned wstunnel 11.0.0 with checksum verification, a hardened systemd service and restricted UDP forwarding.
-- OpenVPN UDP/TCP cards switch the real single active OpenVPN server transport; Makia does not fake simultaneous ownership of the same TCP port.
+- OpenVPN UDP stays on the primary server while an independent `openvpn-server@makia-tcp` fallback can run in parallel on its own subnet/port; the panel reports real listener ownership and never fakes shared TCP/443.
 - Added certificate-renewal handling for IKEv2, Stealth and WStunnel.
+
+### Disaster recovery / migration
+- Added AES-256 Full Migration Backup with per-payload SHA256, format/version manifest, encrypted on-disk history and restore-readiness metadata.
+- Preserves Makia data, SSH identities, Xray/REALITY identity, WireGuard keys/peers, OpenVPN PKI, IKEv2, Stunnel/Stealth, WStunnel, Nginx/Let's Encrypt, Makia systemd units and Makia-owned firewall rules.
+- Added panel Upload → Verify → Compatibility Preview → Restore flow. Restore runs in a detached root systemd job and deletes the temporary password file after execution.
+- Restore now takes a coherent pre-mutation snapshot with writers stopped and automatically rolls back managed files/users/runtime if validation fails.
+- Domain cutover reports `Cloudflare A record: <domain> → NEW_VPS_IP` and performs DNS-to-new-VPS diagnostics; literal-IP client configs remain explicitly non-portable.
 
 ### Hardening / recovery
 - Host packages and external engine installation are kept out of the hardened web-service sandbox; missing host tooling instructs the operator to run `sudo makia-upgrade`.

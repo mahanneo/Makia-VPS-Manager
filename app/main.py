@@ -1,10 +1,10 @@
 from pathlib import Path
 from datetime import date, datetime, timedelta
-import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress
+import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket
 import pyotp, qrcode
 import qrcode.image.svg
-from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, Response
+from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -1807,7 +1807,7 @@ def backups(request:Request):
 def backup_create(request:Request):
     actor=require_local_admin(request)
     require_mutation(request)
-    try: result=system_ops.create_backup(str(DATA_DIR))
+    try: result=system_ops.create_backup(str(DATA_DIR),VERSION)
     except system_ops.OperationError as e: raise HTTPException(400,str(e))
     audit(actor,"backup_create",result["name"],ip=ip(request))
     return result
@@ -1852,6 +1852,9 @@ def backup_migration_readiness(request:Request):
 class PortableBackupRequest(BaseModel):
     password:str=Field(min_length=10,max_length=128)
 
+class MigrationRestoreApply(BaseModel):
+    password:str=Field(min_length=10,max_length=128)
+
 @app.post("/api/backups/portable")
 def backup_portable(payload:PortableBackupRequest,request:Request):
     require_local_admin(request)
@@ -1865,15 +1868,113 @@ def backup_portable(payload:PortableBackupRequest,request:Request):
         )
         blob=access_ops.protected_zip(files,payload.password)
         access_ops.verify_protected_zip(blob,payload.password,"manifest.json")
-    except (system_ops.OperationError,access_ops.AccessPackageError) as e:
+        manifest=json.loads(files["manifest.json"].decode("utf-8"))
+        saved=system_ops.save_full_migration_backup(blob,VERSION,manifest)
+    except (system_ops.OperationError,access_ops.AccessPackageError,OSError,ValueError) as e:
         raise HTTPException(400,str(e))
-    filename=f"makia-full-migration-{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.zip"
-    audit(actor,"full_migration_backup_export",filename,f"files={len(files)}",ip(request))
+    filename=saved["name"]
+    audit(actor,"full_migration_backup_export",filename,f"files={len(files)}; sha256={saved['sha256']}",ip(request))
     return Response(content=blob,media_type="application/zip",headers={
         "Content-Disposition":f'attachment; filename="{filename}"',
         "Cache-Control":"no-store, private",
         "X-Content-Type-Options":"nosniff",
+        "X-Makia-Backup-SHA256":saved["sha256"],
     })
+
+@app.get("/api/backups/{name}/download")
+def backup_download(name:str,request:Request):
+    actor=require_local_admin(request)
+    try:
+        path=system_ops.backup_download_path(name)
+    except system_ops.OperationError as e:
+        raise HTTPException(404,str(e))
+    if not path.name.endswith(".zip"):
+        raise HTTPException(409,"Quick Backup is host-local only. Build a password-protected Full Migration Backup for download.")
+    audit(actor,"backup_download",name,ip=ip(request))
+    media="application/zip"
+    return FileResponse(
+        path,media_type=media,filename=path.name,
+        headers={"Cache-Control":"no-store, private","X-Content-Type-Options":"nosniff"},
+    )
+
+
+@app.post("/api/backups/restore/verify")
+async def backup_restore_verify(request:Request,bundle:UploadFile=File(...),password:str=Form(...)):
+    actor=require_local_admin(request)
+    require_mutation(request)
+    if len(password)<10:
+        raise HTTPException(400,"Migration password must be at least 10 characters")
+    max_bytes=512*1024*1024
+    blob=await bundle.read(max_bytes+1)
+    if len(blob)>max_bytes:
+        raise HTTPException(413,"Migration bundle exceeds the 512 MiB upload limit")
+    try:
+        result=system_ops.stage_migration_restore(blob,password,VERSION)
+    except system_ops.OperationError as e:
+        audit(actor,"migration_restore_verify_failed",bundle.filename or "upload",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"migration_restore_verified",result["job_id"],f"sha256={result['sha256']}",ip=ip(request))
+    result["cutover_instruction"]=(
+        f"Cloudflare A record: {result['panel_domain']} → NEW_VPS_IP"
+        if result.get("panel_domain") else
+        "Configure a stable domain before cutover if unchanged client configs are required."
+    )
+    return result
+
+
+@app.post("/api/backups/restore/{job_id}/apply")
+def backup_restore_apply(job_id:str,payload:MigrationRestoreApply,request:Request):
+    actor=require_local_admin(request)
+    require_mutation(request)
+    try:
+        status=system_ops.migration_restore_status(job_id)
+    except system_ops.OperationError as e:
+        raise HTTPException(404,str(e))
+    if status.get("state") not in {"verified","failed"}:
+        raise HTTPException(409,f"Restore job is already {status.get('state')}")
+    unit=f"makia-migration-restore@{job_id}.service"
+    try:
+        system_ops.arm_migration_restore(job_id,payload.password,VERSION)
+        system_ops._run(["systemctl","start","--no-block",unit],timeout=15)
+    except system_ops.OperationError as e:
+        system_ops.discard_migration_restore_password(job_id)
+        audit(actor,"migration_restore_start_failed",job_id,str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"migration_restore_started",job_id,ip=ip(request))
+    return {
+        "ok":True,"job_id":job_id,"state":"starting",
+        "note":"Restore runs in a separate root systemd unit so the job survives the Makia service restart.",
+    }
+
+
+@app.get("/api/backups/restore/{job_id}/status")
+def backup_restore_status(job_id:str,request:Request):
+    require_local_admin(request)
+    try:
+        status=system_ops.migration_restore_status(job_id)
+    except system_ops.OperationError as e:
+        raise HTTPException(404,str(e))
+    domain=str(status.get("panel_domain") or "")
+    if domain:
+        status["cutover_instruction"]=f"Cloudflare A record: {domain} → NEW_VPS_IP"
+        resolved=[]
+        try:
+            resolved=sorted({
+                item[4][0] for item in socket.getaddrinfo(domain,443,socket.AF_INET,socket.SOCK_STREAM)
+                if item and item[4]
+            })
+        except OSError:
+            resolved=[]
+        local=sorted(set(protocol_ops._local_ipv4_candidates()))
+        status["dns_propagation"]={
+            "resolved_ipv4":resolved,
+            "vps_ipv4":local,
+            "points_to_this_vps":bool(set(resolved)&set(local)),
+            "note":"For raw VPN/SSH transports the Cloudflare record must be DNS only.",
+        }
+    status["ip_based_warning"]="Profiles containing the old literal VPS IP cannot be preserved by DNS cutover and must be re-exported."
+    return status
+
 
 @app.get("/api/audit")
 def audit_list(request:Request,limit:int=100):

@@ -183,4 +183,4 @@ def test_protocol_hub_exposes_six_real_connection_modes():
     ]:
         assert marker in JS
     assert "هر Mode به Backend واقعی متصل است" in JS
-    assert "OpenVPN Server فعال" in JS
+    assert "TCP fallback جداست" in JS
