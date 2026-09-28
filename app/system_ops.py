@@ -150,11 +150,12 @@ def security_status():
     return {"ufw":ufw,"fail2ban":fail2ban,"ssh":ssh}
 
 
-def _backup_root():
+def _backup_root(create=True):
     root=Path(os.getenv("MAKIA_BACKUP_DIR","/var/backups/makia-vps-manager"))
-    root.mkdir(parents=True,exist_ok=True,mode=0o700)
-    try: os.chmod(root,0o700)
-    except OSError: pass
+    if create:
+        root.mkdir(parents=True,exist_ok=True,mode=0o700)
+        try: os.chmod(root,0o700)
+        except OSError: pass
     return root
 
 
@@ -177,7 +178,9 @@ def _write_backup_metadata(path,metadata):
 
 
 def backup_list():
-    root=_backup_root()
+    root=_backup_root(create=False)
+    if not root.is_dir():
+        return []
     items=[]
     paths=[p for p in root.iterdir() if p.is_file() and (p.name.endswith(".tar.gz") or p.name.endswith(".zip"))]
     for path in sorted(paths,key=lambda p:p.stat().st_mtime,reverse=True):
@@ -247,7 +250,7 @@ def backup_download_path(name):
     safe=Path(raw).name
     if safe!=raw or not (safe.endswith(".tar.gz") or safe.endswith(".zip")):
         raise OperationError("invalid backup name")
-    path=_backup_root()/safe
+    path=_backup_root(create=False)/safe
     if not path.is_file():
         raise OperationError("backup not found")
     return path
@@ -319,7 +322,7 @@ def migration_restore_status(job_id):
     job_id=str(job_id or "")
     if not re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{8}",job_id):
         raise OperationError("invalid restore job id")
-    path=_backup_root()/"restore-jobs"/job_id/"status.json"
+    path=_backup_root(create=False)/"restore-jobs"/job_id/"status.json"
     if not path.is_file():
         raise OperationError("restore job not found")
     try:
