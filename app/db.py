@@ -1,6 +1,6 @@
 import os
 import sqlite3
-import hashlib, secrets
+import hashlib, secrets, json
 from datetime import datetime, timezone
 from .config import DB_PATH
 from .security import hash_password
@@ -161,6 +161,27 @@ def init_db():
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_support_grants_expires_at ON support_grants(expires_at);
+        CREATE TABLE IF NOT EXISTS service_plans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE NOT NULL,
+          protocol_kind TEXT NOT NULL DEFAULT 'xray',
+          config_json TEXT NOT NULL DEFAULT '{}',
+          price_label TEXT NOT NULL DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_service_plans_active ON service_plans(active);
+        CREATE TABLE IF NOT EXISTS notification_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          level TEXT NOT NULL DEFAULT 'info',
+          event_type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          delivered INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_notification_events_created_at ON notification_events(created_at);
         ''')
         # Migration-safe columns for future profile growth.
         _add_column(con, "account_profiles", "plan TEXT NOT NULL DEFAULT ''")
@@ -183,6 +204,13 @@ def init_db():
         _add_column(con, "protocol_clients", "disabled_reason TEXT NOT NULL DEFAULT ''")
         _add_column(con, "admins", "totp_secret TEXT")
         _add_column(con, "admins", "totp_enabled INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "public_ip TEXT")
+        _add_column(con, "nodes", "region TEXT NOT NULL DEFAULT ''")
+        _add_column(con, "nodes", "users INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "online_users INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "traffic_bytes INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "services_json TEXT NOT NULL DEFAULT '{}'")
+        _add_column(con, "nodes", "last_error TEXT NOT NULL DEFAULT ''")
 
         rows_missing_sub=con.execute("SELECT id FROM protocol_clients WHERE subscription_id IS NULL OR subscription_id=''").fetchall()
         for item in rows_missing_sub:
@@ -323,7 +351,9 @@ def create_node(name):
 
 def list_nodes():
     with connect() as con:
-        rows=con.execute("SELECT id,name,token_last4,active,created_at,last_seen_at,hostname,version,cpu,memory,disk FROM nodes ORDER BY id DESC").fetchall()
+        rows=con.execute(
+            "SELECT id,name,token_last4,active,created_at,last_seen_at,hostname,version,cpu,memory,disk,public_ip,region,users,online_users,traffic_bytes,services_json,last_error FROM nodes ORDER BY id DESC"
+        ).fetchall()
         return [dict(r) for r in rows]
 
 def revoke_node(node_id):
@@ -336,12 +366,87 @@ def node_by_token(token):
         row=con.execute("SELECT id,name,active FROM nodes WHERE token_hash=? AND active=1",(h,)).fetchone()
         return dict(row) if row else None
 
-def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk):
+def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk,public_ip="",region="",users=0,online_users=0,traffic_bytes=0,services=None,last_error=""):
     with connect() as con:
         con.execute(
-            "UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=? WHERE id=?",
-            (now(),hostname,version,float(cpu),float(memory),float(disk),int(node_id))
+            """UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=?,public_ip=?,region=?,
+               users=?,online_users=?,traffic_bytes=?,services_json=?,last_error=? WHERE id=?""",
+            (
+                now(),hostname,version,float(cpu),float(memory),float(disk),str(public_ip or ""),
+                str(region or ""),max(0,int(users or 0)),max(0,int(online_users or 0)),
+                max(0,int(traffic_bytes or 0)),json.dumps(services or {},ensure_ascii=False,separators=(",",":")),
+                str(last_error or "")[:500],int(node_id)
+            )
         )
+
+
+def create_service_plan(name,protocol_kind,config,price_label="",active=True):
+    ts=now()
+    with connect() as con:
+        cur=con.execute(
+            """INSERT INTO service_plans(name,protocol_kind,config_json,price_label,active,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (str(name).strip(),str(protocol_kind).strip(),json.dumps(config or {},ensure_ascii=False,separators=(",",":")),
+             str(price_label or ""),1 if active else 0,ts,ts)
+        )
+        return cur.lastrowid
+
+def list_service_plans(active_only=False):
+    with connect() as con:
+        sql="SELECT * FROM service_plans"
+        args=()
+        if active_only:
+            sql+=" WHERE active=1"
+        sql+=" ORDER BY id DESC"
+        rows=con.execute(sql,args).fetchall()
+        out=[]
+        for row in rows:
+            item=dict(row)
+            try:item["config"]=json.loads(item.pop("config_json") or "{}")
+            except Exception:item["config"]={}
+            out.append(item)
+        return out
+
+def get_service_plan(plan_id):
+    with connect() as con:
+        row=con.execute("SELECT * FROM service_plans WHERE id=?",(int(plan_id),)).fetchone()
+        if not row:return None
+        item=dict(row)
+        try:item["config"]=json.loads(item.pop("config_json") or "{}")
+        except Exception:item["config"]={}
+        return item
+
+def update_service_plan(plan_id,name,protocol_kind,config,price_label="",active=True):
+    with connect() as con:
+        con.execute(
+            """UPDATE service_plans SET name=?,protocol_kind=?,config_json=?,price_label=?,active=?,updated_at=? WHERE id=?""",
+            (str(name).strip(),str(protocol_kind).strip(),json.dumps(config or {},ensure_ascii=False,separators=(",",":")),
+             str(price_label or ""),1 if active else 0,now(),int(plan_id))
+        )
+
+def delete_service_plan(plan_id):
+    with connect() as con:
+        con.execute("DELETE FROM service_plans WHERE id=?",(int(plan_id),))
+
+def add_notification_event(event_type,title,detail="",level="info",delivered=False):
+    with connect() as con:
+        cur=con.execute(
+            "INSERT INTO notification_events(level,event_type,title,detail,delivered,created_at) VALUES(?,?,?,?,?,?)",
+            (str(level or "info"),str(event_type),str(title),str(detail or ""),1 if delivered else 0,now())
+        )
+        return cur.lastrowid
+
+def list_notification_events(limit=100):
+    with connect() as con:
+        rows=con.execute(
+            "SELECT * FROM notification_events ORDER BY id DESC LIMIT ?",
+            (max(1,min(int(limit),500)),)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def mark_notification_delivered(event_id,delivered=True):
+    with connect() as con:
+        con.execute("UPDATE notification_events SET delivered=? WHERE id=?",(1 if delivered else 0,int(event_id)))
 
 
 def get_setting(key, default=None):
