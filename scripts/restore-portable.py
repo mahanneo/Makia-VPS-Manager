@@ -334,6 +334,7 @@ def restore_v2_system_payload(payload):
         ("payload/xray_alt.tar.gz","xray_alt",Path("/etc/xray")),
         ("payload/makia_etc.tar.gz","makia_etc",Path("/etc/makia-vps-manager")),
         ("payload/stunnel.tar.gz","stunnel",Path("/etc/stunnel")),
+        ("payload/outline.tar.gz","outline",Path("/opt/outline")),
         ("payload/ipsec_d.tar.gz","ipsec_d",Path("/etc/ipsec.d")),
     ]
     for key,root,target in mappings:
