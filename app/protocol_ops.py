@@ -1892,7 +1892,9 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         f"script-security 2\nup {up}\ndown {down}\n",
         encoding="utf-8"
     )
-    Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    (sysctl_dir/"99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
     _run(["sysctl","--system"],timeout=30)
     _run(["systemctl","enable","--now","openvpn-server@server"],timeout=30)
     firewall=_ufw_allow_if_active(port,"udp" if server_proto.startswith("udp") else "tcp","OpenVPN")
