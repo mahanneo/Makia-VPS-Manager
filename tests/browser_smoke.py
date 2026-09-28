@@ -346,6 +346,11 @@ def main():
 
             settings_tabs.locator('[data-action="settings-tab"][data-tab="recovery"]').click()
             page.locator('[data-action="portable-backup"]').click()
+            page.locator(".disaster-recovery-modal").wait_for()
+            recovery_text=page.locator(".disaster-recovery-modal").inner_text()
+            for label in ["Xray","WireGuard","OpenVPN","IKEv2","Stealth / WStunnel","TLS / Nginx","SSH"]:
+                assert label in recovery_text
+            assert "DNS-only" in recovery_text
             page.locator("#migrationPassword").fill("MigrationPass!2026")
             with page.expect_download() as portable:
                 page.locator('[data-action="portable-backup-download"]').click()
@@ -355,9 +360,13 @@ def main():
                 zf.setpassword(b"MigrationPass!2026")
                 names=zf.namelist()
                 assert "manifest.json" in names
+                assert "RESTORE.txt" in names
                 assert "payload/data.tar.gz" in names
-                manifest=zf.read("manifest.json").decode("utf-8")
-                assert "makia-portable-migration" in manifest
+                manifest=json.loads(zf.read("manifest.json").decode("utf-8"))
+                assert manifest["format"]=="makia-portable-migration"
+                assert manifest["format_version"]==2
+                assert "sha256" in manifest
+                assert "DNS-only" in manifest["cutover"]["cloudflare"]
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
