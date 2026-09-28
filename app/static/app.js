@@ -183,9 +183,10 @@ async function openAccessDetail(id){
   const manage=(a.kind==='ssh'||a.kind==='xray')
     ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
     : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
+  const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
-    '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">Native config</button>',
+    '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
     '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Protected ZIP</button>',
     '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">راهنمای اتصال</button>'
   ].join(''):'<span class="muted">برای این رکورد خروجی قابل تحویل موجود نیست.</span>';
