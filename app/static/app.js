@@ -927,10 +927,25 @@ async function sessions(renderToken=window.__viewRenderToken){
 async function disconnectSession(tty,user){if(!confirm('قطع اتصال '+user+' ؟'))return;try{await api('/api/sessions/disconnect',{method:'POST',body:JSON.stringify({tty,username:user})});await sessions()}catch(e){alert(e.message)}}
 function relativeSeen(v){if(!v)return'Never';const t=Date.parse(v);if(Number.isNaN(t))return v;const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 async function nodes(renderToken=window.__viewRenderToken){
-  title.textContent='Nodes';setPageContext('FLEET CONTROL');
+  title.textContent=tr('نودها','Nodes');setPageContext('MULTI-VPS FLEET');
   const rows=await api('/api/nodes');if(renderToken!==window.__viewRenderToken||activeView!=='nodes')return;
-  content.innerHTML=viewIntro('MULTI-NODE','مدیریت نودها','VPSهای متصل را با Token مستقل، Heartbeat و Telemetry مرکزی مدیریت کن.','<button class="primary action-lg" data-action="node-create">＋ Add Node</button>')+
-  '<div class="panel modern-list"><div class="notice">برای Nodeهای خارج از شبکه محلی، Controller را فقط با HTTPS در دسترس قرار بده.</div><div class="table">'+(rows.length?rows.map(n=>'<div class="row"><div><b>'+htmlEsc(n.name)+'</b><div class="muted">'+htmlEsc(n.hostname||'Waiting for heartbeat')+'</div></div><div><span class="status-chip '+(n.last_seen_at?'ok':'warn')+'">'+htmlEsc(relativeSeen(n.last_seen_at))+'</span><div class="muted">token …'+htmlEsc(n.token_last4)+'</div></div><div><b>'+htmlEsc(n.cpu??'-')+'% / '+htmlEsc(n.memory??'-')+'%</b><div class="muted">CPU / RAM · Disk '+htmlEsc(n.disk??'-')+'%</div></div><div class="toolbar"><span class="status-chip">'+htmlEsc(n.version||'-')+'</span><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">Revoke</button></div></div>').join(''):'<div class="empty">هنوز Nodeای ثبت نشده است.</div>')+'</div></div>';
+  const now=Date.now();
+  const online=rows.filter(n=>n.last_seen_at&&now-Date.parse(n.last_seen_at)<180000).length;
+  const cards=rows.map(n=>{
+    let services={};try{services=JSON.parse(n.services_json||'{}')}catch(e){}
+    const stale=!n.last_seen_at||now-Date.parse(n.last_seen_at)>=180000;
+    const svc=Object.entries(services).map(([k,v])=>'<span class="'+(v?'up':'down')+'">'+htmlEsc(k)+' '+(v?'✓':'!')+'</span>').join('');
+    return '<article class="ops-card"><div class="ops-card-head"><div><span class="pro-kicker">'+htmlEsc(n.region||'NODE')+'</span><h3>'+htmlEsc(n.name)+'</h3><small class="muted">'+htmlEsc(n.hostname||tr('منتظر Heartbeat','Waiting for heartbeat'))+'</small></div><span class="status-chip '+(!stale?'ok':'bad')+'">'+(!stale?tr('آنلاین','ONLINE'):tr('آفلاین','OFFLINE'))+'</span></div>'+
+      '<div class="plan-facts"><span>CPU<b>'+htmlEsc(n.cpu??'-')+'%</b></span><span>RAM<b>'+htmlEsc(n.memory??'-')+'%</b></span><span>Disk<b>'+htmlEsc(n.disk??'-')+'%</b></span><span>'+htmlEsc(tr('کاربر','Users'))+'<b>'+Number(n.users||0)+'</b></span><span>'+htmlEsc(tr('فعال اخیر','Recent active'))+'<b>'+Number(n.online_users||0)+'</b></span><span>'+htmlEsc(tr('ترافیک NIC','NIC traffic'))+'<b>'+fmtBytes(n.traffic_bytes||0)+'</b></span></div>'+
+      '<div class="node-service-chips">'+svc+'</div><div class="muted" style="margin-top:9px">'+htmlEsc(n.public_ip||'—')+' · '+htmlEsc(relativeSeen(n.last_seen_at))+' · v'+htmlEsc(n.version||'-')+'</div>'+
+      '<div class="toolbar" style="margin-top:12px"><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">'+htmlEsc(tr('لغو نود','Revoke'))+'</button></div></article>';
+  }).join('');
+  content.innerHTML=[
+    '<section class="pro-page-head"><div><span class="pro-kicker">MULTI-VPS FLEET</span><h1>'+htmlEsc(tr('داشبورد چند سرور','Multi-VPS Dashboard'))+'</h1><p>'+htmlEsc(tr('Heartbeat، منابع، سرویس‌ها، تعداد کاربر و ترافیک Nodeها در یک صفحه.','Heartbeat, resources, service health, client counts and traffic across nodes.'))+'</p></div><div class="pro-head-actions"><button class="primary" data-action="node-create">＋ '+htmlEsc(tr('افزودن نود','Add Node'))+'</button></div></section>',
+    '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل نودها','Total nodes'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('آنلاین','Online'))+'</span><b>'+online+'</b></div><div><span>'+htmlEsc(tr('آفلاین','Offline'))+'</span><b>'+(rows.length-online)+'</b></div><div><span>'+htmlEsc(tr('کاربر مدیریت‌شده','Managed clients'))+'</span><b>'+rows.reduce((a,n)=>a+Number(n.users||0),0)+'</b></div></section>',
+    '<div class="notice">'+htmlEsc(tr('برای Nodeهای خارج از شبکه محلی، Controller را فقط از HTTPS در دسترس قرار بده.','Expose the controller to remote nodes over HTTPS only.'))+'</div>',
+    '<section class="ops-card-grid">'+(cards||'<div class="empty">'+htmlEsc(tr('هنوز نودی ثبت نشده است.','No nodes enrolled yet.'))+'</div>')+'</section>'
+  ].join('');
 }
 async function createNode(){
   const name=prompt('نام Node:','node-01');if(!name)return;
