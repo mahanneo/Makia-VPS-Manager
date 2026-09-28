@@ -5,6 +5,8 @@ const pageContext=document.querySelector('#pageContext');
 function htmlEsc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function dataEnc(v){return encodeURIComponent(String(v??''))}
 function dataDec(v){try{return decodeURIComponent(String(v??''))}catch{return String(v??'')}}
+function isFa(){return String(window.MAKIA_LANG||'fa').toLowerCase()!=='en'}
+function tr(fa,en){return isFa()?fa:en}
 function setPageContext(v){if(pageContext)pageContext.textContent=v||'MAKIA CONTROL CENTER'}
 function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name||'download';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),800)}
 function filenameFromHeaders(r,fallback){const cd=r.headers.get('content-disposition')||'';const m=cd.match(/filename="([^"]+)"/i);return m?.[1]||fallback||'download'}
@@ -93,8 +95,8 @@ let accessCache=[];
 let provisionState=null;
 
 async function access(renderToken=window.__viewRenderToken){
-  title.textContent='کاربران';setPageContext('CLIENTS');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی کاربران…</b></div>';
+  title.textContent=tr('کاربران','Clients');setPageContext(tr('کاربران','CLIENTS'));
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال همگام‌سازی کاربران…','Synchronizing clients…'))+'</b></div>';
   const [rows,stack,sshRows,pcRows,operator]=await Promise.all([
     api('/api/access'),api('/api/protocols'),api('/api/accounts'),api('/api/protocol-clients'),api('/api/settings/operator')
   ]);
@@ -105,8 +107,8 @@ async function access(renderToken=window.__viewRenderToken){
   const online=rows.reduce((n,x)=>n+Number(x.online||0),0);
   content.innerHTML=[
     '<div class="pro-page">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">ACCESS MANAGEMENT</span><h1>کاربران</h1><p>لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">بررسی سلامت</button><button class="primary" data-action="wizard-open">＋ ساخت دسترسی</button></div></section>',
-      '<section class="pro-stat-strip"><div><span>کل کاربران</span><b>'+rows.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>نیازمند توجه</span><b>'+attention+'</b></div><div><span>اتصال زنده</span><b>'+online+'</b></div></section>',
+      '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
+      '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
       '<section class="pro-directory">',
         '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
@@ -164,6 +166,24 @@ function accessCard(a){
   ].join('');
 }
 
+
+async function openClientPortal(kind,key,name){
+  try{
+    const r=await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/portal');
+    const url=String(r.url||'');
+    if(!url)throw new Error(tr('لینک کاربر ساخته نشد','Client link could not be created'));
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal client-portal-link-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">'+htmlEsc(tr('لینک اختصاصی کاربر','CLIENT SELF-SERVICE LINK'))+'</div><h3>'+htmlEsc(name||key)+'</h3><p>'+htmlEsc(tr('این لینک را مستقیم برای کاربر بفرست؛ آموزش، فایل و QR در همان صفحه است.','Send this link directly to the client; guide, file and QR are available on the same page.'))+'</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<label>'+htmlEsc(tr('لینک اختصاصی','Private client link'))+'<textarea id="clientPortalUrl" class="config-output small" readonly></textarea></label>',
+      '<div class="wizard-note"><b>'+htmlEsc(tr('محرمانه','Private'))+'</b><span>'+htmlEsc(tr('هر کسی این لینک را داشته باشد می‌تواند اطلاعات اتصال همان کاربر را ببیند. آن را مانند رمز عبور نگه دارید.','Anyone with this link can view this client’s connection data. Treat it like a password.'))+'</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="copy-target" data-target="clientPortalUrl">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><a class="primary link-btn" href="'+htmlEsc(url)+'" target="_blank" rel="noopener noreferrer">'+htmlEsc(tr('باز کردن صفحه کاربر','Open client page'))+'</a><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div>',
+      '</div></div>'
+    ].join('');
+    document.getElementById('clientPortalUrl').value=url;
+  }catch(e){alert(tr('لینک کاربر: ','Client link: ')+e.message)}
+}
+
 async function openAccessDetail(id){
   let a=accessCache.find(x=>String(x.id)===String(id));
   if(!a){
@@ -187,8 +207,9 @@ async function openAccessDetail(id){
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
-    '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Protected ZIP</button>',
-    '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">راهنمای اتصال</button>'
+    '<button class="primary" data-action="client-portal" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button>',
+    '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button>',
+    '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button>'
   ].join(''):'<span class="muted">برای این رکورد خروجی قابل تحویل موجود نیست.</span>';
   modalRoot.innerHTML=[
     '<div class="modal-backdrop detail-backdrop"><aside class="access-detail-drawer">',
@@ -2010,6 +2031,7 @@ async function handleMakiaAction(btn){
   }
   if(action==='native-export'){await downloadAccessNative(btn.dataset.kind,dataDec(btn.dataset.key));return}
   if(action==='access-share'){await openAccessShare(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='client-portal'){await openClientPortal(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='access-detail'){await openAccessDetail(dataDec(btn.dataset.id));return}
