@@ -61,6 +61,16 @@
       {% endif %}
 
       {% if state.active %}
+      <div class="portal-device-card">
+        <div>
+          <b>{{ 'دستگاه شناسایی‌شده' if fa else 'Detected device' }}: {{device.label}}</b>
+          <span>{{ 'راهنمای پایین بر اساس دستگاه شما اولویت‌بندی شده است.' if fa else 'The guide below is prioritized for your device.' }}</span>
+        </div>
+        {% if one_tap_url %}
+        <a class="one-tap-portal" href="{{one_tap_url}}">{{ 'باز کردن / وارد کردن مستقیم' if fa else 'Open / import directly' }}</a>
+        {% endif %}
+      </div>
+
       <section class="portal-action-grid">
         {% if has_native %}
         <a class="portal-action primary-card" href="{{download_url}}">
@@ -142,6 +152,13 @@
             <li>{{ 'در موبایل QR را اسکن کنید یا فایل .conf را دانلود کنید.' if fa else 'On mobile, scan the QR code or download the .conf file.' }}</li>
             <li>{{ 'در Windows/macOS گزینه Import tunnel(s) from file را انتخاب کنید.' if fa else 'On Windows/macOS choose Import tunnel(s) from file.' }}</li>
             <li>{{ 'Tunnel را فعال کنید.' if fa else 'Activate the tunnel.' }}</li>
+          </ol>
+        {% elif kind == 'outline' %}
+          <ol>
+            <li>{{ 'Outline Client رسمی را روی Android، iPhone، Windows یا macOS نصب کنید.' if fa else 'Install the official Outline Client on Android, iPhone, Windows or macOS.' }}</li>
+            <li>{{ 'روی دکمه ورود مستقیم بزنید یا Access Key را کپی و داخل Outline Client وارد کنید.' if fa else 'Use the direct import button or copy the Access Key into Outline Client.' }}</li>
+            <li>{{ 'در موبایل می‌توانید QR را نیز اسکن کنید.' if fa else 'On mobile you can also scan the QR code.' }}</li>
+            <li>{{ 'Access Key را مانند رمز عبور محرمانه نگه دارید.' if fa else 'Treat the Access Key like a private password.' }}</li>
           </ol>
         {% elif kind == 'xray' %}
           <ol>
