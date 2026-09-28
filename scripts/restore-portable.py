@@ -61,6 +61,132 @@ def read_bundle(path:Path,password:str):
     return manifest,payload
 
 
+MANAGED_RESTORE_PATHS=[
+    DATA,
+    Path("/etc/wireguard"),
+    Path("/etc/openvpn"),
+    Path("/etc/letsencrypt"),
+    Path("/usr/local/etc/xray"),
+    Path("/etc/xray"),
+    Path("/etc/makia-vps-manager"),
+    Path("/etc/stunnel"),
+    Path("/etc/ipsec.d"),
+    Path("/etc/ipsec.conf"),
+    Path("/etc/ipsec.secrets"),
+    Path("/etc/default/stunnel4"),
+    Path("/etc/nginx/sites-available/makia-vps-manager"),
+    Path("/etc/nginx/sites-enabled/makia-vps-manager"),
+]
+for _unit in [
+    "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
+    "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
+    "makia-migration-restore@.service",
+]:
+    MANAGED_RESTORE_PATHS.append(Path("/etc/systemd/system")/_unit)
+
+
+def _remove_path(path:Path):
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def _copy_path(src:Path,dst:Path):
+    dst.parent.mkdir(parents=True,exist_ok=True)
+    if src.is_symlink():
+        dst.symlink_to(os.readlink(src))
+    elif src.is_dir():
+        shutil.copytree(src,dst,symlinks=True)
+    else:
+        shutil.copy2(src,dst)
+
+
+def _capture_user_state(username):
+    passwd=run(["getent","passwd",username],check=False)
+    if passwd.returncode!=0:
+        return {"username":username,"existed":False}
+    shadow=run(["getent","shadow",username],check=False)
+    row={"username":username,"existed":True,"passwd":(passwd.stdout or "").strip(),"shadow":(shadow.stdout or "").strip()}
+    parts=row["passwd"].split(":")
+    home=Path(parts[5]) if len(parts)>=7 else Path(f"/home/{username}")
+    auth=home/".ssh"/"authorized_keys"
+    row["authorized_keys"]=auth.read_text(encoding="utf-8",errors="ignore") if auth.is_file() else None
+    return row
+
+
+def _restore_user_state(row):
+    username=str(row.get("username") or "")
+    if not username:
+        return
+    if not row.get("existed"):
+        if run(["id","-u",username],check=False).returncode==0:
+            run(["userdel","-r",username],check=False)
+        return
+    passwd=str(row.get("passwd") or "").split(":")
+    shadow=str(row.get("shadow") or "").split(":")
+    if run(["id","-u",username],check=False).returncode!=0 and len(passwd)>=7:
+        run(["useradd","-m","-s",passwd[6],username],check=False)
+    if len(shadow)>=2 and shadow[1]:
+        run(["usermod","-p",shadow[1],username],check=False)
+    if len(passwd)>=7:
+        home=Path(passwd[5])
+        auth=home/".ssh"/"authorized_keys"
+        previous=row.get("authorized_keys")
+        if previous is None:
+            auth.unlink(missing_ok=True)
+        else:
+            auth.parent.mkdir(parents=True,exist_ok=True)
+            auth.write_text(str(previous),encoding="utf-8")
+            os.chmod(auth.parent,0o700); os.chmod(auth,0o600)
+            try:
+                import pwd
+                pw=pwd.getpwnam(username)
+                os.chown(auth.parent,pw.pw_uid,pw.pw_gid); os.chown(auth,pw.pw_uid,pw.pw_gid)
+            except Exception:
+                pass
+
+
+def create_restore_rollback(payload):
+    BACKUP_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700)
+    root=Path(tempfile.mkdtemp(prefix=".restore-rollback-",dir=BACKUP_ROOT))
+    os.chmod(root,0o700)
+    records=[]
+    for target in MANAGED_RESTORE_PATHS:
+        rel=Path(str(target).lstrip("/"))
+        backup=root/"fs"/rel
+        existed=target.exists() or target.is_symlink()
+        records.append({"target":str(target),"backup":str(backup),"existed":existed})
+        if existed:
+            _copy_path(target,backup)
+    try:
+        incoming=json.loads(payload["payload/ssh-users.json"].decode("utf-8"))
+    except Exception:
+        incoming=[]
+    users=[_capture_user_state(str(row.get("username") or "")) for row in incoming if row.get("username")]
+    return root,records,users
+
+
+def rollback_restore(root,records,users):
+    stop_stack()
+    for rec in records:
+        target=Path(rec["target"])
+        try:
+            if target.exists() or target.is_symlink():
+                _remove_path(target)
+            if rec.get("existed"):
+                backup=Path(rec["backup"])
+                if backup.exists() or backup.is_symlink():
+                    _copy_path(backup,target)
+        except Exception:
+            pass
+    for row in users:
+        try: _restore_user_state(row)
+        except Exception: pass
+    run(["systemctl","daemon-reload"],check=False)
+    restart_stack()
+
+
 def restore_tree(blob:bytes,archive_root:str,target:Path):
     with tempfile.TemporaryDirectory(prefix="makia-restore-tree-") as tmp_name:
         tmp=Path(tmp_name)
@@ -178,6 +304,21 @@ def restore_v2_system_payload(payload):
             target.write_bytes(payload[key])
             os.chmod(target,mode)
 
+    allowed_units={
+        "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
+        "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
+        "makia-migration-restore@.service",
+    }
+    for key,blob in payload.items():
+        if not key.startswith("payload/systemd/"):
+            continue
+        unit=Path(key).name
+        if unit not in allowed_units:
+            raise RuntimeError(f"unexpected systemd unit in bundle: {unit}")
+        target=Path("/etc/systemd/system")/unit
+        target.write_bytes(blob)
+        os.chmod(target,0o644)
+
     site=Path("/etc/nginx/sites-available/makia-vps-manager")
     if site.exists():
         enabled=Path("/etc/nginx/sites-enabled/makia-vps-manager")
@@ -186,7 +327,7 @@ def restore_v2_system_payload(payload):
         enabled.symlink_to(site)
 
 
-def normalize_destination_runtime():
+def normalize_destination_runtime(payload=None):
     sys.path.insert(0,str(APP))
     from app import protocol_ops
 
@@ -235,6 +376,15 @@ def normalize_destination_runtime():
     if Path("/etc/ipsec.conf").exists() and "# BEGIN MAKIA IKEV2" in Path("/etc/ipsec.conf").read_text(encoding="utf-8",errors="ignore"):
         protocol_ops._ufw_allow_if_active(500,"udp","IKEv2 restored")
         protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T restored")
+
+    if payload and "payload/makia-firewall.json" in payload and shutil.which("ufw"):
+        try:
+            for rule in json.loads(payload["payload/makia-firewall.json"].decode("utf-8")):
+                port=int(rule.get("port") or 0); proto=str(rule.get("proto") or "").lower()
+                if 1<=port<=65535 and proto in {"tcp","udp"}:
+                    protocol_ops._ufw_allow_if_active(port,proto,"Restored rule")
+        except Exception as exc:
+            raise RuntimeError(f"unable to restore Makia firewall rules: {exc}") from exc
 
     Path("/etc/sysctl.d/99-makia-recovery.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
     run(["sysctl","-w","net.ipv4.ip_forward=1"],check=False)
@@ -326,11 +476,18 @@ def main():
     parser.add_argument("bundle",type=Path)
     parser.add_argument("--apply",action="store_true",help="perform the restore; without this flag only validate the bundle")
     parser.add_argument("--password",help="bundle password (prefer prompt or MAKIA_MIGRATION_PASSWORD)")
+    parser.add_argument("--password-file",type=Path,help="root-only file containing the bundle password")
     parser.add_argument("--allow-version-mismatch",action="store_true",help="allow restore when bundle/app versions differ")
     args=parser.parse_args()
     if os.geteuid()!=0:
         raise SystemExit("Run as root.")
-    password=args.password or os.getenv("MAKIA_MIGRATION_PASSWORD") or getpass.getpass("Migration bundle password: ")
+    file_password=""
+    if args.password_file:
+        st=args.password_file.stat()
+        if st.st_mode & 0o077:
+            raise SystemExit("Password file permissions must be 0600 or stricter.")
+        file_password=args.password_file.read_text(encoding="utf-8").rstrip("\r\n")
+    password=args.password or file_password or os.getenv("MAKIA_MIGRATION_PASSWORD") or getpass.getpass("Migration bundle password: ")
     manifest,payload=read_bundle(args.bundle,password)
     print(json.dumps(manifest,ensure_ascii=False,indent=2))
     required={"payload/data.tar.gz","payload/ssh-users.json"}
@@ -351,26 +508,44 @@ def main():
     if shutil.which("makia-backup"):
         run(["makia-backup"],check=False)
 
-    stop_stack()
-    restore_data(payload["payload/data.tar.gz"])
-    restore_ssh_users(payload["payload/ssh-users.json"])
-    restore_v2_system_payload(payload)
-    normalize_destination_runtime()
-    restart_stack()
+    rollback_root,rollback_records,rollback_users=create_restore_rollback(payload)
+    mutated=False
+    try:
+        stop_stack()
+        mutated=True
+        restore_data(payload["payload/data.tar.gz"])
+        restore_ssh_users(payload["payload/ssh-users.json"])
+        restore_v2_system_payload(payload)
+        normalize_destination_runtime(payload)
+        restart_stack()
 
-    domain=str(manifest.get("panel_domain") or "")
-    checks=validate_restored(domain)
-    failed=[name for name,ok in checks if not ok]
-    for name,ok in checks:
-        print(("PASS" if ok else "FAIL"),name)
-    if failed:
-        raise SystemExit("Restore completed but validation failed: "+", ".join(failed))
+        domain=str(manifest.get("panel_domain") or "")
+        checks=validate_restored(domain)
+        failed=[name for name,ok in checks if not ok]
+        for name,ok in checks:
+            print(("PASS" if ok else "FAIL"),name)
+        if failed:
+            raise RuntimeError("runtime validation failed: "+", ".join(failed))
+    except Exception as exc:
+        rollback_error=None
+        if mutated:
+            try:
+                rollback_restore(rollback_root,rollback_records,rollback_users)
+            except Exception as rb_exc:
+                rollback_error=rb_exc
+        if rollback_error:
+            raise SystemExit(f"Restore failed ({exc}); automatic rollback also failed ({rollback_error}).")
+        raise SystemExit(f"Restore failed and automatic rollback completed: {exc}")
+    finally:
+        shutil.rmtree(rollback_root,ignore_errors=True)
 
     print("\nFULL MIGRATION RESTORE: PASS")
     if domain:
-        print(f"Cutover next: update the DNS A/AAAA record for {domain} to this VPS.")
+        print(f"Cloudflare A record: {domain} → NEW_VPS_IP")
+        print("Update A/AAAA only after runtime verification and DNS diagnostics pass.")
         print("Raw VPN/SSH hostnames must be DNS-only in Cloudflare, not proxied.")
         print("Domain-based Xray/WireGuard/OpenVPN/SSH client credentials remain unchanged.")
+        print("Profiles containing the old literal VPS IP require re-export; DNS cannot change a literal IP.")
 
 
 if __name__=="__main__":
