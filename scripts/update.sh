@@ -195,6 +195,7 @@ install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
+install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -207,6 +208,7 @@ install -m 0755 "$SRC/scripts/uninstall.sh" /usr/local/sbin/makia-uninstall
 install -m 0755 "$SRC/scripts/doctor.sh" /usr/local/sbin/makia-doctor
 install -m 0755 "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 install -m 0755 "$SRC/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
+install -m 0755 "$SRC/scripts/run-migration-restore.py" /usr/local/sbin/makia-run-migration-restore
 install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 install -m 0755 "$SRC/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
 install -m 0755 "$SRC/scripts/makia-vpn-tls-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
