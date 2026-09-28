@@ -1965,7 +1965,9 @@ def repair_openvpn_all_runtimes():
     backup_dir=_backup_dir()
     stamp=int(time.time())
     results=[]
-    Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    (sysctl_dir/"99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
     _run(["sysctl","--system"],timeout=30)
     for conf in configs:
         stem=conf.stem
