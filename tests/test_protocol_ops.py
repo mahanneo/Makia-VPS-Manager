@@ -532,3 +532,25 @@ def test_repair_openvpn_all_runtimes_rebinds_destination_uplink(monkeypatch,tmp_
     assert (tmp_path/"sysctl"/"99-makia-openvpn.conf").read_text()=="net.ipv4.ip_forward=1\n"
     assert ["systemctl","restart","openvpn-server@server"] in calls
     assert ["systemctl","restart","openvpn-server@transport-tcp"] in calls
+
+
+def test_repair_protocol_firewall_runtime_rebuilds_managed_rules(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"_config_path",lambda:None)
+    monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{"port":443})
+    monkeypatch.setattr(protocol_ops,"_openvpn_transport_runtimes",lambda:{
+        "udp":{"port":1194},"tcp":{"port":8443},
+    })
+    monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{"configured":True})
+    monkeypatch.setattr(protocol_ops,"stealth_status",lambda:{"configured":True,"port":9443})
+    monkeypatch.setattr(protocol_ops,"wstunnel_status",lambda:{"configured":True,"port":8444})
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda port,proto,label:calls.append((port,proto,label)) or {"active":True,"changed":True})
+    result=protocol_ops.repair_protocol_firewall_runtime()
+    assert result["ok"] is True
+    assert (443,"udp","WireGuard") in calls
+    assert (1194,"udp","OpenVPN UDP") in calls
+    assert (8443,"tcp","OpenVPN TCP") in calls
+    assert (500,"udp","IKEv2") in calls
+    assert (4500,"udp","IKEv2 NAT-T") in calls
+    assert (9443,"tcp","OpenVPN Stealth") in calls
+    assert (8444,"tcp","WStunnel WSS") in calls
