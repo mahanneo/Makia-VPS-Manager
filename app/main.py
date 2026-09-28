@@ -795,9 +795,23 @@ def ikev2_user_delete(name:str,request:Request):
     audit(actor,"ikev2_user_delete",name,ip=ip(request))
     return result
 
+class OpenVPNTCPFallback(BaseModel):
+    port:int=Field(default=8443,ge=1,le=65535)
+
+@app.post("/api/protocols/openvpn/tcp-fallback")
+def openvpn_tcp_fallback(payload:OpenVPNTCPFallback,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.ensure_openvpn_tcp_fallback(payload.port)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"openvpn_tcp_fallback_failed","openvpn",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(actor,"openvpn_tcp_fallback","openvpn",f"port={payload.port}",ip=ip(request))
+    return result
+
 class StealthBootstrap(BaseModel):
     domain:str=Field(min_length=3,max_length=253)
-    port:int=Field(default=8443,ge=1,le=65535)
+    port:int=Field(default=9443,ge=1,le=65535)
 
 @app.post("/api/protocols/stealth/bootstrap")
 def stealth_bootstrap(payload:StealthBootstrap,request:Request):
@@ -1797,6 +1811,43 @@ def backup_create(request:Request):
     except system_ops.OperationError as e: raise HTTPException(400,str(e))
     audit(actor,"backup_create",result["name"],ip=ip(request))
     return result
+
+@app.get("/api/backups/migration-readiness")
+def backup_migration_readiness(request:Request):
+    require_local_admin(request)
+    domain=(get_setting("panel_domain","") or "").strip()
+    domain_based=0
+    ip_based=0
+    unknown=0
+    examples=[]
+    for artifact in list_access_artifacts():
+        endpoint=""
+        try:
+            endpoint=str(json.loads(artifact.get("metadata_json") or "{}").get("endpoint") or "").strip()
+        except Exception:
+            endpoint=""
+        if not endpoint:
+            unknown+=1
+            continue
+        host=endpoint.strip("[]")
+        try:
+            ipaddress.ip_address(host)
+            ip_based+=1
+            if len(examples)<5:
+                examples.append({"kind":artifact.get("kind"),"name":artifact.get("name"),"endpoint":endpoint})
+        except ValueError:
+            domain_based+=1
+    return {
+        "panel_domain":domain,
+        "domain_configured":bool(domain),
+        "domain_based":domain_based,
+        "ip_based":ip_based,
+        "unknown":unknown,
+        "ip_examples":examples,
+        "same_config_cutover_ready":bool(domain and ip_based==0),
+        "cloudflare_note":"VPN/SSH records that carry raw traffic must be DNS only; Cloudflare orange-cloud proxy does not proxy raw WireGuard/OpenVPN/SSH.",
+        "restore_command":"sudo makia-restore-portable /root/makia-full-migration.zip --apply",
+    }
 
 class PortableBackupRequest(BaseModel):
     password:str=Field(min_length=10,max_length=128)
