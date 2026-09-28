@@ -28,4 +28,5 @@ rm -f /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
 # Migration restore runner/unit are code/runtime artifacts; encrypted backup history is preserved.
 systemctl stop 'makia-migration-restore@*.service' 2>/dev/null || true
 rm -f /etc/systemd/system/makia-migration-restore@.service
-rm -f /usr/local/sbin/makia-run-migration-restore
+rm -f /usr/local/sbin/makia-run-migration-restore /usr/local/sbin/makia-restore-portable
+systemctl daemon-reload
