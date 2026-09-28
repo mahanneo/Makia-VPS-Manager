@@ -30,7 +30,10 @@ def cloudflare_zone(token,domain):
     token=str(token or "").strip()
     if not token or not domain:raise GrowthError("Cloudflare token and domain are required")
     parts=domain.split(".")
-    candidates=[".".join(parts[i:]) for i in range(max(0,len(parts)-2),len(parts))]
+    # Try the most specific hostname and progressively shorter suffixes. This
+    # works for zones such as example.co.uk without embedding a public-suffix
+    # database in the server.
+    candidates=[".".join(parts[i:]) for i in range(0,max(1,len(parts)-1))]
     headers={"Authorization":f"Bearer {token}"}
     for candidate in candidates:
         data=_json_request("https://api.cloudflare.com/client/v4/zones?name="+urllib.parse.quote(candidate),headers=headers)
@@ -115,6 +118,15 @@ def backup_remote_upload(path,config):
     if not host or any(ch.isspace() for ch in host):raise GrowthError("invalid SFTP host")
     if not 1<=port<=65535:raise GrowthError("invalid SFTP port")
     if not identity or not Path(identity).is_file():raise GrowthError("SFTP identity_file must exist on this VPS")
+    resolved=Path(identity).resolve()
+    allowed_roots=(Path("/etc/makia-vps-manager").resolve(),Path("/opt/makia-vps-manager/data").resolve())
+    if not any(resolved==root or root in resolved.parents for root in allowed_roots):
+        raise GrowthError("SFTP identity_file must live under /etc/makia-vps-manager or Makia data directory")
+    try:
+        mode=resolved.stat().st_mode & 0o777
+        if mode & 0o077:raise GrowthError("SFTP identity_file permissions must be 0600 or stricter")
+    except OSError as exc:raise GrowthError(str(exc)) from exc
+    identity=str(resolved)
     if not shutil.which("ssh") or not shutil.which("scp"):raise GrowthError("OpenSSH client tools are not installed")
     base=["-i",identity,"-p",str(port),"-o","BatchMode=yes","-o","StrictHostKeyChecking=accept-new"]
     target=f"{user}@{host}"
