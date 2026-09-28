@@ -1,4 +1,4 @@
-import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3, hashlib
+import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3, hashlib, ssl, urllib.request, urllib.parse, base64, hmac
 from datetime import datetime
 from pathlib import Path
 import psutil
@@ -394,6 +394,234 @@ def migration_restore_status(job_id):
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise OperationError("restore job status is invalid") from exc
+
+
+
+def _json_request(url,method="GET",payload=None,headers=None,timeout=20,ssl_context=None,form=False):
+    body=None
+    req_headers={"Accept":"application/json","User-Agent":"Makia-VPS-Manager"}
+    req_headers.update(headers or {})
+    if payload is not None:
+        if form:
+            body=urllib.parse.urlencode(payload).encode("utf-8")
+            req_headers["Content-Type"]="application/x-www-form-urlencoded"
+        else:
+            body=json.dumps(payload,separators=(",",":")).encode("utf-8")
+            req_headers["Content-Type"]="application/json"
+    request=urllib.request.Request(str(url),data=body,method=str(method).upper(),headers=req_headers)
+    try:
+        with urllib.request.urlopen(request,timeout=timeout,context=ssl_context) as response:
+            raw=response.read()
+            if not raw:
+                return {}
+            return json.loads(raw.decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        try: detail=exc.read().decode("utf-8","replace")[:800]
+        except Exception: detail=str(exc)
+        raise OperationError(f"HTTP {exc.code}: {detail}") from exc
+    except (urllib.error.URLError,TimeoutError,OSError,json.JSONDecodeError) as exc:
+        raise OperationError(str(exc)) from exc
+
+
+def telegram_send(bot_token,chat_id,text):
+    token=str(bot_token or "").strip()
+    chat=str(chat_id or "").strip()
+    message=str(text or "").strip()
+    if not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}",token):
+        raise OperationError("invalid Telegram bot token")
+    if not chat or len(chat)>80 or len(message)>3500:
+        raise OperationError("invalid Telegram message target or content")
+    result=_json_request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        method="POST",payload={"chat_id":chat,"text":message,"disable_web_page_preview":True}
+    )
+    if not result.get("ok"):
+        raise OperationError("Telegram API did not confirm delivery")
+    return {"ok":True,"message_id":((result.get("result") or {}).get("message_id"))}
+
+
+def cloudflare_record_state(api_token,zone_name,hostname):
+    token=str(api_token or "").strip()
+    zone=str(zone_name or "").strip().lower().rstrip(".")
+    host=str(hostname or "").strip().lower().rstrip(".")
+    if len(token)<20 or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}",zone) or not re.fullmatch(r"[A-Za-z0-9*_.-]{1,253}",host):
+        raise OperationError("invalid Cloudflare settings")
+    headers={"Authorization":f"Bearer {token}"}
+    zones=_json_request(
+        "https://api.cloudflare.com/client/v4/zones?"+urllib.parse.urlencode({"name":zone,"status":"active"}),
+        headers=headers
+    )
+    if not zones.get("success") or not zones.get("result"):
+        raise OperationError("Cloudflare zone not found or token has insufficient permissions")
+    zone_id=zones["result"][0]["id"]
+    records=_json_request(
+        f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?"+
+        urllib.parse.urlencode({"name":host,"type":"A"}),
+        headers=headers
+    )
+    record=(records.get("result") or [None])[0]
+    return {
+        "zone_id":zone_id,
+        "record_id":record.get("id") if record else "",
+        "hostname":host,
+        "content":record.get("content") if record else "",
+        "proxied":bool(record.get("proxied")) if record else False,
+        "ttl":record.get("ttl") if record else None,
+        "exists":bool(record),
+    }
+
+
+def cloudflare_update_a(api_token,zone_name,hostname,ipv4,ttl=120):
+    try: socket.inet_aton(str(ipv4))
+    except OSError as exc: raise OperationError("invalid IPv4 address") from exc
+    state=cloudflare_record_state(api_token,zone_name,hostname)
+    headers={"Authorization":f"Bearer {str(api_token).strip()}"}
+    payload={
+        "type":"A","name":state["hostname"],"content":str(ipv4),
+        "ttl":max(60,min(int(ttl or 120),86400)),"proxied":False,
+        "comment":"Managed by Makia VPS Manager disaster recovery"
+    }
+    if state["record_id"]:
+        url=f"https://api.cloudflare.com/client/v4/zones/{state['zone_id']}/dns_records/{state['record_id']}"
+        result=_json_request(url,method="PUT",payload=payload,headers=headers)
+    else:
+        url=f"https://api.cloudflare.com/client/v4/zones/{state['zone_id']}/dns_records"
+        result=_json_request(url,method="POST",payload=payload,headers=headers)
+    if not result.get("success"):
+        raise OperationError("Cloudflare did not confirm DNS update")
+    record=result.get("result") or {}
+    return {
+        "ok":True,"hostname":state["hostname"],"content":record.get("content",str(ipv4)),
+        "proxied":bool(record.get("proxied")),"record_id":record.get("id",""),
+    }
+
+
+def _normalize_cert_fingerprint(value):
+    raw=str(value or "").strip()
+    compact=re.sub(r"[^A-Fa-f0-9]","",raw)
+    if len(compact)==64:
+        return "hex",compact.lower()
+    try:
+        decoded=base64.b64decode(raw+"="*(-len(raw)%4),validate=True)
+        if len(decoded)==32:
+            return "b64",base64.b64encode(decoded).decode("ascii").rstrip("=")
+    except Exception:
+        pass
+    raise OperationError("Outline cert SHA256 must be a 64-char hex or base64 SHA256 fingerprint")
+
+
+def verify_outline_certificate(api_url,cert_sha256):
+    parsed=urllib.parse.urlsplit(str(api_url or "").strip())
+    if parsed.scheme!="https" or not parsed.hostname:
+        raise OperationError("Outline API URL must use https")
+    port=int(parsed.port or 443)
+    mode,expected=_normalize_cert_fingerprint(cert_sha256)
+    context=ssl.create_default_context()
+    context.check_hostname=False
+    context.verify_mode=ssl.CERT_NONE
+    try:
+        with socket.create_connection((parsed.hostname,port),timeout=10) as raw:
+            with context.wrap_socket(raw,server_hostname=parsed.hostname) as tls:
+                der=tls.getpeercert(binary_form=True)
+    except OSError as exc:
+        raise OperationError(f"unable to reach Outline API TLS endpoint: {exc}") from exc
+    digest=hashlib.sha256(der).digest()
+    actual=digest.hex() if mode=="hex" else base64.b64encode(digest).decode("ascii").rstrip("=")
+    if not hmac.compare_digest(actual,expected):
+        raise OperationError("Outline API certificate fingerprint mismatch")
+    return {"host":parsed.hostname,"port":port,"sha256":actual}
+
+
+def outline_api_request(api_url,cert_sha256,path="",method="GET",payload=None,form=False):
+    verify_outline_certificate(api_url,cert_sha256)
+    base=str(api_url or "").strip().rstrip("/")
+    suffix=str(path or "").strip()
+    url=base+("/"+suffix.lstrip("/") if suffix else "")
+    context=ssl.create_default_context()
+    context.check_hostname=False
+    context.verify_mode=ssl.CERT_NONE
+    return _json_request(url,method=method,payload=payload,ssl_context=context,form=form)
+
+
+def outline_status(api_url,cert_sha256):
+    data=outline_api_request(api_url,cert_sha256,"access-keys/")
+    keys=data.get("accessKeys") if isinstance(data,dict) else None
+    if keys is None and isinstance(data,list):
+        keys=data
+    if keys is None:
+        raise OperationError("Outline API returned an unexpected access-key response")
+    return {"ready":True,"keys":keys,"count":len(keys)}
+
+
+def outline_create_key(api_url,cert_sha256,name,port=0,quota_bytes=0):
+    body={}
+    if int(port or 0):
+        if not 1<=int(port)<=65535: raise OperationError("Outline port must be 1-65535")
+        body["port"]=int(port)
+    result=outline_api_request(api_url,cert_sha256,"access-keys",method="POST",payload=body or None)
+    key_id=str(result.get("id") or "")
+    if not key_id or not str(result.get("accessUrl") or "").startswith("ss://"):
+        raise OperationError("Outline API did not return a valid access key")
+    clean_name=str(name or "").strip()[:80]
+    if clean_name:
+        outline_api_request(api_url,cert_sha256,f"access-keys/{urllib.parse.quote(key_id,safe='')}/name",method="PUT",payload={"name":clean_name},form=True)
+        result["name"]=clean_name
+    if int(quota_bytes or 0)>0:
+        outline_api_request(
+            api_url,cert_sha256,f"access-keys/{urllib.parse.quote(key_id,safe='')}/data-limit",
+            method="PUT",payload={"limit":{"bytes":int(quota_bytes)}}
+        )
+        result["dataLimit"]={"bytes":int(quota_bytes)}
+    return result
+
+
+def outline_delete_key(api_url,cert_sha256,key_id):
+    raw=str(key_id or "")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}",raw):
+        raise OperationError("invalid Outline access-key id")
+    outline_api_request(api_url,cert_sha256,f"access-keys/{urllib.parse.quote(raw,safe='')}",method="DELETE")
+    return {"deleted":True,"id":raw}
+
+
+def remote_backup_push(local_path,host,user,remote_path,key_path,port=22):
+    source=Path(local_path)
+    if not source.is_file(): raise OperationError("backup file not found")
+    host=str(host or "").strip(); user=str(user or "").strip()
+    remote_path=str(remote_path or "").strip()
+    key=Path(str(key_path or "").strip())
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}",user):
+        raise OperationError("invalid remote backup SSH user")
+    if not host or len(host)>253 or not remote_path.startswith("/"):
+        raise OperationError("invalid remote backup target")
+    if not key.is_file():
+        raise OperationError("remote backup SSH key file not found")
+    port=max(1,min(int(port or 22),65535))
+    target=f"{user}@{host}:{remote_path.rstrip('/')}/{source.name}"
+    args=[
+        "scp","-q","-P",str(port),"-i",str(key),
+        "-o","BatchMode=yes","-o","ConnectTimeout=10","-o","StrictHostKeyChecking=accept-new",
+        "--",str(source),target
+    ]
+    _run(args,timeout=120)
+    return {"ok":True,"target":target,"size":source.stat().st_size,"sha256":_sha256_file(source)}
+
+
+def prune_backups(keep=7,kind="full_migration"):
+    keep=max(1,min(int(keep or 7),100))
+    root=_backup_root(create=False)
+    if not root.is_dir(): return {"removed":[]}
+    rows=backup_list()
+    candidates=[x for x in rows if x.get("type")==kind]
+    removed=[]
+    for item in candidates[keep:]:
+        path=root/item["name"]
+        meta=_backup_metadata_path(path)
+        try:path.unlink()
+        except OSError:continue
+        try:meta.unlink()
+        except OSError:pass
+        removed.append(item["name"])
+    return {"removed":removed}
 
 
 def _tar_bytes(path, arcname):
