@@ -432,11 +432,7 @@ def normalize_destination_runtime(payload=None):
 
     if Path("/opt/outline/access.txt").exists():
         if not shutil.which("docker"):
-            if shutil.which("apt-get"):
-                run(["apt-get","update"],check=True)
-                run(["apt-get","install","-y","docker.io"],check=True)
-            else:
-                raise RuntimeError("Outline restore requires Docker on the destination VPS")
+            raise RuntimeError("Outline component is present in this backup. Install Outline/Docker on the destination with sudo makia-install-outline before Restore; the hardened restore job does not run APT.")
         run(["systemctl","enable","--now","docker"],check=True)
         os.chmod("/opt/outline",0o700)
         os.chmod("/opt/outline/access.txt",0o600)
