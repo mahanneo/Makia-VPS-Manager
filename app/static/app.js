@@ -219,6 +219,7 @@ async function access(renderToken=window.__viewRenderToken){
     '<div class="pro-page">',
       '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
       '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
+      '<div class="access-bulk-bar"><div><b>'+htmlEsc(tr('عملیات گروهی','Bulk actions'))+'</b><small>'+htmlEsc(tr('برای SSH و Xray/Outline','For SSH and Xray/Outline'))+'</small></div><div class="access-bulk-actions"><button class="primary" data-growth-action="bulk-renew">+30d / +50GB</button><button class="ghost" data-growth-action="bulk-enable">'+htmlEsc(tr('فعال','Enable'))+'</button><button class="ghost" data-growth-action="bulk-disable">'+htmlEsc(tr('غیرفعال','Disable'))+'</button><button class="ghost" data-growth-action="bulk-reset">'+htmlEsc(tr('ریست ترافیک','Reset traffic'))+'</button></div></div>',
       '<section class="pro-directory">',
         '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
@@ -265,8 +266,10 @@ function accessCard(a){
   const proto=String(a.protocol||a.kind||'').toUpperCase();
   const stateClass=a.status==='active'?'ok':a.status==='expired'?'bad':'warn';
   const label=dataEnc(a.name),id=dataEnc(a.id);
+  const bulkTarget=a.kind==='xray'?'protocol:'+a.key:a.kind==='ssh'?'ssh:'+a.key:'';
   return [
     '<article class="pro-user-row">',
+      '<div class="access-select-wrap">'+(bulkTarget?'<input class="access-select" type="checkbox" data-target="'+htmlEsc(bulkTarget)+'" aria-label="'+htmlEsc(tr('انتخاب','Select'))+'">':'')+'</div>',
       '<div class="pro-user-id"><span class="pro-user-avatar">'+htmlEsc(String(a.name||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(a.name)+'</b><small>'+htmlEsc(a.endpoint||a.plan||'Managed access')+'</small></div></div>',
       '<div><span class="pro-protocol-badge '+htmlEsc(a.kind)+'">'+htmlEsc(proto)+'</span></div>',
       '<div><span class="status-chip '+stateClass+'">'+htmlEsc(a.status||'unknown')+'</span></div>',
@@ -320,9 +323,10 @@ async function openAccessDetail(id){
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
   const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
+  const renewTarget=a.kind==='xray'?'protocol:'+a.key:a.kind==='ssh'?'ssh:'+a.key:'';
   const manage=(a.kind==='ssh'||a.kind==='xray')
-    ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
-    : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
+    ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">'+htmlEsc(tr('ویرایش تنظیمات','Edit settings'))+'</button>'+(renewTarget?'<button class="ghost" data-growth-action="quick-renew" data-target="'+dataEnc(renewTarget)+'">+30d / +50GB</button>':'')
+    : '<button class="primary" data-action="nav" data-view="'+kind+'">'+htmlEsc(tr('مدیریت','Manage'))+' '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
   const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
@@ -346,11 +350,12 @@ async function openAccessDetail(id){
 
 async function openProvisionWizard(protocol){
   if(!window.__protocolData) window.__protocolData=await api('/api/protocols');
-  const [defs,operator]=await Promise.all([
+  const [defs,operator,plans]=await Promise.all([
     api('/api/accounts/new-defaults').catch(()=>({username:'user001'})),
-    api('/api/settings/operator').catch(()=>({defaults:{},delivery:{}}))
+    api('/api/settings/operator').catch(()=>({defaults:{},delivery:{}})),
+    api('/api/plans').catch(()=>[])
   ]);
-  window.__operatorSettings=operator;
+  window.__operatorSettings=operator;window.__servicePlans=plans;
   const d=operator.defaults||{};
   const initialEndpoint=window.PANEL_DOMAIN||location.hostname;
   const initialMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(initialEndpoint)?'ip':'domain';
@@ -359,7 +364,7 @@ async function openProvisionWizard(protocol){
   let xrayPort=Number(d.xray_port||2087);
   while(usedXrayPorts.has(xrayPort)&&xrayPort<65535)xrayPort++;
   provisionState={
-    step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',
+    step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',planId:'',
     endpoint:initialEndpoint,endpointMode:initialMode,
     endpointValues:{ip:initialMode==='ip'?initialEndpoint:'',domain:initialMode==='domain'?initialEndpoint:''},
     password:'',passwordMode:d.ssh_password_mode||'pin6',
@@ -423,7 +428,7 @@ function renderProvisionWizard(){
       return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+x[4]+'</span><div><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
     }).join('')+'</div>';
   }else if(s.step===2){
-    body=wizardIdentityFields(s);
+    body=wizardPlanField(s)+wizardIdentityFields(s);
   }else if(s.step===3){
     body=wizardPolicyFields(s);
   }else{
@@ -441,6 +446,36 @@ function renderProvisionWizard(){
       '<footer class="wizard-footer">'+footer+'</footer>',
     '</aside></div>'
   ].join('');
+}
+function wizardPlanField(s){
+  const plans=(window.__servicePlans||[]).filter(p=>p.active!==0&&(!p.protocol||p.protocol===s.protocol||(s.protocol==='xray'&&p.protocol==='xray')));
+  if(!plans.length)return '';
+  return '<div class="wizard-section-title plan-picker-title"><span class="pro-kicker">PLAN TEMPLATE</span><h4>'+htmlEsc(tr('شروع سریع با پلن','Start from a plan'))+'</h4><p>'+htmlEsc(tr('اختیاری؛ با انتخاب پلن حجم، مدت و محدودیت‌ها خودکار پر می‌شوند.','Optional; selecting a plan pre-fills quota, duration and limits.'))+'</p></div><label class="wizard-plan-select">'+htmlEsc(tr('پلن','Plan'))+'<select id="wizServicePlan"><option value="">'+htmlEsc(tr('بدون پلن / دستی','No plan / Manual'))+'</option>'+plans.map(p=>'<option value="'+p.id+'" '+(String(s.planId)===String(p.id)?'selected':'')+'>'+htmlEsc(p.name)+'</option>').join('')+'</select></label>';
+}
+function applyWizardPlan(planId){
+  const s=provisionState,plan=(window.__servicePlans||[]).find(p=>String(p.id)===String(planId));
+  s.planId=planId||'';
+  if(!plan)return;
+  const cfg=plan.config||{};
+  if(s.protocol==='ssh'){
+    s.plan=plan.name||'';
+    s.expireDate=Number(plan.expire_days||0)?dateAfterDays(Number(plan.expire_days)):''; 
+    s.devices=Number(plan.ip_limit||1);s.sessions=Number(cfg.connection_limit||s.sessions||1);
+  }else if(s.protocol==='xray'){
+    s.quota=Number(plan.quota_bytes||0)/1024**3;s.expireDays=Number(plan.expire_days||0);s.devices=Number(plan.ip_limit||1);s.resetDays=Number(plan.reset_days||0);
+    if(cfg.protocol&&XRAY_PROFILE_MATRIX[cfg.protocol])s.xrayProtocol=cfg.protocol;
+    if(cfg.port)s.port=Number(cfg.port);
+    if(cfg.transport)s.transport=String(cfg.transport);
+    if(cfg.security)s.security=String(cfg.security);
+    if(cfg.path)s.path=String(cfg.path);
+    if(cfg.sni)s.sni=String(cfg.sni);
+    if(cfg.reality_target)s.realityDest=String(cfg.reality_target);
+    s.simpleMode=false;s.manualXray=true;normalizeXrayProfile(s,false);
+  }else if(s.protocol==='wireguard'){
+    if(cfg.dns)s.dns=String(cfg.dns);if(cfg.mtu)s.wgMtu=Number(cfg.mtu);if(cfg.keepalive!==undefined)s.wgKeepalive=Number(cfg.keepalive);if(cfg.allowed_ips)s.wgAllowedIps=String(cfg.allowed_ips);
+  }else if(s.protocol==='openvpn'){
+    if(cfg.proto)s.ovpnProto=String(cfg.proto).startsWith('tcp')?'tcp':'udp';if(cfg.port)s.ovpnPort=Number(cfg.port);
+  }
 }
 function wizardIdentityFields(s){
   if(s.protocol==='ssh') return [
@@ -570,6 +605,7 @@ function wizardReview(s){
 function captureWizard(){
   const s=provisionState;if(!s)return;
   const val=id=>document.getElementById(id)?.value;
+  if(val('wizServicePlan')!==undefined)s.planId=val('wizServicePlan');
   if(val('wizName')!==undefined)s.name=val('wizName').trim();
   if(val('wizEndpoint')!==undefined)s.endpoint=val('wizEndpoint').trim();
   if(s.endpointValues)s.endpointValues[s.endpointMode]=s.endpoint;
@@ -2261,6 +2297,9 @@ document.addEventListener('click',e=>{
   if(btn){e.preventDefault();Promise.resolve(handleMakiaAction(btn)).catch(err=>alert(err?.message||String(err)))}
 });
 document.addEventListener('change',e=>{
+  if(e.target.id==='wizServicePlan'&&provisionState){
+    captureWizard();applyWizardPlan(e.target.value);renderProvisionWizard();return;
+  }
   if(e.target.id==='wizEndpointMode'&&provisionState){
     const next=e.target.value;
     captureWizard();
