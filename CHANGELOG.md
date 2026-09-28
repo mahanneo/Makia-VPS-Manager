@@ -7,10 +7,13 @@
 - IKEv2 is backed by strongSwan with EAP-MSCHAPv2 users, UDP/500 + UDP/4500, certificate reuse, NAT/forwarding and host diagnostics.
 - Stealth is a real OpenVPN TCP-over-TLS mode using Stunnel; it requires a valid panel certificate and a distinct public TCP listener.
 - WStunnel is a real WireGuard-over-WSS mode using pinned wstunnel 11.0.0 with checksum verification, a hardened systemd service and restricted UDP forwarding.
-- OpenVPN UDP/TCP cards switch the real single active OpenVPN server transport; Makia does not fake simultaneous ownership of the same TCP port.
+- OpenVPN UDP and TCP can now run concurrently as independent systemd instances with separate tunnel subnets while sharing the existing PKI/CRL/tls-crypt identity; enabling TCP no longer disables an active UDP server.
 - Added certificate-renewal handling for IKEv2, Stealth and WStunnel.
 
 ### Hardening / recovery
+- Upgraded the panel-downloadable migration archive to Disaster Recovery format v2: DB/.secret, managed SSH hashes, Xray/REALITY, WireGuard, OpenVPN PKI and all server configs, Let’s Encrypt/Nginx, IKEv2/strongSwan, Stealth/Stunnel and WStunnel state are carried with SHA256 payload verification.
+- Restore now rebuilds WireGuard/OpenVPN NAT/FORWARD rules against the destination VPS default interface so a provider/NIC-name change does not preserve broken host-specific routing.
+- Domain-based client configurations can survive VPS cutover unchanged when the same DNS name is moved to the replacement VPS; direct-IP profiles are explicitly excluded from zero-touch cutover.
 - Host packages and external engine installation are kept out of the hardened web-service sandbox; missing host tooling instructs the operator to run `sudo makia-upgrade`.
 - Rebuilt the host smoke script after detecting malformed/duplicated HTTPS-gate content and added runtime checks for the new modes.
 - Uninstall removes Makia service/helper ownership while intentionally preserving protocol credentials/configuration under `/etc`.
