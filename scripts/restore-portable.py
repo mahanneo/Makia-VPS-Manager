@@ -301,6 +301,7 @@ def main():
         protocol_ops.repair_wireguard_runtime("wg0")
     if Path("/etc/openvpn/server").exists() and list(Path("/etc/openvpn/server").glob("*.conf")):
         protocol_ops.repair_openvpn_all_runtimes()
+    protocol_ops.repair_protocol_firewall_runtime()
 
     restart_stack()
     checks=validate_restored(payload)
