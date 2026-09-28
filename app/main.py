@@ -1852,6 +1852,9 @@ def backup_migration_readiness(request:Request):
 class PortableBackupRequest(BaseModel):
     password:str=Field(min_length=10,max_length=128)
 
+class MigrationRestoreApply(BaseModel):
+    password:str=Field(min_length=10,max_length=128)
+
 @app.post("/api/backups/portable")
 def backup_portable(payload:PortableBackupRequest,request:Request):
     require_local_admin(request)
@@ -1920,7 +1923,7 @@ async def backup_restore_verify(request:Request,bundle:UploadFile=File(...),pass
 
 
 @app.post("/api/backups/restore/{job_id}/apply")
-def backup_restore_apply(job_id:str,request:Request):
+def backup_restore_apply(job_id:str,payload:MigrationRestoreApply,request:Request):
     actor=require_local_admin(request)
     require_mutation(request)
     try:
@@ -1931,10 +1934,11 @@ def backup_restore_apply(job_id:str,request:Request):
         raise HTTPException(409,f"Restore job is already {status.get('state')}")
     unit=f"makia-migration-restore@{job_id}.service"
     try:
+        system_ops.arm_migration_restore(job_id,payload.password,VERSION)
         system_ops._run(["systemctl","start","--no-block",unit],timeout=15)
     except system_ops.OperationError as e:
         audit(actor,"migration_restore_start_failed",job_id,str(e)[:500],ip=ip(request))
-        raise HTTPException(500,str(e))
+        raise HTTPException(400,str(e))
     audit(actor,"migration_restore_started",job_id,ip=ip(request))
     return {
         "ok":True,"job_id":job_id,"state":"starting",
