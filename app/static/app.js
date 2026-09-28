@@ -1299,11 +1299,13 @@ let xrayBuilderCaps=null;
 
 async function openXrayInboundBuilder(){
   try{
-    const [caps,defs,stack]=await Promise.all([
+    const [caps,defs,stack,plans]=await Promise.all([
       api('/api/protocols/xray/inbound-capabilities'),
       api('/api/accounts/new-defaults').catch(()=>({username:'user001'})),
-      api('/api/protocols')
+      api('/api/protocols'),
+      api('/api/plans').catch(()=>[])
     ]);
+    window.__servicePlans=plans;
     xrayBuilderCaps=caps;
     const defaults=window.__operatorSettings?.defaults||{};
     const endpoint=window.PANEL_DOMAIN||location.hostname;
@@ -1317,6 +1319,7 @@ async function openXrayInboundBuilder(){
         '<div class="xray-builder-grid">',
           '<section class="xray-builder-section"><div class="section-title"><b>1. Inbound</b><span>مشخصات سرویس</span></div><div class="form-grid two">',
             '<label>Remark / نام Inbound<input id="xbRemark" maxlength="80" value="Makia-'+port+'"></label>',
+            '<label>'+htmlEsc(tr('Plan template','Plan template'))+'<select id="xbPlan"><option value="">'+htmlEsc(tr('بدون پلن / دستی','No plan / Manual'))+'</option>'+(plans||[]).filter(p=>p.active!==0&&(!p.protocol||p.protocol==='xray')).map(p=>'<option value="'+p.id+'">'+htmlEsc(p.name)+'</option>').join('')+'</select></label>',
             '<label>Protocol<select id="xbProtocol"></select></label>',
             '<label>Listen<input id="xbListen" dir="ltr" value="0.0.0.0"><span class="muted">0.0.0.0 = همه Interfaceها</span></label>',
             '<label>Port<input id="xbPort" type="number" min="1" max="65535" value="'+port+'"></label>',
@@ -1365,12 +1368,23 @@ async function openXrayInboundBuilder(){
     if(caps.protocols?.[preferred])p.value=preferred;
     document.getElementById('xbSsMethod').innerHTML=(caps.shadowsocks_methods||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x)+'</option>').join('');
     p.addEventListener('change',syncXrayInboundBuilder);
+    document.getElementById('xbPlan')?.addEventListener('change',e=>applyXrayBuilderPlan(e.target.value));
     document.getElementById('xbTransport').addEventListener('change',syncXrayInboundBuilder);
     document.getElementById('xbSecurity').addEventListener('change',syncXrayInboundBuilder);
     syncXrayInboundBuilder();
   }catch(e){alert('Xray Inbound Center: '+e.message)}
 }
 
+function applyXrayBuilderPlan(planId){
+  const p=(window.__servicePlans||[]).find(x=>String(x.id)===String(planId));if(!p)return;
+  const cfg=p.config||{};
+  if(cfg.protocol&&xrayBuilderCaps?.protocols?.[cfg.protocol])document.getElementById('xbProtocol').value=cfg.protocol;
+  syncXrayInboundBuilder();
+  const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!==undefined&&v!==null&&v!=='')el.value=v};
+  set('xbQuota',Number(p.quota_bytes||0)/1024**3);set('xbDays',Number(p.expire_days||0));set('xbIpLimit',Number(p.ip_limit||1));set('xbReset',Number(p.reset_days||0));
+  set('xbPort',cfg.port);set('xbTransport',cfg.transport);syncXrayInboundBuilder();set('xbSecurity',cfg.security);syncXrayInboundBuilder();
+  set('xbPath',cfg.path);set('xbSni',cfg.sni);set('xbRealityDest',cfg.reality_target);
+}
 function xbValue(id,fallback=''){const el=document.getElementById(id);return el?el.value:fallback}
 function xbChecked(id){const el=document.getElementById(id);return !!(el&&el.checked)}
 
