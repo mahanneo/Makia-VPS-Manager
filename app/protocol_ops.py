@@ -1945,6 +1945,81 @@ def repair_openvpn_ipv4_runtime():
     runtime=_openvpn_server_runtime()
     return {"ok":True,"backup":str(backup),"script_backups":script_backups,"runtime":runtime}
 
+def repair_openvpn_all_runtimes():
+    """Rebind every managed OpenVPN instance to the destination host network.
+
+    Portable restores preserve PKI and client identity, but provider NIC names
+    can differ. Rebuild per-instance forwarding/NAT scripts from each server
+    subnet and the destination VPS default interface without changing ports,
+    client certificates or transport ownership.
+    """
+    server_dir=OVPN_DIR/"server"
+    if not server_dir.exists():
+        raise ProtocolError("OpenVPN server directory is not available")
+    configs=sorted(server_dir.glob("*.conf"))
+    if not configs:
+        raise ProtocolError("OpenVPN server config is not available")
+    uplink=_default_iface()
+    backup_dir=_backup_dir()
+    stamp=int(time.time())
+    results=[]
+    Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    _run(["sysctl","--system"],timeout=30)
+    for conf in configs:
+        stem=conf.stem
+        original=conf.read_text(encoding="utf-8",errors="ignore")
+        updated=original
+        proto_m=re.search(r"(?m)^proto\s+(\S+)\s*$",updated)
+        current=(proto_m.group(1) if proto_m else "udp").lower()
+        transport="tcp" if current.startswith("tcp") else "udp"
+        normalized=_openvpn_proto(transport,server=True)
+        if proto_m:
+            updated=re.sub(r"(?m)^proto\s+\S+\s*$",f"proto {normalized}",updated,count=1)
+        else:
+            updated=f"proto {normalized}\n"+updated
+        if not re.search(r"(?m)^local\s+",updated):
+            updated=re.sub(r"(?m)^(proto\s+\S+\s*)$",r"\1\nlocal 0.0.0.0",updated,count=1)
+
+        server_m=re.search(r"(?m)^server\s+(\S+)\s+(\S+)\s*$",updated)
+        if not server_m:
+            raise ProtocolError(f"OpenVPN {stem} is missing managed server subnet")
+        try:
+            net=ipaddress.IPv4Network((server_m.group(1),server_m.group(2)),strict=False)
+        except Exception as exc:
+            raise ProtocolError(f"OpenVPN {stem} has invalid server subnet") from exc
+        suffix="" if stem=="server" else ("tcp" if transport=="tcp" else "udp")
+        up,down=_openvpn_forward_scripts(uplink,net.with_prefixlen,suffix)
+        if re.search(r"(?m)^up\s+\S+\s*$",updated):
+            updated=re.sub(r"(?m)^up\s+\S+\s*$",f"up {up}",updated,count=1)
+        else:
+            updated=updated.rstrip()+f"\nup {up}\n"
+        if re.search(r"(?m)^down\s+\S+\s*$",updated):
+            updated=re.sub(r"(?m)^down\s+\S+\s*$",f"down {down}",updated,count=1)
+        else:
+            updated=updated.rstrip()+f"\ndown {down}\n"
+        if not re.search(r"(?m)^script-security\s+",updated):
+            updated=updated.rstrip()+"\nscript-security 2\n"
+
+        backup=backup_dir/f"{stem}.conf.host-rebind-{stamp}.bak"
+        shutil.copy2(conf,backup)
+        try:
+            conf.write_text(updated,encoding="utf-8")
+            os.chmod(conf,0o600)
+            unit=f"openvpn-server@{stem}"
+            _run(["systemctl","enable","--now",unit],timeout=30)
+            _run(["systemctl","restart",unit],timeout=30)
+            runtime=_openvpn_runtime_for(stem)
+            if not runtime.get("service_active") or not runtime.get("listener"):
+                raise ProtocolError(f"OpenVPN {stem} did not become ready after host-network rebind")
+            results.append({"server":stem,"backup":str(backup),"runtime":runtime,"subnet":net.with_prefixlen,"uplink":uplink})
+        except Exception:
+            shutil.copy2(backup,conf)
+            try:_run(["systemctl","restart",f"openvpn-server@{stem}"],timeout=30)
+            except Exception:pass
+            raise
+    return {"ok":True,"uplink":uplink,"servers":results}
+
+
 def _openvpn_server_options():
     server_conf=OVPN_DIR/"server/server.conf"
     result={
