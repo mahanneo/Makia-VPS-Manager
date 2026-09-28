@@ -202,3 +202,26 @@ For each published protocol/profile test:
 - reconnect
 
 **Do not promote 0.26.0-rc1 to 0.26.0 Stable until this Host + Iran field gate is complete.**
+
+
+## Disaster Recovery / Replacement VPS Gate
+
+Before any Stable promotion, verify the **Full VPS Backup** workflow from the panel on a disposable replacement VPS:
+
+1. Create and download the AES-encrypted Full VPS Migration bundle.
+2. Install the same Makia version on a clean Ubuntu 22.04/24.04 VPS.
+3. Copy the bundle and run:
+   `sudo makia-restore-portable /root/makia-full-migration.zip --apply`
+4. Confirm the restore validates DB, Xray, WireGuard, all OpenVPN server units, IKEv2, Stealth, WStunnel and local HTTPS where configured.
+5. Confirm WireGuard and OpenVPN NAT rules were rebound to the **new VPS default interface**, while server keys, peers, CA and client certificates stayed unchanged.
+6. Change the existing VPN hostname A/AAAA record to the replacement VPS and test old **domain-based** client profiles without reissuing credentials.
+7. Raw WireGuard/OpenVPN/SSH records on Cloudflare must be **DNS only**. Do not use the orange-cloud HTTP proxy for these transports.
+8. Any client profile that embeds the old server IP is **not** eligible for DNS-only cutover and must be re-exported with a domain endpoint before a real incident.
+
+### Parallel OpenVPN / Stealth Gate
+
+- Primary OpenVPN UDP users must remain connected when the parallel TCP fallback is enabled.
+- `openvpn-server@makia-tcp` must use its own tunnel subnet and listener.
+- Stealth must reuse the parallel TCP backend rather than changing the primary OpenVPN transport.
+- Enabling Stealth must not mutate/revoke existing OpenVPN PKI or UDP client certificates.
+- Port collisions with Nginx/HTTPS, WStunnel or other TCP listeners must be rejected.
