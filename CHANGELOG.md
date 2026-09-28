@@ -20,6 +20,7 @@
 - Every structured inbound is validated by Xray Core before commit, applied transactionally, restarted, listener-verified and rolled back on failure.
 - The RC5 Core smoke validates structured profiles including VLESS RAW/NONE, VLESS WS/TLS, VLESS gRPC/REALITY, VLESS XHTTP/REALITY, VLESS mKCP/NONE, Trojan RAW/REALITY and Shadowsocks RAW/TLS.
 - Existing real data-plane tests for VLESS REALITY and VLESS security=none remain mandatory and passing in CI.
+- Full Migration format v2 remains restorable from verified RC2/RC3/RC4 backups into RC5; unrelated versions remain rejected.
 
 ### Release status
 - Release Candidate only. Stable remains blocked on real VPS RC5 upgrade/UAT and inside-Iran client tests.
