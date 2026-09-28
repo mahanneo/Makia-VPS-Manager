@@ -1,5 +1,6 @@
+{% set fa = language != "en" %}
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="{{language}}" dir="{{'ltr' if language == 'en' else 'rtl'}}">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0b101a"><title>{{app_name}} - 2FA</title>
@@ -9,13 +10,13 @@
 <body class="sanaei-login" data-theme="glass">
   <main class="sanaei-login-card">
     <div class="sanaei-login-brand"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
-    <h1>تأیید دو مرحله‌ای</h1><p>کد ۶ رقمی Authenticator را وارد کنید.</p>
+    <h1>{{'تأیید دو مرحله‌ای' if fa else 'Two-factor authentication'}}</h1><p>{{'کد ۶ رقمی برنامه احراز هویت را وارد کنید.' if fa else 'Enter the 6-digit code from your authenticator app.'}}</p>
     {% if error %}<div class="alert">{{error}}</div>{% endif %}
     <form method="post" action="/login/2fa" class="sanaei-login-form">
       <input type="hidden" name="token" value="{{token}}">
-      <label><span>Authenticator Code</span><div class="sanaei-login-input"><b>◇</b><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="123456"></div></label>
-      <button class="sanaei-login-submit" type="submit">تأیید و ورود</button>
+      <label><span>{{'کد احراز هویت' if fa else 'Authenticator code'}}</span><div class="sanaei-login-input"><b>◇</b><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="123456"></div></label>
+      <button class="sanaei-login-submit" type="submit">{{'تأیید و ورود' if fa else 'Verify and sign in'}}</button>
     </form>
-    <div class="sanaei-login-foot"><span>Time-based OTP</span><span>v{{version}}</span></div>
+    <div class="sanaei-login-foot"><span>{{'رمز یک‌بارمصرف زمانی' if fa else 'Time-based OTP'}}</span><span>v{{version}}</span></div>
   </main>
 </body></html>
