@@ -64,7 +64,10 @@ def safe_archive_name(value:str,fallback="file"):
     for part in raw.split("/"):
         if not part or part in {".",".."}:
             continue
-        clean=safe_filename(part,fallback)
+        # Archive member names may legitimately contain '@' (notably systemd
+        # template units such as makia-migration-restore@.service). Preserve it
+        # while still rejecting path traversal and unsafe separators.
+        clean=re.sub(r"[^A-Za-z0-9_.@-]+","-",str(part)).strip(".-")[:96]
         if clean:
             parts.append(clean)
     return "/".join(parts) if parts else fallback
