@@ -240,3 +240,46 @@ def test_protected_zip_preserves_safe_relative_paths():
         assert "payload/data.tar.gz" in names
         assert "escape.txt" in names
         assert all(".." not in name for name in names)
+
+
+def test_artifact_save_assigns_and_preserves_public_portal_token(monkeypatch):
+    saved=[]
+    existing={"metadata_json":json.dumps({"public_token":"existing_public_token_1234567890"})}
+    monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda kind,key: existing)
+    monkeypatch.setattr(main_app,"upsert_access_artifact",lambda *args:saved.append(args) or 9)
+    monkeypatch.setattr(access_ops,"seal_payload",lambda payload:"sealed")
+    payload={"native_filename":"client.conf","files":{"client.conf":b"config"}}
+    result=main_app.artifact_save("wireguard","phone","phone","wireguard",payload,{"endpoint":"vpn.example.com"})
+    assert result==9
+    metadata=json.loads(saved[0][6])
+    assert metadata["public_token"]=="existing_public_token_1234567890"
+    assert metadata["endpoint"]=="vpn.example.com"
+
+
+def test_artifact_save_assigns_new_public_portal_token(monkeypatch):
+    saved=[]
+    monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda kind,key: None)
+    monkeypatch.setattr(main_app,"upsert_access_artifact",lambda *args:saved.append(args) or 10)
+    monkeypatch.setattr(access_ops,"seal_payload",lambda payload:"sealed")
+    payload={"native_filename":"u.ovpn","files":{"u.ovpn":b"client"}}
+    main_app.artifact_save("openvpn","u","u","openvpn",payload,{})
+    metadata=json.loads(saved[0][6])
+    token=metadata["public_token"]
+    assert len(token)>=24
+    assert "/" not in token
+
+
+def test_public_artifact_lookup_uses_constant_time_token_match(monkeypatch):
+    rows=[
+        {"kind":"xray","external_key":"1","metadata_json":json.dumps({"public_token":"token_abcdefghijklmnopqrstuvwxyz"})},
+        {"kind":"openvpn","external_key":"u","metadata_json":"{}"},
+    ]
+    monkeypatch.setattr(main_app,"list_access_artifacts",lambda:rows)
+    monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda kind,key:{"kind":kind,"external_key":key})
+    found=main_app._artifact_by_public_token("token_abcdefghijklmnopqrstuvwxyz")
+    assert found=={"kind":"xray","external_key":"1"}
+    assert main_app._artifact_by_public_token("wrong_token_abcdefghijklmnopqrstuvwxyz") is None
+
+
+def test_public_portal_qr_is_not_offered_for_openvpn_source_config(monkeypatch):
+    assert "openvpn" not in {"xray","wireguard","ssh"}
