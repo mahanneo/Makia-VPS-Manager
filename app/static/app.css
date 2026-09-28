@@ -1916,3 +1916,33 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 .portal-file-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .portal-file-row span{font-size:11px;color:var(--muted)}
 .portal-file-row strong{font-size:12px;color:var(--accent)}
+
+
+/* 0.26.0-rc7 — Operations Suite */
+.proto-dot.outline{background:#78e4c4;box-shadow:0 0 10px #78e4c455}
+.ops-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.ops-card{border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));border-radius:18px;padding:18px;box-shadow:0 14px 45px #0003}
+.ops-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:10px}
+.ops-card-head h3{margin:0;font-size:16px}
+.ops-card p{color:var(--muted);line-height:1.7}
+.plan-card{min-height:210px;display:flex;flex-direction:column}
+.plan-card .toolbar{margin-top:auto}
+.plan-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.plan-facts span{display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);font-size:10px;color:var(--muted)}
+.plan-facts b{font-size:14px;color:var(--text)}
+.ops-row{grid-template-columns:1.3fr .7fr 1.25fr .75fr}
+.full-field-btn{width:100%;margin-top:6px;min-height:44px}
+.dr-steps{display:grid;gap:10px;margin:16px 0}
+.dr-step{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid var(--line);border-radius:13px;background:var(--panel2)}
+.dr-step i{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;font-style:normal;font-weight:800}
+.dr-step i.ok{background:rgba(45,212,167,.14);color:var(--green)}
+.dr-step i.pending{background:rgba(247,198,107,.12);color:var(--amber)}
+.dr-step div{display:grid;gap:4px}
+.dr-step span{color:var(--muted);font-size:11px;line-height:1.6}
+.node-service-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.node-service-chips span{font-size:9px;padding:4px 6px;border-radius:7px;border:1px solid var(--line)}
+.node-service-chips .up{color:var(--green)}.node-service-chips .down{color:var(--red)}
+.portal-device-card{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:15px;background:var(--panel2)}
+.portal-device-card div{display:grid;gap:4px}.portal-device-card span{color:var(--muted);font-size:11px}
+.one-tap-portal{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 14px;border-radius:12px;text-decoration:none;font-weight:800;background:linear-gradient(135deg,#35d6ff,#6c7cff);color:#06111a}
+@media(max-width:900px){.ops-card-grid{grid-template-columns:1fr}.plan-facts{grid-template-columns:1fr 1fr}.ops-row{grid-template-columns:1fr;gap:6px}}
