@@ -81,7 +81,7 @@ def main():
             assert portal.locator("#wireguard").count()==1
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
-            assert "اتصال بدون حدس و خطا" in portal.locator("body").inner_text()
+            assert "اتصال روی موبایل و کامپیوتر" in portal.locator("body").inner_text()
             assert portal.locator(".visual-steps").count()==4
             assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
