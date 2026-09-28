@@ -1271,6 +1271,23 @@ def openvpn_bootstrap(payload:OpenVPNBootstrap,request:Request):
     audit(actor,"openvpn_bootstrap","server",f"port={payload.port}; proto={payload.proto}",ip(request))
     return result
 
+class OpenVPNTransportEnsure(BaseModel):
+    port:int|None=Field(default=None,ge=1,le=65535)
+
+
+@app.post("/api/protocols/openvpn/transports/{proto}/ensure")
+def openvpn_transport_ensure(proto:str,payload:OpenVPNTransportEnsure,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.ensure_openvpn_transport(proto,payload.port)
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"openvpn_transport_ensure_failed",proto,str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    runtime=result.get("runtime") or {}
+    audit(actor,"openvpn_transport_ensure",proto,f"port={runtime.get('port')}; server={runtime.get('name')}",ip=ip(request))
+    return result
+
+
 @app.get("/api/protocols/openvpn/diagnostics")
 def openvpn_diagnostics_get(request:Request,endpoint:str=""):
     require_capability(request,"openvpn")
@@ -1342,6 +1359,28 @@ def openvpn_client_create(payload:OpenVPNClient,request:Request):
     result["artifact_id"]=artifact_id
     audit(actor,"openvpn_client_create",payload.name,ip=ip(request))
     return result
+
+
+@app.get("/api/protocols/openvpn/clients/{name}/profile")
+def openvpn_client_transport_profile(name:str,request:Request,transport:str="udp"):
+    require_capability(request,"openvpn")
+    endpoint=public_host(request)
+    artifact=get_access_artifact_by_key("openvpn",name)
+    if artifact:
+        try:
+            endpoint=str(json.loads(artifact.get("metadata_json") or "{}").get("endpoint") or endpoint)
+        except Exception:
+            pass
+    try:
+        rendered=protocol_ops.render_openvpn_client(name,endpoint,transport)
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(409,str(e))
+    filename=f"{name}-{rendered['proto']}.ovpn"
+    return Response(
+        content=rendered["config"],
+        media_type="application/x-openvpn-profile",
+        headers={"Content-Disposition":f'attachment; filename="{filename}"',"Cache-Control":"no-store, private"}
+    )
 
 class AccessPackageRequest(BaseModel):
     password:str=Field(min_length=4,max_length=128)
