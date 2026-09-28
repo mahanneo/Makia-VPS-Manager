@@ -161,6 +161,21 @@ def restart_stack():
             unit=f"openvpn-server@{conf.stem}"
             run(["systemctl","enable","--now",unit],check=False)
             run(["systemctl","restart",unit],check=False)
+    ipsec_conf=Path("/etc/ipsec.conf")
+    if ipsec_conf.exists() and "# BEGIN MAKIA IKEV2" in ipsec_conf.read_text(encoding="utf-8",errors="ignore"):
+        run(["systemctl","enable","--now","makia-ikev2-network"],check=False)
+        if run(["systemctl","is-enabled","strongswan-starter"],check=False).returncode==0:
+            strong="strongswan-starter"
+        else:
+            strong="strongswan"
+        run(["systemctl","enable","--now",strong],check=False)
+        run(["systemctl","restart",strong],check=False)
+    if Path("/etc/stunnel/makia-openvpn.conf").exists():
+        run(["systemctl","enable","--now","stunnel4"],check=False)
+        run(["systemctl","restart","stunnel4"],check=False)
+    if Path("/etc/makia-vps-manager/wstunnel.env").exists():
+        run(["systemctl","enable","--now","makia-wstunnel"],check=False)
+        run(["systemctl","restart","makia-wstunnel"],check=False)
     for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","fail2ban"]:
         run(["systemctl","enable","--now",svc],check=False)
         run(["systemctl","restart",svc],check=False)
