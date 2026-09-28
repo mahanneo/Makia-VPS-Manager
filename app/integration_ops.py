@@ -221,6 +221,23 @@ def outline_status():
     }
 
 
+def outline_transfer_metrics():
+    """Return cumulative transfer bytes by access-key id.
+
+    Outline's Manager API exposes /metrics/transfer with
+    bytesTransferredByUserId. Treat absence as unavailable rather than guessing.
+    """
+    result=_outline_request("/metrics/transfer")
+    values=result.get("bytesTransferredByUserId") or {}
+    if not isinstance(values,dict):
+        raise IntegrationError("Outline transfer metrics response is invalid")
+    out={}
+    for key,value in values.items():
+        try:out[str(key)]=max(0,int(value or 0))
+        except Exception:continue
+    return out
+
+
 def outline_list_keys():
     result=_outline_request("/access-keys/")
     return result.get("accessKeys") or []
