@@ -266,8 +266,9 @@ def test_protected_zip_preserves_systemd_template_at_sign():
         assert "payload/systemd/makia-migration-restore@.service" in zf.namelist()
 
 
-def test_migration_inspector_accepts_legacy_sanitized_systemd_template(tmp_path):
+def test_migration_inspector_accepts_legacy_sanitized_systemd_template(tmp_path,monkeypatch):
     import hashlib, io, json, pyzipper
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
     expected_name="payload/systemd/makia-migration-restore@.service"
     legacy_name="payload/systemd/makia-migration-restore-.service"
     unit=b"[Service]\\nType=oneshot\\n"
