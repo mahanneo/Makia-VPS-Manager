@@ -7,6 +7,72 @@ function dataEnc(v){return encodeURIComponent(String(v??''))}
 function dataDec(v){try{return decodeURIComponent(String(v??''))}catch{return String(v??'')}}
 function isFa(){return String(window.MAKIA_LANG||'fa').toLowerCase()!=='en'}
 function tr(fa,en){return isFa()?fa:en}
+const MAKIA_UI_TEXT={
+  'Dashboard':'داشبورد','Clients':'کاربران','Client':'کاربر','Create access':'ساخت دسترسی',
+  'Create Access':'ساخت دسترسی','Access Management':'مدیریت دسترسی','ACCESS MANAGEMENT':'مدیریت دسترسی',
+  'Main':'اصلی','Protocols':'پروتکل‌ها','Protocol management':'مدیریت پروتکل‌ها','Inbounds':'Inboundها',
+  'Infrastructure':'زیرساخت','Server & Network':'سرور و شبکه','System':'سیستم','Maintenance':'نگهداری',
+  'Services':'سرویس‌ها','Network / Ports':'شبکه و پورت‌ها','Live Sessions':'اتصال‌های زنده','Nodes':'نودها',
+  'Logs':'لاگ‌ها','Backups':'بکاپ‌ها','Backup':'بکاپ','Update':'بروزرسانی','Settings':'تنظیمات','Support':'پشتیبانی',
+  'Server online':'سرور آنلاین','ONLINE':'آنلاین','Administrator':'مدیر','Refresh':'بروزرسانی',
+  'Search panel...':'جستجو در پنل...','Open menu':'باز کردن منو','Close menu':'بستن منو','Sign out':'خروج',
+  'Active':'فعال','ACTIVE':'فعال','Disabled':'غیرفعال','DISABLED':'غیرفعال','Expired':'منقضی',
+  'Running':'در حال اجرا','Attention':'نیازمند بررسی','Status':'وضعیت','Endpoint':'آدرس اتصال',
+  'Usage':'مصرف','Used':'مصرف','Quota':'حجم کل','Unlimited':'نامحدود','Expiry':'انقضا','Expires':'انقضا',
+  'IP limit':'محدودیت IP','Device / IP limit':'محدودیت دستگاه / IP',
+  'Management':'مدیریت','Delivery':'تحویل','Close':'بستن','Done':'تمام','Cancel':'انصراف','Save':'ذخیره',
+  'Copy':'کپی','Copied':'کپی شد','Copy link':'کپی لینک','Copy config':'کپی تنظیمات',
+  'Download':'دانلود','Download raw':'دانلود فایل خام','Native file':'فایل اصلی','Native config':'تنظیمات اصلی',
+  'Protected ZIP':'بسته رمزدار','Connection guide':'راهنمای اتصال','Client portal link':'لینک اختصاصی کاربر',
+  'QR / Share':'QR / اشتراک','Profile file':'فایل پروفایل','Config':'تنظیمات','Self-Test':'تست سلامت',
+  'Health check':'بررسی سلامت','Total clients':'کل کاربران','Needs attention':'نیازمند توجه',
+  'Live connections':'اتصال زنده','All access':'همه دسترسی‌ها','Protocol':'پروتکل',
+  'User':'کاربر','Search':'جستجو','Search Makia…  (Ctrl+K)':'جستجو در Makia…  (Ctrl+K)',
+  'System history':'تاریخچه سیستم','Clients by protocol':'کاربران بر اساس پروتکل',
+  'Memory':'حافظه','Disk':'دیسک','Uptime':'زمان فعالیت','Traffic recorded':'ترافیک ثبت‌شده',
+  'Panel endpoint':'آدرس پنل','Server ready':'سرور آماده','Check required':'نیازمند بررسی',
+  'Install':'نصب','Repair & Restart':'تعمیر و راه‌اندازی مجدد','Validate':'اعتبارسنجی',
+  'Validate & Apply':'اعتبارسنجی و اعمال','Validate & Create':'اعتبارسنجی و ساخت',
+  'New Inbound':'Inbound جدید','ADD XRAY CLIENT':'افزودن کاربر Xray','Create client':'ساخت کاربر',
+  'ACCESS PROFILE':'پروفایل دسترسی','CLIENT ACCESS':'دسترسی کاربر','CLIENT SELF-SERVICE LINK':'لینک اختصاصی کاربر',
+  'Private':'محرمانه','Open client page':'باز کردن صفحه کاربر','Download connection file':'دانلود فایل اتصال',
+  'Download QR code':'دانلود QR','Full connection guide':'راهنمای کامل اتصال',
+  'QUICK SCAN':'اسکن سریع','Connection QR':'QR اتصال','MANUAL IMPORT':'ورود دستی',
+  'Connection link / configuration':'لینک / تنظیمات اتصال','QUICK GUIDE':'راهنمای سریع',
+  'How do I connect?':'چطور وصل شوم؟','Server Ready':'سرور آماده'
+};
+function localizeString(value){
+  const raw=String(value??''),trim=raw.trim();if(!trim)return raw;
+  if(isFa()){
+    const out=MAKIA_UI_TEXT[trim];if(!out)return raw;
+    return raw.replace(trim,out);
+  }
+  const pair=Object.entries(MAKIA_UI_TEXT).find(([,fa])=>fa===trim);
+  if(!pair)return raw;
+  return raw.replace(trim,pair[0]);
+}
+function localizeVisibleUi(root=document){
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+  for(const node of nodes){
+    const p=node.parentElement;if(!p||['SCRIPT','STYLE','TEXTAREA','PRE','CODE'].includes(p.tagName))continue;
+    const next=localizeString(node.nodeValue);if(next!==node.nodeValue)node.nodeValue=next;
+  }
+  const scope=root.querySelectorAll?root:document;
+  scope.querySelectorAll?.('[placeholder],[title],[aria-label]').forEach(el=>{
+    for(const attr of ['placeholder','title','aria-label']){
+      const v=el.getAttribute(attr);if(!v)continue;
+      const next=localizeString(v);if(next!==v)el.setAttribute(attr,next);
+    }
+  });
+}
+let __localizeScheduled=false;
+function scheduleUiLocalization(){
+  if(__localizeScheduled)return;__localizeScheduled=true;
+  queueMicrotask(()=>{__localizeScheduled=false;localizeVisibleUi(document)});
+}
+new MutationObserver(scheduleUiLocalization).observe(document.documentElement,{subtree:true,childList:true});
+
 function setPageContext(v){if(pageContext)pageContext.textContent=v||'MAKIA CONTROL CENTER'}
 function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name||'download';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),800)}
 function filenameFromHeaders(r,fallback){const cd=r.headers.get('content-disposition')||'';const m=cd.match(/filename="([^"]+)"/i);return m?.[1]||fallback||'download'}
@@ -2214,5 +2280,5 @@ function switchView(v){
   return currentView();
 }
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
-applyLanguageShell();ensureSessionContext().catch(()=>{});switchView('dashboard');
+applyLanguageShell();localizeVisibleUi(document);ensureSessionContext().catch(()=>{});switchView('dashboard');
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js').catch(()=>{}));}
