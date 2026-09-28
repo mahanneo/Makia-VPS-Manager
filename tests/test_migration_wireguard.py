@@ -62,10 +62,25 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     (wg/"wg0.conf").write_text("[Interface]\nPrivateKey = server-key\n",encoding="utf-8")
     nginx=tmp_path/"makia-nginx.conf"
     nginx.write_text("server { server_name vpn.example.com; }\n",encoding="utf-8")
+    ipsec_d=tmp_path/"ipsec.d"
+    ipsec_d.mkdir()
+    (ipsec_d/"private.key").write_text("ike-private\n",encoding="utf-8")
+    ipsec_conf=tmp_path/"ipsec.conf"
+    ipsec_conf.write_text("# BEGIN MAKIA IKEV2\nconn makia-ikev2\n# END MAKIA IKEV2\n",encoding="utf-8")
+    ipsec_secrets=tmp_path/"ipsec.secrets"
+    ipsec_secrets.write_text('alice : EAP "secret"  # makia-eap:alice\n',encoding="utf-8")
+    ikev2_env=tmp_path/"ikev2.env"
+    ikev2_env.write_text("MAKIA_IKEV2_CIDR=10.77.0.0/24\n",encoding="utf-8")
+    wstunnel_env=tmp_path/"wstunnel.env"
+    wstunnel_env.write_text("WSTUNNEL_LISTEN_PORT=8444\n",encoding="utf-8")
+    stunnel_conf=tmp_path/"stunnel.conf"
+    stunnel_conf.write_text("[makia-openvpn]\naccept=9443\nconnect=127.0.0.1:8443\n",encoding="utf-8")
+    stunnel_defaults=tmp_path/"stunnel4.defaults"
+    stunnel_defaults.write_text("ENABLED=1\n",encoding="utf-8")
 
     monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[{"username":"user001","password_hash":"$6$hash"}])
     files=system_ops.portable_migration_files(
-        str(data),["user001"],panel_domain="vpn.example.com",version="0.13.0-rc1",
+        str(data),["user001"],panel_domain="vpn.example.com",version="0.26.0-rc1",
         system_paths={
             "wireguard":str(wg),
             "openvpn":str(tmp_path/"missing-openvpn"),
@@ -73,6 +88,13 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
             "xray":str(tmp_path/"missing-xray"),
             "xray_alt":str(tmp_path/"missing-xray-alt"),
             "nginx_site":str(nginx),
+            "ipsec_d":str(ipsec_d),
+            "ipsec_conf":str(ipsec_conf),
+            "ipsec_secrets":str(ipsec_secrets),
+            "ikev2_env":str(ikev2_env),
+            "wstunnel_env":str(wstunnel_env),
+            "stunnel_conf":str(stunnel_conf),
+            "stunnel_defaults":str(stunnel_defaults),
         },
     )
     assert "manifest.json" in files
@@ -80,11 +102,26 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
     assert "payload/wireguard.tar.gz" in files
     assert "payload/ssh-users.json" in files
     assert "payload/nginx-site.conf" in files
+    assert "payload/ipsec_d.tar.gz" in files
+    assert "payload/ipsec.conf" in files
+    assert "payload/ipsec.secrets" in files
+    assert "payload/ikev2.env" in files
+    assert "payload/wstunnel.env" in files
+    assert "payload/stunnel-makia.conf" in files
+    assert "RESTORE.txt" in files
     manifest=json.loads(files["manifest.json"])
     assert manifest["format"]=="makia-portable-migration"
+    assert manifest["format_version"]==2
     assert manifest["panel_domain"]=="vpn.example.com"
+    assert manifest["app_version"]=="0.26.0-rc1"
     assert manifest["managed_ssh_users"]==1
     assert manifest["components"]["wireguard"] is True
+    assert manifest["components"]["ipsec_d"] is True
+    assert manifest["components"]["wstunnel_env"] is True
+    assert manifest["components"]["stunnel_conf"] is True
+    assert manifest["sha256"]["payload/ipsec.secrets"]
+    assert manifest["excluded_secrets"]==["/etc/makia-vps-manager/makia.env"]
+    assert "DNS-only" in manifest["cutover"]["cloudflare"]
 
 
 def test_xray_advanced_firewall_rules():
