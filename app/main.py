@@ -301,6 +301,26 @@ def _portal_language(request:Request):
     current=str(get_setting("language","fa") or "fa").lower()
     return current if current in {"fa","en"} else "fa"
 
+def _portal_device(request:Request):
+    ua=(request.headers.get("user-agent") or "").lower()
+    if "android" in ua:return {"id":"android","label":"Android"}
+    if "iphone" in ua or "ipad" in ua:return {"id":"ios","label":"iPhone / iPad"}
+    if "windows" in ua:return {"id":"windows","label":"Windows"}
+    if "macintosh" in ua or "mac os" in ua:return {"id":"macos","label":"macOS"}
+    if "linux" in ua:return {"id":"linux","label":"Linux"}
+    return {"id":"other","label":"Device"}
+
+def _portal_one_tap(kind,share_text,download_url):
+    share=str(share_text or "").strip()
+    if kind in {"xray","outline"}:
+        scheme=urllib.parse.urlsplit(share).scheme.lower()
+        if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks"}:
+            return share
+    if kind in {"wireguard","openvpn"}:
+        return download_url
+    return ""
+
+
 def _public_access_state(kind,key):
     if kind in {"xray","outline"}:
         try: row=get_protocol_client(int(key))
@@ -1937,9 +1957,11 @@ def public_access_portal(token:str,request:Request):
         "native_filename":native_filename,"public_files":public_files,
         "details_text":str(payload.get("primary_text") or "") if kind=="ssh" else "",
         "portal_url":portal_url,
+        "device":_portal_device(request),
         "guide_url":f"{public_origin(request)}/help/connect#{guide_kind}",
         "download_url":f"/access/{token}/download",
         "qr_url":f"/access/{token}/qr.svg" if qr else "",
+        "one_tap_url":_portal_one_tap(kind,share_text,f"/access/{token}/download") if state.get("active") else "",
     })
     response.headers["Cache-Control"]="no-store, private"
     response.headers["Pragma"]="no-cache"
