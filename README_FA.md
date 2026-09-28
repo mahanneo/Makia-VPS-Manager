@@ -4,7 +4,7 @@
 
 - **IKEv2** با strongSwan و EAP-MSCHAPv2 اجرا می‌شود و UDP/500 و UDP/4500 را استفاده می‌کند.
 - **WireGuard** همان Engine فعلی Makia با Peer، QR، Handshake و Traffic است.
-- **UDP / TCP** دو حالت واقعی OpenVPN Server هستند؛ معماری فعلی یک Server Profile فعال دارد و هم‌زمانی جعلی نمایش داده نمی‌شود.
+- **UDP / TCP** دو Runtime واقعی و مستقل OpenVPN هستند؛ هر دو می‌توانند هم‌زمان فعال باشند، Subnet جدا دارند و PKI/Certificate کاربران را مشترک نگه می‌دارند.
 - **Stealth**، OpenVPN TCP را داخل TLS واقعی Stunnel قرار می‌دهد.
 - **WStunnel**، WireGuard را از یک WSS tunnel واقعی عبور می‌دهد و binary نسخه 11.0.0 با SHA256 release verification نصب می‌شود.
 
@@ -250,17 +250,20 @@ Makia برای SSH می‌تواند:
 
 برای Rollback و بازیابی روی همان Host.
 
-### Portable Migration
+### Disaster Recovery / VPS Migration
 
-از **Backups → Portable Migration** یک ZIP رمزگذاری‌شده AES-256 ساخته می‌شود که در صورت وجود شامل این موارد است:
+از **Backups → Disaster Recovery Backup** یک ZIP رمزگذاری‌شده AES-256 ساخته می‌شود. این Bundle برای Failover به VPS جایگزین طراحی شده و در صورت وجود شامل این موارد است:
 
-- SQLite و `.secret`
-- Xray config و REALITY keys
-- WireGuard keys/peers
-- OpenVPN PKI
-- Nginx
-- Let's Encrypt
-- SSH password hashes کاربران مدیریت‌شده
+- SQLite، `.secret`، Policyها و Access artifacts
+- Xray config، UUIDها و REALITY keys
+- WireGuard server/peer keys و config
+- OpenVPN PKI، CA، Client certs، CRL و تمام Server instanceهای UDP/TCP
+- IKEv2/strongSwan config، EAP users و IPsec key material
+- Stealth/Stunnel configuration
+- WStunnel runtime configuration
+- Nginx و Let's Encrypt
+- SSH password hashes و expiry کاربران مدیریت‌شده
+- Manifest نسخه‌دار و SHA256 هر payload برای تشخیص Bundle خراب/دستکاری‌شده
 
 روی VPS مقصد ابتدا همان نسخه Makia را نصب کنید و سپس:
 
@@ -271,9 +274,9 @@ sudo makia-doctor
 sudo makia-uat-smoke
 ```
 
-بعد از PASS شدن مقصد، DNS دامنه را به IP جدید تغییر دهید.
+بعد از PASS شدن مقصد، **همان Domain قبلی** را نگه دارید و رکورد A/AAAA را به IP جدید تغییر دهید. Restore، Ruleهای NAT/FORWARD وابسته به Host را با Interface واقعی VPS جدید بازسازی می‌کند؛ بنابراین تفاوت `eth0`/`ens3` بین Providerها نباید Credential کاربران را عوض کند.
 
-هدف Migration، **حفظ Credential کاربران** است؛ DNS propagation ممکن است یک بازه کوتاه Cutover ایجاد کند.
+هدف Migration، **حفظ Credential کاربران و Server identity** است. این Zero-touch فقط برای Profileهایی صدق می‌کند که Endpoint آن‌ها دامنه حفظ‌شده باشد. Profileهایی که IP قدیمی را مستقیماً داخل Client دارند باید دوباره صادر شوند. برای WireGuard/OpenVPN/IKEv2 خام، رکورد Cloudflare باید **DNS only** باشد؛ Orange-cloud این پروتکل‌ها را Proxy نمی‌کند.
 
 ## عیب‌یابی
 
@@ -296,7 +299,7 @@ sudo nginx -t
 - Protected ZIP و رمز آن را در دو پیام جدا ارسال کنید.
 - QR و Share Link حاوی Credential هستند.
 - فایل OVPN، WireGuard config و SSH Credentials را عمومی نکنید.
-- Portable Migration Bundle شامل Secretهای حساس است؛ پس از انتقال امن، نسخه‌های اضافی را حذف کنید.
+- Disaster Recovery Bundle شامل Private keys، PKI و Secretهای حساس است؛ فقط با Password قوی نگهداری شود و پس از انتقال امن نسخه‌های اضافی حذف شوند.
 
 ## تست و Release Gate
 
