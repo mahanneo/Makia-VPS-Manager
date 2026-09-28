@@ -20,7 +20,7 @@
     </div>
 
     <button class="pro-create-access" type="button" data-shell-action="create-access">
-      <span>＋</span><div><b>{{'ساخت دسترسی' if fa else 'Create access'}}</b><small>SSH · Xray · WireGuard · OpenVPN</small></div>
+      <span>＋</span><div><b>{{'ساخت دسترسی' if fa else 'Create access'}}</b><small>SSH · Xray · WireGuard · OpenVPN · Outline</small></div>
     </button>
 
     <nav class="pro-nav" aria-label="{{'منوی اصلی پنل' if fa else 'Main navigation'}}">
@@ -37,6 +37,7 @@
           <button data-view="ssh"><span class="proto-dot ssh"></span><b>SSH / NPV</b></button>
           <button data-view="wireguard"><span class="proto-dot wg"></span><b>WireGuard</b></button>
           <button data-view="openvpn"><span class="proto-dot ovpn"></span><b>OpenVPN</b></button>
+          <button data-view="outline"><span class="proto-dot outline"></span><b>Outline</b></button>
         </div>
       </div>
 
@@ -49,6 +50,18 @@
           <button data-view="sessions"><span>•</span><b>{{'اتصال‌های زنده' if fa else 'Live Sessions'}}</b></button>
           <button data-view="nodes"><span>•</span><b>{{'نودها' if fa else 'Nodes'}}</b></button>
           <button data-view="connectivity"><span>•</span><b>Connectivity Lab</b></button>
+        </div>
+      </div>
+
+      <p>{{'عملیات' if fa else 'Operations'}}</p>
+      <div class="pro-nav-group" data-group-root="operations">
+        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="operations"><span class="pro-nav-icon">⚡</span><b>{{'اتوماسیون و فروش' if fa else 'Automation & Sales'}}</b><i>⌄</i></button>
+        <div class="pro-submenu" data-group-panel="operations">
+          <button data-view="plans"><span>•</span><b>{{'پلن‌ها' if fa else 'Plans'}}</b></button>
+          <button data-view="expiry"><span>•</span><b>{{'انقضا و تمدید' if fa else 'Expiry & Renewals'}}</b></button>
+          <button data-view="automation"><span>•</span><b>{{'اتوماسیون بکاپ' if fa else 'Backup Automation'}}</b></button>
+          <button data-view="diagnostics"><span>•</span><b>{{'مرکز عیب‌یابی' if fa else 'Diagnostics Center'}}</b></button>
+          <button data-view="integrations"><span>•</span><b>{{'اتصال‌ها' if fa else 'Integrations'}}</b></button>
         </div>
       </div>
 
