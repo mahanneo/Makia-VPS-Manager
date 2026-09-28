@@ -1597,23 +1597,32 @@ def _openvpn_server_runtime():
                         break
     return result
 
-def _openvpn_forward_scripts(uplink):
-    """Permit tunnel routing even when the host firewall denies forwarded packets."""
-    up=OVPN_DIR/"makia-up.sh"
-    down=OVPN_DIR/"makia-down.sh"
+def _openvpn_forward_scripts(uplink,subnet="10.8.0.0/24",suffix=""):
+    """Permit one managed OpenVPN instance to route its own tunnel subnet."""
+    try:
+        net=ipaddress.ip_network(str(subnet),strict=False)
+    except ValueError as exc:
+        raise ProtocolError("invalid OpenVPN routed subnet") from exc
+    if net.version!=4:
+        raise ProtocolError("OpenVPN routed subnet must be IPv4")
+    safe_suffix=re.sub(r"[^A-Za-z0-9_-]","",str(suffix or ""))
+    tail=f"-{safe_suffix}" if safe_suffix else ""
+    up=OVPN_DIR/f"makia-up{tail}.sh"
+    down=OVPN_DIR/f"makia-down{tail}.sh"
+    cidr=net.with_prefixlen
     up.write_text(
         "#!/bin/sh\n"
         'iptables -C FORWARD -i "$dev" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$dev" -j ACCEPT\n'
         'iptables -C FORWARD -o "$dev" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o "$dev" -j ACCEPT\n'
-        f"iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE 2>/dev/null || "
-        f"iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE\n",
+        f"iptables -t nat -C POSTROUTING -s {cidr} -o {uplink} -j MASQUERADE 2>/dev/null || "
+        f"iptables -t nat -A POSTROUTING -s {cidr} -o {uplink} -j MASQUERADE\n",
         encoding="utf-8"
     )
     down.write_text(
         "#!/bin/sh\n"
         'iptables -D FORWARD -i "$dev" -j ACCEPT 2>/dev/null || true\n'
         'iptables -D FORWARD -o "$dev" -j ACCEPT 2>/dev/null || true\n'
-        f"iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
+        f"iptables -t nat -D POSTROUTING -s {cidr} -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
         encoding="utf-8"
     )
     os.chmod(up,0o700); os.chmod(down,0o700)
