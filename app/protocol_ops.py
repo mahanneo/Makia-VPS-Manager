@@ -2640,12 +2640,14 @@ def _validate_xray_manual_combo(protocol,transport,security):
         raise ProtocolError("unsupported Xray protocol")
     if protocol=="hysteria2":
         return "hysteria","tls"
+    if security=="reality" and protocol!="vless":
+        raise ProtocolError("REALITY requires VLESS")
+    if security=="reality" and transport not in {"tcp","grpc","xhttp"}:
+        raise ProtocolError("REALITY requires VLESS with TCP/RAW, gRPC or XHTTP")
     if transport not in spec["transports"]:
         raise ProtocolError(f"{protocol.upper()} cannot be exported with transport={transport}")
     if security not in spec["security"]:
         raise ProtocolError(f"{protocol.upper()} cannot be exported with security={security}")
-    if security=="reality" and (protocol!="vless" or transport not in {"tcp","grpc","xhttp"}):
-        raise ProtocolError("REALITY requires VLESS with TCP/RAW, gRPC or XHTTP")
     return transport,security
 
 
