@@ -68,12 +68,166 @@ async def security_headers(request:Request,call_next):
         response.headers.setdefault("Strict-Transport-Security","max-age=31536000; includeSubDomains")
     return response
 
+_BACKGROUND_STARTED=False
+
 @app.on_event("startup")
 def startup():
+    global _BACKGROUND_STARTED
     init_db()
     if get_setting("ui_generation","")!="glass-v1":
         set_setting("theme","glass")
         set_setting("ui_generation","glass-v1")
+    if not _BACKGROUND_STARTED:
+        _BACKGROUND_STARTED=True
+        threading.Thread(target=_automation_loop,name="makia-automation",daemon=True).start()
+
+
+def _sealed_setting_get(key,default=None):
+    token=(get_setting(key,"") or "").strip()
+    if not token:return default if default is not None else {}
+    try:return access_ops.open_payload(token)
+    except Exception:return default if default is not None else {}
+
+def _sealed_setting_set(key,value):
+    set_setting(key,access_ops.seal_payload(dict(value or {})))
+
+def _notification(level,category,title,message,telegram=True):
+    try:add_notification(level,category,title,message)
+    except Exception:pass
+    if not telegram:return
+    cfg=_sealed_setting_get("telegram_admin_config",{})
+    if not cfg.get("enabled") or not cfg.get("bot_token") or not cfg.get("chat_id"):return
+    try:growth_ops.telegram_send(cfg["bot_token"],cfg["chat_id"],f"{title}\n{message}")
+    except Exception:pass
+
+def _backup_schedule_due(schedule,now_ts=None):
+    now_dt=datetime.now().astimezone() if now_ts is None else datetime.fromtimestamp(now_ts).astimezone()
+    if not int(schedule.get("enabled") or 0):return False
+    hour=max(0,min(23,int(schedule.get("hour") or 0)))
+    if now_dt.hour!=hour:return False
+    last=str(schedule.get("last_run_at") or "")
+    try:last_dt=datetime.fromisoformat(last).astimezone() if last else None
+    except Exception:last_dt=None
+    freq=str(schedule.get("frequency") or "daily")
+    if last_dt:
+        age=(now_dt-last_dt).total_seconds()
+        if freq=="daily" and age<20*3600:return False
+        if freq=="weekly" and age<6*86400:return False
+    if freq=="weekly" and now_dt.weekday()!=0:return False
+    return True
+
+def _prune_backup_history(keep_last):
+    try:
+        rows=system_ops.backup_list()
+        full=[x for x in rows if x.get("type")=="full_migration"]
+        for item in full[max(1,int(keep_last)):]:
+            path=system_ops.backup_download_path(item["name"])
+            try:path.unlink()
+            except OSError:pass
+            meta=Path(str(path)+".meta.json")
+            try:meta.unlink()
+            except OSError:pass
+    except Exception:pass
+
+def _run_backup_schedule(schedule):
+    secret={}
+    try:
+        secret=access_ops.open_payload(schedule.get("remote_secret_enc") or "") if schedule.get("remote_secret_enc") else {}
+        password=str(secret.get("password") or "")
+        if len(password)<10:raise RuntimeError("scheduled backup password is missing")
+        files=system_ops.portable_migration_files(
+            str(DATA_DIR),list(all_profiles().keys()),panel_domain=get_setting("panel_domain",""),version=VERSION
+        )
+        blob=access_ops.protected_zip(files,password)
+        access_ops.verify_protected_zip(blob,password,"manifest.json")
+        manifest=json.loads(files["manifest.json"].decode("utf-8"))
+        saved=system_ops.save_full_migration_backup(blob,VERSION,manifest)
+        remote_cfg=dict(secret.get("remote") or {})
+        if str(schedule.get("remote_type") or "local")!="local" or remote_cfg:
+            remote_cfg["type"]=str(schedule.get("remote_type") or remote_cfg.get("type") or "local")
+            remote=growth_ops.backup_remote_upload(saved["path"],remote_cfg)
+        else:
+            remote={"remote_type":"local","target":saved["path"],"sha256":saved["sha256"]}
+        update_backup_schedule(schedule["id"],last_run_at=datetime.now(timezone.utc).isoformat(),last_status="pass",last_detail=json.dumps(remote,separators=(",",":")))
+        _prune_backup_history(schedule.get("keep_last") or 7)
+        _notification("info","backup","Scheduled backup completed",f"{saved['name']} · {remote.get('remote_type')}")
+        return {"saved":saved,"remote":remote}
+    except Exception as exc:
+        update_backup_schedule(schedule["id"],last_run_at=datetime.now(timezone.utc).isoformat(),last_status="fail",last_detail=str(exc)[:1000])
+        _notification("error","backup","Scheduled backup failed",str(exc)[:900])
+        raise
+
+def _telegram_bot_iteration():
+    cfg=_sealed_setting_get("telegram_admin_config",{})
+    if not cfg.get("enabled") or not cfg.get("bot_enabled") or not cfg.get("bot_token") or not cfg.get("chat_id"):return
+    offset=int(get_setting("telegram_update_offset","0") or 0)
+    updates=growth_ops.telegram_updates(cfg["bot_token"],offset=offset,timeout=1)
+    for item in updates:
+        uid=int(item.get("update_id") or 0)
+        if uid>=offset:set_setting("telegram_update_offset",uid+1)
+        msg=item.get("message") or {}
+        chat=str((msg.get("chat") or {}).get("id") or "")
+        if chat!=str(cfg.get("chat_id")):continue
+        text=str(msg.get("text") or "").strip()
+        if not text.startswith("/"):continue
+        parts=text.split()
+        cmd=parts[0].split("@")[0].lower()
+        reply=""
+        if cmd=="/status":
+            clients=list_protocol_clients()
+            active=sum(1 for x in clients if int(x.get("enabled") or 0))
+            nodes=list_nodes()
+            online_nodes=sum(1 for x in nodes if x.get("last_seen_at"))
+            reply=f"Makia {VERSION}\nClients: {len(clients)} ({active} active)\nNodes: {len(nodes)} ({online_nodes} reporting)"
+        elif cmd=="/expiring":
+            now=int(time.time());soon=now+7*86400
+            rows=[x for x in list_protocol_clients() if 0<int(x.get("expire_at") or 0)<=soon]
+            rows.sort(key=lambda x:int(x.get("expire_at") or 0))
+            reply="Expiring ≤7d:\n"+("\n".join(f"{x['name']} · {max(0,(int(x['expire_at'])-now)//86400)}d" for x in rows[:20]) or "None")
+        elif cmd=="/user" and len(parts)>=2:
+            name=parts[1]
+            row=next((x for x in list_protocol_clients() if x.get("name")==name),None)
+            if row:
+                used=int(row.get("used_up_bytes") or 0)+int(row.get("used_down_bytes") or 0)
+                reply=f"{name}\n{row.get('protocol')} / {row.get('engine')}\nEnabled: {bool(row.get('enabled'))}\nUsed: {used}\nQuota: {row.get('quota_bytes')}\nExpiry: {row.get('expire_at')}"
+            else:reply="Client not found"
+        elif cmd=="/backup":
+            try:
+                schedules=[x for x in list_backup_schedules() if int(x.get("enabled") or 0)]
+                if not schedules:reply="No enabled backup schedule"
+                else:
+                    _run_backup_schedule(schedules[0]);reply="Backup completed"
+            except Exception as exc:reply=f"Backup failed: {exc}"
+        elif cmd=="/help":
+            reply="/status\n/expiring\n/user <name>\n/backup"
+        if reply:
+            try:growth_ops.telegram_send(cfg["bot_token"],cfg["chat_id"],reply)
+            except Exception:pass
+
+def _automation_loop():
+    last_telegram=0
+    while True:
+        try:
+            now=time.time()
+            for schedule in list_backup_schedules():
+                if _backup_schedule_due(schedule,now):
+                    try:_run_backup_schedule(schedule)
+                    except Exception:pass
+            if now-last_telegram>=20:
+                last_telegram=now
+                try:_telegram_bot_iteration()
+                except Exception:pass
+            # lightweight health alerts
+            if int(now)%3600<60:
+                try:
+                    usage=system_ops.system_snapshot()
+                    disk=float(usage.get("disk_percent") or usage.get("disk") or 0)
+                    if disk>=90:_notification("warning","health","Disk usage is high",f"{disk:.1f}% used",telegram=True)
+                except Exception:pass
+        except Exception:
+            pass
+        time.sleep(60)
+
 
 def current_user(request:Request):
     actor=read_session(request.cookies.get(COOKIE_NAME))
