@@ -2711,6 +2711,218 @@ def admin_token_revoke(token_id:int,request:Request):
     audit(actor,"api_token_revoke",str(token_id),ip=ip(request))
     return {"ok":True}
 
+
+class OutlineIntegrationPayload(BaseModel):
+    api_url:str=Field(min_length=12,max_length=600)
+    cert_sha256:str=Field(min_length=32,max_length=160)
+
+class CloudflareIntegrationPayload(BaseModel):
+    api_token:str=Field(min_length=20,max_length=300)
+    zone:str=Field(min_length=1,max_length=253)
+    hostname:str=Field(min_length=1,max_length=253)
+
+class TelegramIntegrationPayload(BaseModel):
+    bot_token:str=Field(min_length=20,max_length=200)
+    chat_id:str=Field(min_length=1,max_length=80)
+    enabled:bool=True
+
+class BackupSchedulePayload(BaseModel):
+    enabled:bool=False
+    hour:int=Field(default=4,ge=0,le=23)
+    keep:int=Field(default=7,ge=1,le=100)
+    password:str=Field(default="",max_length=128)
+    remote_enabled:bool=False
+    remote_host:str=Field(default="",max_length=253)
+    remote_user:str=Field(default="",max_length=64)
+    remote_path:str=Field(default="/var/backups/makia",max_length=600)
+    remote_key_path:str=Field(default="/root/.ssh/id_ed25519",max_length=600)
+    remote_port:int=Field(default=22,ge=1,le=65535)
+
+@app.get("/api/integrations")
+def integrations_get(request:Request):
+    require_local_admin(request)
+    outline=_secret_config_get("outline")
+    cf=_secret_config_get("cloudflare")
+    tg=_secret_config_get("telegram")
+    backup=_secret_config_get("backup_schedule")
+    return {
+        "outline":{
+            "configured":bool(outline.get("api_url") and outline.get("cert_sha256")),
+            "api_url":outline.get("api_url",""),
+            "cert_sha256":_masked_secret(outline.get("cert_sha256","")),
+        },
+        "cloudflare":{
+            "configured":bool(cf.get("api_token") and cf.get("zone") and cf.get("hostname")),
+            "zone":cf.get("zone",""),"hostname":cf.get("hostname",""),
+            "token":_masked_secret(cf.get("api_token","")),
+        },
+        "telegram":{
+            "configured":bool(tg.get("bot_token") and tg.get("chat_id")),
+            "enabled":bool(tg.get("enabled")),
+            "chat_id":tg.get("chat_id",""),"token":_masked_secret(tg.get("bot_token","")),
+        },
+        "backup_schedule":{
+            "enabled":bool(backup.get("enabled")),
+            "hour":int(backup.get("hour",4) or 4),
+            "keep":int(backup.get("keep",7) or 7),
+            "password_set":bool(backup.get("password")),
+            "remote_enabled":bool(backup.get("remote_enabled")),
+            "remote_host":backup.get("remote_host",""),"remote_user":backup.get("remote_user",""),
+            "remote_path":backup.get("remote_path","/var/backups/makia"),
+            "remote_key_path":backup.get("remote_key_path","/root/.ssh/id_ed25519"),
+            "remote_port":int(backup.get("remote_port",22) or 22),
+        }
+    }
+
+@app.put("/api/integrations/outline")
+def outline_integration_save(payload:OutlineIntegrationPayload,request:Request):
+    actor=require_mutation(request)
+    cfg={"api_url":payload.api_url.strip().rstrip("/"),"cert_sha256":payload.cert_sha256.strip()}
+    try:
+        status=system_ops.outline_status(cfg["api_url"],cfg["cert_sha256"])
+    except system_ops.OperationError as exc:
+        raise HTTPException(400,str(exc))
+    _secret_config_set("outline",cfg)
+    audit(actor,"outline_integration_save","outline",f"keys={status['count']}",ip(request))
+    return {"ok":True,"count":status["count"]}
+
+@app.post("/api/integrations/outline/test")
+def outline_integration_test(request:Request):
+    require_local_admin(request)
+    cfg=_secret_config_get("outline")
+    if not cfg: raise HTTPException(409,"Outline integration is not configured")
+    try:return system_ops.outline_status(cfg.get("api_url"),cfg.get("cert_sha256"))
+    except system_ops.OperationError as exc:raise HTTPException(400,str(exc))
+
+@app.put("/api/integrations/cloudflare")
+def cloudflare_integration_save(payload:CloudflareIntegrationPayload,request:Request):
+    actor=require_mutation(request)
+    cfg={"api_token":payload.api_token.strip(),"zone":payload.zone.strip().lower(),"hostname":payload.hostname.strip().lower()}
+    try: state=system_ops.cloudflare_record_state(cfg["api_token"],cfg["zone"],cfg["hostname"])
+    except system_ops.OperationError as exc: raise HTTPException(400,str(exc))
+    _secret_config_set("cloudflare",cfg)
+    audit(actor,"cloudflare_integration_save",cfg["hostname"],f"exists={state['exists']}",ip(request))
+    return state
+
+@app.post("/api/integrations/cloudflare/test")
+def cloudflare_integration_test(request:Request):
+    require_local_admin(request)
+    cfg=_secret_config_get("cloudflare")
+    if not cfg: raise HTTPException(409,"Cloudflare integration is not configured")
+    try:return system_ops.cloudflare_record_state(cfg["api_token"],cfg["zone"],cfg["hostname"])
+    except system_ops.OperationError as exc:raise HTTPException(400,str(exc))
+
+class CloudflareCutoverPayload(BaseModel):
+    ipv4:str
+    ttl:int=Field(default=120,ge=60,le=86400)
+
+@app.post("/api/integrations/cloudflare/cutover")
+def cloudflare_cutover(payload:CloudflareCutoverPayload,request:Request):
+    actor=require_mutation(request)
+    cfg=_secret_config_get("cloudflare")
+    if not cfg: raise HTTPException(409,"Cloudflare integration is not configured")
+    try:
+        result=system_ops.cloudflare_update_a(cfg["api_token"],cfg["zone"],cfg["hostname"],payload.ipv4,payload.ttl)
+    except system_ops.OperationError as exc:
+        _notification_delivery("cloudflare","Cloudflare cutover failed",str(exc),"error")
+        raise HTTPException(400,str(exc))
+    _notification_delivery("cloudflare",f"DNS cutover: {cfg['hostname']}",f"New IPv4: {payload.ipv4}","info")
+    audit(actor,"cloudflare_cutover",cfg["hostname"],f"ipv4={payload.ipv4}; proxied=false",ip(request))
+    return result
+
+@app.put("/api/integrations/telegram")
+def telegram_integration_save(payload:TelegramIntegrationPayload,request:Request):
+    actor=require_mutation(request)
+    cfg={"bot_token":payload.bot_token.strip(),"chat_id":payload.chat_id.strip(),"enabled":payload.enabled}
+    try: system_ops.telegram_send(cfg["bot_token"],cfg["chat_id"],"Makia Telegram integration connected ✅")
+    except system_ops.OperationError as exc: raise HTTPException(400,str(exc))
+    _secret_config_set("telegram",cfg)
+    audit(actor,"telegram_integration_save","telegram",f"chat={cfg['chat_id']}; enabled={cfg['enabled']}",ip(request))
+    return {"ok":True,"enabled":payload.enabled}
+
+@app.post("/api/integrations/telegram/test")
+def telegram_integration_test(request:Request):
+    require_local_admin(request)
+    cfg=_secret_config_get("telegram")
+    if not cfg: raise HTTPException(409,"Telegram integration is not configured")
+    try:return system_ops.telegram_send(cfg["bot_token"],cfg["chat_id"],"Makia test notification ✅")
+    except system_ops.OperationError as exc:raise HTTPException(400,str(exc))
+
+@app.put("/api/integrations/backup-schedule")
+def backup_schedule_save(payload:BackupSchedulePayload,request:Request):
+    actor=require_mutation(request)
+    old=_secret_config_get("backup_schedule")
+    password=payload.password.strip() or str(old.get("password") or "")
+    if payload.enabled and len(password)<10:
+        raise HTTPException(400,"scheduled Full Migration Backup requires a password of at least 10 characters")
+    if payload.remote_enabled:
+        if not payload.remote_host or not payload.remote_user or not payload.remote_path.startswith("/"):
+            raise HTTPException(400,"remote SFTP target is incomplete")
+    cfg={
+        "enabled":payload.enabled,"hour":payload.hour,"keep":payload.keep,"password":password,
+        "remote_enabled":payload.remote_enabled,"remote_host":payload.remote_host.strip(),
+        "remote_user":payload.remote_user.strip(),"remote_path":payload.remote_path.strip(),
+        "remote_key_path":payload.remote_key_path.strip(),"remote_port":payload.remote_port,
+    }
+    _secret_config_set("backup_schedule",cfg)
+    audit(actor,"backup_schedule_save","backup",f"enabled={payload.enabled}; hour={payload.hour}; remote={payload.remote_enabled}",ip(request))
+    return {"ok":True,"enabled":payload.enabled,"password_set":bool(password)}
+
+@app.get("/api/notifications")
+def notification_events_get(request:Request,limit:int=100):
+    require_user(request)
+    return list_notification_events(limit)
+
+@app.get("/api/protocols/outline")
+def outline_protocol_get(request:Request):
+    require_capability(request,"outline")
+    cfg=_secret_config_get("outline")
+    if not cfg:
+        return {"configured":False,"ready":False,"keys":[],"count":0}
+    try:
+        status=system_ops.outline_status(cfg.get("api_url"),cfg.get("cert_sha256"))
+        return {"configured":True,**status}
+    except system_ops.OperationError as exc:
+        return {"configured":True,"ready":False,"keys":[],"count":0,"error":str(exc)}
+
+class OutlineKeyCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    port:int=Field(default=0,ge=0,le=65535)
+    quota_gb:float=Field(default=0,ge=0,le=1_000_000)
+
+@app.post("/api/protocols/outline/keys")
+def outline_key_create(payload:OutlineKeyCreate,request:Request):
+    actor=require_capability(request,"outline",True)
+    cfg=_secret_config_get("outline")
+    if not cfg: raise HTTPException(409,"Outline integration is not configured")
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    try:
+        result=system_ops.outline_create_key(
+            cfg["api_url"],cfg["cert_sha256"],payload.name,payload.port,quota_bytes
+        )
+        key_id=str(result["id"])
+        delivery=access_ops.outline_payload(payload.name,result["accessUrl"])
+        artifact_id=artifact_save("outline",key_id,payload.name,"outline",delivery,{
+            "outline_id":key_id,"quota_bytes":quota_bytes,
+            "port":result.get("port"),"method":result.get("method",""),
+        })
+    except (system_ops.OperationError,access_ops.AccessPackageError) as exc:
+        raise HTTPException(400,str(exc))
+    audit(actor,"outline_key_create",key_id,f"name={payload.name}; quota={quota_bytes}",ip(request))
+    return {**result,"artifact_id":artifact_id}
+
+@app.delete("/api/protocols/outline/keys/{key_id}")
+def outline_key_delete(key_id:str,request:Request):
+    actor=require_capability(request,"outline",True)
+    cfg=_secret_config_get("outline")
+    if not cfg: raise HTTPException(409,"Outline integration is not configured")
+    try: result=system_ops.outline_delete_key(cfg["api_url"],cfg["cert_sha256"],key_id)
+    except system_ops.OperationError as exc:raise HTTPException(400,str(exc))
+    delete_access_artifact_by_key("outline",key_id)
+    audit(actor,"outline_key_delete",key_id,ip=ip(request))
+    return result
+
+
 class NodeCreate(BaseModel):
     name:str=Field(min_length=1,max_length=80)
 
