@@ -878,9 +878,9 @@ async function xrayWorkspace(renderToken=window.__viewRenderToken){
   const inactive=managed.length-active;
   const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
   content.innerHTML=[
-    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">V</span><div><h2>V2Ray / Xray</h2><p>VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'xray-inbound-builder':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ New Inbound':'نصب Xray Core')+'</button></div></section>',
+    '<section class="wg-workspace-hero protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">V</span><div><h2>Xray / V2Ray</h2><p>Inbound → Client → Transport → Security · VLESS · VMess · Trojan · Shadowsocks · Hysteria2</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="xray-diagnostics">Diagnostics</button><button class="ghost" data-action="xray-advanced">تنظیمات Xray</button><button class="primary" data-action="'+(engine.installed?'xray-inbound-builder':'protocol-setup')+'" data-kind="xray">'+(engine.installed?'＋ New Inbound':'نصب Xray Core')+'</button></div></section>',
     '<section class="wg-workspace-metrics"><div><span>کل کاربران</span><b>'+managed.length+'</b></div><div><span>فعال</span><b>'+active+'</b></div><div><span>غیرفعال</span><b>'+inactive+'</b></div><div><span>مصرف کل</span><b>'+fmtBytes(used)+'</b></div></section>',
-    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>مدیریت کاربران V2Ray / Xray</h3><span>QUOTA · EXPIRY · RESET · IP LIMIT · STATUS</span></div><button class="ghost" data-action="refresh">بروزرسانی</button></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز کاربری ساخته نشده است.</div>')+'</div></section>',
+    '<section class="panel protocol-directory"><div class="panel-head"><div><h3>Clientهای مدیریت‌شده</h3><span>هر Client به یک Inbound متصل است · QUOTA · EXPIRY · IP LIMIT</span></div><div class="toolbar"><button class="ghost" data-action="nav" data-view="inbounds">مشاهده Inboundها</button><button class="ghost" data-action="refresh">بروزرسانی</button></div></div><div class="protocol-client-list">'+(managed.length?managed.map(protocolClientRow).join(''):'<div class="empty">هنوز Client ساخته نشده است. ابتدا یک Inbound بساز.</div>')+'</div></section>',
     '<section class="panel"><div class="panel-head"><div><h3>خروجی و اشتراک کاربران</h3><span>'+rows.length+' PROFILE</span></div><button class="ghost" data-action="client-guide" data-kind="xray">راهنمای اتصال</button></div><div class="access-cards">'+(rows.length?rows.map(accessCard).join(''):'<div class="empty compact">پروفایل قابل تحویل وجود ندارد.</div>')+'</div></section>'
   ].join('');
 }
@@ -1958,6 +1958,11 @@ function renderCommands(q=''){
 async function selectWizardProtocol(kind){
   if(!provisionState)return;
   if(!wizardProtocolReady(kind)){await openProtocolSetup(kind);return}
+  if(kind==='xray'){
+    closeModal();
+    await openXrayInboundBuilder();
+    return;
+  }
   provisionState.protocol=kind;provisionState.step=2;
   if(kind==='ssh'){
     const d=window.__operatorSettings?.defaults||{},mode=d.ssh_password_mode||'pin6';
