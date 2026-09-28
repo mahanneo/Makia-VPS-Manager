@@ -20,7 +20,9 @@ Existing host upgrade must preserve:
 - SSH accounts and policy metadata
 - Xray configuration and client credentials
 - WireGuard private/public keys and peers
-- OpenVPN PKI, clients and server configuration
+- OpenVPN PKI, clients and all UDP/TCP server configurations
+- IKEv2/strongSwan users and key material
+- Stealth/Stunnel and WStunnel runtime configuration
 - Nginx / Let's Encrypt state
 
 Run:
@@ -47,6 +49,25 @@ The six cards must be backed by real runtime state:
 - WStunnel
 
 No card may claim READY without its actual service/listener/runtime being ready.
+
+## Disaster Recovery gate
+
+From the panel, build **Disaster Recovery Backup** with a strong password. Validate the encrypted bundle on a second VPS before considering failover ready:
+
+```bash
+sudo makia-restore-portable /path/to/makia-portable-*.zip
+sudo makia-restore-portable /path/to/makia-portable-*.zip --apply
+sudo makia-doctor
+sudo makia-uat-smoke
+```
+
+Required:
+- migration manifest format v2 and SHA256 payload validation PASS;
+- DB/.secret, SSH hashes, Xray/REALITY, WireGuard, OpenVPN PKI/configs, IKEv2, Stunnel/Stealth, WStunnel and TLS/Nginx state restore successfully when present;
+- WireGuard/OpenVPN NAT/FORWARD rules are rebuilt for the **destination** VPS uplink interface;
+- when client profiles use the preserved domain, changing that domain's DNS A/AAAA record to the new VPS is sufficient for cutover without changing keys/UUID/PKI;
+- direct-IP profiles are identified as requiring reissue;
+- raw WireGuard/OpenVPN/IKEv2 DNS records in Cloudflare are DNS-only.
 
 ## HTTPS prerequisite
 
