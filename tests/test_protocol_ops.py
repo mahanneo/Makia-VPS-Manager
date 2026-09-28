@@ -504,3 +504,16 @@ def test_tcp_fallback_rolls_back_config_when_restart_fails(monkeypatch,tmp_path)
     with pytest.raises(ProtocolError,match="simulated"):
         protocol_ops.ensure_openvpn_tcp_fallback(8443)
     assert conf.read_text(encoding="utf-8")=="port 8443\nproto tcp4-server\n# old\n"
+
+
+def test_xray_manual_mode_allows_public_vless_without_tls_or_reality(monkeypatch):
+    assert protocol_ops._validate_xray_manual_combo("vless","tcp","none")==("tcp","none")
+    assert protocol_ops._validate_xray_manual_combo("vmess","ws","none")==("ws","none")
+    assert protocol_ops._validate_xray_manual_combo("trojan","tcp","none")==("tcp","none")
+
+
+def test_xray_manual_mode_keeps_reality_constraints():
+    with pytest.raises(ProtocolError,match="REALITY"):
+        protocol_ops._validate_xray_manual_combo("vmess","tcp","reality")
+    with pytest.raises(ProtocolError,match="REALITY"):
+        protocol_ops._validate_xray_manual_combo("vless","ws","reality")
