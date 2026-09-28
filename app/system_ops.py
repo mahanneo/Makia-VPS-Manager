@@ -261,11 +261,17 @@ def _migration_versions_compatible(bundle_version,expected_version):
     destination=str(expected_version or "").strip()
     if not bundle or not destination or bundle==destination:
         return True
-    # RC3 contains an explicit compatibility shim for RC2 Full Migration
-    # bundles (including the historical systemd '@' archive-name defect).
-    # Keep this allow-list directional and narrow; do not silently accept
-    # arbitrary older/newer application versions.
-    return (bundle,destination)==("0.26.0-rc2","0.26.0-rc3")
+    # Full Migration format v2 stayed compatible across the 0.26 RC line.
+    # Keep this directional and explicit: RC5 may restore earlier verified
+    # RC2/RC3/RC4 bundles, including the RC2 systemd-template name shim.
+    compatible_to_rc5={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4"}
+    if destination=="0.26.0-rc5" and bundle in compatible_to_rc5:
+        return True
+    if destination=="0.26.0-rc4" and bundle in {"0.26.0-rc2","0.26.0-rc3"}:
+        return True
+    if destination=="0.26.0-rc3" and bundle=="0.26.0-rc2":
+        return True
+    return False
 
 
 def inspect_portable_migration_blob(blob,password,expected_version=""):
