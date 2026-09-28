@@ -2002,7 +2002,7 @@ def public_access_qr(token:str,request:Request):
 def access_share(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
     require_local_admin(request)
-    if kind not in {"ssh","xray","wireguard"}:
+    if kind not in {"ssh","xray","wireguard","outline"}:
         raise HTTPException(404,"share view is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -2041,7 +2041,7 @@ def access_share(kind:str,key:str,request:Request):
 @app.get("/api/access/{kind}/{key}/qr.svg")
 def access_qr(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
-    if kind not in {"ssh","xray","wireguard"}:
+    if kind not in {"ssh","xray","wireguard","outline"}:
         raise HTTPException(404,"QR is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
