@@ -27,6 +27,7 @@
         <a href="#xray"><span class="guide-mini-icon xray">X</span>Xray</a>
         <a href="#wireguard"><span class="guide-mini-icon wg">W</span>WireGuard</a>
         <a href="#openvpn"><span class="guide-mini-icon ovpn">O</span>OpenVPN</a>
+        <a href="#outline"><span class="guide-mini-icon outline">O</span>Outline</a>
         <a href="#ssh"><span class="guide-mini-icon ssh">›_</span>SSH / NPV</a>
       </nav>
     </section>
@@ -74,6 +75,20 @@
         <article><b>macOS</b><p>{{'OpenVPN Connect را نصب کنید و همان فایل .ovpn را وارد کنید.' if fa else 'Install OpenVPN Connect and import the same .ovpn file.'}}</p></article>
       </div>
       <div class="notice">{{'اگر مدیر Port یا Transport سرور را تغییر داد، فایل OVPN جدید را از لینک اختصاصی خود دریافت کنید.' if fa else 'If the server port or transport changes, download a fresh OVPN file from your private access page.'}}</div>
+    </section>
+
+    <section class="client-card guide-section" id="outline">
+      <div class="guide-section-head"><span class="guide-icon outline">O</span><div><div class="eyebrow">SHADOWSOCKS · ACCESS KEY · OFFICIAL OUTLINE API</div><h2>Outline</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><path d="M70 25h100v95H70z"/><path d="M88 48h64M88 66h52M88 84h58"/></svg><figcaption><b>{{'۱. دریافت Access Key' if fa else '1. Get the access key'}}</b><span>{{'کلید ss:// را از صفحه اختصاصی دریافت کنید.' if fa else 'Get the ss:// key from your private page.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="65" y="10" width="110" height="125" rx="16"/><path d="M90 55h60M120 35v40"/></svg><figcaption><b>{{'۲. افزودن سرور' if fa else '2. Add server'}}</b><span>{{'در Outline Client گزینه Add Server را بزنید.' if fa else 'Choose Add Server in Outline Client.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'سرور را فعال کنید و اتصال را تست کنید.' if fa else 'Activate the server and test connectivity.'}}</span></figcaption></figure>
+      </div>
+      <div class="guide-method-grid">
+        <article><b>Android / iPhone</b><p>{{'Outline Client را نصب کنید، Access Key را Paste کنید و Add Server را بزنید.' if fa else 'Install Outline Client, paste the access key and tap Add Server.'}}</p></article>
+        <article><b>Windows / macOS</b><p>{{'Outline Client دسکتاپ را نصب کنید و همان ss:// Access Key را وارد کنید.' if fa else 'Install Outline Client for desktop and import the same ss:// access key.'}}</p></article>
+        <article><b>{{'نکته' if fa else 'Note'}}</b><p>{{'Outline Access Key را مانند رمز عبور محرمانه نگه دارید.' if fa else 'Treat the Outline access key like a private password.'}}</p></article>
+      </div>
     </section>
 
     <section class="client-card guide-section" id="ssh">
