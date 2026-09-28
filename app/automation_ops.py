@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 from . import access_ops, system_ops, outline_ops
@@ -286,7 +287,7 @@ def telegram_poll_commands(version):
             elif cmd=="/status":
                 m=system_ops.metrics()
                 clients=list_protocol_clients()
-                reply=f"Makia {version}\nCPU {m.get('cpu_percent',0)}% · RAM {m.get('memory_percent',0)}% · Disk {m.get('disk_percent',0)}%\nManaged protocol clients: {len(clients)}"
+                reply=f"Makia {version}\nCPU {m.get('cpu',0)}% · RAM {m.get('memory',0)}% · Disk {m.get('disk',0)}%\nManaged protocol clients: {len(clients)}"
             elif cmd=="/expiry":
                 now_ts=int(time.time()); exp=[]
                 for row in list_protocol_clients():
@@ -320,7 +321,7 @@ def enforce_outline_expiry():
 def health_alerts():
     try:
         m=system_ops.metrics()
-        disk=float(m.get("disk_percent") or 0)
+        disk=float(m.get("disk") or 0)
         if disk>=90:send_configured_alert("disk-high","error","Disk usage critical",f"Disk usage is {disk:.1f}%")
     except Exception:pass
     for svc in ("makia-vps-manager","xray","nginx"):
