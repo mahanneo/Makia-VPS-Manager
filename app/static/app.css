@@ -1908,3 +1908,11 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
   .portal-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .portal-section-head{align-items:flex-start}
 }
+
+.portal-file-list{display:grid;gap:9px}
+.portal-file-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 13px;border:1px solid var(--line);border-radius:13px;background:var(--panel);text-decoration:none;color:var(--text)}
+.portal-file-row:hover{border-color:var(--accent)}
+.portal-file-row div{display:flex;min-width:0;flex-direction:column;gap:4px}
+.portal-file-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.portal-file-row span{font-size:11px;color:var(--muted)}
+.portal-file-row strong{font-size:12px;color:var(--accent)}
