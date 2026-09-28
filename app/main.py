@@ -1604,6 +1604,22 @@ def _resolve_access_payload(kind,key,request):
             return access_ops.open_payload(artifact["payload_enc"]),artifact
         except access_ops.AccessPackageError as e:
             raise HTTPException(500,str(e))
+    if kind=="outline":
+        try: row=get_protocol_client(int(key))
+        except Exception: row=None
+        if not row or row.get("engine")!="outline":
+            raise HTTPException(404,"Outline client not found")
+        filename=f"{access_ops.safe_filename(row['name'])}-outline.txt"
+        payload={
+            "native_filename":filename,
+            "files":{filename:(row.get("share_link") or "").encode("utf-8")},
+            "primary_text":row.get("share_link") or "",
+            "share_text":row.get("share_link") or "",
+            "share_type":"outline",
+            "summary":{"name":row["name"],"protocol":"outline","access_key_id":str(row.get("inbound_tag") or "").replace("outline:","")},
+        }
+        artifact_save("outline",str(row["id"]),row["name"],"outline",payload,{"client_id":row["id"]})
+        return payload,get_access_artifact_by_key("outline",str(row["id"]))
     if kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -1689,11 +1705,11 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
-        if kind=="xray":
+        if kind in {"xray","outline"}:
             try:
                 protocol=(get_protocol_client(int(key)) or {}).get("protocol") or ""
             except Exception:
