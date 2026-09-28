@@ -1228,6 +1228,65 @@ def xray_inbound_client_create(inbound_tag:str,payload:XrayInboundClientCreate,r
     return result
 
 
+
+class OutlineClientCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    port:int=Field(default=8388,ge=1,le=65535)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=30,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+
+@app.get("/api/protocols/outline")
+def outline_status(request:Request):
+    require_capability(request,"xray")
+    clients=[x for x in list_protocol_clients() if x.get("protocol")=="outline"]
+    return {
+        "available":bool(protocol_ops.xray_status().get("installed")),
+        "backend":"Xray Shadowsocks static access key",
+        "cipher":"aes-256-gcm",
+        "clients":len(clients),
+        "note":"Outline client compatible static ss:// access keys; this is not the Outline Manager API."
+    }
+
+@app.post("/api/protocols/outline/clients")
+def outline_client_create(payload:OutlineClientCreate,request:Request):
+    actor=require_capability(request,"xray",True)
+    if any(row.get("name")==payload.name for row in list_protocol_clients()):
+        raise HTTPException(409,"client name already exists")
+    endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
+    try:
+        result=protocol_ops.create_xray_full_inbound({
+            "protocol":"outline","transport":"tcp","security":"none","port":payload.port,
+            "remark":"outline-"+payload.name,"name":payload.name,"endpoint":endpoint,
+            "shadowsocks_method":"aes-256-gcm","options":{"sniffing_enabled":False}
+        })
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    quota_bytes=int(payload.quota_gb*1024**3)
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+    client_id=create_protocol_client(
+        payload.name,"xray","outline",result["tag"],result["credential"],result["share_link"],
+        quota_bytes,expire_at,payload.ip_limit,0
+    )
+    delivery=access_ops.xray_payload(payload.name,"outline",result["share_link"],"","")
+    artifact_id=artifact_save("xray",str(client_id),payload.name,"outline",delivery,{
+        "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
+        "transport":"tcp","security":"none","endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,
+        "outline_compatible":True,"cipher":"aes-256-gcm",
+    })
+    qr=qrcode.make(result["share_link"],image_factory=qrcode.image.svg.SvgPathImage)
+    buf=io.BytesIO();qr.save(buf)
+    result.update({
+        "client_id":client_id,"artifact_id":artifact_id,
+        "qr":"data:image/svg+xml;base64,"+base64.b64encode(buf.getvalue()).decode(),
+        "quota_bytes":quota_bytes,"expire_at":expire_at,"ip_limit":payload.ip_limit,
+        "compatibility":"Outline Client static Shadowsocks access key",
+    })
+    audit(actor,"outline_client_create",str(client_id),f"port={payload.port}; endpoint={endpoint}",ip(request))
+    return result
+
 class XrayQuickInbound(BaseModel):
     protocol:str
     port:int=Field(ge=1,le=65535)
