@@ -137,6 +137,8 @@ for item in \
   "etc/systemd/system/makia-protocol-traffic.service" \
   "etc/systemd/system/makia-scheduled-backup.service" \
   "etc/systemd/system/makia-scheduled-backup.timer" \
+  "etc/systemd/system/makia-ops-monitor.service" \
+  "etc/systemd/system/makia-ops-monitor.timer" \
   "etc/nginx/sites-available/makia-vps-manager"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
@@ -200,6 +202,8 @@ install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/m
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
+install -m 0644 "$SRC/systemd/makia-ops-monitor.service" /etc/systemd/system/makia-ops-monitor.service
+install -m 0644 "$SRC/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -338,6 +342,7 @@ systemctl restart makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
 systemctl enable --now makia-scheduled-backup.timer
+systemctl enable --now makia-ops-monitor.timer
 systemctl restart makia-metrics-sampler
 systemctl restart makia-protocol-traffic
 systemctl enable --now fail2ban
