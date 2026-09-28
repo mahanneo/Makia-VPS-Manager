@@ -162,10 +162,17 @@ command -v certbot >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' python3-certbot-nginx 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' strongswan 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' libcharon-extra-plugins 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
-if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
+OUTLINE_HOST_PACKAGES=()
+if [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" || -s /opt/outline/access.txt ]]; then
+  dpkg-query -W -f='${Status}' docker.io 2>/dev/null | grep -q 'install ok installed' || OUTLINE_HOST_PACKAGES+=(docker.io)
+fi
+if [[ "$NEED_HOST_PACKAGES" -eq 1 || "${#OUTLINE_HOST_PACKAGES[@]}" -gt 0 ]]; then
   echo "Ensuring host security/TLS/VPN packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
+  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins "${OUTLINE_HOST_PACKAGES[@]}"
+fi
+if command -v docker >/dev/null 2>&1 && [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" || -s /opt/outline/access.txt ]]; then
+  systemctl enable --now docker
 fi
 
 ROLLBACK_ARMED=1
@@ -216,6 +223,7 @@ install -m 0755 "$SRC/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
 install -m 0755 "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
 install -m 0755 "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
+install -m 0755 "$SRC/scripts/install-outline.sh" /usr/local/sbin/makia-install-outline
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
