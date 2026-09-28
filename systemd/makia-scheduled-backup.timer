@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Makia scheduled backup scheduler hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=180
+Unit=makia-scheduled-backup.service
+
+[Install]
+WantedBy=timers.target
