@@ -2343,7 +2343,7 @@ function openPlanEditor(p=null){
 async function savePlan(id){
   let config={};try{config=JSON.parse(document.getElementById('planConfig').value||'{}')}catch(e){alert(e.message);return}
   const payload={name:document.getElementById('planName').value.trim(),kind:document.getElementById('planKind').value,protocol:document.getElementById('planProtocol').value.trim(),duration_days:Number(document.getElementById('planDays').value||0),quota_gb:Number(document.getElementById('planQuota').value||0),ip_limit:Number(document.getElementById('planIp').value||1),connection_limit:Number(document.getElementById('planConn').value||1),price:Number(document.getElementById('planPrice').value||0),config,active:true};
-  try{await api(id?'/api/plans/'+id:'/api/plans',{method:id?'PUT':'POST',body:JSON.stringify(payload)});closeModal();await plansView()}catch(e){alert(e.message)}
+  try{await api(id?'/api/plans/'+id:'/api/plans',{method:id?'PUT':'POST',body:JSON.stringify(payload)});closeModal();await currentView()}catch(e){alert(e.message)}
 }
 async function usePlan(id){
   const p=(window.__planRows||[]).find(x=>Number(x.id)===Number(id));if(!p)return;
@@ -2377,7 +2377,7 @@ async function saveBackupSchedule(){
   const type=document.getElementById('bsRemote').value;
   const remote=type==='s3'?{type,endpoint_url:document.getElementById('bsEndpoint').value.trim(),bucket:document.getElementById('bsBucket').value.trim(),access_key:document.getElementById('bsAccess').value.trim(),secret_key:document.getElementById('bsSecret').value,prefix:'makia'}:type==='sftp'?{type,host:document.getElementById('bsHost').value.trim(),user:document.getElementById('bsUser').value.trim(),path:document.getElementById('bsPath').value.trim(),identity_file:document.getElementById('bsIdentity').value.trim()}: {type:'none'};
   const payload={name:document.getElementById('bsName').value.trim(),backup_type:document.getElementById('bsType').value,interval_hours:Number(document.getElementById('bsHours').value||24),keep_last:Number(document.getElementById('bsKeep').value||7),password:document.getElementById('bsPassword').value,remote,enabled:true};
-  try{await api('/api/automation/backups',{method:'POST',body:JSON.stringify(payload)});closeModal();await automationView()}catch(e){alert(e.message)}
+  try{await api('/api/automation/backups',{method:'POST',body:JSON.stringify(payload)});closeModal();await currentView()}catch(e){alert(e.message)}
 }
 
 async function integrationsView(renderToken=window.__viewRenderToken){
@@ -2391,7 +2391,7 @@ async function saveIntegrations(){
   const current=await api('/api/integrations');
   const cf={enabled:!!document.getElementById('cfEnabled')?.checked,api_token:document.getElementById('cfToken')?.value||'',zone:document.getElementById('cfZone')?.value.trim()||'',record:document.getElementById('cfRecord')?.value.trim()||'',ttl:Number(document.getElementById('cfTtl')?.value||60),proxied:false};
   const tg={enabled:!!document.getElementById('tgEnabled')?.checked,bot_token:document.getElementById('tgToken')?.value||'',chat_id:document.getElementById('tgChat')?.value.trim()||'',commands:true};
-  try{await api('/api/integrations',{method:'POST',body:JSON.stringify({cloudflare:cf,telegram:tg})});toast(tr('ذخیره شد','Saved'));await integrationsView()}catch(e){alert(e.message)}
+  try{await api('/api/integrations',{method:'POST',body:JSON.stringify({cloudflare:cf,telegram:tg})});toast(tr('ذخیره شد','Saved'));await currentView()}catch(e){alert(e.message)}
 }
 async function cloudflareCutover(){
   const s=await api('/api/integrations');const ip=prompt('NEW VPS IPv4:');if(!ip)return;const record=s.cloudflare.record||'';if(!confirm('Update '+record+' → '+ip+' ?'))return;
@@ -2427,7 +2427,7 @@ function openOutlineClient(plan=null){
 }
 async function createOutlineClient(){
   const payload={name:document.getElementById('outlineName').value.trim(),quota_gb:Number(document.getElementById('outlineQuota').value||0),expire_days:Number(document.getElementById('outlineDays').value||0)};
-  try{const r=await api('/api/protocols/outline/clients',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Outline Access Key created');await outlineView()}catch(e){alert(e.message)}
+  try{const r=await api('/api/protocols/outline/clients',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Outline Access Key created');await currentView()}catch(e){alert(e.message)}
 }
 async function connectivityLab(renderToken=window.__viewRenderToken){
   title.textContent='Connectivity Lab';setPageContext('CONNECTIVITY READINESS');
