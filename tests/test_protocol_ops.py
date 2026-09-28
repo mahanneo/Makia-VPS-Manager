@@ -287,8 +287,9 @@ def test_protocol_modes_reports_six_real_modes(monkeypatch):
     monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{
         "service_active":True,"config":"/etc/wireguard/wg0.conf","port":443
     })
-    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{
-        "service_active":True,"listener":True,"port":1194,"proto":"udp4"
+    monkeypatch.setattr(protocol_ops,"_openvpn_transport_runtimes",lambda:{
+        "udp":{"service_active":True,"listener":True,"port":1194,"proto":"udp4","name":"server"},
+        "tcp":{"service_active":True,"listener":True,"port":8443,"proto":"tcp4-server","name":"transport-tcp"},
     })
     monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{
         "configured":True,"service_active":True
@@ -306,10 +307,11 @@ def test_protocol_modes_reports_six_real_modes(monkeypatch):
     assert by_id["ikev2"]["ready"] is True
     assert by_id["wireguard"]["ready"] is True
     assert by_id["udp"]["ready"] is True
-    assert by_id["tcp"]["ready"] is False
+    assert by_id["tcp"]["ready"] is True
     assert by_id["stealth"]["ready"] is False
     assert by_id["wstunnel"]["ready"] is True
-    assert data["constraints"]["openvpn_single_active_transport"] is True
+    assert data["constraints"]["openvpn_single_active_transport"] is False
+    assert data["constraints"]["openvpn_dual_transport"] is True
 
 
 def test_create_ikev2_user_writes_managed_eap_secret(monkeypatch,tmp_path):
@@ -415,3 +417,70 @@ def test_remove_ikev2_user_keeps_other_managed_users(monkeypatch,tmp_path):
     assert "makia-eap:bob" in text
     assert protocol_ops.list_ikev2_users()==[{"name":"bob"}]
     assert ["ipsec","rereadsecrets"] in calls
+
+
+def test_ensure_openvpn_tcp_adds_auxiliary_instance_without_touching_udp(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"
+    server.mkdir(parents=True)
+    primary=server/"server.conf"
+    original=(
+        "port 1194\nproto udp4\nlocal 0.0.0.0\ndev tun\n"
+        "topology subnet\nserver 10.8.0.0 255.255.255.0\n"
+        "ca ca.crt\ncert server.crt\nkey server.key\ndh dh.pem\ncrl-verify crl.pem\n"
+        "tls-crypt ta.key\n"
+        "script-security 2\nup /etc/openvpn/makia-up.sh\ndown /etc/openvpn/makia-down.sh\n"
+    )
+    primary.write_text(original,encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"eth0")
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda port,proto,label:{"active":True,"changed":True})
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"_run",lambda args,**kwargs:calls.append(args) or "")
+
+    def fake_runtime(stem="server"):
+        conf=server/f"{stem}.conf"
+        if not conf.exists():
+            return {"name":stem,"config":str(conf),"port":None,"proto":None,"service_active":False,"listener":False}
+        text=conf.read_text(encoding="utf-8")
+        import re
+        return {
+            "name":stem,"config":str(conf),
+            "port":int(re.search(r"(?m)^port\s+(\d+)",text).group(1)),
+            "proto":re.search(r"(?m)^proto\s+(\S+)",text).group(1),
+            "service_active":True,"listener":True,
+        }
+    monkeypatch.setattr(protocol_ops,"_openvpn_runtime_for",fake_runtime)
+
+    result=protocol_ops.ensure_openvpn_transport("tcp",8443)
+    aux=server/"transport-tcp.conf"
+    assert result["created"] is True
+    assert result["runtime"]["port"]==8443
+    assert primary.read_text(encoding="utf-8")==original
+    text=aux.read_text(encoding="utf-8")
+    assert "port 8443" in text
+    assert "proto tcp4-server" in text
+    assert "dev tun-makia-tcp" in text
+    assert "server 10.8.1.0 255.255.255.0" in text
+    assert str(ovpn/"makia-up-tcp.sh") in text
+    assert ["systemctl","restart","openvpn-server@transport-tcp"] in calls
+
+
+def test_openvpn_transport_runtime_prefers_primary_and_discovers_aux(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"
+    server.mkdir(parents=True)
+    (server/"server.conf").write_text("port 1194\nproto udp4\n",encoding="utf-8")
+    (server/"transport-tcp.conf").write_text("port 8443\nproto tcp4-server\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"_openvpn_runtime_for",lambda stem:{
+        "name":stem,
+        "port":1194 if stem=="server" else 8443,
+        "proto":"udp4" if stem=="server" else "tcp4-server",
+        "service_active":True,"listener":True,
+        "config":str(server/f"{stem}.conf"),
+    })
+    runtimes=protocol_ops._openvpn_transport_runtimes()
+    assert runtimes["udp"]["name"]=="server"
+    assert runtimes["tcp"]["name"]=="transport-tcp"
