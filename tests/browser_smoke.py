@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -358,6 +359,10 @@ def main():
                 assert "payload/data.tar.gz" in names
                 manifest=zf.read("manifest.json").decode("utf-8")
                 assert "makia-portable-migration" in manifest
+                manifest_obj=json.loads(manifest)
+                assert manifest_obj["format_version"]==2
+                assert manifest_obj["restore_contract"]["preserve_credentials"] is True
+                assert "payload_sha256" in manifest_obj
             page.locator('.close-btn[data-action="modal-close"]').click()
 
             for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
@@ -393,7 +398,7 @@ def main():
                 assert label in mode_text
             assert page.locator('[data-action="ikev2-setup"]').count()==1
             assert page.locator('[data-action="openvpn-mode"][data-proto="udp"]').count()==1
-            assert page.locator('[data-action="openvpn-mode"][data-proto="tcp"]').count()==1
+            assert page.locator('[data-action="openvpn-tcp-fallback"]').count()==1
             assert page.locator('[data-action="stealth-setup"]').count()==1
             assert page.locator('[data-action="wstunnel-setup"]').count()==1
             page.locator(".port-management-panel").wait_for()

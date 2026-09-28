@@ -222,6 +222,21 @@ else
   bad "WStunnel tooling missing"
 fi
 
+if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then
+  OVPN_TCP_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/makia-tcp.conf 2>/dev/null || true)"
+  if systemctl is-active --quiet openvpn-server@makia-tcp; then
+    ok "OpenVPN parallel TCP fallback runtime active"
+  else
+    bad "OpenVPN TCP fallback configured but service inactive"
+  fi
+  if [[ -n "$OVPN_TCP_PORT" ]] && ss -H -ltn 2>/dev/null | grep -Eq ":${OVPN_TCP_PORT}([[:space:]]|$)"; then
+    ok "OpenVPN TCP fallback listener on port $OVPN_TCP_PORT"
+  else
+    bad "OpenVPN TCP fallback listener missing"
+  fi
+else
+  ok "OpenVPN TCP fallback not configured"
+fi
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   if systemctl is-active --quiet stunnel4; then
     ok "Stealth TLS/Stunnel runtime active"

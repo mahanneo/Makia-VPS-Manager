@@ -290,6 +290,10 @@ def test_protocol_modes_reports_six_real_modes(monkeypatch):
     monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",lambda:{
         "service_active":True,"listener":True,"port":1194,"proto":"udp4"
     })
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem:{
+        "service_active":stem=="makia-tcp","listener":stem=="makia-tcp","port":8443 if stem=="makia-tcp" else None,
+        "proto":"tcp4-server" if stem=="makia-tcp" else None,"config":"/etc/openvpn/server/makia-tcp.conf" if stem=="makia-tcp" else None
+    })
     monkeypatch.setattr(protocol_ops,"ikev2_status",lambda:{
         "configured":True,"service_active":True
     })
@@ -306,10 +310,10 @@ def test_protocol_modes_reports_six_real_modes(monkeypatch):
     assert by_id["ikev2"]["ready"] is True
     assert by_id["wireguard"]["ready"] is True
     assert by_id["udp"]["ready"] is True
-    assert by_id["tcp"]["ready"] is False
+    assert by_id["tcp"]["ready"] is True
     assert by_id["stealth"]["ready"] is False
     assert by_id["wstunnel"]["ready"] is True
-    assert data["constraints"]["openvpn_single_active_transport"] is True
+    assert data["constraints"]["tcp_fallback_parallel"] is True
 
 
 def test_create_ikev2_user_writes_managed_eap_secret(monkeypatch,tmp_path):
@@ -415,3 +419,27 @@ def test_remove_ikev2_user_keeps_other_managed_users(monkeypatch,tmp_path):
     assert "makia-eap:bob" in text
     assert protocol_ops.list_ikev2_users()==[{"name":"bob"}]
     assert ["ipsec","rereadsecrets"] in calls
+
+
+def test_tcp_fallback_uses_existing_pki_and_parallel_service(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"; server.mkdir(parents=True)
+    for name in ["ca.crt","server.crt","server.key","dh.pem","crl.pem","ta.key"]:
+        (server/name).write_text(name,encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_CONF",server/"makia-tcp.conf")
+    monkeypatch.setattr(protocol_ops,"OVPN_TCP_FALLBACK_SERVICE","openvpn-server@makia-tcp")
+    monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl"))
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:False)
+    monkeypatch.setattr(protocol_ops,"_openvpn_aux_forward_scripts",lambda stem,network:(ovpn/"up.sh",ovpn/"down.sh"))
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *args,**kwargs:{"active":True})
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem:{
+        "config":str(server/"makia-tcp.conf"),"port":8443,"proto":"tcp4-server","service_active":True,"listener":True
+    })
+    result=protocol_ops.ensure_openvpn_tcp_fallback(8443)
+    text=(server/"makia-tcp.conf").read_text(encoding="utf-8")
+    assert result["ok"] is True
+    assert "proto tcp4-server" in text
+    assert "server 10.9.0.0 255.255.255.0" in text
+    assert "server.conf" not in text

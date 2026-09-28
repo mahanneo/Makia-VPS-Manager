@@ -1812,3 +1812,13 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
   .change-protocol-foot{align-items:flex-start;flex-direction:column}
   .change-protocol-foot .ghost{width:100%}
 }
+
+
+/* full VPS migration / disaster recovery */
+.migration-readiness-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.migration-readiness-grid article{padding:15px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01))}
+.migration-readiness-grid span,.migration-readiness-grid small{display:block;color:var(--muted);font-size:9px}
+.migration-readiness-grid b{display:block;margin:7px 0;font-size:14px;word-break:break-word}
+.migration-flow-panel{margin:14px 0}
+.migration-flow-panel code{direction:ltr;unicode-bidi:embed;color:#a9edff}
+@media(max-width:850px){.migration-readiness-grid{grid-template-columns:1fr}}

@@ -73,18 +73,29 @@ def test_portable_migration_files_include_data_and_manifest(tmp_path,monkeypatch
             "xray":str(tmp_path/"missing-xray"),
             "xray_alt":str(tmp_path/"missing-xray-alt"),
             "nginx_site":str(nginx),
+            "makia_etc":str(tmp_path/"missing-makia-etc"),
+            "stunnel":str(tmp_path/"missing-stunnel"),
+            "ipsec_d":str(tmp_path/"missing-ipsec-d"),
+            "ipsec_conf":str(tmp_path/"missing-ipsec-conf"),
+            "ipsec_secrets":str(tmp_path/"missing-ipsec-secrets"),
+            "stunnel_defaults":str(tmp_path/"missing-stunnel-defaults"),
         },
     )
     assert "manifest.json" in files
     assert "payload/data.tar.gz" in files
     assert "payload/wireguard.tar.gz" in files
     assert "payload/ssh-users.json" in files
-    assert "payload/nginx-site.conf" in files
+    assert "payload/nginx_site" in files
     manifest=json.loads(files["manifest.json"])
     assert manifest["format"]=="makia-portable-migration"
     assert manifest["panel_domain"]=="vpn.example.com"
     assert manifest["managed_ssh_users"]==1
+    assert manifest["format_version"]==2
     assert manifest["components"]["wireguard"] is True
+    assert manifest["restore_contract"]["preserve_credentials"] is True
+    assert manifest["restore_contract"]["rebind_destination_network"] is True
+    assert manifest["payload_sha256"]["payload/data.tar.gz"]
+    assert manifest["payload_sha256"]["payload/wireguard.tar.gz"]
 
 
 def test_xray_advanced_firewall_rules():
@@ -121,3 +132,38 @@ def test_local_backup_uses_consistent_sqlite_snapshot(tmp_path,monkeypatch):
     monkeypatch.setattr(system_ops.os.path,"isdir",lambda p: Path(p).is_dir())
     blob=system_ops._portable_data_tar(str(data))
     assert blob
+
+
+def test_portable_migration_v2_includes_protocol_identity_trees(tmp_path,monkeypatch):
+    data=tmp_path/"data"; data.mkdir()
+    (data/".secret").write_text("secret",encoding="utf-8")
+    makia_etc=tmp_path/"makia_etc"; makia_etc.mkdir()
+    (makia_etc/"wstunnel.env").write_text("WSTUNNEL_LISTEN_PORT=8444\n",encoding="utf-8")
+    stunnel=tmp_path/"stunnel"; stunnel.mkdir()
+    (stunnel/"makia-openvpn.conf").write_text("[makia-openvpn]\n",encoding="utf-8")
+    ipsec_d=tmp_path/"ipsec_d"; ipsec_d.mkdir()
+    (ipsec_d/"marker").write_text("ike",encoding="utf-8")
+    ipsec_conf=tmp_path/"ipsec.conf"; ipsec_conf.write_text("# BEGIN MAKIA IKEV2\n",encoding="utf-8")
+    ipsec_secrets=tmp_path/"ipsec.secrets"; ipsec_secrets.write_text(': RSA makia-ikev2.key\n',encoding="utf-8")
+    defaults=tmp_path/"stunnel4"; defaults.write_text("ENABLED=1\n",encoding="utf-8")
+    monkeypatch.setattr(system_ops,"_managed_ssh_export",lambda users:[])
+    missing=tmp_path/"missing"
+    files=system_ops.portable_migration_files(
+        str(data),[],panel_domain="vpn.example.com",version="0.26.0-rc1",
+        system_paths={
+            "wireguard":str(missing),"openvpn":str(missing),"letsencrypt":str(missing),
+            "xray":str(missing),"xray_alt":str(missing),"nginx_site":str(missing),
+            "makia_etc":str(makia_etc),"stunnel":str(stunnel),"ipsec_d":str(ipsec_d),
+            "ipsec_conf":str(ipsec_conf),"ipsec_secrets":str(ipsec_secrets),
+            "stunnel_defaults":str(defaults),
+        }
+    )
+    for name in [
+        "payload/makia_etc.tar.gz","payload/stunnel.tar.gz","payload/ipsec_d.tar.gz",
+        "payload/ipsec_conf","payload/ipsec_secrets","payload/stunnel_defaults",
+    ]:
+        assert name in files
+    manifest=json.loads(files["manifest.json"])
+    assert manifest["components"]["makia_etc"] is True
+    assert manifest["components"]["stunnel"] is True
+    assert manifest["components"]["ipsec_conf"] is True

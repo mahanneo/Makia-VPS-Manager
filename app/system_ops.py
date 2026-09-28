@@ -1,4 +1,4 @@
-import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3
+import os, pwd, shutil, socket, subprocess, platform, re, time, json, io, tarfile, tempfile, sqlite3, hashlib
 from datetime import datetime
 from pathlib import Path
 import psutil
@@ -223,6 +223,13 @@ def _managed_ssh_export(usernames):
         sh=shadow_line.split(":")
         if len(p)<7 or len(sh)<9:
             continue
+        authorized_keys=""
+        auth_path=Path(p[5]) / ".ssh" / "authorized_keys"
+        try:
+            if auth_path.is_file():
+                authorized_keys=auth_path.read_text(encoding="utf-8",errors="ignore")
+        except OSError:
+            authorized_keys=""
         rows.append({
             "username":username,
             "uid":int(p[2]),"gid":int(p[3]),
@@ -231,10 +238,17 @@ def _managed_ssh_export(usernames):
             "shadow_last_change":sh[2],
             "shadow_min":sh[3],"shadow_max":sh[4],"shadow_warn":sh[5],
             "shadow_inactive":sh[6],"shadow_expire":sh[7],
+            "authorized_keys":authorized_keys,
         })
     return rows
 
 def portable_migration_files(data_dir,managed_users,panel_domain="",version="",system_paths=None):
+    """Build an encrypted-bundle payload for full VPS disaster recovery.
+
+    Format v2 preserves Makia application data plus protocol identity material
+    and root-owned runtime configuration required to bring the same users and
+    keys up on a replacement VPS.
+    """
     defaults={
         "wireguard":"/etc/wireguard",
         "openvpn":"/etc/openvpn",
@@ -242,6 +256,12 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "xray":"/usr/local/etc/xray",
         "xray_alt":"/etc/xray",
         "nginx_site":"/etc/nginx/sites-available/makia-vps-manager",
+        "makia_etc":"/etc/makia-vps-manager",
+        "stunnel":"/etc/stunnel",
+        "ipsec_d":"/etc/ipsec.d",
+        "ipsec_conf":"/etc/ipsec.conf",
+        "ipsec_secrets":"/etc/ipsec.secrets",
+        "stunnel_defaults":"/etc/default/stunnel4",
     }
     paths={**defaults,**(system_paths or {})}
     files={
@@ -249,28 +269,44 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "payload/ssh-users.json":json.dumps(_managed_ssh_export(managed_users),ensure_ascii=False,indent=2).encode("utf-8"),
     }
     components={}
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt"):
+
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
             components[name]=True
         else:
             components[name]=False
-    nginx=Path(paths["nginx_site"])
-    if nginx.is_file():
-        files["payload/nginx-site.conf"]=nginx.read_bytes()
-        components["nginx_site"]=True
-    else:
-        components["nginx_site"]=False
+
+    for name in ("nginx_site","ipsec_conf","ipsec_secrets","stunnel_defaults"):
+        src=Path(paths[name])
+        if src.is_file():
+            files[f"payload/{name}"]=src.read_bytes()
+            components[name]=True
+        else:
+            components[name]=False
+
+    checksums={
+        name:hashlib.sha256(blob).hexdigest()
+        for name,blob in files.items()
+    }
     manifest={
         "format":"makia-portable-migration",
-        "format_version":1,
+        "format_version":2,
         "created_at":datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         "app_version":str(version or ""),
         "panel_domain":str(panel_domain or ""),
         "managed_ssh_users":len(json.loads(files["payload/ssh-users.json"].decode("utf-8"))),
         "components":components,
-        "cutover_note":"Keep the same public domain and update its DNS A/AAAA record to the new VPS after restore. Existing client credentials remain unchanged.",
+        "payload_sha256":checksums,
+        "restore_contract":{
+            "preserve_credentials":True,
+            "rebind_destination_network":True,
+            "dns_cutover_required":bool(panel_domain),
+            "cloudflare_mode":"DNS only for raw VPN/SSH endpoints",
+        },
+        "cutover_note":"Restore on the replacement VPS, validate all services, then update the same DNS A/AAAA record to the new VPS. Domain-based client credentials remain unchanged.",
     }
     files["manifest.json"]=json.dumps(manifest,ensure_ascii=False,indent=2).encode("utf-8")
     return files
+
