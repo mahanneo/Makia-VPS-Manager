@@ -483,6 +483,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "nginx_site":"/etc/nginx/sites-available/makia-vps-manager",
         "makia_etc":"/etc/makia-vps-manager",
         "stunnel":"/etc/stunnel",
+        "outline":"/opt/outline",
         "ipsec_d":"/etc/ipsec.d",
         "ipsec_conf":"/etc/ipsec.conf",
         "ipsec_secrets":"/etc/ipsec.secrets",
@@ -495,7 +496,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     }
     components={}
 
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","outline","ipsec_d"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
