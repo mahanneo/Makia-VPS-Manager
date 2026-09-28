@@ -1036,7 +1036,21 @@ def security(request:Request):
 @app.get("/api/protocols")
 def protocols(request:Request):
     require_user(request)
-    return protocol_ops.catalog()
+    result=protocol_ops.catalog()
+    cfg=_secret_config_get("outline")
+    outline={"configured":bool(cfg),"ready":False,"count":0}
+    if cfg:
+        try:
+            state=system_ops.outline_status(cfg.get("api_url"),cfg.get("cert_sha256"))
+            outline.update({"ready":True,"count":state.get("count",0)})
+        except Exception as exc:
+            outline["error"]=str(exc)
+    result["outline"]=outline
+    result.setdefault("capabilities",[]).append({
+        "id":"outline","engine":"outline","available":bool(outline.get("ready")),
+        "mode":"external_api","configured":bool(outline.get("configured"))
+    })
+    return result
 
 @app.get("/api/protocols/modes")
 def protocol_modes_get(request:Request):
@@ -1995,7 +2009,40 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3}
+    outline_cfg=_secret_config_get("outline")
+    outline_live={}
+    if outline_cfg:
+        try:
+            live=system_ops.outline_status(outline_cfg.get("api_url"),outline_cfg.get("cert_sha256"))
+            outline_live={str(x.get("id")):x for x in (live.get("keys") or [])}
+        except Exception:
+            outline_live={}
+    outline_artifacts=[a for a in artifacts.values() if a["kind"]=="outline"]
+    seen_outline=set()
+    for art in outline_artifacts:
+        key=str(art["external_key"]); seen_outline.add(key)
+        live=outline_live.get(key) or {}
+        try: meta=json.loads(art.get("metadata_json") or "{}")
+        except Exception: meta={}
+        rows.append({
+            "id":f"outline:{key}","kind":"outline","key":key,
+            "name":live.get("name") or art.get("display_name") or key,"protocol":"outline",
+            "status":"active" if live else ("unknown" if outline_cfg else "setup"),
+            "online":None,"device_limit":1,"can_export":True,"artifact_id":art.get("id"),
+            "legacy":False,"endpoint":"","quota_bytes":int(((live.get("dataLimit") or {}).get("bytes")) or meta.get("quota_bytes") or 0),
+            "outline_port":live.get("port") or meta.get("port"),"outline_method":live.get("method") or meta.get("method",""),
+        })
+    for key,live in outline_live.items():
+        if key in seen_outline: continue
+        rows.append({
+            "id":f"outline:{key}","kind":"outline","key":key,
+            "name":live.get("name") or f"Outline {key}","protocol":"outline","status":"active",
+            "online":None,"device_limit":1,"can_export":False,"artifact_id":None,"legacy":True,
+            "endpoint":"","quota_bytes":int(((live.get("dataLimit") or {}).get("bytes")) or 0),
+            "outline_port":live.get("port"),"outline_method":live.get("method",""),
+        })
+
+    order={"ssh":0,"xray":1,"wireguard":2,"openvpn":3,"outline":4}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2349,6 +2396,11 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="outline":
+            cfg=_secret_config_get("outline")
+            if not cfg: raise HTTPException(409,"Outline integration is not configured")
+            system_ops.outline_delete_key(cfg["api_url"],cfg["cert_sha256"],key)
+            delete_access_artifact_by_key("outline",key)
         else:
             raise HTTPException(404,"unsupported access kind")
     except (system_ops.OperationError,protocol_ops.ProtocolError) as e:
