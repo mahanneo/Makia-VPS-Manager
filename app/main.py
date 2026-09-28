@@ -2022,7 +2022,7 @@ def access_share(kind:str,key:str,request:Request):
             sid=xray_row["subscription_id"]
             summary["subscription_url"]=f"{public_origin(request)}/sub/{sid}?format={subscription_settings['default_format']}" if subscription_settings["enabled"] else ""
             summary["client_url"]=f"{public_origin(request)}/client/{sid}" if subscription_settings["client_page_enabled"] else ""
-    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'ssh'}"
+    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'outline' if kind=='outline' else 'ssh'}"
     subscription=str(summary.get("subscription_url") or "")
     subscription_qr=""
     if subscription:
