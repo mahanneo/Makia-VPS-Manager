@@ -554,3 +554,32 @@ def test_repair_protocol_firewall_runtime_rebuilds_managed_rules(monkeypatch):
     assert (4500,"udp","IKEv2 NAT-T") in calls
     assert (9443,"tcp","OpenVPN Stealth") in calls
     assert (8444,"tcp","WStunnel WSS") in calls
+
+
+def test_repair_openvpn_all_runtimes_ignores_non_makia_server_configs(monkeypatch,tmp_path):
+    ovpn=tmp_path/"openvpn"
+    server=ovpn/"server"
+    server.mkdir(parents=True)
+    primary=server/"server.conf"
+    custom=server/"customer-custom.conf"
+    primary.write_text(
+        "port 1194\nproto udp4\ndev tun\nserver 10.8.0.0 255.255.255.0\n"
+        "script-security 2\nup /old/up\ndown /old/down\n",
+        encoding="utf-8",
+    )
+    custom_text="port 7443\nproto tcp-server\ndev tun-custom\n# externally managed\n"
+    custom.write_text(custom_text,encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",ovpn)
+    monkeypatch.setenv("MAKIA_BACKUP_DIR",str(tmp_path/"backups"))
+    monkeypatch.setenv("MAKIA_SYSCTL_DIR",str(tmp_path/"sysctl"))
+    monkeypatch.setattr(protocol_ops,"_default_iface",lambda:"ens3")
+    monkeypatch.setattr(protocol_ops,"_ufw_allow_if_active",lambda *args,**kwargs:{"active":False,"changed":False})
+    monkeypatch.setattr(protocol_ops,"_run",lambda *args,**kwargs:"")
+    monkeypatch.setattr(protocol_ops,"_openvpn_runtime_for",lambda stem:{
+        "name":stem,"port":1194,"proto":"udp4","service_active":True,"listener":True,
+        "config":str(server/f"{stem}.conf"),
+    })
+    result=protocol_ops.repair_openvpn_all_runtimes()
+    assert result["ok"] is True
+    assert [row["server"] for row in result["servers"]]==["server"]
+    assert custom.read_text(encoding="utf-8")==custom_text
