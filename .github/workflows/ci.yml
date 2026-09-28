@@ -105,6 +105,7 @@ jobs:
           test -f docs/UAT-0.26.0-RC2.md
           test -f docs/UAT-0.26.0-RC3.md
           test -f docs/UAT-0.26.0-RC4.md
+          test -f docs/UAT-0.26.0-RC5.md
           grep -q 'CREDENTIAL_FILE=/root/makia-install-credentials.txt' scripts/install.sh
           grep -q 'MAKIA VPS MANAGER - INSTALL READY' scripts/install.sh
           test -f docs/UAT-PROTOCOL-MODES.md
@@ -201,8 +202,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.26.0-rc4"' app/config.py
-          grep -Fxq '0.26.0-rc4' VERSION
+          grep -q 'VERSION = "0.26.0-rc5"' app/config.py
+          grep -Fxq '0.26.0-rc5' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -226,7 +227,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v0260rc4' app/static/sw.js
+          grep -q 'makia-shell-v0260rc5' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
@@ -268,7 +269,7 @@ jobs:
           grep -q 'security-posture-grid' app/static/app.js
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
-          grep -q 'makia-shell-v0260rc4' app/static/sw.js
+          grep -q 'makia-shell-v0260rc5' app/static/sw.js
 
       - name: Connection modes contract
         run: |

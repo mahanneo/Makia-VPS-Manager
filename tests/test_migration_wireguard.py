@@ -290,15 +290,17 @@ def test_migration_inspector_accepts_legacy_sanitized_systemd_template(tmp_path,
         legacy_name:unit,
     }
     blob=access_ops.protected_zip(files,"MigrationPass!2026")
-    preview=system_ops.inspect_portable_migration_blob(blob,"MigrationPass!2026","0.26.0-rc3")
+    preview=system_ops.inspect_portable_migration_blob(blob,"MigrationPass!2026","0.26.0-rc5")
     assert preview["compatible"] is True
-    staged=system_ops.stage_migration_restore(blob,"MigrationPass!2026","0.26.0-rc3")
+    staged=system_ops.stage_migration_restore(blob,"MigrationPass!2026","0.26.0-rc5")
     assert staged["bundle_version"]=="0.26.0-rc2"
     assert staged["restore_ready"] is True
 
 
 def test_migration_version_compatibility_is_narrow_and_directional():
-    assert system_ops._migration_versions_compatible("0.26.0-rc3","0.26.0-rc3") is True
-    assert system_ops._migration_versions_compatible("0.26.0-rc2","0.26.0-rc3") is True
-    assert system_ops._migration_versions_compatible("0.26.0-rc3","0.26.0-rc2") is False
-    assert system_ops._migration_versions_compatible("0.25.0","0.26.0-rc3") is False
+    assert system_ops._migration_versions_compatible("0.26.0-rc5","0.26.0-rc5") is True
+    assert system_ops._migration_versions_compatible("0.26.0-rc2","0.26.0-rc5") is True
+    assert system_ops._migration_versions_compatible("0.26.0-rc3","0.26.0-rc5") is True
+    assert system_ops._migration_versions_compatible("0.26.0-rc4","0.26.0-rc5") is True
+    assert system_ops._migration_versions_compatible("0.26.0-rc5","0.26.0-rc4") is False
+    assert system_ops._migration_versions_compatible("0.25.0","0.26.0-rc5") is False

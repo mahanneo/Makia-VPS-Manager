@@ -1846,3 +1846,25 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
   .port-plan-grid,.migration-preview-grid,.backup-history-row{grid-template-columns:1fr}
   .backup-history-row>div:last-child{grid-column:auto}
 }
+
+
+/* v0.26.0-rc5 — Xray Inbound Center */
+.xray-builder-modal{width:min(1180px,96vw);max-height:94vh;overflow:auto}
+.xray-builder-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.xray-builder-section{border:1px solid var(--line);background:var(--panel-2);border-radius:18px;padding:16px;min-width:0}
+.xray-builder-section .section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px}
+.xray-builder-section .section-title b{font-size:14px}
+.xray-builder-section .section-title span{font-size:11px;color:var(--muted);text-align:left}
+.xray-builder-section textarea:not(.config-output){min-height:74px;resize:vertical}
+.xray-builder-section.pro-advanced{grid-column:1/-1}
+.xray-builder-section.pro-advanced>summary{cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:center}
+.xray-builder-section.pro-advanced>summary small{color:var(--muted)}
+.xray-builder-section.pro-advanced[open]>summary{margin-bottom:14px}
+.xray-builder-modal .check-row{display:flex;flex-direction:row;align-items:center;gap:9px;min-height:44px}
+.xray-builder-modal .check-row input{width:auto}
+.xray-builder-modal #xbCompatNote{margin-top:14px}
+@media(max-width:900px){
+  .xray-builder-grid{grid-template-columns:1fr}
+  .xray-builder-section.pro-advanced{grid-column:auto}
+  .xray-builder-modal{width:96vw}
+}

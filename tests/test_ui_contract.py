@@ -84,7 +84,7 @@ def test_primary_navigation_has_dedicated_protocol_workspaces():
 
 
 def test_xray_workspace_exposes_real_policy_controls():
-    for marker in ["QUOTA · EXPIRY · RESET · IP LIMIT · STATUS","protocolClientRow","resetProtocolTraffic"]:
+    for marker in ["Clientهای مدیریت‌شده","QUOTA · EXPIRY · IP LIMIT","protocolClientRow","resetProtocolTraffic"]:
         assert marker in JS
 
 
@@ -194,3 +194,13 @@ def test_protocol_workspace_access_actions_refresh_their_cache():
     assert "window.__protocolData=stack;window.__operatorSettings=operator;accessCache=rows;" in JS
     assert "window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;accessCache=accessRows;" in JS
     assert "if(action==='access-detail'){await openAccessDetail" in JS
+
+
+def test_xray_inbound_center_has_3x_style_sections():
+    for marker in [
+        "XRAY INBOUND CENTER","Inbound → Client → Transport → Security → Sniffing → Sockopt",
+        "xray-inbound-builder","xray-builder-create","xbProtocol","xbTransport","xbSecurity",
+        "xbSniffEnabled","xbTcpFastOpen","xbExtraStream",
+        "/api/protocols/xray/inbound-capabilities","/api/protocols/xray/inbounds"
+    ]:
+        assert marker in JS

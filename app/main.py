@@ -840,6 +840,176 @@ def wstunnel_bootstrap(payload:WStunnelBootstrap,request:Request):
     audit(actor,"wstunnel_bootstrap","wstunnel",f"domain={payload.domain}; port={payload.port}",ip=ip(request))
     return result
 
+class XrayInboundBuilderPayload(BaseModel):
+    protocol:str
+    port:int=Field(ge=1,le=65535)
+    remark:str=Field(min_length=1,max_length=80)
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    listen:str=Field(default="0.0.0.0",max_length=80)
+    transport:str="tcp"
+    security:str="none"
+    flow:str=""
+    credential:str=Field(default="",max_length=128)
+    shadowsocks_method:str="aes-128-gcm"
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    reset_days:int=Field(default=0,ge=0,le=3650)
+    options:dict=Field(default_factory=dict)
+
+
+@app.get("/api/protocols/xray/inbound-capabilities")
+def xray_inbound_capabilities(request:Request):
+    require_capability(request,"xray")
+    return protocol_ops.xray_inbound_builder_capabilities()
+
+
+@app.post("/api/protocols/xray/inbounds")
+def xray_inbound_create(payload:XrayInboundBuilderPayload,request:Request):
+    actor=require_capability(request,"xray",True)
+    if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
+        raise HTTPException(400,"Xray client name must be unique because traffic accounting uses the client email/name identity")
+    client_id=None
+    result=None
+    try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
+        spec=payload.model_dump()
+        spec["endpoint"]=endpoint
+        result=protocol_ops.create_xray_full_inbound(spec)
+        quota_bytes=int(payload.quota_gb*1024*1024*1024)
+        expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+        client_id=create_protocol_client(
+            payload.name,"xray",payload.protocol,result["tag"],result["credential"],result["share_link"],
+            quota_bytes,expire_at,payload.ip_limit,payload.reset_days
+        )
+        client_row=get_protocol_client(client_id)
+        sub_id=(client_row or {}).get("subscription_id") or ""
+        origin=public_origin(request)
+        subscription_settings=operator_settings_snapshot()["subscription"]
+        sub_format=subscription_settings["default_format"]
+        delivery=access_ops.xray_payload(
+            payload.name,payload.protocol,result["share_link"],
+            f"{origin}/sub/{sub_id}?format={sub_format}" if sub_id and subscription_settings["enabled"] else "",
+            f"{origin}/client/{sub_id}" if sub_id and subscription_settings["client_page_enabled"] else ""
+        )
+        artifact_id=artifact_save("xray",str(client_id),payload.name,payload.protocol,delivery,{
+            "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
+            "transport":result.get("transport",""),"security":result.get("security",""),
+            "flow":payload.flow,"subscription_id":sub_id,
+            "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,
+            "builder":"inbound-center-v1","remark":payload.remark,
+            "reality_public_key":(result.get("reality") or {}).get("public_key",""),
+            "reality_short_id":(result.get("reality") or {}).get("short_id",""),
+        })
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    except Exception:
+        if client_id is not None:
+            try:
+                delete_access_artifact_by_key("xray",str(client_id))
+                delete_protocol_client(client_id)
+            except Exception:
+                pass
+        if result and result.get("tag"):
+            try:protocol_ops.remove_xray_inbound(result["tag"])
+            except Exception:pass
+        raise
+    qr=qrcode.make(result["share_link"],image_factory=qrcode.image.svg.SvgPathImage)
+    buf=io.BytesIO();qr.save(buf)
+    result["qr"]="data:image/svg+xml;base64,"+base64.b64encode(buf.getvalue()).decode()
+    result["client_id"]=client_id
+    result["artifact_id"]=artifact_id
+    result["subscription_id"]=sub_id
+    result["quota_bytes"]=quota_bytes
+    result["expire_at"]=expire_at
+    result["ip_limit"]=payload.ip_limit
+    result["reset_days"]=payload.reset_days
+    audit(
+        actor,"xray_inbound_builder_create",result["tag"],
+        f"protocol={payload.protocol}; transport={payload.transport}; security={payload.security}; port={payload.port}",
+        ip(request)
+    )
+    return result
+
+
+class XrayInboundClientCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    credential:str=Field(default="",max_length=128)
+    flow:str=""
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    reset_days:int=Field(default=0,ge=0,le=3650)
+
+
+@app.post("/api/protocols/xray/inbounds/{inbound_tag}/clients")
+def xray_inbound_client_create(inbound_tag:str,payload:XrayInboundClientCreate,request:Request):
+    actor=require_capability(request,"xray",True)
+    if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
+        raise HTTPException(400,"Xray client name must be globally unique because accounting uses the email/name identity")
+    client_id=None
+    result=None
+    try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
+        result=protocol_ops.add_xray_client_to_inbound(
+            inbound_tag,payload.name,endpoint,payload.credential,payload.flow
+        )
+        quota_bytes=int(payload.quota_gb*1024*1024*1024)
+        expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+        client_id=create_protocol_client(
+            payload.name,"xray",result["protocol"],result["tag"],result["credential"],result["share_link"],
+            quota_bytes,expire_at,payload.ip_limit,payload.reset_days
+        )
+        row=get_protocol_client(client_id)
+        sub_id=(row or {}).get("subscription_id") or ""
+        origin=public_origin(request)
+        subscription_settings=operator_settings_snapshot()["subscription"]
+        sub_format=subscription_settings["default_format"]
+        delivery=access_ops.xray_payload(
+            payload.name,result["protocol"],result["share_link"],
+            f"{origin}/sub/{sub_id}?format={sub_format}" if sub_id and subscription_settings["enabled"] else "",
+            f"{origin}/client/{sub_id}" if sub_id and subscription_settings["client_page_enabled"] else ""
+        )
+        artifact_id=artifact_save("xray",str(client_id),payload.name,result["protocol"],delivery,{
+            "client_id":client_id,"inbound_tag":result["tag"],"port":result["port"],
+            "transport":result.get("transport",""),"security":result.get("security",""),
+            "flow":payload.flow,"subscription_id":sub_id,
+            "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,
+            "builder":"inbound-client-v1",
+            "reality_public_key":(result.get("reality") or {}).get("public_key",""),
+            "reality_short_id":(result.get("reality") or {}).get("short_id",""),
+        })
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    except Exception:
+        if result and result.get("tag") and payload.name:
+            try:protocol_ops.remove_xray_client_from_inbound(result["tag"],payload.name)
+            except Exception:pass
+        if client_id is not None:
+            try:
+                delete_access_artifact_by_key("xray",str(client_id))
+                delete_protocol_client(client_id)
+            except Exception:
+                pass
+        raise
+    qr=qrcode.make(result["share_link"],image_factory=qrcode.image.svg.SvgPathImage)
+    buf=io.BytesIO();qr.save(buf)
+    result["qr"]="data:image/svg+xml;base64,"+base64.b64encode(buf.getvalue()).decode()
+    result["client_id"]=client_id
+    result["artifact_id"]=artifact_id
+    result["subscription_id"]=sub_id
+    result["quota_bytes"]=quota_bytes
+    result["expire_at"]=expire_at
+    result["ip_limit"]=payload.ip_limit
+    result["reset_days"]=payload.reset_days
+    audit(actor,"xray_inbound_client_create",result["tag"],f"name={payload.name}; protocol={result['protocol']}",ip=ip(request))
+    return result
+
+
 class XrayQuickInbound(BaseModel):
     protocol:str
     port:int=Field(ge=1,le=65535)
@@ -1672,7 +1842,16 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="xray":
             row=get_protocol_client(int(key))
             if not row: raise HTTPException(404,"Xray client not found")
-            protocol_ops.remove_xray_inbound(row["inbound_tag"])
+            siblings=[
+                item for item in list_protocol_clients()
+                if item.get("engine")=="xray"
+                and item.get("inbound_tag")==row.get("inbound_tag")
+                and int(item.get("id") or 0)!=int(key)
+            ]
+            if siblings:
+                protocol_ops.remove_xray_client_from_inbound(row["inbound_tag"],row["name"])
+            else:
+                protocol_ops.remove_xray_inbound(row["inbound_tag"])
             delete_protocol_client(int(key)); delete_access_artifact_by_key("xray",key)
         elif kind=="wireguard":
             artifact=get_access_artifact_by_key("wireguard",key)

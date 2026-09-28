@@ -49,6 +49,7 @@ def main():
     protocol_ops._xray_materialize_tls=lambda domain:(cert_path,key_path)
     try:
         validate_guided_matrix(binary,root,cert_path,key_path)
+        validate_inbound_builder_profiles(binary,root,cert_path,key_path)
         data=protocol_ops._ensure_xray_stats(
             protocol_ops._xray_default_config(Path("/tmp/makia-xray-config.json"))
         )
@@ -186,6 +187,78 @@ def main():
     finally:
         cover.shutdown();cover.server_close()
         protocol_ops._xray_materialize_tls=original_tls
+
+
+
+def validate_inbound_builder_profiles(binary,root,cert_path,key_path):
+    """Validate the structured RC5 form fields against the pinned Xray Core."""
+    cases=[
+        ("vless","tcp","none",{
+            "path":"/raw","header_type":"http","http_host":"example.com","http_path":"/raw",
+            "tcp_fast_open":True,"tcp_no_delay":True,"domain_strategy":"UseIP",
+            "sniffing_enabled":True,
+        }),
+        ("vless","ws","tls",{
+            "path":"/ws","host":"test.example.com","heartbeat_period":10,
+            "headers":{"X-Makia":"1"},"server_name":"test.example.com","alpn":"h2,http/1.1",
+        }),
+        ("vless","grpc","reality",{
+            "service_name":"makia-grpc","authority":"test.example.com","multi_mode":True,
+            "server_name":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
+            "fingerprint":"chrome","spider_x":"/",
+        }),
+        ("vless","xhttp","reality",{
+            "path":"/xhttp","host":"test.example.com","xhttp_mode":"auto","x_padding_bytes":"100-1000",
+            "server_name":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
+        }),
+        ("vless","kcp","none",{
+            "mtu":1350,"tti":20,"uplink_capacity":5,"downlink_capacity":20,
+            "cwnd_multiplier":1,"max_sending_window":2097152,
+        }),
+        ("trojan","tcp","reality",{
+            "server_name":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
+            "fingerprint":"chrome",
+        }),
+        ("shadowsocks","tcp","tls",{
+            "server_name":"test.example.com","alpn":"h2,http/1.1",
+        }),
+    ]
+    checked=[]
+    for idx,(protocol,transport,security,options) in enumerate(cases):
+        normalized_transport,normalized_security=protocol_ops._xray_builder_validate_combo(
+            protocol,transport,security
+        )
+        stream,meta=protocol_ops._xray_builder_stream(
+            binary,protocol,normalized_transport,normalized_security,options
+        )
+        credential=protocol_ops._xray_builder_credential(protocol)
+        settings,_=protocol_ops._xray_builder_client(
+            protocol,f"builder-{idx}",credential,
+            "xtls-rprx-vision" if protocol=="vless" and transport=="tcp" and security=="reality" else "",
+            "aes-128-gcm",
+        )
+        inbound={
+            "tag":f"builder-{idx}","listen":"127.0.0.1","port":24000+idx,
+            "protocol":"hysteria" if protocol=="hysteria2" else protocol,
+            "settings":settings,"streamSettings":stream,
+            "sniffing":protocol_ops._xray_builder_sniffing(options),
+        }
+        data=protocol_ops._xray_default_config(root/f"builder-{idx}.json")
+        data["inbounds"]=[inbound]
+        target=protocol_ops._xray_temp_json_path(root/f"builder-{idx}.json","builder-core")
+        target.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+        try:
+            protocol_ops._xray_test_config(binary,target)
+        except Exception as exc:
+            raise AssertionError(
+                f"Xray 26.3.27 rejected inbound builder profile {protocol}/{transport}/{security}: {exc}"
+            ) from exc
+        finally:
+            target.unlink(missing_ok=True)
+        if security=="reality":
+            assert meta.get("public_key") and meta.get("short_id")
+        checked.append(f"{protocol}/{transport}/{security}")
+    print("Xray Inbound Center structured options PASS: "+", ".join(checked))
 
 
 def validate_guided_matrix(binary,root,cert_path,key_path):
