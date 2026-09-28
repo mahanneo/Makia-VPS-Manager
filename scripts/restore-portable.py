@@ -27,14 +27,42 @@ def run(args,check=True):
     return p
 
 
+def _within_root(root:Path,target:Path):
+    root=root.resolve()
+    target=target.resolve()
+    return target==root or root in target.parents
+
+
 def safe_extract_tar(blob:bytes,destination:Path):
+    """Extract migration tar data without path/symlink traversal.
+
+    Let's Encrypt legitimately uses relative symlinks such as
+    live/domain/fullchain.pem -> ../../archive/domain/fullchain1.pem. Those are
+    allowed only when the resolved link target remains inside this extraction
+    root. Absolute links and links escaping the archive root are rejected.
+    """
     destination=destination.resolve()
     destination.mkdir(parents=True,exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(blob),mode="r:gz") as tf:
-        for member in tf.getmembers():
+        members=tf.getmembers()
+        for member in members:
             target=(destination/member.name).resolve()
-            if target!=destination and destination not in target.parents:
+            if not _within_root(destination,target):
                 raise RuntimeError("unsafe path in migration archive")
+            if member.issym():
+                link=Path(member.linkname)
+                if link.is_absolute():
+                    raise RuntimeError("unsafe absolute symlink in migration archive")
+                link_target=(target.parent/link).resolve()
+                if not _within_root(destination,link_target):
+                    raise RuntimeError("unsafe symlink target in migration archive")
+            elif member.islnk():
+                link=Path(member.linkname)
+                if link.is_absolute():
+                    raise RuntimeError("unsafe absolute hardlink in migration archive")
+                link_target=(destination/link).resolve()
+                if not _within_root(destination,link_target):
+                    raise RuntimeError("unsafe hardlink target in migration archive")
         tf.extractall(destination)
 
 
