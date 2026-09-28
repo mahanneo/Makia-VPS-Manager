@@ -375,12 +375,16 @@ def xray_status():
                 protocol=item.get("protocol") or "unknown"
                 if protocol=="hysteria" and isinstance(settings,dict) and int(settings.get("version") or 0)==2:
                     protocol="hysteria2"
+                stream=item.get("streamSettings") or {}
                 inbounds.append({
                     "tag":item.get("tag") or "",
                     "protocol":protocol,
                     "listen":item.get("listen") or "0.0.0.0",
                     "port":item.get("port"),
                     "clients":client_count,
+                    "transport":stream.get("method") or stream.get("network") or "raw",
+                    "security":stream.get("security") or "none",
+                    "sniffing":bool((item.get("sniffing") or {}).get("enabled")),
                 })
         except Exception as exc:
             error=str(exc)[:300]
