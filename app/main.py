@@ -2149,9 +2149,17 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="outline":
+            row=get_protocol_client(int(key))
+            if not row or row.get("engine")!="outline":
+                raise HTTPException(404,"Outline client not found")
+            outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
+            outline_ops.delete_key(outline_id)
+            delete_protocol_client(int(key))
+            delete_access_artifact_by_key("outline",key)
         else:
             raise HTTPException(404,"unsupported access kind")
-    except (system_ops.OperationError,protocol_ops.ProtocolError) as e:
+    except (system_ops.OperationError,protocol_ops.ProtocolError,outline_ops.OutlineError) as e:
         raise HTTPException(400,str(e))
     audit(actor,"access_revoke",f"{kind}:{key}",ip=ip(request))
     return {"ok":True}
