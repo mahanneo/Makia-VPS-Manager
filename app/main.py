@@ -1874,10 +1874,22 @@ def public_access_portal(token:str,request:Request):
             "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
         })
     qr=""
-    if share_text and kind in {"xray","wireguard","ssh"}:
+    if share_text and kind in {"xray","wireguard","ssh","outline"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
+    ua=(request.headers.get("user-agent") or "").lower()
+    if "android" in ua:device="android"
+    elif "iphone" in ua or "ipad" in ua:device="ios"
+    elif "windows" in ua:device="windows"
+    elif "macintosh" in ua or "mac os" in ua:device="macos"
+    elif "linux" in ua:device="linux"
+    else:device="other"
+    one_tap_url=""
+    if share_text:
+        parsed_share=urllib.parse.urlsplit(share_text)
+        if parsed_share.scheme.lower() in {"vless","vmess","trojan","ss","hysteria2","npvt-ssh"}:
+            one_tap_url=share_text
     portal_url=f"{public_origin(request)}/access/{token}"
     response=templates.TemplateResponse("access_portal.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
@@ -1889,6 +1901,7 @@ def public_access_portal(token:str,request:Request):
         "details_text":str(payload.get("primary_text") or "") if kind=="ssh" else "",
         "portal_url":portal_url,
         "guide_url":f"{public_origin(request)}/help/connect#{guide_kind}",
+        "device":device,"one_tap_url":one_tap_url,
         "download_url":f"/access/{token}/download",
         "qr_url":f"/access/{token}/qr.svg" if qr else "",
     })
@@ -1973,7 +1986,7 @@ def public_access_qr(token:str,request:Request):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
-    if kind not in {"xray","wireguard","ssh"}:
+    if kind not in {"xray","wireguard","ssh","outline"}:
         raise HTTPException(404,"QR is not available for this access type")
     share=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not share:
