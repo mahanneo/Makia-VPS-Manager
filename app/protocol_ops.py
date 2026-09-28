@@ -445,13 +445,54 @@ def stunnel_status():
 
 def _listener_present(port, proto="tcp"):
     port=int(port or 0)
-    if not port or not shutil.which("ss"):
+    proto=str(proto or "tcp").lower()
+    if not port:
         return False
-    flag="-ltn" if str(proto).lower()=="tcp" else "-lun"
-    p=subprocess.run(["ss","-H",flag],text=True,capture_output=True,timeout=8,check=False)
-    if p.returncode!=0:
-        return False
-    return any(re.search(rf":{port}\b",line) for line in (p.stdout or "").splitlines())
+
+    ss=shutil.which("ss")
+    if ss:
+        flag="-ltn" if proto=="tcp" else "-lun"
+        try:
+            p=subprocess.run([ss,"-H",flag],text=True,capture_output=True,timeout=8,check=False)
+            if p.returncode==0 and any(re.search(rf":{port}\\b",line) for line in (p.stdout or "").splitlines()):
+                return True
+        except (OSError,subprocess.TimeoutExpired):
+            pass
+
+    # Fallback for hardened/minimal hosts where ss is unavailable, delayed or
+    # restricted. /proc/net exposes the kernel socket table directly.
+    hex_port=f"{port:04X}"
+    tables=("/proc/net/tcp","/proc/net/tcp6") if proto=="tcp" else ("/proc/net/udp","/proc/net/udp6")
+    for table in tables:
+        try:
+            for line in Path(table).read_text(encoding="utf-8",errors="ignore").splitlines()[1:]:
+                cols=line.split()
+                if len(cols)<4:
+                    continue
+                local=cols[1]
+                state=cols[3].upper()
+                if ":" not in local:
+                    continue
+                _,phex=local.rsplit(":",1)
+                if phex.upper()!=hex_port:
+                    continue
+                # TCP LISTEN = 0A. UDP sockets do not have an equivalent listen
+                # state, so presence on the requested local port is sufficient.
+                if proto!="tcp" or state=="0A":
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def _wait_listener(port, proto="tcp", timeout=8.0, interval=0.25):
+    deadline=time.monotonic()+max(0.0,float(timeout))
+    while True:
+        if _listener_present(port,proto):
+            return True
+        if time.monotonic()>=deadline:
+            return False
+        time.sleep(max(0.05,float(interval)))
 
 
 def ikev2_status():
@@ -2790,10 +2831,20 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         if not _active("xray"):
             raise ProtocolError("Xray did not become active after restart")
         firewall_proto="udp" if protocol=="hysteria2" or stream.get("method")=="mkcp" else "tcp"
-        if not _listener_present(port,firewall_proto):
+        if not _wait_listener(port,firewall_proto,timeout=8.0,interval=0.25):
+            detail=""
+            try:
+                p=subprocess.run(
+                    ["systemctl","status","xray","--no-pager","--lines=12"],
+                    text=True,capture_output=True,timeout=8,check=False
+                )
+                detail=(p.stdout or p.stderr or "").strip().replace("\n"," | ")
+            except Exception:
+                detail=""
+            suffix=f"; status: {detail[:700]}" if detail else ""
             raise ProtocolError(
-                f"Xray service is active but the requested {firewall_proto.upper()}/{port} listener is not present; "
-                "the previous config has been restored"
+                f"Xray service is active but {firewall_proto.upper()}/{port} did not become ready within 8 seconds"
+                f"{suffix}; the previous config has been restored"
             )
         _ufw_allow_if_active(port,firewall_proto,f"Xray {protocol}")
     except Exception:

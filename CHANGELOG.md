@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.26.0-rc4] - 2026-09-28
+
+### Xray runtime listener reliability
+- Replaced the single immediate post-restart listener check with an 8-second readiness wait.
+- Listener detection now uses `ss` when available and falls back to `/proc/net/tcp*` or `/proc/net/udp*` on hardened/minimal hosts.
+- Xray creation only rolls back after the requested listener fails the readiness window, and the error now includes a concise systemd status excerpt.
+
+### OpenVPN client actions
+- Fixed OpenVPN `...` detail actions failing from a stale Access cache.
+- Protocol workspaces now refresh the shared Access cache, and the detail drawer self-recovers from cache misses by reloading `/api/access`.
+- OpenVPN client export is labeled explicitly as `دانلود فایل OVPN`; Protected ZIP and guide actions remain available.
+
+### Release status
+- Release Candidate only. Real VPS Xray creation, OpenVPN client download, replacement-VPS restore and inside-Iran data-plane UAT are still required before Stable.
+
+
 ## [0.26.0-rc3] - 2026-09-28
 
 ### Xray / V2Ray manual builder

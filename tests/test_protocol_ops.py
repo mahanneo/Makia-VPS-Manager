@@ -517,3 +517,25 @@ def test_xray_manual_mode_keeps_reality_constraints():
         protocol_ops._validate_xray_manual_combo("vmess","tcp","reality")
     with pytest.raises(ProtocolError,match="REALITY"):
         protocol_ops._validate_xray_manual_combo("vless","ws","reality")
+
+
+def test_wait_listener_tolerates_delayed_bind(monkeypatch):
+    states=iter([False,False,True])
+    monkeypatch.setattr(protocol_ops,"_listener_present",lambda port,proto:next(states))
+    monkeypatch.setattr(protocol_ops.time,"sleep",lambda *_:None)
+    ticks=iter([0.0,0.1,0.2,0.3,0.4])
+    monkeypatch.setattr(protocol_ops.time,"monotonic",lambda:next(ticks))
+    assert protocol_ops._wait_listener(45217,"tcp",timeout=1.0,interval=0.05) is True
+
+
+def test_listener_present_falls_back_to_proc_net(monkeypatch):
+    monkeypatch.setattr(protocol_ops.shutil,"which",lambda name:None if name=="ss" else None)
+    class FakePath:
+        def __init__(self,value): self.value=str(value)
+        def read_text(self,**kwargs):
+            if self.value=="/proc/net/tcp":
+                # local port B0A1 == 45217, state 0A == LISTEN
+                return "  sl  local_address rem_address st\n   0: 00000000:B0A1 00000000:0000 0A\n"
+            raise OSError("missing")
+    monkeypatch.setattr(protocol_ops,"Path",FakePath)
+    assert protocol_ops._listener_present(45217,"tcp") is True
