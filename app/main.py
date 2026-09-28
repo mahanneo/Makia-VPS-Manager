@@ -889,7 +889,15 @@ def security(request:Request):
 @app.get("/api/protocols")
 def protocols(request:Request):
     require_user(request)
-    return protocol_ops.catalog()
+    result=protocol_ops.catalog()
+    try:outline=integration_ops.outline_status()
+    except Exception as exc:outline={"installed":False,"container_active":False,"api_ok":False,"error":str(exc)[:300]}
+    result["outline"]=outline
+    result.setdefault("capabilities",[]).append({
+        "id":"outline","engine":"outline","available":bool(outline.get("installed") and outline.get("api_ok")),
+        "installed":bool(outline.get("installed")),"mode":"managed"
+    })
+    return result
 
 @app.get("/api/protocols/modes")
 def protocol_modes_get(request:Request):
@@ -2524,28 +2532,23 @@ def outline_status_get(request:Request):
 
 @app.post("/api/protocols/outline/install")
 def outline_install(payload:OutlineInstallPayload,request:Request):
+    """Return the root setup command; package installation never runs inside the hardened web service."""
     actor=require_local_admin(request)
     require_mutation(request)
-    script=Path("/usr/local/sbin/makia-install-outline")
-    if not script.is_file():
-        script=Path(__file__).resolve().parents[1]/"scripts/install-outline.sh"
-    if not script.is_file():
-        raise HTTPException(500,"Outline installer wrapper is missing")
-    args=[str(script)]
-    if payload.hostname:
-        args+=["--hostname",payload.hostname]
-    if payload.keys_port:
-        args+=["--keys-port",str(payload.keys_port)]
     try:
-        output=system_ops._run(args,timeout=300)
-        status=integration_ops.outline_status()
-    except (system_ops.OperationError,integration_ops.IntegrationError) as exc:
-        audit(actor,"outline_install_failed","outline",str(exc)[:500],ip(request))
+        command=integration_ops.outline_install_command(payload.hostname,payload.keys_port)
+    except integration_ops.IntegrationError as exc:
         raise HTTPException(400,str(exc))
-    if not status.get("api_ok"):
-        raise HTTPException(409,"Outline installer completed but the Management API is not ready")
-    audit(actor,"outline_install","outline",f"keys_port={payload.keys_port}",ip=request.client.host if request.client else None)
-    return {"ok":True,"output":output[-1200:],"status":status}
+    status=integration_ops.outline_status()
+    if status.get("api_ok"):
+        return {"ok":True,"already_ready":True,"status":status,"command":""}
+    audit(actor,"outline_install_command","outline",f"keys_port={payload.keys_port}",ip(request))
+    return {
+        "ok":False,"already_ready":False,"requires_root":True,
+        "command":command,
+        "note":"Run this command in the VPS root shell. Makia intentionally does not run APT/Docker installers inside the hardened web service.",
+        "status":status,
+    }
 
 @app.get("/api/protocols/outline/keys")
 def outline_keys_get(request:Request):
