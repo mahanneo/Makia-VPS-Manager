@@ -148,7 +148,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","outline":"outline"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -1917,7 +1917,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -2074,7 +2074,7 @@ def public_access_portal(token:str,request:Request):
             "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
         })
     qr=""
-    if share_text and kind in {"xray","wireguard","ssh"}:
+    if share_text and kind in {"xray","wireguard","ssh","outline"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
@@ -2173,7 +2173,7 @@ def public_access_qr(token:str,request:Request):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
-    if kind not in {"xray","wireguard","ssh"}:
+    if kind not in {"xray","wireguard","ssh","outline"}:
         raise HTTPException(404,"QR is not available for this access type")
     share=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not share:
@@ -2189,7 +2189,7 @@ def public_access_qr(token:str,request:Request):
 def access_share(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
     require_local_admin(request)
-    if kind not in {"ssh","xray","wireguard"}:
+    if kind not in {"ssh","xray","wireguard","outline"}:
         raise HTTPException(404,"share view is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -2209,7 +2209,7 @@ def access_share(kind:str,key:str,request:Request):
             sid=xray_row["subscription_id"]
             summary["subscription_url"]=f"{public_origin(request)}/sub/{sid}?format={subscription_settings['default_format']}" if subscription_settings["enabled"] else ""
             summary["client_url"]=f"{public_origin(request)}/client/{sid}" if subscription_settings["client_page_enabled"] else ""
-    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'ssh'}"
+    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'outline' if kind=='outline' else 'ssh'}"
     subscription=str(summary.get("subscription_url") or "")
     subscription_qr=""
     if subscription:
