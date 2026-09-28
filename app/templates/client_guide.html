@@ -33,6 +33,11 @@
 
     <section class="client-card guide-section" id="xray">
       <div class="guide-section-head"><span class="guide-icon xray">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>Xray / V2Ray</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="65" y="10" width="110" height="125" rx="16"/><rect x="83" y="30" width="74" height="74" rx="8"/><path d="M94 42h18v18H94zm34 0h18v18h-18zM94 76h18v18H94zm28-8h10v10h-10zm16 16h10v10h-10z"/></svg><figcaption><b>{{'۱. دریافت پروفایل' if fa else '1. Get the profile'}}</b><span>{{'QR یا لینک اختصاصی را باز کنید.' if fa else 'Open your private QR or link.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="52" y="23" width="136" height="96" rx="12"/><path d="M76 48h88M76 66h66M76 84h78"/><circle cx="164" cy="94" r="12"/><path d="m158 94 5 5 8-11"/></svg><figcaption><b>{{'۲. وارد کردن' if fa else '2. Import'}}</b><span>{{'پروفایل را در کلاینت سازگار وارد کنید.' if fa else 'Import it into a compatible client.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/><rect x="78" y="117" width="84" height="9" rx="4"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'پروفایل را فعال و اینترنت را تست کنید.' if fa else 'Activate the profile and test internet access.'}}</span></figcaption></figure>
+      </div>
       <div class="guide-method-grid">
         <article><b>{{'Android' if fa else 'Android'}}</b><p>{{'Hiddify، v2rayNG یا NekoBox را نصب کنید. QR را اسکن کنید یا لینک را از حافظه وارد کنید، سپس پروفایل را فعال کنید.' if fa else 'Install Hiddify, v2rayNG or NekoBox. Scan the QR code or import the link from clipboard, then activate the profile.'}}</p></article>
         <article><b>iPhone / iPad</b><p>{{'یک کلاینت سازگار Xray نصب کنید. QR یا لینک اختصاصی را وارد کنید و بدون تغییر SNI، کلید عمومی، Short ID یا Port متصل شوید.' if fa else 'Install a compatible Xray client. Import the private QR/link and connect without changing SNI, public key, Short ID or port.'}}</p></article>
@@ -43,6 +48,11 @@
 
     <section class="client-card guide-section" id="wireguard">
       <div class="guide-section-head"><span class="guide-icon wg">W</span><div><div class="eyebrow">{{'VPN بومی · QR · فایل تنظیمات' if fa else 'NATIVE VPN · QR · CONFIG'}}</div><h2>WireGuard</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95zm25-9h9v9h-9zm17 15h9v9h-9z"/></svg><figcaption><b>{{'۱. QR یا فایل' if fa else '1. QR or file'}}</b><span>{{'QR را اسکن کنید یا فایل .conf را بگیرید.' if fa else 'Scan the QR or get the .conf file.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="54" y="25" width="132" height="92" rx="11"/><path d="M76 48h88M76 66h62M76 84h75"/><path d="M160 47v39m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن تونل' if fa else '2. Import tunnel'}}</b><span>{{'فایل را در WireGuard وارد کنید.' if fa else 'Import the file into WireGuard.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><path d="M120 14 74 34v34c0 30 19 50 46 63 27-13 46-33 46-63V34z"/><path d="M100 72h40M120 52v40"/></svg><figcaption><b>{{'۳. فعال‌سازی' if fa else '3. Activate'}}</b><span>{{'تونل را روشن و Handshake را بررسی کنید.' if fa else 'Activate the tunnel and verify the handshake.'}}</span></figcaption></figure>
+      </div>
       <div class="guide-method-grid">
         <article><b>{{'موبایل' if fa else 'Mobile'}}</b><p>{{'برنامه رسمی WireGuard را نصب کنید. علامت + را بزنید و QR را اسکن کنید یا فایل .conf را وارد کنید.' if fa else 'Install the official WireGuard app. Tap + and scan the QR code or import the .conf file.'}}</p></article>
         <article><b>Windows</b><p>{{'برنامه WireGuard را نصب کنید، گزینه وارد کردن تونل از فایل را بزنید و فایل .conf را انتخاب کنید.' if fa else 'Install WireGuard, choose Import tunnel(s) from file and select the .conf file.'}}</p></article>
@@ -53,6 +63,11 @@
 
     <section class="client-card guide-section" id="openvpn">
       <div class="guide-section-head"><span class="guide-icon ovpn">O</span><div><div class="eyebrow">PKI · TCP / UDP · OVPN</div><h2>OpenVPN</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><path d="M74 26h92v93H74z"/><path d="M90 48h60M90 64h48M90 80h55"/><path d="m90 99 12 10 24-29"/></svg><figcaption><b>{{'۱. دانلود OVPN' if fa else '1. Download OVPN'}}</b><span>{{'فایل اختصاصی خود را دانلود کنید.' if fa else 'Download your private OVPN file.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="58" y="20" width="124" height="105" rx="13"/><path d="M83 48h74M83 67h54"/><path d="M120 80v24m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن پروفایل' if fa else '2. Import profile'}}</b><span>{{'فایل را در OpenVPN Connect وارد کنید.' if fa else 'Import the file into OpenVPN Connect.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'پروفایل را فعال کنید.' if fa else 'Activate the profile.'}}</span></figcaption></figure>
+      </div>
       <div class="guide-method-grid">
         <article><b>Android / iPhone</b><p>{{'OpenVPN Connect را نصب کنید. فایل .ovpn را دانلود کنید و از بخش وارد کردن پروفایل، فایل را انتخاب کنید.' if fa else 'Install OpenVPN Connect. Download the .ovpn file and import it from the profile import screen.'}}</p></article>
         <article><b>Windows</b><p>{{'OpenVPN Connect را نصب کنید، فایل .ovpn را وارد کنید و سپس اتصال را فعال کنید.' if fa else 'Install OpenVPN Connect, import the .ovpn file and then connect.'}}</p></article>
@@ -63,6 +78,11 @@
 
     <section class="client-card guide-section" id="ssh">
       <div class="guide-section-head"><span class="guide-icon ssh">›_</span><div><div class="eyebrow">SSH · NPV</div><h2>SSH / NPV</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="50" y="26" width="140" height="92" rx="10"/><path d="m72 54 17 14-17 14M101 82h42"/></svg><figcaption><b>{{'۱. دریافت مشخصات' if fa else '1. Get credentials'}}</b><span>{{'Host، Port، Username و Password را ببینید.' if fa else 'View host, port, username and password.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95z"/></svg><figcaption><b>{{'۲. NPV یا SSH' if fa else '2. NPV or SSH'}}</b><span>{{'QR را اسکن یا مشخصات را دستی وارد کنید.' if fa else 'Scan the QR or enter the credentials manually.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="55" y="25" width="130" height="94" rx="11"/><path d="m78 55 16 13-16 13M106 81h42"/><circle cx="165" cy="94" r="11"/><path d="m159 94 5 5 8-11"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'اتصال را اجرا و محدودیت نشست را رعایت کنید.' if fa else 'Connect and respect the session limit.'}}</span></figcaption></figure>
+      </div>
       <div class="guide-method-grid">
         <article><b>NPV</b><p>{{'اگر QR یا لینک npvt-ssh دارید، آن را در NapsternetV یا کلاینت سازگار وارد کنید.' if fa else 'If you have an npvt-ssh QR/link, import it into NapsternetV or another compatible client.'}}</p></article>
         <article><b>Windows / macOS / Linux</b><p>{{'برای SSH معمولی از Server، Port، Username و Password موجود در صفحه اختصاصی استفاده کنید.' if fa else 'For standard SSH, use the Server, Port, Username and Password shown on your private access page.'}}</p></article>
