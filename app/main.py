@@ -1270,7 +1270,15 @@ def protocol_client_update(client_id:int,payload:ProtocolClientPolicy,request:Re
     quota_bytes=int(payload.quota_gb*1024*1024*1024) if payload.quota_gb is not None else None
     expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days is not None and payload.expire_days>0 else (0 if payload.expire_days==0 else None)
 
-    if payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
+    if row.get("engine")=="outline":
+        outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
+        target_quota=quota_bytes if quota_bytes is not None else int(row.get("quota_bytes") or 0)
+        target_enabled=bool(row.get("enabled")) if payload.enabled is None else bool(payload.enabled)
+        try:
+            outline_ops.set_data_limit(outline_id,target_quota if target_enabled else 0)
+        except outline_ops.OutlineError as e:
+            raise HTTPException(400,str(e))
+    elif payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
         if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2","http","socks"}:
             try:
                 if payload.enabled:
