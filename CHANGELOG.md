@@ -12,6 +12,7 @@
 ### Migration / restore fix
 - Fixed Full Migration archives containing systemd template units: @ is now preserved in ZIP member names.
 - Restore/preview accepts RC2 bundles where the old sanitizer wrote makia-migration-restore-.service, while still verifying the original manifest SHA256.
+- RC3 explicitly accepts verified `0.26.0-rc2` Full Migration bundles while continuing to reject unrelated application versions.
 - This directly fixes the bundle payload missing: payload/systemd/makia-migration-restore@.service restore error.
 
 ### First-install operator handoff
