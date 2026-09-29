@@ -205,3 +205,20 @@ def test_mtproxy_secret_is_not_in_process_argv_or_state_file():
     assert "MTPROXY_SECRET" not in state_block
     assert 'chown root:makia-mtproxy "$CONFIG_FILE"' in installer
     assert 'chmod 0640 "$CONFIG_FILE"' in installer
+
+
+def test_network_service_navigation_is_visible_in_protocol_group():
+    dashboard=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    protocol_panel=dashboard.split('data-group-panel="protocols"',1)[1].split("</div>",1)[0]
+    infra_panel=dashboard.split('data-group-panel="infra"',1)[1].split("</div>",1)[0]
+    assert 'data-view="telegramproxy"' in protocol_panel
+    assert 'data-view="dnscenter"' in protocol_panel
+    assert 'data-view="telegramproxy"' not in infra_panel
+    assert 'data-view="dnscenter"' not in infra_panel
+
+
+def test_dns_client_delivery_never_presents_loopback_as_remote_address():
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert "remoteAddresses=[...new Set([r.wireguard_address,r.public_address].filter(Boolean))]" in js
+    assert "dnsUserDelivery" in js
+    assert "127.0.0.1" not in js.split("const remoteAddresses=",1)[1].split("const upstreamOptions",1)[0]
