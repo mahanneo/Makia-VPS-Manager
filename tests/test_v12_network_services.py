@@ -250,3 +250,24 @@ def test_panel_install_commands_prepare_only_then_configure_in_ui(tmp_path,monke
     assert state["configured"] is False
     assert state["install_command"].endswith("makia-install-mtproxy --install-only")
     assert network_services.dns_install_command().endswith("makia-install-dns --install-only")
+
+
+def test_update_preserves_network_service_state_contract():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    for path in (
+        "/etc/makia-vps-manager/mtproxy.env",
+        "/etc/makia-vps-manager/mtproxy.toml",
+        "/etc/makia-vps-manager/dns.json",
+        "/etc/unbound/unbound.conf.d/makia.conf",
+    ):
+        assert path in update
+    assert "file_sha256" in update
+    assert "assert_preserved_file" in update
+    assert 'assert_preserved_file "$MTPROXY_ENV_PATH"' in update
+    assert 'assert_preserved_file "$MTPROXY_CONFIG_PATH"' in update
+    assert 'assert_preserved_file "$DNS_STATE_PATH"' in update
+    assert 'assert_preserved_file "$DNS_CONFIG_PATH"' in update
+    assert "MTProxy was active before update but is not active after tooling refresh" in update
+    assert "DNS resolver was active before update but is not active after tooling refresh" in update
+    assert "systemctl restart makia-mtproxy" in update
+    assert "systemctl restart unbound" in update
