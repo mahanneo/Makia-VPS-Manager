@@ -2205,15 +2205,45 @@ def access_package(kind:str,key:str,payload:AccessPackageRequest,request:Request
         "X-Content-Type-Options":"nosniff",
     })
 
+def _delete_outline_managed_client(row):
+    """Revoke one Makia-managed Outline credential and then remove local state.
+
+    If the Management API is reachable and the runtime key is already absent,
+    local cleanup is still safe. If the API itself is unreachable, keep local
+    state so an administrator can retry instead of silently losing the ability
+    to revoke a still-live credential later.
+    """
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    client_id=int(row.get("id") or 0)
+    outline_key_id=str(row.get("inbound_tag") or "").strip()
+    if not outline_key_id:
+        raise HTTPException(409,"Outline runtime key id is missing")
+    try:
+        runtime_keys=integration_ops.outline_list_keys()
+    except integration_ops.IntegrationError as exc:
+        raise HTTPException(400,str(exc))
+    runtime_present=any(str(item.get("id") or "")==outline_key_id for item in runtime_keys)
+    if runtime_present:
+        try:
+            integration_ops.outline_delete_key(outline_key_id)
+        except integration_ops.IntegrationError as exc:
+            raise HTTPException(400,str(exc))
+    delete_access_artifact_by_key("outline",str(client_id))
+    delete_protocol_client(client_id)
+    return {"ok":True,"client_id":client_id,"outline_key_id":outline_key_id,"runtime_removed":runtime_present}
+
+
 @app.delete("/api/access/{kind}/{key}")
 def access_revoke(kind:str,key:str,request:Request):
     actor=require_access_kind(request,kind,True)
+    result={"ok":True}
     try:
         if kind=="ssh":
             system_ops.delete_user(key); delete_profile(key); delete_access_artifact_by_key("ssh",key)
         elif kind=="xray":
             row=get_protocol_client(int(key))
-            if not row: raise HTTPException(404,"Xray client not found")
+            if not row or row.get("engine")!="xray": raise HTTPException(404,"Xray client not found")
             siblings=[
                 item for item in list_protocol_clients()
                 if item.get("engine")=="xray"
@@ -2242,12 +2272,16 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="outline":
+            try: row=get_protocol_client(int(key))
+            except Exception: row=None
+            result=_delete_outline_managed_client(row)
         else:
             raise HTTPException(404,"unsupported access kind")
     except (system_ops.OperationError,protocol_ops.ProtocolError) as e:
         raise HTTPException(400,str(e))
     audit(actor,"access_revoke",f"{kind}:{key}",ip=ip(request))
-    return {"ok":True}
+    return result
 
 @app.get("/api/diagnostics/self-test")
 def diagnostics_self_test(request:Request):
@@ -2629,13 +2663,13 @@ def outline_key_create(payload:OutlineKeyCreate,request:Request):
 def outline_key_delete(key_id:str,request:Request):
     actor=require_capability(request,"outline",True)
     row=next((x for x in list_protocol_clients() if x.get("engine")=="outline" and str(x.get("inbound_tag"))==str(key_id)),None)
-    try:
-        result=integration_ops.outline_delete_key(key_id)
-    except integration_ops.IntegrationError as exc:
-        raise HTTPException(400,str(exc))
     if row:
-        delete_access_artifact_by_key("outline",str(row["id"]))
-        delete_protocol_client(row["id"])
+        result=_delete_outline_managed_client(row)
+    else:
+        try:
+            result=integration_ops.outline_delete_key(key_id)
+        except integration_ops.IntegrationError as exc:
+            raise HTTPException(400,str(exc))
     audit(actor,"outline_key_delete",key_id,ip=ip(request))
     return result
 
