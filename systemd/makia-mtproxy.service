@@ -1,0 +1,25 @@
+[Unit]
+Description=Makia Telegram MTProto Proxy
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/makia-mtproxy/mtproto-proxy
+ConditionPathExists=/etc/makia-vps-manager/mtproxy.env
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/makia-vps-manager/mtproxy.env
+WorkingDirectory=/opt/makia-mtproxy
+ExecStart=/opt/makia-mtproxy/mtproto-proxy -u nobody -p ${MTPROXY_STATS_PORT} -H ${MTPROXY_PORT} -S ${MTPROXY_SECRET} --aes-pwd /opt/makia-mtproxy/proxy-secret /opt/makia-mtproxy/proxy-multi.conf -M 1
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyPaths=/opt/makia-mtproxy /etc/makia-vps-manager/mtproxy.env
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
