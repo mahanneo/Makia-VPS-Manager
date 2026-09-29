@@ -212,7 +212,7 @@ jobs:
           grep -q 'body\[data-theme="glass"\]' app/static/app.css
           grep -q 'glass-status-hero' app/static/app.js
           grep -q 'Glass Aurora' app/static/app.js
-          grep -q "const CACHE='makia-shell-v0" app/static/sw.js
+          grep -q "const CACHE='makia-shell-v100'" app/static/sw.js
           grep -q '/api/protocols/openvpn/diagnostics' app/main.py
           grep -q '/api/protocols/openvpn/repair' app/main.py
           grep -q 'openvpn_endpoint_diagnostics' app/protocol_ops.py
