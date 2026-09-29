@@ -1935,6 +1935,8 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         shutil.copy2(src,dst)
     uplink=_default_iface()
     up,down=_openvpn_forward_scripts(uplink)
+    OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
+    os.chmod(OVPN_CLIENT_POLICY_DIR,0o755)
     server_conf=server_dir/"server.conf"
     server_conf.write_text(
         f"port {port}\nproto {server_proto}\nlocal 0.0.0.0\ndev tun\n"
@@ -1945,7 +1947,10 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         "push \"dhcp-option DNS 1.1.1.1\"\npush \"dhcp-option DNS 8.8.8.8\"\n"
         "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
         "data-ciphers AES-256-GCM:AES-128-GCM\ndata-ciphers-fallback AES-256-GCM\nauth SHA256\nverb 3\n"
-        f"script-security 2\nup {up}\ndown {down}\n",
+        f"script-security 2\nup {up}\ndown {down}\n"
+        f"client-config-dir {OVPN_CLIENT_POLICY_DIR}\n"
+        f"management {OVPN_MANAGEMENT_SOCKET} unix\n"
+        "management-client-user root\nmanagement-client-group root\n",
         encoding="utf-8"
     )
     Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
