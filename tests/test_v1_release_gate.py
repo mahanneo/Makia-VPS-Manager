@@ -133,3 +133,40 @@ def test_outline_management_action_contract_present():
         '/api/diagnostics/access/{kind}/{key}',
     ]:
         assert marker in main
+
+
+def test_inline_onclick_handlers_exist():
+    import re
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    dashboard=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    login=(ROOT/"app/templates/login.html").read_text(encoding="utf-8")
+    combined=js+"\n"+dashboard+"\n"+login
+    inline=re.findall(r'onclick=["\']([^"\']+)["\']',combined)
+    calls={
+        m.group(1)
+        for code in inline
+        for m in re.finditer(r"\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(",code)
+    }
+    ignore={"if","confirm","alert","Number","String","encodeURIComponent","decodeURIComponent"}
+    definitions=set(re.findall(r"(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(",js))
+    assert sorted(calls-ignore-definitions)==[]
+
+
+def test_shell_actions_are_wired():
+    import re
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    dashboard=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    actions=set(re.findall(r'data-shell-action=["\']([^"\']+)["\']',dashboard))
+    missing=[a for a in sorted(actions) if f"'"+a+"'" not in js and '"'+a+'"' not in js]
+    assert missing==[]
+
+
+def test_official_brand_asset_is_referenced():
+    dashboard=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    login=(ROOT/"app/templates/login.html").read_text(encoding="utf-8")
+    readme=(ROOT/"README.md").read_text(encoding="utf-8")
+    assert (ROOT/"app/static/makia-brand.png").is_file()
+    assert (ROOT/"docs/assets/makia-brand.png").is_file()
+    assert "/static/makia-brand.png" in dashboard
+    assert "/static/makia-brand.png" in login
+    assert "docs/assets/makia-brand.png" in readme
