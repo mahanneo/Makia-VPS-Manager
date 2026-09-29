@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.11] - 2026-09-29
+
+### Immutable main updates
+- Replaced floating branch archive downloads with immutable commit-pinned codeload archives.
+- FORCE_MAIN resolves the exact current `main` commit SHA before downloading source.
+- Added tarball integrity, extracted-root identity and VERSION validation before release shell preflight.
+- Prevents a fresh raw bootstrap updater from being paired with a stale cached `main.tar.gz`.
+- Preserves the current host-smoke rebuild and all runtime script integrity, DNS, MTProxy and rollback safeguards.
+- Rotated the service-worker cache to `makia-shell-v1211`.
+
+
 ## [1.2.10] - 2026-09-29
 
 ### Host smoke script recovery
