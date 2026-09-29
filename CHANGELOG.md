@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.26.0-rc9] - 2026-09-29
+
+### Disaster recovery and backup reliability
+- Added a pre-mutation restore blocker when a migration bundle contains Outline state but Docker is absent on the replacement VPS.
+- Added root-only optional Outline dependency preparation through `MAKIA_ENABLE_OUTLINE=1` in clean install/upgrade flows.
+- Scheduled remote backups now update `last_run` only after the configured remote destination succeeds, allowing hourly retry after SCP failures.
+- Local retention is applied before remote transfer so repeated remote failures do not grow local backup history without bound.
+
+### Secret handling
+- Network exception text redacts credential-bearing request URLs.
+- Telegram webhook setup validates the bot token before any network request.
+- Added regression coverage proving Telegram tokens are absent from network-error messages.
+
+### Compatibility / release gates
+- Full Migration compatibility explicitly accepts verified RC2-RC8 bundles on RC9 and remains directional.
+- Added RC9 hardening tests and UAT documentation.
+- **Release Candidate only.** Real host and external-client UAT remain mandatory before Stable.
+
+
 ## [0.26.0-rc8] - 2026-09-29
 
 ### Operations Suite
