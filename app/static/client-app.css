@@ -185,3 +185,26 @@ button{cursor:pointer}
   .client-access-card{grid-template-columns:auto 1fr}
   .client-connect{grid-column:1/-1;width:100%}
 }
+
+.client-agent-panel{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px;border:1px solid #24425f;border-radius:16px;background:#071827
+}
+.client-agent-panel.paired{border-color:rgba(50,210,150,.30);background:rgba(50,210,150,.045)}
+.client-agent-panel>div{display:grid;gap:4px;min-width:0}
+.client-agent-panel strong{font-size:11px}
+.client-agent-panel span{font-size:9px;color:var(--muted);line-height:1.7}
+.client-agent-check{
+  width:34px;height:34px;border-radius:50%;display:grid!important;place-items:center;
+  color:#b6f5d9!important;background:rgba(50,210,150,.12);font-size:15px!important;font-weight:900
+}
+.client-agent-pair{min-width:118px}
+.client-agent-message{
+  margin-top:10px;padding:11px 12px;border-radius:13px;border:1px solid #28445f;
+  background:#081522;color:#bfd1e3;font-size:10px;line-height:1.7
+}
+.client-agent-message.error{border-color:rgba(255,99,125,.35);color:#ffc0ca;background:rgba(255,99,125,.07)}
+@media(max-width:520px){
+  .client-agent-panel{align-items:stretch;flex-direction:column}
+  .client-agent-pair{width:100%}
+}
