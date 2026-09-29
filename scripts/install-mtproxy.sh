@@ -97,10 +97,12 @@ fi
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -f "$source_dir/systemd/makia-mtproxy.service" ]]; then
   install -m 0644 "$source_dir/systemd/makia-mtproxy.service" /etc/systemd/system/makia-mtproxy.service
+elif [[ -f /etc/systemd/system/makia-mtproxy.service ]]; then
+  : # Installed by makia-install/makia-update before this optional component.
 elif [[ -f /opt/makia-vps-manager/systemd/makia-mtproxy.service ]]; then
   install -m 0644 /opt/makia-vps-manager/systemd/makia-mtproxy.service /etc/systemd/system/makia-mtproxy.service
 else
-  echo "Makia MTProxy service unit not found." >&2; exit 5
+  echo "Makia MTProxy service unit not found. Run sudo makia-upgrade first." >&2; exit 5
 fi
 
 systemctl daemon-reload
