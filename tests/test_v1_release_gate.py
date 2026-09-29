@@ -1,0 +1,135 @@
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+
+from app import main as main_app
+
+
+ROOT=Path(__file__).resolve().parents[1]
+
+
+class DummyRequest:
+    method="DELETE"
+    headers={"x-makia-request":"1"}
+    client=None
+    url=type("U",(),{"path":"/api/access/outline/7","netloc":"testserver"})()
+
+
+def test_outline_managed_delete_revokes_runtime_then_local(monkeypatch):
+    row={"id":7,"engine":"outline","inbound_tag":"key-77","name":"phone","enabled":1}
+    calls=[]
+    monkeypatch.setattr(main_app.integration_ops,"outline_list_keys",lambda:[{"id":"key-77"},{"id":"other"}])
+    monkeypatch.setattr(main_app.integration_ops,"outline_delete_key",lambda key:calls.append(("runtime",key)) or {"removed":True})
+    monkeypatch.setattr(main_app,"delete_access_artifact_by_key",lambda kind,key:calls.append(("artifact",kind,key)))
+    monkeypatch.setattr(main_app,"delete_protocol_client",lambda client_id:calls.append(("db",client_id)))
+    result=main_app._delete_outline_managed_client(row)
+    assert result["ok"] is True and result["runtime_removed"] is True
+    assert calls==[
+        ("runtime","key-77"),
+        ("artifact","outline","7"),
+        ("db",7),
+    ]
+
+
+def test_outline_managed_delete_is_safe_when_runtime_key_already_missing(monkeypatch):
+    row={"id":8,"engine":"outline","inbound_tag":"missing-key","name":"phone","enabled":0}
+    calls=[]
+    monkeypatch.setattr(main_app.integration_ops,"outline_list_keys",lambda:[{"id":"other"}])
+    monkeypatch.setattr(main_app.integration_ops,"outline_delete_key",lambda key:(_ for _ in ()).throw(AssertionError("must not call delete")))
+    monkeypatch.setattr(main_app,"delete_access_artifact_by_key",lambda kind,key:calls.append(("artifact",kind,key)))
+    monkeypatch.setattr(main_app,"delete_protocol_client",lambda client_id:calls.append(("db",client_id)))
+    result=main_app._delete_outline_managed_client(row)
+    assert result["runtime_removed"] is False
+    assert calls==[("artifact","outline","8"),("db",8)]
+
+
+def test_outline_managed_delete_keeps_local_state_when_api_unreachable(monkeypatch):
+    row={"id":9,"engine":"outline","inbound_tag":"key-99","name":"phone","enabled":1}
+    calls=[]
+    monkeypatch.setattr(
+        main_app.integration_ops,"outline_list_keys",
+        lambda:(_ for _ in ()).throw(main_app.integration_ops.IntegrationError("Outline API offline")),
+    )
+    monkeypatch.setattr(main_app,"delete_access_artifact_by_key",lambda *a,**k:calls.append(("artifact",a)))
+    monkeypatch.setattr(main_app,"delete_protocol_client",lambda *a,**k:calls.append(("db",a)))
+    with pytest.raises(HTTPException) as exc:
+        main_app._delete_outline_managed_client(row)
+    assert exc.value.status_code==400
+    assert calls==[]
+
+
+def test_generic_access_revoke_supports_outline(monkeypatch):
+    row={"id":11,"engine":"outline","inbound_tag":"key-11","name":"alice","enabled":1}
+    monkeypatch.setattr(main_app,"require_access_kind",lambda *a,**k:"admin")
+    monkeypatch.setattr(main_app,"get_protocol_client",lambda client_id:row if int(client_id)==11 else None)
+    monkeypatch.setattr(main_app,"_delete_outline_managed_client",lambda value:{"ok":True,"client_id":value["id"],"outline_key_id":value["inbound_tag"]})
+    monkeypatch.setattr(main_app,"audit",lambda *a,**k:None)
+    result=main_app.access_revoke("outline","11",DummyRequest())
+    assert result["ok"] is True
+    assert result["outline_key_id"]=="key-11"
+
+
+def test_access_revoke_has_all_first_class_protocols():
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    start=main.index('@app.delete("/api/access/{kind}/{key}")')
+    block=main[start:start+5000]
+    for kind in ["ssh","xray","wireguard","openvpn","outline"]:
+        assert f'kind=="{kind}"' in block
+
+
+def test_ui_actions_have_delegated_handlers():
+    import re
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    actions=set(re.findall(r'data-action=["\']([^"\']+)["\']',js))
+    handlers=set(re.findall(r'action===["\']([^"\']+)["\']',js))
+    allowed_inline={"modal-close"}
+    assert sorted(actions-handlers-allowed_inline)==[]
+
+
+def test_ui_static_api_calls_have_backend_routes():
+    import re
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    calls=sorted(set(
+        m.group(2).split("?")[0]
+        for m in re.finditer(r"api\(([\'\"\x60])([^\'\"\x60]+)\1",js)
+        if m.group(2).startswith("/api/")
+    ))
+    routes=[
+        (m.group(1).upper(),m.group(2))
+        for m in re.finditer(r'@app\.(get|post|put|delete|patch)\(["\']([^"\']+)["\']',main)
+    ]
+    missing=[]
+    for call in calls:
+        if not any(path==call or ("{" in path and call.startswith(path.split("{")[0])) for _,path in routes):
+            missing.append(call)
+    assert missing==[]
+
+
+def test_no_duplicate_fastapi_routes():
+    import re
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    routes=[
+        (m.group(1).upper(),m.group(2))
+        for m in re.finditer(r'@app\.(get|post|put|delete|patch)\(["\']([^"\']+)["\']',main)
+    ]
+    assert len(routes)==len(set(routes))
+
+
+def test_outline_management_action_contract_present():
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    for marker in [
+        "outline-renew","outline-reissue","outline-quota","revoke-access",
+        "client-portal","protected-export","access-share","access-diagnostics",
+    ]:
+        assert marker in js
+    for marker in [
+        '/api/protocols/outline/keys',
+        '/api/protocols/outline/clients/{client_id}/reissue',
+        '/api/protocols/outline/clients/{client_id}/quota',
+        '/api/access/{kind}/{key}',
+        '/api/diagnostics/access/{kind}/{key}',
+    ]:
+        assert marker in main
