@@ -244,7 +244,7 @@ def init_db():
         _add_column(con, "nodes", "rx INTEGER NOT NULL DEFAULT 0")
         _add_column(con, "nodes", "tx INTEGER NOT NULL DEFAULT 0")
         _add_column(con, "nodes", "latency_ms REAL NOT NULL DEFAULT 0")
-        _add_column(con, "nodes", "services_json TEXT NOT NULL DEFAULT '{}')
+        _add_column(con, "nodes", "services_json TEXT NOT NULL DEFAULT '{}'")
 
         rows_missing_sub=con.execute("SELECT id FROM protocol_clients WHERE subscription_id IS NULL OR subscription_id=''").fetchall()
         for item in rows_missing_sub:
