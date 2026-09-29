@@ -17,9 +17,7 @@ class NetworkServiceError(RuntimeError):
 
 
 MTPROXY_ROOT=Path("/opt/makia-mtproxy")
-MTPROXY_BIN=MTPROXY_ROOT/"mtproto-proxy"
-MTPROXY_SECRET_FILE=MTPROXY_ROOT/"proxy-secret"
-MTPROXY_CONFIG_FILE=MTPROXY_ROOT/"proxy-multi.conf"
+MTPROXY_BIN=MTPROXY_ROOT/"mtg"
 MTPROXY_ENV=Path("/etc/makia-vps-manager/mtproxy.env")
 MTPROXY_SERVICE="makia-mtproxy"
 
@@ -164,21 +162,21 @@ def mtproxy_status(host_hint=""):
     env=_read_env(MTPROXY_ENV)
     host=env.get("MTPROXY_PUBLIC_HOST") or (str(host_hint or "").strip())
     port=int(env.get("MTPROXY_PORT") or 0)
-    stats_port=int(env.get("MTPROXY_STATS_PORT") or 0)
     secret=env.get("MTPROXY_SECRET") or ""
-    configured=bool(host and port and re.fullmatch(r"[0-9a-fA-F]{32}",secret))
+    front_domain=env.get("MTPROXY_FRONT_DOMAIN") or ""
+    configured=bool(host and port and re.fullmatch(r"ee[0-9a-fA-F]+",secret))
     active=_active(MTPROXY_SERVICE)
     listener=bool(port and _port_busy(port,"tcp"))
-    client_secret=("dd"+secret.lower()) if secret else ""
+    client_secret=secret.lower() if secret else ""
     query=urllib.parse.urlencode({"server":host,"port":port,"secret":client_secret}) if configured else ""
     return {
-        "installed":MTPROXY_BIN.exists() and MTPROXY_SECRET_FILE.exists() and MTPROXY_CONFIG_FILE.exists(),
+        "installed":MTPROXY_BIN.exists(),
         "configured":configured,
         "service_active":active,
         "listener":listener,
         "host":host,
         "port":port,
-        "stats_port":stats_port,
+        "front_domain":front_domain,
         "secret":client_secret,
         "secret_last4":secret[-4:] if secret else "",
         "tg_link":f"tg://proxy?{query}" if query else "",
@@ -188,22 +186,33 @@ def mtproxy_status(host_hint=""):
 
 
 def configure_mtproxy(host,port=443,rotate_secret=False):
-    if not (MTPROXY_BIN.exists() and MTPROXY_SECRET_FILE.exists() and MTPROXY_CONFIG_FILE.exists()):
-        raise NetworkServiceError("MTProxy is not installed; run the install command first")
+    if not MTPROXY_BIN.exists():
+        raise NetworkServiceError("Telegram MTProxy is not installed; run the install command first")
     host=_validate_host(host)
     previous=MTPROXY_ENV.read_bytes() if MTPROXY_ENV.exists() else None
     old=_read_env(MTPROXY_ENV)
     requested=_validate_port(port)
-    selected=_free_port(requested,(8443,9443,10443,11443,12443,2053,2087,13010),"tcp")
-    stats_requested=int(old.get("MTPROXY_STATS_PORT") or 8888)
-    stats=_free_port(stats_requested,(8889,8890,8891,18888),"tcp")
+    current_port=int(old.get("MTPROXY_PORT") or 0)
+    # Re-saving the active configuration must not treat Makia's own listener
+    # as a foreign collision and silently move every user to a new port.
+    selected=requested if requested==current_port and _active(MTPROXY_SERVICE) else _free_port(
+        requested,(8443,9443,10443,11443,12443,2053,2087,13010),"tcp"
+    )
     secret=old.get("MTPROXY_SECRET") or ""
-    if rotate_secret or not re.fullmatch(r"[0-9a-fA-F]{32}",secret):
-        secret=secrets.token_hex(16)
+    front_domain=host
+    try:
+        ipaddress.ip_address(host)
+        raise NetworkServiceError("Telegram FakeTLS proxy requires a DNS hostname pointing to this VPS, not a raw IP")
+    except ValueError:
+        pass
+    if rotate_secret or not re.fullmatch(r"ee[0-9a-fA-F]+",secret) or old.get("MTPROXY_FRONT_DOMAIN")!=front_domain:
+        secret=_run([str(MTPROXY_BIN),"generate-secret","--hex",front_domain],timeout=15).strip()
+        if not re.fullmatch(r"ee[0-9a-fA-F]+",secret):
+            raise NetworkServiceError("mtg returned an invalid FakeTLS secret")
     env=(
         f"MTPROXY_PUBLIC_HOST={host}\n"
         f"MTPROXY_PORT={selected}\n"
-        f"MTPROXY_STATS_PORT={stats}\n"
+        f"MTPROXY_FRONT_DOMAIN={front_domain}\n"
         f"MTPROXY_SECRET={secret}\n"
     )
     _atomic_write(MTPROXY_ENV,env,0o600)
