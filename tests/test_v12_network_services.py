@@ -329,3 +329,43 @@ def test_mtproxy_listener_startup_window_is_not_eight_seconds():
     source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
     assert "deadline=time.monotonic()+25" in source
     assert "deadline=time.monotonic()+8" not in source
+
+
+def test_mtproxy_parent_directory_is_traversable_by_service_group():
+    installer=(ROOT/"scripts/install-mtproxy.sh").read_text(encoding="utf-8")
+    assert 'install -d -o root -g makia-mtproxy -m 0710 /etc/makia-vps-manager' in installer
+    assert 'install -d -m 0700 /etc/makia-vps-manager' not in installer
+    assert 'chown root:makia-mtproxy "$CONFIG_FILE"' in installer
+    assert 'chmod 0640 "$CONFIG_FILE"' in installer
+
+
+def test_mtproxy_backend_repairs_config_parent_permissions():
+    source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
+    assert "def _ensure_mtproxy_config_access" in source
+    assert "os.chmod(MTPROXY_CONFIG_DIR,0o710)" in source
+    assert "os.chown(MTPROXY_CONFIG_DIR,0,gid)" in source
+    assert '"runuser","-u","makia-mtproxy","--","test","-r"' in source
+
+
+def test_mtproxy_uses_auto_port_without_preferring_443():
+    source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    installer=(ROOT/"scripts/install-mtproxy.sh").read_text(encoding="utf-8")
+    assert "def configure_mtproxy(host,port=0" in source
+    assert "kernel_fallback=True" in source
+    assert "(8443,9443,10443,11443,12443,13010,18080,24443,30443,40443,50443)" in source
+    assert "candidates=[requested,8443,9443,10443,11443,12443,13010,18080,24443,30443,40443,50443]" in installer
+    assert "candidates=[requested,443" not in installer
+    assert "port:int=Field(default=0,ge=0,le=65535)" in main
+    assert "const port=0;" in js
+    assert "mtPortDisplay" in js
+    assert "r.port||443" not in js
+
+
+def test_mtproxy_first_runtime_failure_keeps_attempted_config_for_retry():
+    source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
+    failure=source.split("except Exception:",1)
+    assert "MTPROXY_ENV.unlink(missing_ok=True)" not in source
+    assert "MTPROXY_CONFIG.unlink(missing_ok=True)" not in source
+    assert '["systemctl","disable","--now",MTPROXY_SERVICE]' in source
