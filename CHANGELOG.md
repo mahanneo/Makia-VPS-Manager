@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.3] - 2026-09-29
+
+### MTProxy runtime hotfix
+- Removed `MemoryDenyWriteExecute=true` from the dedicated mtg systemd unit to avoid Go/runtime compatibility failures before listener startup.
+- Increased MTProxy listener readiness from 8 seconds to 25 seconds.
+- Startup failures now return bounded systemd/journal diagnostics with the MTProxy secret redacted.
+- Preserved the v1.2.1 update-state invariants and v1.2.2 non-destructive firewall behavior.
+
+
 ## [1.2.2] - 2026-09-29
 
 ### Telegram Proxy persistence

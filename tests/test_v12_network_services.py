@@ -149,7 +149,7 @@ def test_mtproxy_systemd_is_unprivileged_and_hardened():
     assert "MTPROXY_SECRET" not in text
     assert "NoNewPrivileges=true" in text
     assert "ProtectSystem=strict" in text
-    assert "MemoryDenyWriteExecute=true" in text
+    assert "MemoryDenyWriteExecute=true" not in text
     assert "mtg run /etc/makia-vps-manager/mtproxy.toml" in text
 
 
@@ -301,3 +301,31 @@ def test_mtproxy_ui_explains_firewall_failure_without_claiming_deletion():
     js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
     assert "firewall_warning" in js
     assert "Proxy configuration is preserved" in js
+
+
+def test_mtproxy_systemd_avoids_go_incompatible_wx_hardening():
+    service=(ROOT/"systemd/makia-mtproxy.service").read_text(encoding="utf-8")
+    assert "User=makia-mtproxy" in service
+    assert "AmbientCapabilities=CAP_NET_BIND_SERVICE" in service
+    assert "ProtectSystem=strict" in service
+    assert "MemoryDenyWriteExecute=true" not in service
+
+
+def test_mtproxy_runtime_failure_returns_bounded_diagnostics(monkeypatch):
+    outputs=[
+        type("P",(),{"stdout":"service failed with secret eeSECRET","stderr":"","returncode":3})(),
+        type("P",(),{"stdout":"journal says bind failed eeSECRET","stderr":"","returncode":0})(),
+    ]
+    def fake_run(*args,**kwargs):
+        return outputs.pop(0)
+    monkeypatch.setattr(network_services.subprocess,"run",fake_run)
+    text=network_services._mtproxy_runtime_diagnostics("eeSECRET")
+    assert "<redacted-secret>" in text
+    assert "eeSECRET" not in text
+    assert "bind failed" in text
+
+
+def test_mtproxy_listener_startup_window_is_not_eight_seconds():
+    source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
+    assert "deadline=time.monotonic()+25" in source
+    assert "deadline=time.monotonic()+8" not in source
