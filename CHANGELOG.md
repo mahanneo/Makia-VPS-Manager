@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.4] - 2026-09-29
+
+### MTProxy root-cause fix
+- Fixed the real-host permission bug where `makia-mtproxy` could not traverse `/etc/makia-vps-manager` to read `mtproxy.toml`.
+- The config directory is now `0710 root:makia-mtproxy`: group traverse only, while other Makia secret files remain protected by their root-only modes.
+- Added a pre-start check that the actual `makia-mtproxy` account can read the config and validates the config with `mtg doctor`.
+
+### Automatic port allocation
+- Telegram Proxy now uses AUTO port selection from the start; 443 is no longer the default/preferred port.
+- Makia tries managed high TCP ports and falls back to a kernel-selected free high port if necessary.
+- Safe retries retain the existing port when it is still available.
+- The browser no longer requires a manual proxy port.
+
+### Failure persistence
+- First-start runtime failures no longer delete the entered hostname, generated secret or selected port.
+- Existing configurations still roll back safely on failed reconfiguration.
+- Keeps all v1.2.1-v1.2.3 update, firewall and runtime diagnostic protections.
+
+
 ## [1.2.3] - 2026-09-29
 
 ### MTProxy runtime hotfix
