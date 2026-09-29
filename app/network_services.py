@@ -122,12 +122,7 @@ def _read_env(path):
     return result
 
 
-def _mtproxy_secret():
-    if not MTPROXY_CONFIG.exists():
-        return ""
-    try:text=MTPROXY_CONFIG.read_text(encoding="utf-8",errors="strict")
-    except OSError:return ""
-    match=re.search(r'(?m)^secret\s*=\s*"([^"]+)"\s*
+def _atomic_write(path,text,mode=0o600):
     path=Path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     fd,tmp=tempfile.mkstemp(prefix=".makia-",dir=str(path.parent))
@@ -143,6 +138,37 @@ def _mtproxy_secret():
         if os.path.exists(tmp):
             os.unlink(tmp)
 
+
+def _mtproxy_secret():
+    if not MTPROXY_CONFIG.exists():
+        return ""
+    try:
+        text=MTPROXY_CONFIG.read_text(encoding="utf-8",errors="strict")
+    except OSError:
+        return ""
+    match=re.search(r'(?m)^secret\s*=\s*"([^"]+)"\s*$',text)
+    return match.group(1).strip() if match else ""
+
+
+def _write_mtproxy_config(secret,port):
+    if not re.fullmatch(r"ee[0-9a-fA-F]+",str(secret or "")):
+        raise NetworkServiceError("invalid mtg FakeTLS secret")
+    port=_validate_port(port)
+    text=(
+        f'secret = "{secret}"\n'
+        f'bind-to = "0.0.0.0:{port}"\n\n'
+        '[network]\n'
+        'dns = "https://1.1.1.1"\n'
+    )
+    _atomic_write(MTPROXY_CONFIG,text,0o640)
+    try:
+        gid=grp.getgrnam("makia-mtproxy").gr_gid
+    except KeyError as exc:
+        raise NetworkServiceError(
+            "makia-mtproxy system user/group is missing; re-run the MTProxy installer"
+        ) from exc
+    os.chown(MTPROXY_CONFIG,0,gid)
+    os.chmod(MTPROXY_CONFIG,0o640)
 
 def _ufw_allow(port,proto,label):
     if not shutil.which("ufw"):
