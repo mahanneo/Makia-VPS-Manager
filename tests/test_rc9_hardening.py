@@ -80,3 +80,27 @@ def test_telegram_webhook_validates_bot_token_before_network():
     from app import integration_ops
     with pytest.raises(integration_ops.IntegrationError,match="invalid Telegram bot token"):
         integration_ops.telegram_set_webhook("not-a-token","https://panel.example.com/hook","A"*32)
+
+def test_protocol_workspaces_use_consistent_access_detail_menu():
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert 'data-filter-value="outline"' in js
+    assert "dataEnc('ssh:'+a.username)" in js
+    assert "dataEnc('wireguard:'+p.key)" in js
+    assert "dataEnc('xray:'+c.id)" in js
+    assert "dataEnc('outline:'+clientId)" in js
+    assert "async function openAccessDetail" in js
+    for marker in [
+        "client-portal","protected-export","native-export","access-diagnostics",
+        "wg-reissue","outline-reissue","outline-quota"
+    ]:
+        assert marker in js
+
+
+def test_outline_setup_surfaces_root_dependency_commands():
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert '"requires_dependency":not docker_ready' in main
+    assert '"dependency_command":"sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade"' in main
+    assert "outlineDependencyCmd" in js
+    assert "Docker is not ready for Outline" in js
+    assert "sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade" in js
