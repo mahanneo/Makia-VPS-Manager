@@ -49,7 +49,8 @@ DNS_WAS_ACTIVE=0
 DNS_WAS_QUERY_OK=0
 systemctl is-active --quiet makia-mtproxy 2>/dev/null && MTPROXY_WAS_ACTIVE=1 || true
 systemctl is-active --quiet unbound 2>/dev/null && DNS_WAS_ACTIVE=1 || true
-if [[ "$DNS_WAS_ACTIVE" -eq 1 ]] && command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null | grep -Eq '^[0-9]+(\.[0-9]+){3}
+if [[ "$DNS_WAS_ACTIVE" -eq 1 ]] && command -v dig >/dev/null 2>&1; then
+  if dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+
 
 assert_preserved_file(){
   local path="$1" before="$2" label="$3"
@@ -359,10 +360,9 @@ PY
   fi
 fi
 
-# Repair a pre-existing resolver that was active but could not answer before
-# the update. This is an intentional config mutation (for example adding the
-# system CA bundle required by authenticated DNS-over-TLS), so successful
-# repaired hashes become the accepted baseline for this update transaction.
+# Repair a pre-existing resolver that could not answer before the update.
+# A successful repair is an intentional config mutation, so its hashes become
+# the accepted baseline for the rest of this update transaction.
 if [[ "$DNS_WAS_QUERY_OK" -eq 0 && -s "$DNS_STATE_PATH" && -s "$DNS_CONFIG_PATH" ]] && command -v unbound >/dev/null 2>&1; then
   echo "Repairing existing Makia DNS resolver with the current DoT contract..."
   if (
@@ -578,7 +578,8 @@ cat "$APP/VERSION"
 echo
 /usr/local/sbin/makia-doctor || true
 ; then
-  DNS_WAS_QUERY_OK=1
+    DNS_WAS_QUERY_OK=1
+  fi
 fi
 
 assert_preserved_file(){
