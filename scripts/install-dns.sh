@@ -47,6 +47,7 @@ server:
     do-ip6: no
     do-udp: yes
     do-tcp: yes
+    tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
     hide-identity: yes
     hide-version: yes
     qname-minimisation: yes
