@@ -324,12 +324,25 @@ def health_alerts():
         disk=float(m.get("disk") or 0)
         if disk>=90:send_configured_alert("disk-high","error","Disk usage critical",f"Disk usage is {disk:.1f}%")
     except Exception:pass
-    for svc in ("makia-vps-manager","xray","nginx"):
+    for svc in ("makia-vps-manager","xray","nginx","wg-quick@wg0","openvpn-server@server"):
         try:
             s=system_ops.service_status(svc)
             if s.get("installed") and not s.get("active"):
                 send_configured_alert(f"service:{svc}","error",f"Service down: {svc}",str(s.get("state") or "inactive"))
         except Exception:pass
+    try:
+        now_ts=int(time.time())
+        expiring=[]
+        for row in list_protocol_clients():
+            expire=int(row.get("expire_at") or 0)
+            if row.get("enabled") and expire and 0 < expire-now_ts <= 3*86400:
+                expiring.append(row.get("name") or str(row.get("id")))
+        if expiring:
+            send_configured_alert(
+                "expiry-soon","warn","Managed access expiring soon",
+                f"{len(expiring)} client(s) expire within 3 days: "+", ".join(expiring[:20])
+            )
+    except Exception:pass
 
 
 def scheduler_tick(version):
