@@ -138,6 +138,10 @@ def test_pwa_shell_uses_no_store_for_private_api_and_separate_service_worker():
     sw=(ROOT/"app/static/client-sw.js").read_text(encoding="utf-8")
     portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
     assert 'cache:"no-store"' in js
+    assert "function clearSensitiveDelivery()" in js
+    assert 'form[action="/client/logout"]' in js
+    assert 'window.addEventListener("pagehide",clearSensitiveDelivery)' in js
+    assert 'window.addEventListener("pageshow",event=>{if(event.persisted)location.reload()})' in js
     assert 'u.pathname.startsWith("/client/")' in sw
     assert 'fetch(event.request,{cache:"no-store"})' in sw
     assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-icon.svg"]' in sw
