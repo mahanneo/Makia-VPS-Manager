@@ -294,6 +294,22 @@ def _artifact_by_public_token(token):
             return get_access_artifact_by_key(item["kind"],item["external_key"])
     return None
 
+def _detect_client_device(user_agent):
+    ua=str(user_agent or "").lower()
+    if "android" in ua:return "android"
+    if "iphone" in ua or "ipad" in ua:return "ios"
+    if "windows" in ua:return "windows"
+    if "macintosh" in ua or "mac os" in ua:return "macos"
+    if "linux" in ua:return "linux"
+    return "other"
+
+def _one_tap_import_url(share_text):
+    raw=str(share_text or "").strip()
+    if not raw:return ""
+    parsed=urllib.parse.urlsplit(raw)
+    return raw if parsed.scheme.lower() in {"vless","vmess","trojan","ss","hysteria2","npvt-ssh"} else ""
+
+
 def _portal_language(request:Request):
     requested=(request.query_params.get("lang") or "").strip().lower()
     if requested in {"fa","en"}:
@@ -1891,18 +1907,8 @@ def public_access_portal(token:str,request:Request):
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
-    ua=(request.headers.get("user-agent") or "").lower()
-    if "android" in ua:device="android"
-    elif "iphone" in ua or "ipad" in ua:device="ios"
-    elif "windows" in ua:device="windows"
-    elif "macintosh" in ua or "mac os" in ua:device="macos"
-    elif "linux" in ua:device="linux"
-    else:device="other"
-    one_tap_url=""
-    if share_text:
-        parsed_share=urllib.parse.urlsplit(share_text)
-        if parsed_share.scheme.lower() in {"vless","vmess","trojan","ss","hysteria2","npvt-ssh"}:
-            one_tap_url=share_text
+    device=_detect_client_device(request.headers.get("user-agent") or "")
+    one_tap_url=_one_tap_import_url(share_text)
     portal_url=f"{public_origin(request)}/access/{token}"
     response=templates.TemplateResponse("access_portal.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
