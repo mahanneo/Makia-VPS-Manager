@@ -271,3 +271,33 @@ def test_update_preserves_network_service_state_contract():
     assert "DNS resolver was active before update but is not active after tooling refresh" in update
     assert "systemctl restart makia-mtproxy" in update
     assert "systemctl restart unbound" in update
+
+
+def test_mtproxy_firewall_failure_preserves_config(tmp_path,monkeypatch):
+    env=tmp_path/"mtproxy.env"
+    config=tmp_path/"mtproxy.toml"
+    binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
+    monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
+    monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
+    monkeypatch.setattr(network_services,"_free_port",lambda *a,**k:8443)
+    monkeypatch.setattr(network_services,"_run",lambda *a,**k:"ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d" if "generate-secret" in a[0] else "")
+    monkeypatch.setattr(network_services,"_active",lambda service:True)
+    monkeypatch.setattr(network_services,"_port_busy",lambda port,proto="tcp",address="0.0.0.0":True)
+    monkeypatch.setattr(network_services.grp,"getgrnam",lambda name:type("G",(),{"gr_gid":0})())
+    monkeypatch.setattr(network_services.os,"chown",lambda *a,**k:None)
+    monkeypatch.setattr(network_services,"_ufw_allow",lambda *a,**k:(_ for _ in ()).throw(network_services.NetworkServiceError("ufw failed")))
+    monkeypatch.setattr(network_services,"_ufw_port_status",lambda *a,**k:{"active":True,"allowed":False})
+    result=network_services.configure_mtproxy("proxy.example.com",443,False)
+    assert result["configured"] is True
+    assert result["service_active"] is True
+    assert result["listener"] is True
+    assert result["firewall_warning"]=="ufw failed"
+    assert env.exists() and "MTPROXY_PORT=8443" in env.read_text(encoding="utf-8")
+    assert config.exists() and "secret = " in config.read_text(encoding="utf-8")
+
+
+def test_mtproxy_ui_explains_firewall_failure_without_claiming_deletion():
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert "firewall_warning" in js
+    assert "Proxy configuration is preserved" in js
