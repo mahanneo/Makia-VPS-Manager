@@ -164,6 +164,23 @@ def main():
             assert page.locator('.pro-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
 
+            # Client Platform admin workspace must coexist with the existing
+            # control panel and expose only metadata/bindings management.
+            page.locator('.pro-sidebar button[data-view="clientplatform"]').click()
+            leave_sidebar(page)
+            page.locator(".client-platform-page").wait_for()
+            assert "client-browser" in page.locator("#clientPlatformRows").inner_text()
+            assert "Client Portal" in page.locator(".cp-rollout-card").inner_text()
+            assert page.locator('[data-action="client-account-new"]').count()==1
+            page.locator('#clientPlatformRows [data-action="client-account-open"]').first.click()
+            page.locator(".cp-manage-drawer").wait_for()
+            drawer_text=page.locator(".cp-manage-drawer").inner_text()
+            assert "Fast Access" in drawer_text
+            assert "Browser OpenVPN" in drawer_text
+            assert page.locator('[data-action="client-binding-add"]').count()==1
+            page.screenshot(path='/tmp/makia-client-platform-admin.png',full_page=True)
+            page.locator('.cp-manage-drawer [data-action="modal-close"]').click()
+
             # v1.2 regression: protocol cards must never render the missing x[4]
             # value as literal "undefined" or overlap the copy area.
             page.locator('.pro-create-access[data-shell-action="create-access"]').click()
