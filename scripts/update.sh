@@ -292,6 +292,22 @@ fi
 if ! /usr/local/sbin/makia-install-dns --install-only; then
   echo "WARNING: DNS tooling preparation failed; panel will show the root repair/install command."
 fi
+# Enforce the shared config-directory contract after all optional installers.
+# DNS must never revoke the MTProxy service group's traverse permission.
+if getent group makia-mtproxy >/dev/null 2>&1; then
+  chown root:makia-mtproxy /etc/makia-vps-manager
+  chmod 0710 /etc/makia-vps-manager
+else
+  chown root:root /etc/makia-vps-manager
+  chmod 0700 /etc/makia-vps-manager
+fi
+[[ -f /etc/makia-vps-manager/makia.env ]] && { chown root:root /etc/makia-vps-manager/makia.env; chmod 0600 /etc/makia-vps-manager/makia.env; }
+[[ -f /etc/makia-vps-manager/dns.json ]] && { chown root:root /etc/makia-vps-manager/dns.json; chmod 0600 /etc/makia-vps-manager/dns.json; }
+[[ -f /etc/makia-vps-manager/mtproxy.env ]] && { chown root:root /etc/makia-vps-manager/mtproxy.env; chmod 0600 /etc/makia-vps-manager/mtproxy.env; }
+if [[ -f /etc/makia-vps-manager/mtproxy.toml ]] && getent group makia-mtproxy >/dev/null 2>&1; then
+  chown root:makia-mtproxy /etc/makia-vps-manager/mtproxy.toml
+  chmod 0640 /etc/makia-vps-manager/mtproxy.toml
+fi
 
 echo "Verifying persistent Telegram/DNS configuration was preserved..."
 assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
