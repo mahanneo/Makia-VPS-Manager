@@ -150,7 +150,7 @@ def test_mtproxy_systemd_is_unprivileged_and_hardened():
     assert "NoNewPrivileges=true" in text
     assert "ProtectSystem=strict" in text
     assert "MemoryDenyWriteExecute=true" in text
-    assert "simple-run" in text
+    assert "mtg run /etc/makia-vps-manager/mtproxy.toml" in text
 
 
 def test_optional_network_components_are_packaged():
