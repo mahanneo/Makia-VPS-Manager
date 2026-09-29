@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.26.0-rc10] - 2026-09-29
+
+### Outline setup
+- Replaced the raw missing-Docker failure experience with an explicit two-step root-shell setup workflow.
+- Outline install API now reports dependency readiness and the required host-preparation command without running package managers from the web service.
+- Added a dedicated public Outline connection guide and correct guide routing.
+
+### Unified access management
+- Standardized managed-user actions across SSH, Xray, WireGuard, OpenVPN and Outline behind the same `•••` detail drawer.
+- Added protocol-specific management controls inside the drawer while preserving common QR/share, native download, Client Portal, Protected ZIP and guide delivery.
+- Added Outline to the unified Clients filter and corrected Outline quota/usage/expiry rendering.
+- Kept the protocol sidebar expanded while Outline is selected.
+
+### Regression coverage
+- Expanded Playwright to cover all RC10 operational views, six Client filters and unified detail entries.
+- Updated the public visual-guide contract from four protocols to five.
+- Added static gates for Outline setup commands, guide routing and unified access menus.
+- **Release Candidate only.** Real VPS/Outline/client UAT is still required before Stable.
+
+
 ## [0.26.0-rc9] - 2026-09-29
 
 ### Disaster recovery and backup reliability
