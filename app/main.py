@@ -1026,7 +1026,24 @@ class XrayInboundBuilderPayload(BaseModel):
 @app.get("/api/protocols/xray/inbound-capabilities")
 def xray_inbound_capabilities(request:Request):
     require_capability(request,"xray")
-    return protocol_ops.xray_inbound_builder_capabilities()
+    caps=protocol_ops.xray_inbound_builder_capabilities()
+    # Presets are enriched with actual host port readiness so selecting a
+    # profile does not blindly collide with Nginx, OpenVPN, WireGuard or
+    # another Xray listener. This is advisory; create/apply still performs
+    # the authoritative runtime validation and rollback.
+    for preset in caps.get("presets") or []:
+        transport_proto="udp" if preset.get("requires_udp") else "tcp"
+        states=[]
+        for raw_port in preset.get("ports") or []:
+            port=int(raw_port)
+            occupied=protocol_ops._port_transport_in_use(port,transport_proto)
+            states.append({
+                "port":port,"transport":transport_proto,"occupied":occupied,
+                "owner":protocol_ops._port_owner_label(port,transport_proto) if occupied else "",
+            })
+        preset["port_state"]=states
+        preset["suggested_port"]=next((x["port"] for x in states if not x["occupied"]),None)
+    return caps
 
 
 @app.post("/api/protocols/xray/inbounds")
