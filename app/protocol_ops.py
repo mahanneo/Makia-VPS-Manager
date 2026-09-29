@@ -2749,6 +2749,73 @@ def xray_inbound_builder_capabilities():
         ],
         "xhttp_modes":["auto","packet-up","stream-up","stream-one"],
         "flow":["","xtls-rprx-vision"],
+        "presets":[
+            {
+                "id":"ir-reality-raw-vision","tier":"recommended","label":"VLESS · REALITY · RAW/Vision",
+                "protocol":"vless","transport":"tcp","security":"reality","flow":"xtls-rprx-vision",
+                "ports":[443,8443,2053],"requires_domain":False,"requires_udp":False,
+                "path":"","sni":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
+                "summary":"Primary direct profile: low overhead, no public TLS certificate required.",
+                "note":"REALITY target/SNI must be reachable from the VPS. Effectiveness varies by ISP/network."
+            },
+            {
+                "id":"ir-reality-grpc","tier":"alternative","label":"VLESS · gRPC · REALITY",
+                "protocol":"vless","transport":"grpc","security":"reality","flow":"",
+                "ports":[443,8443,2053],"requires_domain":False,"requires_udp":False,
+                "path":"makia-grpc","sni":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
+                "summary":"HTTP/2-style alternative when RAW behaves poorly on a path.",
+                "note":"Client must support gRPC + REALITY. No Vision flow is applied to this preset."
+            },
+            {
+                "id":"ir-vless-ws-tls","tier":"alternative","label":"VLESS · WebSocket · TLS",
+                "protocol":"vless","transport":"ws","security":"tls","flow":"",
+                "ports":[8443,443,2053],"requires_domain":True,"requires_udp":False,
+                "path":"/makia-ws","sni":"$endpoint","reality_dest":"",
+                "summary":"Classic TLS/WebSocket compatibility profile for domain-based deployments.",
+                "note":"Requires a valid Makia-managed TLS certificate for the selected domain."
+            },
+            {
+                "id":"ir-vless-httpupgrade-tls","tier":"alternative","label":"VLESS · HTTPUpgrade · TLS",
+                "protocol":"vless","transport":"httpupgrade","security":"tls","flow":"",
+                "ports":[8443,443,2053],"requires_domain":True,"requires_udp":False,
+                "path":"/makia-up","sni":"$endpoint","reality_dest":"",
+                "summary":"Lighter HTTP upgrade alternative to WebSocket on compatible clients.",
+                "note":"Requires a valid TLS certificate and HTTPUpgrade-capable client."
+            },
+            {
+                "id":"ir-trojan-grpc-tls","tier":"alternative","label":"Trojan · gRPC · TLS",
+                "protocol":"trojan","transport":"grpc","security":"tls","flow":"",
+                "ports":[8443,443,2053],"requires_domain":True,"requires_udp":False,
+                "path":"makia-trojan","sni":"$endpoint","reality_dest":"",
+                "summary":"Compatibility fallback using Trojan over gRPC/TLS.",
+                "note":"Requires a valid TLS certificate for the public domain."
+            },
+            {
+                "id":"ir-hysteria2-tls","tier":"alternative","label":"Hysteria2 · TLS · UDP",
+                "protocol":"hysteria2","transport":"hysteria","security":"tls","flow":"",
+                "ports":[8443,443,2053],"requires_domain":True,"requires_udp":True,
+                "path":"","sni":"$endpoint","reality_dest":"",
+                "summary":"UDP-based alternative for networks where UDP remains usable.",
+                "note":"UDP may be throttled or blocked on some mobile/ISP paths; requires valid TLS."
+            },
+            {
+                "id":"ir-vmess-ws-tls","tier":"compatibility","label":"VMess · WebSocket · TLS",
+                "protocol":"vmess","transport":"ws","security":"tls","flow":"",
+                "ports":[8443,443,2053],"requires_domain":True,"requires_udp":False,
+                "path":"/makia-vmess","sni":"$endpoint","reality_dest":"",
+                "summary":"Legacy-client compatibility preset; prefer VLESS for new deployments.",
+                "note":"Kept for client compatibility rather than as the primary new-user profile."
+            },
+            {
+                "id":"ir-xhttp-reality-lab","tier":"experimental","label":"VLESS · XHTTP · REALITY (Lab)",
+                "protocol":"vless","transport":"xhttp","security":"reality","flow":"",
+                "ports":[2053,8443,443],"requires_domain":False,"requires_udp":False,
+                "path":"/makia-xhttp","sni":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
+                "xhttp_mode":"packet-up",
+                "summary":"Experimental XHTTP profile, exposed for controlled field testing only.",
+                "note":"Pinned Xray 26.3.27 has recent XHTTP compatibility/resource reports; do not use as the default fleet profile."
+            },
+        ],
     }
 
 
