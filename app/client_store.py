@@ -595,7 +595,11 @@ def client_access_list(account_id):
         item["source"]="protocol"
         item["delivery_id"]=int(item["protocol_client_id"])
         item["delivery_kind"]="protocol"
-        item["accounting_supported"]=True
+        engine=str(item.get("engine") or "").lower()
+        item["accounting_supported"]=engine in {"xray","outline"}
+        item["enforcement_level"]="hard" if engine in {"xray","outline"} else "delivery"
+        item["enforcement_text"]="expiry + quota" if engine in {"xray","outline"} else "delivery only"
+        item["account_used_bytes"]=protocol_usage_for_account(account_id,item["protocol_client_id"])
         items.append(item)
     for item in list_artifact_bindings(account_id):
         items.append({
@@ -611,7 +615,13 @@ def client_access_list(account_id):
             "native_filename":item.get("native_filename") or "",
             "used_bytes":0,
             "quota_bytes":0,
-            "accounting_supported":False,
+            "accounting_supported":str(item.get("kind") or "").lower()=="wireguard",
+            "enforcement_level":"hard" if str(item.get("kind") or "").lower() in {"wireguard","ssh"} else "delivery",
+            "enforcement_text":(
+                "expiry + quota" if str(item.get("kind") or "").lower()=="wireguard"
+                else "expiry + device/session" if str(item.get("kind") or "").lower()=="ssh"
+                else "delivery only"
+            ),
         })
     return sorted(items,key=lambda x:(int(x.get("priority") or 100),str(x.get("label") or x.get("name") or "")))
 
