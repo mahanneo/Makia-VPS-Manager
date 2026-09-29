@@ -5,7 +5,8 @@ set -Eeuo pipefail
 
 MTG_VERSION="2.2.8"
 ROOT="/opt/makia-mtproxy"
-ENV_FILE="/etc/makia-vps-manager/mtproxy.env"
+STATE_FILE="/etc/makia-vps-manager/mtproxy.env"
+CONFIG_FILE="/etc/makia-vps-manager/mtproxy.toml"
 HOST=""
 PORT=0
 
@@ -64,7 +65,10 @@ install -m 0755 "$bin" "$ROOT/mtg"
 "$ROOT/mtg" --version | grep -F "2.2.8" >/dev/null
 
 install -d -m 0700 /etc/makia-vps-manager
-if [[ ! -s "$ENV_FILE" ]]; then
+if ! id makia-mtproxy >/dev/null 2>&1; then
+  useradd --system --no-create-home --home /nonexistent --shell /usr/sbin/nologin makia-mtproxy
+fi
+if [[ ! -s "$CONFIG_FILE" || ! -s "$STATE_FILE" ]]; then
   if [[ -z "$HOST" ]]; then
     HOST="$(hostname -f 2>/dev/null || true)"
     [[ "$HOST" == *.* ]] || HOST=""
@@ -93,13 +97,22 @@ PY
   secret="$("$ROOT/mtg" generate-secret --hex "$HOST")"
   [[ "$secret" =~ ^ee[0-9a-fA-F]+$ ]] || { echo "mtg returned an invalid FakeTLS secret." >&2; exit 7; }
 
-  cat >"$ENV_FILE" <<EOF
+  cat >"$STATE_FILE" <<EOF
 MTPROXY_PUBLIC_HOST=$HOST
 MTPROXY_PORT=$selected
 MTPROXY_FRONT_DOMAIN=$HOST
-MTPROXY_SECRET=$secret
 EOF
-  chmod 0600 "$ENV_FILE"
+  chmod 0600 "$STATE_FILE"
+
+  cat >"$CONFIG_FILE" <<EOF
+secret = "$secret"
+bind-to = "0.0.0.0:$selected"
+
+[network]
+dns = "https://1.1.1.1"
+EOF
+  chown root:makia-mtproxy "$CONFIG_FILE"
+  chmod 0640 "$CONFIG_FILE"
 fi
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -123,10 +136,11 @@ systemctl is-active --quiet makia-mtproxy || {
 }
 
 # shellcheck disable=SC1090
-source "$ENV_FILE"
+source "$STATE_FILE"
+secret="$(awk -F'"' '/^secret = /{print $2;exit}' "$CONFIG_FILE")"
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi '^Status: active'; then
   ufw allow "${MTPROXY_PORT}/tcp" comment 'Makia Telegram MTProxy' >/dev/null
 fi
 
 echo "Telegram MTProxy installed with mtg v${MTG_VERSION}."
-echo "https://t.me/proxy?server=${MTPROXY_PUBLIC_HOST}&port=${MTPROXY_PORT}&secret=${MTPROXY_SECRET}"
+echo "https://t.me/proxy?server=${MTPROXY_PUBLIC_HOST}&port=${MTPROXY_PORT}&secret=${secret}"
