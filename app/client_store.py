@@ -595,12 +595,18 @@ def list_accounts():
                 "SELECT COUNT(*) AS n FROM client_devices WHERE account_id=? AND active=1",
                 (item["id"],),
             ).fetchone()
-            binding_count=con.execute(
+            protocol_count=con.execute(
                 "SELECT COUNT(*) AS n FROM client_protocol_bindings WHERE account_id=? AND enabled=1",
                 (item["id"],),
             ).fetchone()
+            artifact_count=con.execute(
+                "SELECT COUNT(*) AS n FROM client_artifact_bindings WHERE account_id=? AND enabled=1",
+                (item["id"],),
+            ).fetchone()
         item["active_devices"]=int(device_count["n"] or 0)
-        item["bindings"]=int(binding_count["n"] or 0)
+        item["protocol_bindings"]=int(protocol_count["n"] or 0)
+        item["artifact_bindings"]=int(artifact_count["n"] or 0)
+        item["bindings"]=item["protocol_bindings"]+item["artifact_bindings"]
         out.append(item)
     return out
 
