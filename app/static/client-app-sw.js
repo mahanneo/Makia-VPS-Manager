@@ -1,6 +1,5 @@
-const CACHE='makia-client-phase-a-v1';
+const CACHE='makia-client-phase-a-v2';
 const SHELL=[
-  '/client-app/login',
   '/static/client-app.css',
   '/static/client-app.js',
   '/static/client-app-icon.svg'
@@ -22,17 +21,23 @@ self.addEventListener('fetch',event=>{
   const req=event.request;
   const url=new URL(req.url);
   if(req.method!=='GET'||url.origin!==location.origin) return;
-  if(url.pathname.startsWith('/client-app/api/')||url.pathname==='/client-app/'||url.pathname.startsWith('/client-app/logout')){
+
+  // Authenticated pages and login are always network-only. The service worker
+  // never caches account/session/API responses.
+  if(url.pathname.startsWith('/client-app/')){
     event.respondWith(fetch(req));
     return;
   }
-  event.respondWith(
-    fetch(req).then(response=>{
-      if(response && response.ok && (url.pathname.startsWith('/static/client-app')||url.pathname==='/client-app/login')){
-        const copy=response.clone();
-        caches.open(CACHE).then(cache=>cache.put(req,copy)).catch(()=>{});
-      }
-      return response;
-    }).catch(()=>caches.match(req).then(hit=>hit||caches.match('/client-app/login')))
-  );
+
+  if(url.pathname.startsWith('/static/client-app')){
+    event.respondWith(
+      caches.match(req).then(hit=>hit||fetch(req).then(response=>{
+        if(response && response.ok){
+          const copy=response.clone();
+          caches.open(CACHE).then(cache=>cache.put(req,copy)).catch(()=>{});
+        }
+        return response;
+      }))
+    );
+  }
 });
