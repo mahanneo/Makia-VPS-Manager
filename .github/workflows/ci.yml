@@ -107,6 +107,15 @@ jobs:
           test -f docs/UAT-0.26.0-RC4.md
           test -f docs/UAT-0.26.0-RC5.md
           test -f docs/UAT-0.26.0-RC6.md
+          test -f docs/UAT-0.26.0-RC7.md
+          test -f scripts/install-outline.sh
+          grep -q 'makia-install-outline' scripts/install.sh
+          grep -q 'makia-install-outline' scripts/update.sh
+          grep -q 'OUTLINE_VERSION="server-v1.12.0"' scripts/install-outline.sh
+          grep -q 'OUTLINE_GIT_BLOB_SHA="39ba2b0d4ed6cb60ef94bc6015fcc619f092633b"' scripts/install-outline.sh
+          grep -q 'Remote backups must use encrypted Full Migration format' app/main.py
+          grep -q 'StrictHostKeyChecking=yes' app/automation_ops.py
+          grep -q 'Outline API certificate fingerprint mismatch' app/outline_ops.py
           grep -q 'CREDENTIAL_FILE=/root/makia-install-credentials.txt' scripts/install.sh
           grep -q 'MAKIA VPS MANAGER - INSTALL READY' scripts/install.sh
           test -f docs/UAT-PROTOCOL-MODES.md
