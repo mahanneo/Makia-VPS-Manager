@@ -34,7 +34,7 @@ jobs:
       - name: WStunnel installer smoke
         run: |
           WSTUNNEL_DEST=/tmp/wstunnel-test bash scripts/install-wstunnel.sh
-          /tmp/wstunnel-test --version | grep -q '11.1.0'
+          /tmp/wstunnel-test --version | grep -q '11.0.0'
           /tmp/wstunnel-test server --help | grep -q -- '--restrict-to'
           /tmp/wstunnel-test server --help | grep -q -- '--restrict-http-upgrade-path-prefix'
           /tmp/wstunnel-test server --help | grep -q -- '--tls-certificate'
@@ -311,7 +311,7 @@ jobs:
           grep -q 'ikev2-setup' app/static/app.js
           grep -q 'stealth-setup' app/static/app.js
           grep -q 'wstunnel-setup' app/static/app.js
-          grep -q 'WSTUNNEL_VERSION:-11.1.0' scripts/install-wstunnel.sh
+          grep -q 'WSTUNNEL_VERSION:-11.0.0' scripts/install-wstunnel.sh
           grep -q 'checksum mismatch' scripts/install-wstunnel.sh
           grep -q 'IKEv2/strongSwan tooling installed' scripts/uat-smoke.sh
           grep -q 'WStunnel tooling installed' scripts/uat-smoke.sh
