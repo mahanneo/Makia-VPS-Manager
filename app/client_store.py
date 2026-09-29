@@ -108,6 +108,37 @@ def init_client_db():
             );
             CREATE INDEX IF NOT EXISTS idx_client_artifact_bindings_account
               ON client_artifact_bindings(account_id,enabled,priority);
+
+            CREATE TABLE IF NOT EXISTS client_usage_baselines (
+              account_id INTEGER NOT NULL,
+              protocol_client_id INTEGER NOT NULL,
+              baseline_bytes INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY(account_id,protocol_client_id),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(protocol_client_id) REFERENCES protocol_clients(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS client_artifact_usage (
+              account_id INTEGER NOT NULL,
+              artifact_id INTEGER NOT NULL,
+              used_bytes INTEGER NOT NULL DEFAULT 0,
+              last_counter INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY(account_id,artifact_id),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS client_artifact_policy_state (
+              account_id INTEGER NOT NULL,
+              artifact_id INTEGER NOT NULL,
+              suspended_reason TEXT NOT NULL DEFAULT '',
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY(account_id,artifact_id),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
+            );
             """
         )
 
@@ -197,15 +228,28 @@ def account_available(account, now_ts=None):
 
 
 def account_usage_bytes(account_id):
+    account_id=int(account_id)
     with connect() as con:
         row=con.execute(
-            """SELECT COALESCE(SUM(pc.used_up_bytes + pc.used_down_bytes),0) AS used
+            """SELECT COALESCE(SUM(
+                    MAX(0,(pc.used_up_bytes + pc.used_down_bytes)-COALESCE(u.baseline_bytes,0))
+                 ),0) AS used
                FROM client_protocol_bindings b
                JOIN protocol_clients pc ON pc.id=b.protocol_client_id
+               LEFT JOIN client_usage_baselines u
+                 ON u.account_id=b.account_id AND u.protocol_client_id=b.protocol_client_id
                WHERE b.account_id=? AND b.enabled=1""",
-            (int(account_id),),
+            (account_id,),
         ).fetchone()
-        return int(row["used"] or 0) if row else 0
+        artifact=con.execute(
+            """SELECT COALESCE(SUM(u.used_bytes),0) AS used
+               FROM client_artifact_bindings b
+               JOIN client_artifact_usage u
+                 ON u.account_id=b.account_id AND u.artifact_id=b.artifact_id
+               WHERE b.account_id=? AND b.enabled=1""",
+            (account_id,),
+        ).fetchone()
+        return int(row["used"] or 0)+int(artifact["used"] or 0)
 
 
 def _active_devices_count(con,account_id):
@@ -392,6 +436,15 @@ def bind_protocol_client(account_id,protocol_client_id,label="",priority=100,ena
                 int(priority or 100),1 if enabled else 0,ts,
             ),
         )
+        current=con.execute(
+            "SELECT used_up_bytes+used_down_bytes AS used FROM protocol_clients WHERE id=?",
+            (int(protocol_client_id),),
+        ).fetchone()
+        con.execute(
+            """INSERT OR IGNORE INTO client_usage_baselines(account_id,protocol_client_id,baseline_bytes,updated_at)
+               VALUES(?,?,?,?)""",
+            (int(account_id),int(protocol_client_id),int(current["used"] or 0),ts),
+        )
 
 
 def list_protocols(account_id, include_secrets=False):
@@ -452,6 +505,16 @@ def bind_access_artifact(account_id,artifact_id,label="",priority=100,enabled=Tr
                 int(priority or 100),1 if enabled else 0,ts,
             ),
         )
+        con.execute(
+            """INSERT OR IGNORE INTO client_artifact_usage(account_id,artifact_id,used_bytes,last_counter,updated_at)
+               VALUES(?,?,0,0,?)""",
+            (int(account_id),int(artifact_id),ts),
+        )
+        con.execute(
+            """INSERT OR IGNORE INTO client_artifact_policy_state(account_id,artifact_id,suspended_reason,updated_at)
+               VALUES(?,?,?,?)""",
+            (int(account_id),int(artifact_id),"",ts),
+        )
 
 
 def list_artifact_bindings(account_id):
@@ -472,6 +535,14 @@ def unbind_access_artifact(account_id,artifact_id):
     with connect() as con:
         con.execute(
             "DELETE FROM client_artifact_bindings WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        )
+        con.execute(
+            "DELETE FROM client_artifact_usage WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        )
+        con.execute(
+            "DELETE FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",
             (int(account_id),int(artifact_id)),
         )
 
@@ -707,6 +778,10 @@ def unbind_protocol_client(account_id,protocol_client_id):
             "DELETE FROM client_protocol_bindings WHERE account_id=? AND protocol_client_id=?",
             (int(account_id),int(protocol_client_id)),
         )
+        con.execute(
+            "DELETE FROM client_usage_baselines WHERE account_id=? AND protocol_client_id=?",
+            (int(account_id),int(protocol_client_id)),
+        )
 
 
 def account_admin_snapshot(account_id):
@@ -730,6 +805,9 @@ def delete_account(account_id):
     with connect() as con:
         con.execute("DELETE FROM client_sessions WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_usage_baselines WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_artifact_usage WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_artifact_policy_state WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_protocol_bindings WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_bindings WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_accounts WHERE id=?",(account_id,))
@@ -776,3 +854,106 @@ def revoke_all_sessions(account_id):
             "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
             (int(time.time()),int(account_id)),
         )
+
+
+def reset_account_usage(account_id):
+    account_id=int(account_id)
+    if not get_account(account_id):
+        raise ValueError("account not found")
+    ts=now_iso()
+    with connect() as con:
+        rows=con.execute(
+            """SELECT b.protocol_client_id,pc.used_up_bytes+pc.used_down_bytes AS used
+               FROM client_protocol_bindings b
+               JOIN protocol_clients pc ON pc.id=b.protocol_client_id
+               WHERE b.account_id=?""",
+            (account_id,),
+        ).fetchall()
+        for row in rows:
+            con.execute(
+                """INSERT INTO client_usage_baselines(account_id,protocol_client_id,baseline_bytes,updated_at)
+                   VALUES(?,?,?,?)
+                   ON CONFLICT(account_id,protocol_client_id) DO UPDATE SET
+                     baseline_bytes=excluded.baseline_bytes,updated_at=excluded.updated_at""",
+                (account_id,int(row["protocol_client_id"]),int(row["used"] or 0),ts),
+            )
+        con.execute(
+            "UPDATE client_artifact_usage SET used_bytes=0,updated_at=? WHERE account_id=?",
+            (ts,account_id),
+        )
+    return {"ok":True,"used_bytes":0}
+
+
+def add_artifact_counter_sample(account_id,artifact_id,counter):
+    account_id=int(account_id); artifact_id=int(artifact_id); counter=max(0,int(counter or 0))
+    ts=now_iso()
+    with connect() as con:
+        row=con.execute(
+            "SELECT used_bytes,last_counter FROM client_artifact_usage WHERE account_id=? AND artifact_id=?",
+            (account_id,artifact_id),
+        ).fetchone()
+        if not row:
+            con.execute(
+                """INSERT INTO client_artifact_usage(account_id,artifact_id,used_bytes,last_counter,updated_at)
+                   VALUES(?,?,0,?,?)""",
+                (account_id,artifact_id,counter,ts),
+            )
+            return 0
+        last=max(0,int(row["last_counter"] or 0))
+        delta=counter-last if counter>=last else counter
+        used=max(0,int(row["used_bytes"] or 0))+max(0,delta)
+        con.execute(
+            """UPDATE client_artifact_usage SET used_bytes=?,last_counter=?,updated_at=?
+               WHERE account_id=? AND artifact_id=?""",
+            (used,counter,ts,account_id,artifact_id),
+        )
+        return used
+
+
+def get_artifact_policy_state(account_id,artifact_id):
+    with connect() as con:
+        row=con.execute(
+            "SELECT suspended_reason,updated_at FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        ).fetchone()
+        return dict(row) if row else {"suspended_reason":"","updated_at":""}
+
+
+def set_artifact_policy_state(account_id,artifact_id,reason=""):
+    ts=now_iso()
+    with connect() as con:
+        con.execute(
+            """INSERT INTO client_artifact_policy_state(account_id,artifact_id,suspended_reason,updated_at)
+               VALUES(?,?,?,?)
+               ON CONFLICT(account_id,artifact_id) DO UPDATE SET
+                 suspended_reason=excluded.suspended_reason,updated_at=excluded.updated_at""",
+            (int(account_id),int(artifact_id),str(reason or ""),ts),
+        )
+
+
+def client_policy_reason(account,now_ts=None):
+    if not account or not int(account.get("enabled") or 0):
+        return "disabled"
+    now_ts=int(now_ts or time.time())
+    expire_at=int(account.get("expire_at") or 0)
+    if expire_at and now_ts>=expire_at:
+        return "expiry"
+    quota=int(account.get("quota_bytes") or 0)
+    if quota and account_usage_bytes(int(account["id"]))>=quota:
+        return "quota"
+    return ""
+
+
+def protocol_usage_for_account(account_id,protocol_client_id):
+    with connect() as con:
+        row=con.execute(
+            """SELECT pc.used_up_bytes+pc.used_down_bytes AS raw,COALESCE(u.baseline_bytes,0) AS baseline
+               FROM protocol_clients pc
+               LEFT JOIN client_usage_baselines u
+                 ON u.protocol_client_id=pc.id AND u.account_id=?
+               WHERE pc.id=?""",
+            (int(account_id),int(protocol_client_id)),
+        ).fetchone()
+        if not row:
+            return 0
+        return max(0,int(row["raw"] or 0)-int(row["baseline"] or 0))
