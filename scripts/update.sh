@@ -139,6 +139,12 @@ for item in \
   "etc/systemd/system/makia-scheduled-backup.timer" \
   "etc/systemd/system/makia-ops-monitor.service" \
   "etc/systemd/system/makia-ops-monitor.timer" \
+  "etc/systemd/system/makia-mtproxy.service" \
+  "etc/makia-vps-manager/mtproxy.env" \
+  "etc/makia-vps-manager/mtproxy.toml" \
+  "etc/makia-vps-manager/dns.json" \
+  "etc/unbound/unbound.conf.d/makia.conf" \
+  "opt/makia-mtproxy" \
   "etc/nginx/sites-available/makia-vps-manager"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
