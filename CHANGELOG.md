@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.8] - 2026-09-29
+
+### Updater syntax recovery
+- Rebuilt `scripts/update.sh` from the last known-good v1.2.6 updater after the v1.2.7 file became syntactically invalid and retained a duplicate tail.
+- Re-applied the DNS repair transaction cleanly without the truncated precheck block.
+- Added structural regression tests for duplicate updater terminators/functions and dangling `; then` residues.
+- Existing CI Bash syntax validation remains mandatory for all shell scripts.
+- Retains v1.2.7 authenticated DoT/CA-bundle repair, v1.2.6 MTProxy transaction handling, v1.2.5 shared permission repair and FORCE_MAIN recovery.
+- Rotated the service-worker cache to `makia-shell-v128`.
+
+
 ## [1.2.7] - 2026-09-29
 
 ### DNS-over-TLS repair
