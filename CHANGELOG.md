@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.10] - 2026-09-29
+
+### Host smoke script recovery
+- Rebuilt `scripts/uat-smoke.sh` from the last known-good clean copy after the release source itself contained a truncated single-quoted DNS grep expression and duplicated tail content.
+- Added the missing non-failing `warn()` helper used by updater-scoped optional-service soft-fail handling.
+- Replaced the fragile DNS regex pipeline with a captured `dig` result and non-empty answer check.
+- Added structural regression tests for duplicate/truncated host-smoke content, dangling shell tails, and unsafe quote/backtick residues.
+- Retains v1.2.9 verified/atomic runtime shell installation and pre-host-smoke SHA256/syntax repair.
+- Rotated the service-worker cache to `makia-shell-v1210`.
+
+
 ## [1.2.9] - 2026-09-29
 
 ### Verified runtime shell artifacts

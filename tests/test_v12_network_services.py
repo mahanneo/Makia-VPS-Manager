@@ -551,3 +551,24 @@ def test_source_shell_preflight_happens_before_runtime_mutation():
     assert preflight < armed
     assert '"$SRC/scripts/uat-smoke.sh"' in update[preflight:armed]
     assert '"$SRC/scripts/update.sh"' in update[preflight:armed]
+
+
+def test_uat_smoke_has_clean_dns_block_and_warn_helper():
+    uat=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    assert "warn(){" in uat
+    assert 'DNS_ANSWER="$(dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null || true)"' in uat
+    assert 'if [[ -n "$DNS_ANSWER" ]]; then' in uat
+    assert "MAKIA_UAT_DNS_SOFTFAIL" in uat
+    assert "grep -Eq '^[" not in uat
+    assert uat.count('exit "$FAIL"')==1
+    assert uat.rstrip().endswith('exit "$FAIL"')
+    assert "`" not in uat
+
+
+def test_uat_smoke_is_not_duplicated_or_truncated():
+    uat=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    assert uat.count("Makia host smoke")==1
+    assert uat.count("Portable restore command")==2
+    assert uat.count("if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then")==1
+    assert uat.count("if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then")==1
+    assert "\n; then\n" not in uat
