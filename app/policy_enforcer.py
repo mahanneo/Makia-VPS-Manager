@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import date
 from .db import all_profiles, audit
 from .system_ops import online_sessions, disconnect_session, lock_user, OperationError
+from . import client_policy
 
 POLL_SECONDS=12
 
@@ -72,6 +73,11 @@ def enforce_once():
                         audit("system","policy_device_disconnect",username,f"tty={tty}; ip={remote}; device_limit={device_limit}")
                     except OperationError as exc:
                         audit("system","policy_device_disconnect_failed",username,str(exc)[:240])
+
+    try:
+        client_policy.enforce_host_artifacts()
+    except Exception as exc:
+        audit("system","client_policy_host_cycle_failed",detail=str(exc)[:300])
 
 def main():
     while True:
