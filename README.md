@@ -4,8 +4,18 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current code baseline:** `v0.26.0-rc10`
+> **Current code baseline:** `v0.26.0-rc11`
 > CI validates the repository; connectivity on a real VPS still requires external-client UAT.
+
+## v0.26.0-rc11 Outline runtime + engine isolation
+
+- Fixes the real browser `olName is not defined` failure when creating an Outline user/key by removing reliance on DOM ids becoming JavaScript globals.
+- Explicitly isolates Xray/V2Ray client queries from Outline clients, preventing Outline rows from appearing inside Xray and eliminating invalid `•••` detail lookups.
+- Uses the stable Outline Manager API lifecycle: create key → rename → data limit, with rollback deletion on partial failure.
+- Requires a valid `ss://` Outline access key before Makia stores or delivers the credential.
+- Browser UAT now reproduces the Outline create flow and verifies it reaches Client Portal without a ReferenceError.
+- Removes the same fragile DOM-global pattern from major management forms including SSH, Plans, Backup, Cloudflare, Telegram, Settings and Xray forms.
+- See [UAT 0.26.0 RC11](docs/UAT-0.26.0-RC11.md). This remains a **Release Candidate**, not Stable.
 
 ## v0.26.0-rc10 Outline + unified access management
 
