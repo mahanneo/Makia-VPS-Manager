@@ -2442,7 +2442,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
   const health=Boolean(r.installed&&r.configured&&r.service_active&&r.listener);
   const install=r.installed?'':[
     '<section class="network-tool-card install-card">',
-      '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب MTProxy رسمی تلگرام','Install official Telegram MTProxy'))+'</h3>',
+      '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب MTProxy مدرن (mtg)','Install maintained Telegram MTProxy (mtg)'))+'</h3>',
       '<p>'+htmlEsc(tr('نصب از داخل Web Service انجام نمی‌شود. دستور زیر Installer پین‌شده Makia را اجرا می‌کند.','Host installation is intentionally outside the web service. Run the pinned Makia installer below.'))+'</p></div>',
       '<textarea id="mtInstallCommand" readonly>'+htmlEsc(r.install_command||'sudo makia-install-mtproxy')+'</textarea>',
       '<button class="primary" data-action="copy-target" data-target="mtInstallCommand">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button>',
@@ -2459,7 +2459,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
           '<div class="toolbar"><button class="primary" data-action="copy-target" data-target="mtHttpsLink">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><button class="ghost" data-action="copy-target" data-target="mtTgLink">tg://</button></div>',
         '</div>',
       '</div>',
-      '<div class="notice">'+htmlEsc(tr('Secret تحویلی با prefix استاندارد dd برای Random Padding ساخته می‌شود. اپراتور Proxy به محتوای چت‌های Telegram دسترسی ندارد.','The delivered secret uses Telegram random-padding prefix dd. A proxy operator cannot read Telegram chat contents.'))+'</div>',
+      '<div class="notice">'+htmlEsc(tr('Secret تحویلی با FakeTLS secret نسخه mtg ساخته می‌شود. اپراتور Proxy به محتوای چت‌های Telegram دسترسی ندارد.','The delivered secret uses mtg FakeTLS format. A proxy operator cannot read Telegram chat contents.'))+'</div>',
     '</section>'
   ].join(''):'');
   content.innerHTML=[
