@@ -318,7 +318,7 @@ def _migration_versions_compatible(bundle_version,expected_version):
         return True
     # Full Migration format v2 remains compatible across the verified 0.26 RC line.
     # Compatibility is directional: an older destination never claims a newer bundle.
-    rc_line=["0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6","0.26.0-rc7","0.26.0-rc8"]
+    rc_line=["0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6","0.26.0-rc7","0.26.0-rc8","0.26.0-rc9"]
     if destination in rc_line:
         destination_index=rc_line.index(destination)
         return bundle in set(rc_line[:destination_index])
