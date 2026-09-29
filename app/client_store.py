@@ -169,7 +169,10 @@ def account_available(account, now_ts=None):
     expire_at=int(account.get("expire_at") or 0)
     if expire_at and expire_at<=now_ts:
         return False,"expired"
-    used=account_usage_bytes(int(account["id"]))
+    account_id=int(account.get("id") or account.get("account_id") or 0)
+    if not account_id:
+        return False,"invalid"
+    used=account_usage_bytes(account_id)
     quota=int(account.get("quota_bytes") or 0)
     if quota and used>=quota:
         return False,"quota"
