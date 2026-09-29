@@ -58,3 +58,25 @@ def test_remote_backup_failure_does_not_advance_schedule(monkeypatch,tmp_path):
     with pytest.raises(system_ops.OperationError,match="remote unavailable"):
         scheduled_backup.run_once(False)
     assert not any(key=="backup_schedule_last_run" for key,_ in settings)
+
+
+def test_integration_errors_redact_credential_bearing_urls(monkeypatch):
+    token="123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd"
+    url=f"https://api.telegram.org/bot{token}/sendMessage"
+
+    def explode(*args,**kwargs):
+        raise RuntimeError(f"network failure while opening {url}")
+
+    monkeypatch.setattr(__import__("urllib.request",fromlist=["urlopen"]),"urlopen",explode)
+    from app import integration_ops
+    with pytest.raises(integration_ops.IntegrationError) as exc:
+        integration_ops._json_request(url)
+    message=str(exc.value)
+    assert token not in message
+    assert "/[redacted]" in message
+
+
+def test_telegram_webhook_validates_bot_token_before_network():
+    from app import integration_ops
+    with pytest.raises(integration_ops.IntegrationError,match="invalid Telegram bot token"):
+        integration_ops.telegram_set_webhook("not-a-token","https://panel.example.com/hook","A"*32)

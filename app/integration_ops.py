@@ -51,6 +51,16 @@ def _json_request(url,method="GET",body=None,headers=None,timeout=15,context=Non
                 detail=(exc.read() or b"").decode("utf-8","replace")[:1000] or detail
             except Exception:
                 pass
+        # Never echo credential-bearing request URLs into UI/log error paths.
+        # Telegram bot tokens and the Outline Management API secret can both
+        # appear in URL paths. Preserve the origin only and redact the rest.
+        try:
+            parsed=urllib.parse.urlsplit(url)
+            safe_origin=urllib.parse.urlunsplit((parsed.scheme,parsed.netloc,"/[redacted]","",""))
+            detail=detail.replace(url,safe_origin)
+        except Exception:
+            pass
+        detail=re.sub(r"\b\d{6,15}:[A-Za-z0-9_-]{20,}\b","[redacted-telegram-token]",detail)
         raise IntegrationError(detail[:1200]) from exc
 
 
@@ -115,6 +125,8 @@ def telegram_set_webhook(bot_token,url,secret_token):
     token=str(bot_token or "").strip()
     hook=str(url or "").strip()
     secret=str(secret_token or "").strip()
+    if not re.fullmatch(r"\d{6,15}:[A-Za-z0-9_-]{20,}",token):
+        raise IntegrationError("invalid Telegram bot token")
     if not hook.startswith("https://"):
         raise IntegrationError("Telegram webhook requires HTTPS")
     if not re.fullmatch(r"[A-Za-z0-9_-]{24,128}",secret):
