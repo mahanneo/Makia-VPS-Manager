@@ -207,21 +207,56 @@ tar -C / -czf "$RELEASE_BACKUP" "${SNAPSHOT[@]}"
 chmod 0600 "$RELEASE_BACKUP"
 echo "Runtime rollback point: $RELEASE_BACKUP"
 
-if [[ "$FORCE_MAIN" == "1" ]]; then
-  REF="main"
-  ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"
-  echo "Force-main update enabled; ignoring any pinned release archive override."
-else
-  ARCHIVE_URL="${MAKIA_RELEASE_ARCHIVE_URL:-https://github.com/${REPO}/archive/refs/heads/${REF}.tar.gz}"
-fi
 CURL_AUTH=()
 if [[ -n "${MAKIA_RELEASE_BEARER_TOKEN:-}" ]]; then
   CURL_AUTH=(-H "Authorization: Bearer ${MAKIA_RELEASE_BEARER_TOKEN}")
 fi
-curl -fL --retry 3 "${CURL_AUTH[@]}" "$ARCHIVE_URL" -o "$TMP/source.tar.gz"
+
+resolve_github_commit(){
+  local ref="$1" api json sha
+  api="https://api.github.com/repos/${REPO}/commits/${ref}"
+  json="$(curl -fsSL --retry 3 "${CURL_AUTH[@]}" -H "Accept: application/vnd.github+json" "$api")"
+  sha="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))')"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Unable to resolve immutable GitHub commit for ref: $ref" >&2; return 1; }
+  printf '%s' "$sha"
+}
+
+SOURCE_COMMIT=""
+if [[ "$FORCE_MAIN" == "1" ]]; then
+  REF="main"
+  SOURCE_COMMIT="$(resolve_github_commit "$REF")"
+  ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"
+  echo "Force-main update enabled; pinned immutable source commit: $SOURCE_COMMIT"
+elif [[ -n "${MAKIA_RELEASE_ARCHIVE_URL:-}" ]]; then
+  ARCHIVE_URL="$MAKIA_RELEASE_ARCHIVE_URL"
+  echo "Using explicitly configured release archive URL."
+else
+  SOURCE_COMMIT="$(resolve_github_commit "$REF")"
+  ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"
+  echo "Resolved release ref '$REF' to immutable commit: $SOURCE_COMMIT"
+fi
+
+curl -fL --retry 3 --retry-all-errors "${CURL_AUTH[@]}" "$ARCHIVE_URL" -o "$TMP/source.tar.gz"
+tar -tzf "$TMP/source.tar.gz" >/dev/null
 tar -xzf "$TMP/source.tar.gz" -C "$TMP"
 SRC="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d -name 'Makia-VPS-Manager-*' | head -n1)"
 [[ -n "$SRC" ]] || { echo "Unable to locate extracted source."; exit 1; }
+
+if [[ -n "$SOURCE_COMMIT" ]]; then
+  EXPECTED_PREFIX="Makia-VPS-Manager-${SOURCE_COMMIT}"
+  [[ "$(basename "$SRC")" == "$EXPECTED_PREFIX" ]] || {
+    echo "Immutable archive root mismatch: expected $EXPECTED_PREFIX, got $(basename "$SRC")" >&2
+    exit 1
+  }
+fi
+
+[[ -s "$SRC/VERSION" ]] || { echo "Downloaded release is missing VERSION." >&2; exit 1; }
+RELEASE_VERSION="$(tr -d '[:space:]' < "$SRC/VERSION")"
+[[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  echo "Downloaded release has an invalid VERSION: $RELEASE_VERSION" >&2
+  exit 1
+}
+echo "Downloaded immutable Makia release: version=$RELEASE_VERSION commit=${SOURCE_COMMIT:-custom-archive}"
 
 install_verified_shell(){
   local src="$1" dest="$2" mode="${3:-0755}" tmp src_sha tmp_sha dest_sha
