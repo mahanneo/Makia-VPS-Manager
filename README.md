@@ -4,8 +4,16 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current code baseline:** `v0.26.0-rc9`
+> **Current code baseline:** `v0.26.0-rc10`
 > CI validates the repository; connectivity on a real VPS still requires external-client UAT.
+
+## v0.26.0-rc10 Outline + unified access management
+
+- Fixes the real Outline setup failure path seen when Docker is not ready: the panel now shows a two-step root-shell workflow instead of a raw browser alert.
+- Makes the host preparation command explicit: `sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade`, followed by the pinned Outline installer command.
+- Unifies SSH, Xray, WireGuard, OpenVPN and managed Outline user operations behind the same `•••` detail drawer with protocol-specific management and common delivery tools.
+- Adds Outline to the Clients filter, renders real Outline quota/usage/expiry in lists, keeps the protocol group expanded, and adds a dedicated public Outline connection guide.
+- Automated gates are documented in [UAT 0.26.0 RC10](docs/UAT-0.26.0-RC10.md). This is still a **Release Candidate**, not Stable.
 
 ## v0.26.0-rc9 DR + secret-path hardening
 
