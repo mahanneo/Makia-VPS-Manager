@@ -900,8 +900,18 @@ def add_artifact_counter_sample(account_id,artifact_id,counter):
             )
             return 0
         last=max(0,int(row["last_counter"] or 0))
+        previous_used=max(0,int(row["used_bytes"] or 0))
+        # The first runtime sample establishes a baseline so traffic consumed
+        # before the credential was bound to this Client account is not billed.
+        if last==0 and previous_used==0:
+            con.execute(
+                """UPDATE client_artifact_usage SET last_counter=?,updated_at=?
+                   WHERE account_id=? AND artifact_id=?""",
+                (counter,ts,account_id,artifact_id),
+            )
+            return 0
         delta=counter-last if counter>=last else counter
-        used=max(0,int(row["used_bytes"] or 0))+max(0,delta)
+        used=previous_used+max(0,delta)
         con.execute(
             """UPDATE client_artifact_usage SET used_bytes=?,last_counter=?,updated_at=?
                WHERE account_id=? AND artifact_id=?""",
