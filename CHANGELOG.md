@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.26.0-rc11] - 2026-09-29
+
+### Outline runtime
+- Fixed `olName is not defined` and related DOM-id global assumptions in Outline key creation.
+- Added a Playwright regression that opens the Outline create modal, submits a mocked real key response and verifies the Client Portal is reached without a JavaScript ReferenceError.
+- Changed Outline key creation to the stable Manager API sequence: create → rename → data limit.
+- Invalid/non-`ss://` key responses are rejected.
+- Partial policy failure deletes the newly created Outline key to avoid orphan credentials.
+
+### Xray / Outline isolation
+- Xray and Inbounds workspaces now request `/api/protocol-clients?engine=xray`.
+- Outline-managed clients no longer appear in Xray/V2Ray lists.
+- Added explicit backend engine filtering while preserving unfiltered aggregation where required by the unified access API.
+
+### UI runtime hardening
+- Removed fragile DOM-id globals from major save/submit flows across SSH, protocol policy, Plans, Quick Provision, scheduled backup, Cloudflare, Telegram, general settings, 2FA and Xray forms.
+- Added a regression gate that fails if undeclared form-control globals return.
+
+### Release gate
+- Full Migration compatibility extended directionally through RC11.
+- **Release Candidate only.** Real Outline Shadowbox/API/client connectivity and replacement-VPS UAT remain mandatory before Stable.
+
+
 ## [0.26.0-rc10] - 2026-09-29
 
 ### Outline setup
