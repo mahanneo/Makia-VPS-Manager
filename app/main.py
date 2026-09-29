@@ -685,7 +685,7 @@ def _validate_service_plan(payload:ServicePlanPayload):
             if value<low or value>high:
                 raise HTTPException(400,f"plan field out of range: {key}")
     enforceable={
-        "ssh":{"expire_days","quota_gb","device_limit","connection_limit"},
+        "ssh":{"expire_days","device_limit","connection_limit"},
         "xray":{"expire_days","quota_gb","ip_limit","reset_days"},
         "outline":{"expire_days","quota_gb"},
         "wireguard":set(),

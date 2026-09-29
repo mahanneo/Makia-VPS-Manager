@@ -316,21 +316,13 @@ def _migration_versions_compatible(bundle_version,expected_version):
     destination=str(expected_version or "").strip()
     if not bundle or not destination or bundle==destination:
         return True
-    # Full Migration format v2 stayed compatible across the 0.26 RC line.
-    # Keep this directional and explicit: RC5 may restore earlier verified
-    # RC2/RC3/RC4 bundles, including the RC2 systemd-template name shim.
-    compatible_to_rc6={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5"}
-    if destination=="0.26.0-rc6" and bundle in compatible_to_rc6:
-        return True
-    compatible_to_rc5={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4"}
-    if destination=="0.26.0-rc5" and bundle in compatible_to_rc5:
-        return True
-    if destination=="0.26.0-rc4" and bundle in {"0.26.0-rc2","0.26.0-rc3"}:
-        return True
-    if destination=="0.26.0-rc3" and bundle=="0.26.0-rc2":
-        return True
+    # Full Migration format v2 remains compatible across the verified 0.26 RC line.
+    # Compatibility is directional: an older destination never claims a newer bundle.
+    rc_line=["0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6","0.26.0-rc7","0.26.0-rc8"]
+    if destination in rc_line:
+        destination_index=rc_line.index(destination)
+        return bundle in set(rc_line[:destination_index])
     return False
-
 
 def inspect_portable_migration_blob(blob,password,expected_version=""):
     if len(blob)<100:

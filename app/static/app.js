@@ -2360,7 +2360,9 @@ async function plansCenter(renderToken=window.__viewRenderToken){
     const cfg=p.config||{},kind=String(p.protocol_kind||'').toLowerCase(),proto=kind.toUpperCase();
     const policy=kind==='wireguard'||kind==='openvpn'
       ?'<div class="plan-facts"><span><b>'+htmlEsc(tr('قالب تنظیمات اتصال','Connection template'))+'</b></span><span>'+htmlEsc(tr('بدون Quota/Expiry صوری','No fake quota/expiry'))+'</span></div>'
-      :'<div class="plan-facts"><span>'+htmlEsc(tr('مدت','Duration'))+' <b>'+(Number(cfg.expire_days||0)||'∞')+(cfg.expire_days?'d':'')+'</b></span><span>'+htmlEsc(tr('حجم','Quota'))+' <b>'+(Number(cfg.quota_gb||0)||'∞')+(cfg.quota_gb?'GB':'')+'</b></span>'+(kind==='outline'?'':'<span>'+htmlEsc(tr('دستگاه/IP','Device/IP'))+' <b>'+Number(cfg.ip_limit||cfg.device_limit||1)+'</b></span>')+'</div>';
+      :kind==='ssh'
+        ?'<div class="plan-facts"><span>'+htmlEsc(tr('مدت','Duration'))+' <b>'+(Number(cfg.expire_days||0)||'∞')+(cfg.expire_days?'d':'')+'</b></span><span>'+htmlEsc(tr('دستگاه','Devices'))+' <b>'+Number(cfg.device_limit||1)+'</b></span><span>'+htmlEsc(tr('بدون سهمیه ترافیک صوری','No fake traffic quota'))+'</span></div>'
+        :'<div class="plan-facts"><span>'+htmlEsc(tr('مدت','Duration'))+' <b>'+(Number(cfg.expire_days||0)||'∞')+(cfg.expire_days?'d':'')+'</b></span><span>'+htmlEsc(tr('حجم','Quota'))+' <b>'+(Number(cfg.quota_gb||0)||'∞')+(cfg.quota_gb?'GB':'')+'</b></span>'+(kind==='outline'?'':'<span>'+htmlEsc(tr('IP','IP limit'))+' <b>'+Number(cfg.ip_limit||1)+'</b></span>')+'</div>';
     return '<article class="ops-card plan-card"><div class="ops-card-head"><div><span class="pro-kicker">'+htmlEsc(proto)+'</span><h3>'+htmlEsc(p.name)+'</h3></div><span class="status-chip '+(p.active?'ok':'warn')+'">'+(p.active?tr('فعال','ACTIVE'):tr('غیرفعال','INACTIVE'))+'</span></div>'+
       policy+
       (p.price_label?'<p class="muted">'+htmlEsc(p.price_label)+'</p>':'')+
@@ -2389,14 +2391,15 @@ function editServicePlan(id){
 }
 function syncPlanPolicyFields(){
   const kind=document.getElementById('plKind')?.value||'xray';
-  const visible={expiry:!['wireguard','openvpn'].includes(kind),quota:!['wireguard','openvpn'].includes(kind),limit:['ssh','xray'].includes(kind),reset:kind==='xray'};
+  const visible={expiry:!['wireguard','openvpn'].includes(kind),quota:['xray','outline'].includes(kind),limit:['ssh','xray'].includes(kind),reset:kind==='xray'};
   document.querySelectorAll('[data-plan-policy]').forEach(el=>{el.style.display=visible[el.dataset.planPolicy]?'':'none'});
 }
 async function saveServicePlan(id){
   let extra={};try{extra=JSON.parse(document.getElementById('plExtra').value||'{}')}catch(e){alert('JSON: '+e.message);return}
   const kind=document.getElementById('plKind').value;
   const config={...extra};
-  if(!['wireguard','openvpn'].includes(kind)){config.expire_days=Number(plDays.value||0);config.quota_gb=Number(plQuota.value||0)}
+  if(!['wireguard','openvpn'].includes(kind))config.expire_days=Number(plDays.value||0);
+  if(['xray','outline'].includes(kind))config.quota_gb=Number(plQuota.value||0)
   if(kind==='ssh')config.device_limit=Number(plLimit.value||1);
   if(kind==='xray'){config.ip_limit=Number(plLimit.value||1);config.reset_days=Number(plReset.value||0)}
   const payload={name:plName.value.trim(),protocol_kind:kind,config,price_label:plPrice.value.trim(),active:plActive.checked};
