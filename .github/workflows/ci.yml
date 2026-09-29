@@ -374,6 +374,7 @@ jobs:
       MAKIA_DATA_DIR: /tmp/makia-browser
       MAKIA_BACKUP_DIR: /tmp/makia-browser-backups
       MAKIA_INITIAL_ADMIN_PASSWORD: BrowserTestPass!123
+      MAKIA_CLIENT_APP_ENABLED: 1
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
