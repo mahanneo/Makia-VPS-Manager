@@ -139,6 +139,13 @@ install -m 0755 "$SOURCE_DIR/scripts/install-outline.sh" /usr/local/sbin/makia-i
 install -m 0755 "$SOURCE_DIR/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
 install -m 0755 "$SOURCE_DIR/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
 install -m 0755 "$SOURCE_DIR/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
+echo "Preparing optional Telegram/DNS tooling for panel-managed configuration..."
+if ! /usr/local/sbin/makia-install-mtproxy --install-only; then
+  echo "WARNING: MTProxy tooling preparation failed; panel will show the root repair/install command."
+fi
+if ! /usr/local/sbin/makia-install-dns --install-only; then
+  echo "WARNING: DNS tooling preparation failed; panel will show the root repair/install command."
+fi
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SOURCE_DIR/upgrade.sh" /usr/local/sbin/makia-upgrade
 ln -sfn /usr/local/sbin/makia-update /usr/local/sbin/dragon-update
