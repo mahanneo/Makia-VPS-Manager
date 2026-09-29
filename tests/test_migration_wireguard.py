@@ -298,9 +298,9 @@ def test_migration_inspector_accepts_legacy_sanitized_systemd_template(tmp_path,
 
 
 def test_migration_version_compatibility_is_narrow_and_directional():
-    assert system_ops._migration_versions_compatible("0.26.0-rc11","0.26.0-rc11") is True
-    for source in ("0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6","0.26.0-rc7","0.26.0-rc8","0.26.0-rc9","0.26.0-rc10"):
-        assert system_ops._migration_versions_compatible(source,"0.26.0-rc11") is True
-    assert system_ops._migration_versions_compatible("0.26.0-rc11","0.26.0-rc10") is False
-    assert system_ops._migration_versions_compatible("0.25.0","0.26.0-rc11") is False
+    assert system_ops._migration_versions_compatible("1.0.0","1.0.0") is True
+    for source in ("0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6","0.26.0-rc7","0.26.0-rc8","0.26.0-rc9","0.26.0-rc10","0.26.0-rc11"):
+        assert system_ops._migration_versions_compatible(source,"1.0.0") is True
+    assert system_ops._migration_versions_compatible("1.0.0","0.26.0-rc11") is False
+    assert system_ops._migration_versions_compatible("0.25.0","1.0.0") is False
 

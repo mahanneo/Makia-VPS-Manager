@@ -1,349 +1,172 @@
-## نسخه ۰.۲۶.۰-rc11 — رفع خطای ساخت Outline و جداسازی کامل Xray/Outline
+<p align="center">
+  <img src="docs/assets/makia-brand.png" width="128" alt="لوگوی Makia VPS Manager">
+</p>
 
-در RC11 خطای واقعی `olName is not defined` که هنگام ساخت کاربر/Access Key در بعضی مرورگرها دیده می‌شد از ریشه اصلاح شده است. فرم Outline دیگر به رفتار قدیمی مرورگر برای تبدیل `id` عناصر HTML به متغیر JavaScript وابسته نیست.
+<h1 align="center">Makia VPS Manager</h1>
 
-همچنین Clientهای Outline دیگر وارد Workspace مربوط به Xray/V2Ray نمی‌شوند. Xray اکنون صریحاً فقط `engine=xray` را دریافت می‌کند؛ بنابراین کلیدهای Outline داخل لیست Xray نمایش داده نمی‌شوند و دکمه `•••` آن‌ها دیگر به Detail اشتباه Xray نمی‌رود.
+<p align="center">
+  پنل تحت وب مدیریت VPS و دسترسی برای Ubuntu
+</p>
 
-ساخت کلید Outline نیز به Workflow پایدار Management API تغییر کرده است: ابتدا Credential واقعی ساخته می‌شود، سپس Name و Data Limit اعمال می‌شوند و اگر بخشی از Policy شکست بخورد، Key تازه‌ساخته‌شده حذف می‌شود تا Credential نیمه‌کاره باقی نماند. Makia فقط Access Key معتبر با قالب `ss://` را ذخیره و تحویل می‌دهد.
+<p align="center">
+  <strong>نسخه ۱.۰.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+</p>
 
-همین کلاس باگ DOM-global در فرم‌های مدیریتی مهم شامل SSH، Plans، Quick Provision، Backup Scheduler، Cloudflare، Telegram، Settings، 2FA و فرم‌های Xray نیز حذف شده است.
+**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه v1](docs/UAT-1.0.0.md)**
 
-این نسخه همچنان **Release Candidate** است. اتصال واقعی Outline Client روی موبایل/کامپیوتر و Host UAT واقعی قبل از Stable الزامی است. جزئیات: [UAT RC11](docs/UAT-0.26.0-RC11.md).
+---
 
-## نسخه ۰.۲۶.۰-rc10 — اصلاح Outline و یکپارچه‌سازی مدیریت کاربران
+## Makia چیست؟
 
-در RC10 مسیر واقعی Setup مربوط به Outline اصلاح شده است. اگر Docker روی VPS آماده نباشد، پنل دیگر فقط خطای Browser Alert نمایش نمی‌دهد؛ یک Workflow مشخص دو مرحله‌ای نشان می‌دهد: ابتدا `sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade` برای آماده‌سازی Host از مسیر Root، سپس دستور نصب Pin‌شده Outline.
+Makia یک پنل Self-hosted برای مدیریت دسترسی‌ها و عملیات VPS است. هر پروتکل Runtime مستقل خودش را دارد، اما ساخت کاربر، تحویل کانفیگ، تمدید، عیب‌یابی، بکاپ، بازیابی و Multi-VPS در یک رابط یکپارچه مدیریت می‌شوند.
 
-مدیریت کاربران نیز در SSH، Xray، WireGuard، OpenVPN و Outline یکدست شده است: ورودی `•••` برای جزئیات/مدیریت وجود دارد و از همان Drawer می‌توان ابزارهای مرتبط با هر پروتکل و امکانات تحویل شامل Config/Access Key، QR/Share، Client Portal، Protected ZIP و راهنمای اتصال را باز کرد. Outline به فیلتر کاربران و راهنمای عمومی نیز اضافه شده و Usage/Quota/Expiry آن به‌صورت واقعی نمایش داده می‌شود.
+Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کند. نصب Packageها و عملیات حساس Host فقط از مسیرهای صریح و محدود Root انجام می‌شوند.
 
-این نسخه همچنان **Release Candidate** است. UAT واقعی VPS، Docker/Shadowbox، Outline Client، Restore روی VPS جایگزین و Clientهای واقعی قبل از Stable الزامی هستند. جزئیات: [UAT RC10](docs/UAT-0.26.0-RC10.md).
+## پروتکل‌ها
 
-## نسخه ۰.۲۶.۰-rc9 — سخت‌سازی Disaster Recovery و مسیرهای Secret
+| پروتکل | ساخت | تحویل به کاربر | مدیریت |
+|---|---|---|---|
+| SSH / NPV | ✅ | NPV، QR، صفحه اختصاصی | انقضا، Session/Device، Lock، Disconnect |
+| Xray / V2Ray | ✅ | Share Link، QR، Subscription، Portal | حجم، انقضا، IP Policy، تمدید، Diagnostics |
+| WireGuard | ✅ | Config، QR، Portal | فعال/غیرفعال، Reissue، Diagnostics |
+| OpenVPN | ✅ | فایل OVPN، Portal | Revoke، Transport/Runtime Diagnostics |
+| Outline | ✅ | Access Key واقعی `ss://`، QR، Portal، ZIP رمزدار | حجم، انقضا، تمدید، Reissue، Traffic، Diagnostics، حذف |
 
-RC9 قابلیت‌های RC8 را حفظ می‌کند و سه شکاف Production را می‌بندد: Restore بکاپ دارای Outline قبل از هر تغییر، وجود Docker را بررسی می‌کند و مسیر Root برای آماده‌سازی آن با `MAKIA_ENABLE_OUTLINE=1` وجود دارد؛ شکست Remote SCP دیگر زمان اجرای موفق بکاپ را جلو نمی‌برد و در چک ساعتی بعدی دوباره تلاش می‌شود؛ و خطاهای شبکه URLهای دارای Secret را Redact می‌کنند تا Bot Token تلگرام یا Secret مسیر Management API Outline وارد UI/Log نشود.
+در Xray مسیرهای Guided برای پروتکل‌های پشتیبانی‌شده مانند VLESS، VMess، Trojan، Shadowsocks و Hysteria2 وجود دارند و تنظیمات Advanced قبل از Apply توسط Core اعتبارسنجی می‌شوند.
 
-سازگاری Full Migration تا RC9 نیز به‌صورت صریح Gate شده است. این نسخه هنوز **Release Candidate** است و Stable شدن به UAT واقعی VPS جایگزین، Outline زنده، Remote SCP، Cloudflare، Telegram و Clientهای واقعی وابسته است. جزئیات: [UAT RC9](docs/UAT-0.26.0-RC9.md).
+در WireGuard/OpenVPN، Makia قابلیتی را که Engine واقعاً enforce نمی‌کند به‌صورت Fake نمایش نمی‌دهد.
 
-## نسخه ۰.۲۶.۰-rc8 — Operations Suite + Outline
+## قابلیت‌های مدیریتی
 
-در RC8، پنل مدیریت عملیات کامل‌تر شده است: **پلن/قالب، تمدید گروهی، مرکز انقضا، بکاپ زمان‌بندی‌شده و Remote SCP، Disaster Recovery، Cloudflare DNS Cutover، Telegram، اعلان‌ها، Diagnostics و داشبورد Multi-VPS** به مسیرهای واقعی Backend متصل‌اند.
+- Plans / Templates
+- Bulk Renew / Enable / Disable در موارد قابل enforce
+- Expiry Center
+- Notifications Center
+- بکاپ زمان‌بندی‌شده و رمزدار
+- Remote Backup با SCP و Host-key verification
+- Full Migration / Disaster Recovery
+- Cloudflare DNS Cutover
+- Telegram Bot / Notifications
+- Diagnostics برای هر Access
+- Multi-VPS Dashboard
+- Client Portal بدون Login با Token اختصاصی
+- QR / Config / Protected ZIP
+- Audit Log
+- Host Diagnostics
 
-**Outline** نیز به‌صورت First-class اضافه شده است: نصب با نسخه رسمی Pin‌شده و بررسی Integrity، Management API با Certificate Fingerprint، ساخت/تعویض/حذف Access Key، Traffic واقعی، Quota و Expiry سمت سرور، QR، Protected ZIP و Client Portal خصوصی. Full Migration وضعیت `/opt/outline` را نیز نگه می‌دارد.
+## نصب سریع
 
-برای جلوگیری از قابلیت Fake، WireGuard/OpenVPN در Plans فقط Template تنظیم اتصال هستند و سهمیه/انقضای per-client ساختگی نمی‌گیرند؛ SSH نیز Traffic quota ساختگی نمایش نمی‌دهد. Remote SCP فقط با SSH Host Key شناخته‌شده پذیرفته می‌شود و Cloudflare برای Endpointهای خام VPN/SSH همیشه DNS Only است.
-
-این نسخه **Stable نیست**. قبل از Stable باید UAT واقعی VPS شامل Restore روی VPS جایگزین، Outline زنده، Remote SCP، Cloudflare، Telegram و Clientهای واقعی طبق [UAT RC8](docs/UAT-0.26.0-RC8.md) انجام شود.
-## نسخه ۰.۲۶.۰-rc2 — Connection Modes واقعی
-
-در این Release Candidate، بخش **Connection Modes** با شش مسیر واقعی اضافه شده است: **IKEv2، WireGuard، UDP، TCP، Stealth و WStunnel**. این موارد صرفاً کارت نمایشی نیستند و هر گزینه به Runtime واقعی، API واقعی، Port/Listener و Diagnostics متناظر وصل است.
-
-- **IKEv2** با strongSwan و EAP-MSCHAPv2 اجرا می‌شود و UDP/500 و UDP/4500 را استفاده می‌کند.
-- **WireGuard** همان Engine فعلی Makia با Peer، QR، Handshake و Traffic است.
-- **UDP / TCP** دو حالت واقعی OpenVPN Server هستند؛ معماری فعلی یک Server Profile فعال دارد و هم‌زمانی جعلی نمایش داده نمی‌شود.
-- **Stealth**، OpenVPN TCP را داخل TLS واقعی Stunnel قرار می‌دهد.
-- **WStunnel**، WireGuard را از یک WSS tunnel واقعی عبور می‌دهد و binary نسخه 11.0.0 با SHA256 release verification نصب می‌شود.
-
-روی یک IPv4، Nginx HTTPS و چند سرویس TCP نمی‌توانند هم‌زمان مالک TCP/443 باشند. Makia این محدودیت را صریحاً Validate می‌کند؛ WireGuard روی UDP/443 می‌تواند هم‌زمان با HTTPS/TCP 443 فعال باشد، اما Stealth/WStunnel باید Listener آزاد داشته باشند مگر بعداً ingress/multiplexing واقعی اضافه شود.
-
-این نسخه همچنان **Stable نیست**. پس از Upgrade باید `sudo makia-doctor` و `sudo makia-uat-smoke` اجرا شوند و سپس [UAT Connection Modes](docs/UAT-PROTOCOL-MODES.md) و Field Test واقعی داخل ایران انجام شود.
-
-## نسخه ۰.۲۶.۰-rc1 — کاندیدای نهایی انتشار عمومی
-
-این نسخه روی ایرادهای واقعی Host و تکمیل تجربه مدیریتی متمرکز است. خطای ساخت Xray با پیام `runuser: cannot set user id: Operation not permitted` بدون حذف `NoNewPrivileges` رفع شده است؛ Login نیز Focus Surface واحد، تغییر زبان واقعی FA/EN و Dark/Light واقعی دارد.
-
-در Xray، Wizard و Backend از یک **Compatibility Matrix مشترک** استفاده می‌کنند تا ترکیب نامعتبر Protocol/Transport/Security اصلاً به مرحله Commit نرسد. CI روی Xray Core 26.3.27 مجموعه Guided شامل VLESS، VMess، Trojan، Shadowsocks، Hysteria2، HTTP و SOCKS و چند Transport را validate می‌کند و VLESS/REALITY علاوه بر syntax، Handshake و Traffic واقعی CI دارد. قابلیت **Advanced JSON** برای تنظیمات خارج از Guided mode حفظ شده است.
-
-OpenVPN دیگر UDP-only نیست: تنظیم واقعی **TCP/UDP، Port، DNS، Keepalive، Redirect Gateway و Client-to-client** با Backup، Restart verification و Rollback اضافه شده و فایل OVPN دانلودشده از Runtime فعلی بازسازی می‌شود. WireGuard نیز Peer/Handshake/Traffic/QR و تنظیمات DNS، Port، MTU، Keepalive، AllowedIPs و CIDR را یکپارچه نمایش می‌دهد.
-
-Support به Help & Diagnostics ساده‌تر تبدیل شده، Remote Support به بخش Advanced منتقل شده، Admin Security نمای HTTPS/2FA/UFW/Fail2ban/SSH/API Tokens دارد، و راهنمای عمومی برای هر چهار خانواده پروتکل دارای نمودارهای تصویری قدم‌به‌قدم است.
-
-> **نکته برای نصب فعلی:** اگر Footer/Login شما هنوز `v0.24.0-rc1` را نشان می‌دهد، UI قدیمی Users طبیعی است. بعد از Merge این RC، `sudo makia-upgrade` را اجرا کنید و Browser را Hard Refresh کنید.
-
-### وضعیت انتشار
-
-`0.26.0-rc1` برای نصب عمومی به‌عنوان **Release Candidate** آماده می‌شود، اما Stable اعلام نمی‌شود تا UAT واقعی Upgrade/Clean Install و تست Client داخل ایران طبق [UAT 0.26](docs/UAT-0.26.0-RC1.md) و [Iran Field Test](docs/IRAN-CONNECTIVITY-FIELD-TEST.md) تکمیل شود.
-
-## نسخه ۰.۲۵.۰-rc1 — رابط حرفه‌ای و خلوت‌تر
-
-این نسخه منوی Hover/Rail قبلی را کنار می‌گذارد و یک Sidebar ثابت، خوانا و دسته‌بندی‌شده ارائه می‌کند. صفحات روزمره عمداً خلوت‌تر شده‌اند: در صفحه کاربران فقط اطلاعات اصلی دیده می‌شود و QR، فایل Native، Protected ZIP، ویرایش و لغو دسترسی داخل Detail Drawer باز می‌شوند.
-
-ساخت دسترسی جدید نیز دیگر یک Modal بزرگ و شلوغ نیست؛ یک Provisioning Drawer مرحله‌ای باز می‌شود و فقط اطلاعات ضروری را نشان می‌دهد. تنظیمات تخصصی مثل Session/IP limits، MTU، Keepalive، Xray Transport/Security و Quota با Progressive Disclosure نمایش داده می‌شوند.
-
-بخش **Connectivity Lab** وضعیت واقعی Runtime و Endpointهای SSH/Xray/WireGuard/OpenVPN را بررسی می‌کند. این بخش عمداً بین «Server Ready» و «تأیید اتصال از داخل ایران» تفاوت می‌گذارد. برای تست واقعی ایران، `docs/IRAN-CONNECTIVITY-FIELD-TEST.md` و ابزار `scripts/iran-field-preflight.sh` اضافه شده‌اند. هیچ Release نباید بدون Field Test واقعی داخل ایران ادعای سازگاری قطعی داشته باشد.
-
-## نسخه ۰.۲۴.۰-rc1 — ساختار پنل نزدیک به Sanaei / 3x-ui
-
-در این نسخه معماری رابط Makia از نو مرتب شده است. هدف، کپی ظاهری صرف نیست؛ ساختار تعامل و چیدمان پنل به الگوی آشنای 3x-ui/Sanaei نزدیک شده است: Sidebar باریک و قابل Pin، Dashboard فشرده، Inboundها به‌عنوان بخش مستقل، Client Directory واحد، Submenu برای تنظیمات و ابزارهای Xray، و فرم‌ها/جدول‌های فشرده‌تر.
-
-Backend Makia عوض نشده و قابلیت‌های اختصاصی آن مانند SSH/NPV، WireGuard، OpenVPN، Full-stack provisioning، Transport-aware port allocation، Backup، Support و Node management حفظ شده‌اند.
-
-Dashboard جدید فقط داده واقعی API را نمایش می‌دهد و صفحه Inbounds نیز وضعیت واقعی Xray Core را می‌خواند. برای قابلیت‌هایی که Backend مستقل ندارد، کنترل نمایشی جعلی اضافه نشده است.
-
-قبل از Stable، [UAT نسخه ۰.۲۴.۰-rc1](docs/UAT-0.24.0-RC1.md) باید روی VPS واقعی PASS شود.
-
-## نسخه ۰.۲۳.۰-rc1 — بازطراحی کامل پنل
-
-این نسخه رابط کاربری Makia را از Login تا Dashboard و Workspaceهای داخلی از پایه بازطراحی می‌کند. ساختار جدید مطابق طرح تأییدشده از تم سرمه‌ای بسیار تیره، آبی الکتریکی، بنفش، سبز وضعیت و کارت‌های فشرده عملیاتی استفاده می‌کند.
-
-Sidebar جدید، مدیریت کاربران را به SSH، V2Ray/Xray، WireGuard و OpenVPN تفکیک می‌کند و بخش‌های «مدیریت سرویس‌ها»، «مدیریت پورت‌ها»، «گزارش‌ها»، «تنظیمات پنل»، «امنیت»، «بکاپ»، «بروزرسانی» و «پشتیبانی» را به‌صورت مرتب نگه می‌دارد. Dashboard جدید اطلاعات Fake ندارد و KPIها، نمودار Metrics، تعداد کاربران و وضعیت سرویس‌ها را از APIهای واقعی خود Makia می‌خواند.
-
-صفحه‌های SSH/Xray/WireGuard/OpenVPN نیز Table-first شده‌اند تا ساخت کاربر، مشاهده وضعیت، حجم/انقضا در جایی که Accounting واقعی وجود دارد، فعال/غیرفعال، Export و عملیات مدیریتی سریع‌تر باشد.
-
-این نسخه RC است و قبل از Stable باید [UAT رابط کاربری ۰.۲۳.۰-rc1](docs/UAT-0.23.0-RC1.md) روی VPS واقعی بررسی شود.
-
-## نسخه ۰.۲۲.۰-rc1 — نصب کامل و آمادهٔ ساخت کاربر
-
-از این نسخه، نصب تازه Makia دیگر فقط پنل و SSH را بالا نمی‌آورد. Installer به‌صورت خودکار **Xray / V2Ray، WireGuard، OpenVPN، Easy-RSA، iptables و Stunnel** را نصب می‌کند و Runtimeهای WireGuard و OpenVPN را نیز Bootstrap می‌کند. Xray هم با Core اعتبارسنجی‌شده و Config سالم فعال می‌شود.
-
-بعد از پایان نصب، مدیر باید بتواند مستقیماً وارد Workspace مربوط به SSH، Xray، WireGuard یا OpenVPN شود و **فقط User/Client بسازد**؛ مرحلهٔ Install/Bootstrap عادی دیگر بخشی از راه‌اندازی اولیه نیست.
-
-Portها نیز خودکار و Transport-aware تخصیص داده می‌شوند: WireGuard ابتدا UDP/443 و OpenVPN ابتدا UDP/1194 را امتحان می‌کنند. اگر همان Transport روی آن Port اشغال باشد، Makia Port جایگزین آزاد انتخاب می‌کند و مقدار واقعی را در تنظیمات پیش‌فرض ذخیره می‌کند. TCP/443 پنل با UDP/443 WireGuard تداخل محسوب نمی‌شود.
-
-نصب‌های فعلی که فقط SSH روی آن‌ها کار می‌کند نیز با اجرای `sudo makia-upgrade` Full Stack را دریافت می‌کنند. Updater کانفیگ‌های موجود را overwrite نمی‌کند و فقط بخش‌های مفقود را می‌سازد یا Runtime مدیریت‌شده را Repair می‌کند.
-
-قبل از Stable، [UAT نسخه ۰.۲۲.۰-rc1](docs/UAT-0.22.0-RC1.md) باید روی VPS واقعی PASS شود.
-
-## نسخه ۰.۲۱.۰-rc1 — Control Center ماژولار
-
-ساختار پنل در این RC از حالت «همه‌چیز در یک صفحه» خارج شده است. **SSH / NPV، Xray / V2Ray، WireGuard و OpenVPN هرکدام فضای مستقل** دارند و «همه کاربران» فقط نمای سراسری بین پروتکل‌هاست. Dashboard همچنان وضعیت کل سرور، سرویس‌ها، منابع و تعداد دسترسی‌ها را خلاصه می‌کند.
-
-در Xray، قابلیت‌های واقعی Client شامل حجم، تاریخ انقضا، Reset دوره‌ای، IP/Device Limit، فعال/غیرفعال، Subscription و Diagnostics در همان Workspace دیده می‌شوند. SSH سیاست‌های Expiry/Session/Device را جدا نگه می‌دارد؛ WireGuard ترافیک RX/TX و Handshake و فعال/غیرفعال‌سازی همتا را دارد؛ OpenVPN مدیریت PKI و OVPN و Diagnostics را دارد و تا زمانی که Accounting قابل اتکای per-client اضافه نشود، Quota نمایشی نشان نمی‌دهد.
-
-### ایمنی Port
-
-ساخت سرویس‌ها از بررسی **Transport-aware** استفاده می‌کند. شماره Port به‌تنهایی تعارض محسوب نمی‌شود؛ Protocol و Transport هم مهم‌اند. برای نمونه **Nginx روی TCP/443 می‌تواند هم‌زمان با WireGuard روی UDP/443** کار کند، اما دو سرویس که هر دو بخواهند UDP/443 را Bind کنند اجازه ساخت نمی‌گیرند. Xray و Tunnel نیز فقط Transport واقعی خودشان را برای Collision بررسی می‌کنند.
-
-این نسخه Release Candidate است. قبل از Stable باید [UAT نسخه ۰.۲۱.۰-rc1](docs/UAT-0.21.0-RC1.md) روی VPS واقعی اجرا شود.
-
-## نسخه ۰.۱۹.۰ — فضای مدیریت WireGuard
-
-منوی مستقل WireGuard وضعیت سرویس، فهرست همتاها، آخرین handshake، مصرف RX/TX، آدرس Endpoint و دکمه‌های QR، فایل کانفیگ و فعال/غیرفعال‌سازی ماندگار را نشان می‌دهد. هنگام ساخت همتا دامنه یا IP را انتخاب کنید. ظاهر پنل و ناوبری موبایل خواناتر شده‌اند. اگر ذخیرهٔ تنظیمات سرور یا بستهٔ رمزنگاری‌شده شکست بخورد، همتای تازه ساخته‌شده پاک می‌شود. برای بررسی اتصال واقعی بیرون سرور، [چک‌لیست ۰.۱۹.۰](docs/UAT-0.19.0.md) را اجرا کنید.
-
-## اصلاح اتصال نسخه v0.18.1
-
-ساخت ساده Xray اکنون برای VLESS از RAW/REALITY استفاده می‌کند و محدودیت حجم و زمان را به‌صورت پیش‌فرض فعال نمی‌کند. انتخاب پروتکل دیگر ترکیب سازگار اولیه را تنظیم می‌کند و «تنظیمات پیشرفته» همچنان اختیاری است. OpenVPN قانون عبور ترافیک تونل و بررسی NAT/FORWARD دارد؛ در ارتقا، اسکریپت قدیمی مدیریت‌شده با نسخه پشتیبان اصلاح می‌شود. دستور `makia-doctor` نیز هنگام بررسی WireGuard دیگر به متغیر تعریف‌نشده برخورد نمی‌کند. برای آزمون واقعی دستگاه و شبکه، [چک‌لیست v0.18.1](docs/UAT-0.18.1.md) را اجرا کنید.
-
-## نسخه مرجع کد v0.18.0 — انتخاب دامنه یا IP برای همهٔ پروتکل‌ها
-
-در فرم ساخت دسترسی SSH/NPV، Xray، WireGuard و OpenVPN می‌توانید «دامنه» یا «IPv4 عمومی» را صریح انتخاب کنید. همان آدرس در خروجی کلاینت حفظ می‌شود. برای OpenVPN، Port و Transport از تنظیمات واقعی سرور خوانده می‌شود؛ خروجی‌های ذخیره‌شده نیز هنگام دانلود دوباره به دامنهٔ پنل تغییر نمی‌کنند.
-
-این شماره نسخه مبنای رسمی ادامهٔ توسعهٔ کد است. وضعیت اتصال هر پروتکل از بیرون VPS، DNS واقعی و Handshake وایرگارد باید طبق [UAT نسخه 0.18.0](docs/UAT-0.18.0.md) روی سرور شما بررسی شود؛ سبز شدن CI به‌تنهایی اتصال در همهٔ شبکه‌ها را ثابت نمی‌کند.
-
-## نسخه v0.17.0-rc1 — WireGuard Runtime Repair و تست IP/Domain
-
-در این نسخه تشخیص و تعمیر WireGuard عمیق‌تر شده است. پنل وضعیت Service، Interface، UDP Listener، IP Forwarding، FORWARD Rule، NAT و Handshake Peerها را بررسی می‌کند و گزینه **Repair Runtime** دارد.
-
-همچنین در Protocol Hub گزینه **IP / Domain Readiness** اضافه شده تا یک IP یا دامنه را برای SSH، Xray، WireGuard و OpenVPN از نظر Runtime، DNS و Listener بررسی کنید.
-
-Updater نیز WireGuard موجود را قبل از UAT نهایی بررسی می‌کند و در صورت نیاز با Backup تعمیر می‌کند.
-
-> توجه: تست داخلی و CI جای تست اتصال واقعی از یک موبایل/کامپیوتر خارج از VPS را نمی‌گیرد. برای Stable باید IP و Domain واقعی روی Client خارجی تست شوند.
-
-راهنمای UAT: [UAT v0.17.0-rc1](docs/UAT-0.17.0-RC1.md)
-
-# راهنمای فارسی Makia VPS Manager
-
-**Makia VPS Manager** یک پنل مدیریت VPS برای مدیریت دسترسی‌های SSH، Xray، WireGuard و OpenVPN، تحویل امن کانفیگ، دامنه/HTTPS، بکاپ و مهاجرت سرور است.
-
-## نسخه ۰.۲۰.۰ — استفاده بدون لایسنس
-
-پس از نصب و ورود مدیر، SSH، Xray، WireGuard، OpenVPN، خروجی رمزدار، بکاپ و نودها در دسترس‌اند. کد فعال‌سازی، سرور Owner و مرحلهٔ صدور کلید حذف شده‌اند. نصب‌های قبلی با `sudo makia-upgrade` به‌روز می‌شوند؛ لایسنس قدیمی نادیده گرفته می‌شود و کاربران و کانفیگ‌ها باقی می‌مانند.
-
-منوی «پشتیبانی» برای ثبت درخواست و ایجاد کد موقت دسترسی پشتیبانی است؛ استفادهٔ عادی به این کد نیاز ندارد. ورود مدیر، 2FA و محدودیت‌های دسترسی موقت حفظ شده‌اند. آزمون واقعی اتصال از بیرون VPS طبق [چک‌لیست ۰.۲۰.۰](docs/UAT-0.20.0.md) انجام شود.
-
-## نسخه v0.14.0-rc1 — Glass Aurora و OpenVPN با دامنه
-
-ظاهر پیش‌فرض پنل به **Glass Aurora** تغییر کرده است: سایدبار و Topbar شیشه‌ای، کارت‌های شفاف آبی/بنفش، Dashboard جدید با وضعیت سرویس‌ها، چهار کارت خلاصه، حلقه‌های CPU/RAM/Disk، نمودار واقعی شبکه و نمایش Responsive. نصب‌های قبلی در اولین اجرای این Release یک‌بار به Glass منتقل می‌شوند و Themeهای قبلی همچنان از Settings قابل انتخاب‌اند.
-
-### OpenVPN با دامنه
-
-HTTPS پنل و TLS داخلی OpenVPN یک چیز نیستند. HTTPS پنل توسط Nginx/Let's Encrypt مدیریت می‌شود، اما OpenVPN از CA و Certificateهای EasyRSA خودش استفاده می‌کند. دامنه در فایل OVPN فقط Endpoint سرور است.
-
-برای Domain Endpoint:
-- رکورد **A** باید مستقیماً به IPv4 همان VPS اشاره کند.
-- رکورد VPN پشت Proxy/CDN معمولی مثل Cloudflare در حالت Proxied نباشد؛ برای OpenVPN خام از **DNS-only** استفاده کنید.
-- Profileهای جدید و Exportهای مجدد با `udp4` یا `tcp4-client` ساخته می‌شوند تا AAAA اشتباه باعث رفتن Client به IPv6 نشود.
-- Profileهای قدیمی هنگام Export با Domain فعلی پنل دوباره Render می‌شوند؛ Certificate کاربر Reissue نمی‌شود.
-- از **Settings → WG / OpenVPN → Domain Diagnostics** می‌توانید DNS، A/AAAA، Listener، systemd و Port را بررسی کنید.
-- **Normalize IPv4 runtime** از `server.conf` Backup می‌گیرد، OpenVPN را روی `udp4` یا `tcp4-server` نرمال می‌کند و در Failure Rollback می‌کند.
-- OpenVPN روی **TCP/443** با Nginx HTTPS روی همان IP و Port تداخل دارد، مگر Port-sharing/IP جدا داشته باشید. **UDP/443** می‌تواند هم‌زمان با HTTPS/TCP 443 استفاده شود.
-
-## نصب
-
-روی Ubuntu 22.04 یا 24.04 تازه:
+روی **Ubuntu 22.04 یا Ubuntu 24.04 تمیز** و با دسترسی Root:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/install.sh)
 ```
 
-پس از نصب، رمز اولیه مدیر در ترمینال نمایش داده می‌شود. بعد از اولین ورود رمز مدیر را تغییر دهید و در صورت امکان 2FA را فعال کنید.
+Installer یک رمز اولیه تصادفی برای مدیر نمایش می‌دهد. بعد از اولین ورود آن را عوض کنید.
 
-## بروزرسانی
+### بروزرسانی
 
 ```bash
 sudo makia-upgrade
-sudo makia-doctor
-sudo makia-uat-smoke
 ```
 
-Updater قبل از تغییر نسخه Backup می‌گیرد و در Failure مسیر Rollback دارد. تنظیم فعال Nginx/Certbot در Update حفظ می‌شود.
+برای نصب‌های بسیار قدیمی که هنوز Bootstrap Updater ندارند:
 
-## دامنه و HTTPS
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/upgrade.sh)
+```
 
-از **Settings → Domain / Nginx / HTTPS**:
+## Outline
 
-1. دامنه را روی IP سرور تنظیم کنید.
-2. دامنه را در پنل Apply کنید.
-3. ایمیل معتبر وارد کنید.
-4. گواهی Let's Encrypt را صادر کنید.
-5. پنل را از طریق `https://your-domain.example` باز کنید.
+Outline عمداً از داخل Web Service Hardened نصب نمی‌شود.
 
-برای مهاجرت VPS بهتر است Clientها با **دامنه ثابت** ساخته شوند، نه IP مستقیم. در زمان انتقال سرور فقط DNS دامنه به IP جدید تغییر می‌کند.
+اگر Docker هنوز آماده نیست:
 
-## Xray
+```bash
+sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade
+```
 
-### ساخت سریع
+بعد وارد **Outline → Setup** شوید و دستور Pin‌شده‌ای که پنل نمایش می‌دهد را روی SSH سرور اجرا کنید.
 
-از **Access Center → Xray** می‌توان برای VLESS، VMess، Trojan، Shadowsocks و Hysteria2 پروفایل ساخت. Transportها و Securityهای قابل پشتیبانی از طریق Wizard کنترل‌شده ارائه می‌شوند.
+اگر Hostname مربوط به Outline در Cloudflare است، رکورد باید **DNS Only** باشد؛ Orange Cloud برای ترافیک خام Outline/Shadowsocks مناسب نیست.
 
-### Full Xray Core
-
-از **Settings → Xray Defaults → Advanced JSON** می‌توانید Config کامل Xray Core را ویرایش کنید. قبل از Apply:
-
-- JSON بررسی می‌شود؛
-- خود Xray Core کانفیگ را Validate می‌کند؛
-- از Config قبلی Backup گرفته می‌شود؛
-- پس از Apply سرویس Restart می‌شود؛
-- در Failure، Rollback انجام می‌شود.
-
-### اگر Xray روی Failed رفت
-
-در **Services** یا **Protocol Hub** روی **Diagnose** بزنید. Makia موارد زیر را بررسی می‌کند:
-
-- نسخه Xray Core؛
-- اعتبار کانفیگ با root؛
-- اعتبار کانفیگ با همان User واقعی systemd؛
-- Permission فایل Config؛
-- دسترسی Xray به Certificate/Private Key؛
-- خطاهای اخیر `journalctl -u xray`.
-
-دکمه **Repair & Restart** قبل از تغییر از Config Backup می‌گیرد، Permissionها و TLS runtime files را اصلاح می‌کند، با همان User سرویس Validate می‌کند و سپس Xray را Restart می‌کند.
-
-نسخه Xray که این Release در CI با آن اعتبارسنجی می‌شود: **26.3.27**.
-
-## WireGuard
-
-Default سازگاری فعلی:
-
-- UDP Port: `443`
-- MTU: `1280`
-- PersistentKeepalive: `15`
-- AllowedIPs: `0.0.0.0/0`
-
-این تنظیمات مشکلات رایج NAT و MTU را کاهش می‌دهند، ولی در شبکه‌ای که خود WireGuard در سطح پروتکل مسدود شده باشد تضمین عبور وجود ندارد. در آن شرایط Xray/REALITY را نیز تست کنید.
-
-## راهنمای کاربران
-
-یک صفحه عمومی بدون نیاز به Login وجود دارد:
+چرخه کاربر Managed Outline:
 
 ```text
-https://YOUR-PANEL-DOMAIN/help/connect
+ساخت Key واقعی روی Outline Server
+        ↓
+اعتبارسنجی ss://
+        ↓
+Name + Quota
+        ↓
+ذخیره Artifact رمزدار
+        ↓
+QR / Client Portal / Protected ZIP
+        ↓
+Renew / Reissue / Revoke
 ```
 
-لینک مستقیم بخش‌ها:
+اگر ساخت Key در میانه کار Fail شود، Makia Key نیمه‌کاره را حذف می‌کند.
 
-- Xray: `/help/connect#xray`
-- WireGuard: `/help/connect#wireguard`
-- OpenVPN: `/help/connect#openvpn`
-- SSH / NPV: `/help/connect#ssh`
+## بکاپ و Disaster Recovery
 
-از داخل پنل نیز بخش **راهنمای اتصال** وجود دارد و می‌توانید لینک مناسب را Copy و برای کاربر ارسال کنید.
+هدف Full Migration این است که در صورت فیلترشدن، از دسترس خارج‌شدن یا تعویض VPS:
 
-Protected ZIPهای تحویل نیز فایل `connection-guide-fa.txt` دارند.
+1. Backup رمزدار و Verified داشته باشید؛
+2. آن را روی VPS جدید Restore کنید؛
+3. سرویس‌ها و Runtimeها را Verify کنید؛
+4. A Record/Cloudflare را به IP جدید Cutover کنید.
 
-راهنمای کامل کاربران: [docs/CLIENT-GUIDE-FA.md](docs/CLIENT-GUIDE-FA.md)
+Restore قبل از Mutation محتویات Backup را بررسی می‌کند. State مربوط به Outline نیز در صورت وجود داخل Migration قرار می‌گیرد.
 
-## SSH / NPV Tunnel
+## تست سلامت
 
-Makia برای SSH می‌تواند:
-
-- OpenSSH config
-- Credentials
-- لینک `npvt-ssh://`
-- QR سازگار
-- Protected ZIP
-
-تولید کند.
-
-فرمت proprietary و رمزگذاری‌شده `.npv4` بدون مشخصات رسمی جعل یا تولید نمی‌شود.
-
-## Backup و مهاجرت VPS
-
-دو مدل Backup وجود دارد:
-
-### Local Backup
-
-برای Rollback و بازیابی روی همان Host.
-
-### Portable Migration
-
-از **Backups → Portable Migration** یک ZIP رمزگذاری‌شده AES-256 ساخته می‌شود که در صورت وجود شامل این موارد است:
-
-- SQLite و `.secret`
-- Xray config و REALITY keys
-- WireGuard keys/peers
-- OpenVPN PKI
-- Nginx
-- Let's Encrypt
-- SSH password hashes کاربران مدیریت‌شده
-
-روی VPS مقصد ابتدا همان نسخه Makia را نصب کنید و سپس:
-
-```bash
-sudo makia-restore-portable /path/to/bundle.zip
-sudo makia-restore-portable /path/to/bundle.zip --apply
-sudo makia-doctor
-sudo makia-uat-smoke
-```
-
-بعد از PASS شدن مقصد، DNS دامنه را به IP جدید تغییر دهید.
-
-هدف Migration، **حفظ Credential کاربران** است؛ DNS propagation ممکن است یک بازه کوتاه Cutover ایجاد کند.
-
-## عیب‌یابی
-
-دستورات اصلی:
+بعد از نصب یا Update:
 
 ```bash
 sudo makia-doctor
 sudo makia-uat-smoke
-sudo systemctl status xray --no-pager
-sudo journalctl -u xray -n 80 --no-pager
-sudo nginx -t
 ```
 
-در حالت معمول ابتدا از Diagnostics داخل پنل استفاده کنید، چون تست Xray را هم با root و هم با User واقعی systemd اجرا می‌کند.
+دستورات مفید:
+
+```bash
+sudo makia-backup
+sudo makia-uninstall
+```
+
+برای خطای 502:
+
+```bash
+sudo systemctl status makia-vps-manager --no-pager -l
+sudo journalctl -u makia-vps-manager -n 120 --no-pager
+curl -v http://127.0.0.1:8787/healthz
+```
 
 ## امنیت
 
-- پنل عمومی را فقط با HTTPS استفاده کنید.
-- 2FA مدیر را فعال کنید.
-- Protected ZIP و رمز آن را در دو پیام جدا ارسال کنید.
-- QR و Share Link حاوی Credential هستند.
-- فایل OVPN، WireGuard config و SSH Credentials را عمومی نکنید.
-- Portable Migration Bundle شامل Secretهای حساس است؛ پس از انتقال امن، نسخه‌های اضافی را حذف کنید.
+- Session احراز هویت‌شده برای مدیر؛
+- کنترل Mutation و Same-origin؛
+- امکان محدودسازی IP/CIDR مدیریت؛
+- Login rate limiting و Fail2ban؛
+- Artifactهای رمزدار؛
+- عدم وجود Generic Root Shell در Browser؛
+- Redaction توکن‌ها از Errorها؛
+- DNS Only برای Cutover سرویس‌های Raw؛
+- Strict host-key checking برای SCP Backup؛
+- Permission محدود برای فایل Secret و دیتابیس؛
+- Audit برای عملیات مدیریتی.
 
-## تست و Release Gate
+لینک Client Portal، Access Key و Configها را مانند رمز عبور نگهداری کنید.
 
-هر Release Candidate باید حداقل این Gateها را پاس کند:
+## Gate نسخه v1
 
-- Python compile/import
-- Unit tests
-- JavaScript/Bash syntax
-- Browser Smoke با Playwright
-- Xray Core 26.3.27 validation
-- Protected ZIP
-- QR/Share
-- تمام Sidebar views
-- Settings contracts
-- UAT واقعی روی VPS برای نسخه Stable
+CI نسخه ۱ شامل Python compile/import، Pytest، DB/Migration، JavaScript syntax، Playwright، بررسی Action→Handler، بررسی API→Route، Duplicate Route، تست‌های ساخت/حذف/تمدید Outline، جداسازی Xray/Outline، Backup/Restore، Cloudflare/Telegram/Outline Mock، Xray Core و Bash/systemd/security contracts است.
+
+موارد وابسته به محیط مانند Firewall/NAT، DNS propagation، Docker/Shadowbox واقعی، اتصال Client واقعی و SCP واقعی باید روی Host مقصد تست شوند.
+
+جزئیات در **[docs/UAT-1.0.0.md](docs/UAT-1.0.0.md)** ثبت شده است.
+
+## مجوز
+
+GPL-3.0-or-later. اجزای Third-party تابع مجوز و Attribution خودشان هستند.

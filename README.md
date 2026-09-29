@@ -1,334 +1,140 @@
-# ⚡ Makia VPS Manager
+<p align="center">
+  <img src="docs/assets/makia-brand.png" width="128" alt="Makia VPS Manager logo">
+</p>
 
-Modern web-first VPS and access-infrastructure control center for Ubuntu.
+<h1 align="center">Makia VPS Manager</h1>
 
-**[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
+<p align="center">
+  Web-first VPS access management for Ubuntu · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+</p>
 
-> **Current code baseline:** `v0.26.0-rc11`
-> CI validates the repository; connectivity on a real VPS still requires external-client UAT.
+<p align="center">
+  <strong>Version 1.0.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+</p>
 
-## v0.26.0-rc11 Outline runtime + engine isolation
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1 UAT](docs/UAT-1.0.0.md)**
 
-- Fixes the real browser `olName is not defined` failure when creating an Outline user/key by removing reliance on DOM ids becoming JavaScript globals.
-- Explicitly isolates Xray/V2Ray client queries from Outline clients, preventing Outline rows from appearing inside Xray and eliminating invalid `•••` detail lookups.
-- Uses the stable Outline Manager API lifecycle: create key → rename → data limit, with rollback deletion on partial failure.
-- Requires a valid `ss://` Outline access key before Makia stores or delivers the credential.
-- Browser UAT now reproduces the Outline create flow and verifies it reaches Client Portal without a ReferenceError.
-- Removes the same fragile DOM-global pattern from major management forms including SSH, Plans, Backup, Cloudflare, Telegram, Settings and Xray forms.
-- See [UAT 0.26.0 RC11](docs/UAT-0.26.0-RC11.md). This remains a **Release Candidate**, not Stable.
+---
 
-## v0.26.0-rc10 Outline + unified access management
+## What Makia is
 
-- Fixes the real Outline setup failure path seen when Docker is not ready: the panel now shows a two-step root-shell workflow instead of a raw browser alert.
-- Makes the host preparation command explicit: `sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade`, followed by the pinned Outline installer command.
-- Unifies SSH, Xray, WireGuard, OpenVPN and managed Outline user operations behind the same `•••` detail drawer with protocol-specific management and common delivery tools.
-- Adds Outline to the Clients filter, renders real Outline quota/usage/expiry in lists, keeps the protocol group expanded, and adds a dedicated public Outline connection guide.
-- Automated gates are documented in [UAT 0.26.0 RC10](docs/UAT-0.26.0-RC10.md). This is still a **Release Candidate**, not Stable.
+Makia VPS Manager is a self-hosted control panel for managing access services and operational recovery on Ubuntu VPS hosts. It keeps protocol-specific runtime operations separate while presenting users, delivery artifacts, expiry, diagnostics, backup and disaster-recovery workflows through one UI.
 
-## v0.26.0-rc9 DR + secret-path hardening
+Makia does **not** expose a generic root shell in the browser. Operations that require package installation or host-level privilege remain explicit root-shell steps.
 
-- Preserves the RC8 Operations Suite + Outline scope and closes production issues found during branch audit.
-- Outline-bearing replacement-VPS restores now stop before mutation when Docker is missing; root install/upgrade supports `MAKIA_ENABLE_OUTLINE=1` for safe dependency preparation.
-- Remote SCP backup failures no longer advance `last_run`, so the hourly timer can retry instead of suppressing attempts for the full interval.
-- Credential-bearing request URLs are redacted from integration error paths.
-- Full Migration compatibility is explicitly gated through RC9.
-- See [UAT 0.26.0 RC9](docs/UAT-0.26.0-RC9.md). This remains a **Release Candidate**, not Stable.
+## Protocol support
 
-## v0.26.0-rc8 Operations Suite + Outline
+| Protocol | Provisioning | Delivery | Policy / operations |
+|---|---|---|---|
+| SSH / NPV | ✅ | NPV link, QR, client page | expiry, sessions/devices, lock, disconnect |
+| Xray / V2Ray | ✅ | share link, QR, subscription, client page | quota, expiry, IP policy, renew, diagnostics |
+| WireGuard | ✅ | native config, QR, client page | enable/disable, reissue, diagnostics |
+| OpenVPN | ✅ | .ovpn download, client page | revoke, transport/runtime diagnostics |
+| Outline | ✅ | real `ss://` key, QR, client page, protected ZIP | quota, expiry, renew/reissue, traffic, diagnostics, revoke |
 
-- Adds production-oriented **Plans/Templates, Bulk Renew, Expiry Center, Scheduled/Remote Backup, Disaster Recovery, Cloudflare DNS cutover, Telegram alerts/status bot, Notifications, Diagnostics and Multi-VPS telemetry**.
-- Adds **Outline Server** as a first-class protocol with pinned official installer integrity, certificate-fingerprint-checked Management API access, Access Key create/reissue/revoke, real traffic metrics, server-side quota, expiry enforcement, QR/Protected ZIP and private Client Portal delivery.
-- Full Migration format v2 preserves Makia data plus protocol identity/runtime state including `/opt/outline`; restore remains pre-verified, rollback-safe and requires post-restore runtime checks before DNS cutover.
-- Remote SCP requires strict SSH host-key verification and private identity-file permissions. Cloudflare VPN/SSH cutover is always **DNS Only**.
-- WireGuard/OpenVPN plans remain useful connection templates, but Makia does not claim per-client quota/expiry those engines do not enforce. SSH plans likewise do not claim per-user traffic quota.
-- Automated RC8 gates are documented in [UAT 0.26.0 RC8](docs/UAT-0.26.0-RC8.md). This is still a **Release Candidate**, not Stable, until the documented live-host/real-client checks pass.
+Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 where supported by the bundled Xray Core/runtime contract. Advanced Xray configuration is validated before apply and uses rollback on failure.
 
-## v0.19 WireGuard workspace
-- A dedicated WireGuard navigation entry shows peer state, recent handshake, traffic, endpoint and delivery actions with clearer desktop/mobile navigation.
-- Makia-managed peers can be disabled and enabled persistently without changing the saved client key or exported profile. Creation now rolls back runtime state if saving the server config or encrypted export fails.
-- IP and domain endpoints remain an explicit choice during peer provisioning; diagnostics check DNS, service, forwarding and NAT. The [v0.19 live VPS checklist](docs/UAT-0.19.0.md) verifies the actual external client.
-- The interface design takes inspiration from [WG_Panel](https://github.com/Azumi67/WG_Panel), with an original Makia implementation and visual system.
+WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## v0.18 IP / domain choice
-- Access Center has an explicit public IPv4 or domain selection for SSH/NPV, Xray, WireGuard and OpenVPN clients.
-- Client exports keep the selected address. OpenVPN profile downloads no longer switch to the panel domain; an existing imported client profile still needs to be re-imported if its endpoint changes.
-- A direct VPN hostname needs DNS-only routing to the VPS. Xray TLS/REALITY has separate SNI and certificate requirements, and may use a supported proxy transport.
-- See [v0.18 protocol UAT](docs/UAT-0.18.0.md) for the IP/domain matrix and the remaining live VPS checks.
-- The [v0.18.1 connectivity patch UAT](docs/UAT-0.18.1.md) covers the simplified Xray wizard and OpenVPN forwarding repair.
+## Operations Suite
 
-## v0.20 open access
-- All protocols, exports, backups and nodes are available after local admin login, without activation or an Owner server.
-- Existing license settings are ignored during upgrade; accounts and client profiles remain in the database.
-- Support requests and one-time Remote Support grants remain in the Support menu. Login, 2FA, CSRF and remote support scope checks still apply.
-- Run `sudo makia-upgrade` on an existing installation. See [v0.20 UAT](docs/UAT-0.20.0.md) for external client checks.
-
-## v0.14 Glass Aurora & OpenVPN domain reliability
-- Glass Aurora is the new default panel experience, with a glass sidebar/topbar, translucent blue-violet surfaces, responsive service cards, live resource rings and a reorganized operational dashboard.
-- Existing installations migrate once to the Glass theme; Midnight, AMOLED and Graphite remain selectable.
-- OpenVPN domain profiles now use explicit IPv4 transports (`udp4` / `tcp4-client`) so an unrelated AAAA record cannot silently divert a profile away from the IPv4 server.
-- Legacy OpenVPN profiles without a saved export can be regenerated from server PKI; newly saved profiles retain the endpoint chosen at creation.
-- Domain Diagnostics checks A/AAAA resolution, whether the A record reaches this VPS, the OpenVPN listener and service state, and warns about CDN/proxy records.
-- Panel HTTPS/Let's Encrypt is not the OpenVPN tunnel certificate: OpenVPN continues to use its own EasyRSA PKI.
-- A proxied Cloudflare/CDN record is not a raw OpenVPN transport. Use a DNS-only A record that resolves directly to the VPS.
-- OpenVPN TCP/443 cannot directly share the same IP:port with Nginx HTTPS/TCP 443; UDP/443 can coexist with HTTPS/TCP 443.
-
-## v0.13.1 Xray runtime reliability & user guides
-- Xray config mutations preserve access for the actual systemd service user instead of leaving root-only `0600` files behind.
-- Xray Diagnostics compares root validation with service-user validation and surfaces recent `journalctl -u xray` output.
-- Repair & Restart creates a backup, repairs ownership/TLS runtime files, validates as the service user and restarts only after validation.
-- Xray installation is pinned to the same Core version validated in CI: `26.3.27`.
-- Let's Encrypt certificates used by Xray are materialized under an Xray-readable `0600` runtime path and refreshed by a Certbot deploy hook.
-- A public Persian client guide is available at `/help/connect`, and protected delivery bundles include `connection-guide-fa.txt`.
-- The admin panel has a dedicated Client Guides view with per-protocol links that can be sent to end users.
-
-## What Makia manages today
-
-### v0.12 QR, NPV and Settings Center
-- Xray profiles now have an in-panel QR/Share Center, direct profile QR, subscription QR, Copy Link and QR download
-- The public Xray client page shows both direct-profile and subscription QR cards
-- SSH delivery can generate an `npvt-ssh://` import link plus QR for NPV Tunnel/NapsternetV-compatible clients, alongside the normal OpenSSH config
-- SSH NPV delivery is included inside the encrypted Protected ZIP when enabled
-- The proprietary locked `.npv4/.npvt` container format is not fabricated; Makia uses the interoperable share-link/QR path instead
-- Settings is now a categorized control center for Panel UI, Domain/TLS, Delivery, Provisioning Defaults, Security/Session and Scoped API tokens
-- Provisioning Wizard defaults are stored server-side and loaded from Settings rather than being hard-coded in the browser
-- Admin signed-session lifetime is configurable (5 minutes to 30 days) and applies to subsequent logins
-
-
-### v0.11 Control Center UX
-- Rebuilt application shell/sidebar with a dedicated Create Access action and safer event handling
-- New Operations Cockpit dashboard with live host, service, access and session data
-- New multi-step provisioning wizard: Protocol → Identity → Policy → Review/Delivery
-- Access Directory uses delegated `data-action` handlers instead of dynamic inline JavaScript
-- Protected ZIP and Native downloads surface backend errors instead of silently failing
-- Runtime Self-Test verifies SQLite, server-secret permissions, encrypted artifacts, AES delivery packages and protocol catalog
-- Browser CI actually logs in, opens Access Center, downloads/decrypts Protected ZIP, downloads Native config and opens the provisioning wizard
-- `makia-uat-smoke` provides a non-destructive real-host verification gate
-
-
-### Unified Access Center
-- Single management surface for SSH, Xray, WireGuard and OpenVPN access profiles
-- Create SSH users, Xray clients, WireGuard peers and OpenVPN clients from one place
-- Xray Core can be installed from the panel using the official XTLS installer
-- Native export per protocol: SSH config fragment, WireGuard `.conf`, OpenVPN `.ovpn`, Xray share/profile files
-- AES-256 password-protected delivery ZIP for every newly created access profile
-- Encrypted-at-rest access artifacts use the server's Makia secret; raw credentials are not stored as plaintext
-- Existing Xray and OpenVPN profiles can be re-exported; legacy WireGuard peers without retained private keys are explicitly marked for reissue
-- Central revoke flow for SSH, Xray, WireGuard and OpenVPN
-
-
-### SSH Account Center
-- Server-side PIN 4 / PIN 6 / Easy-8 / strong-password generation
-- 1 / 3 / 7 / 15 / 30 / 60 / 90 day presets and custom date
-- Extend from the existing future expiry date
-- Unlimited-expiry mode
-- **Session Limit** and **Device/IP Limit** as separate policies
-- Real background enforcement for expiry, concurrent sessions and distinct SSH source IPs
-- Search, filters, bulk lock/unlock/disconnect and bulk renewal
-- Live source-IP visibility
-- Fail2ban baseline on fresh installs/upgrades
-
-> SSH traffic quota is deliberately **not presented as enforced** until a reliable per-user host accounting layer is available.
-
-### Protocol Hub
-Guided, operational adapters:
-- Xray guided: VLESS, VMess, Trojan, Shadowsocks, Hysteria2, HTTP Proxy, SOCKS5 and Dokodemo/Tunnel
-- WireGuard
-- OpenVPN
-- SSH
-- Stunnel
-
-Validated Xray transports:
-- RAW/TCP
-- WebSocket
-- gRPC
-- HTTPUpgrade
-- XHTTP
-- mKCP
-
-Xray security:
-- None
-- TLS using the panel-managed Let's Encrypt certificate
-- VLESS REALITY with generated X25519 keys and Short ID
-
-Advanced Xray JSON editor:
-- Read the live config
-- Validate with the installed Xray binary before apply
-- Backup before change
-- Restart/health gate
-- Automatic rollback on failed apply
-
-This advanced surface remains available for routing, outbounds, fallbacks, TUN and other engine-level configuration. HTTP Proxy, SOCKS5 and Tunnel/Dokodemo now have dedicated guided workflows.
-
-### Protocol Clients
-- First-class protocol-client records
-- Secure subscription IDs with Base64, raw and JSON outputs
-- Public `/client/<id>` status page for usage, expiry and device policy
-- QR/share links
-- Expiry
-- Traffic quota for Xray clients with per-user stats support
-- Persistent cumulative traffic counters across Xray restarts
-- Manual traffic reset
-- Recurring 7/30/60/90/custom-day traffic reset cycles
-- Automatic quota suspension
-- Automatic reactivation at the next quota-reset boundary
-- Live Xray online-IP/device visibility where supported by the installed Xray core
-- IP-limit violation visibility
-- Manual suspend/reactivate that actually modifies the Xray config
-
-Per-client traffic enforcement currently applies to VLESS, VMess, Trojan and Hysteria2. Shadowsocks quick profiles are clearly marked as not having independent per-client accounting in this RC.
-
-### WireGuard
-- Package install
-- Server bootstrap
-- IP forwarding/NAT
-- Peer provisioning
-- Downloadable client configuration
-
-### OpenVPN
-- Package/Easy-RSA install
-- CA and server PKI bootstrap
-- Server configuration
-- UDP or TCP-server mode
-- NAT/IP forwarding
-- Client certificate generation
-- Downloadable inline `.ovpn` profile
-
-### Infrastructure / Admin
-- CPU/RAM/disk/swap/load/network telemetry
-- 24-hour metrics history
-- Service health/control allowlist
-- Audit log
-- Backups
-- Update Center
-- Multi-node heartbeat foundation
-- Admin 2FA
-- Scoped API tokens for status, accounts, protocol clients and nodes
-- Persistent login-rate limiting
-- Owner-only SQLite permissions
-- Domain management + Nginx validation/rollback
-- Let's Encrypt via Certbot
-- Persian / English shell
-- Midnight / AMOLED / Graphite themes
-- Comfortable / Compact density
-- Installable PWA shell
-- `makia-doctor` host diagnostics
-
-## Capability honesty
-
-Makia does not render an unimplemented feature as a working button.
-
-The Protocol Hub labels capabilities as:
-- **Guided** — dedicated tested Makia workflow exists.
-- **Advanced** — supported through the validated Xray configuration editor.
-- **Unavailable** — no tested adapter exists in this release.
-
-TUIC v5, AmneziaWG and MTProto are currently listed as unavailable rather than being simulated because they require dedicated sidecar/runtime adapters. See `docs/PARITY-3XUI.md` for the explicit parity matrix.
+- Plans / Templates
+- Bulk renew / enable / disable where enforceable
+- Expiry Center
+- Notifications Center
+- Scheduled encrypted backup
+- Remote SCP backup with strict host-key checking
+- Full Migration / Disaster Recovery
+- Cloudflare DNS cutover (**DNS Only** for raw VPN/SSH services)
+- Telegram status / expiry / backup integration
+- Per-access Diagnostics Center
+- Multi-VPS node telemetry
+- Public, tokenized Client Portal
+- QR / native config / protected ZIP delivery
+- Audit log and host diagnostics
 
 ## Quick install
 
-Run as root on a **fresh Ubuntu 22.04 or 24.04 VPS**:
+Use a **fresh Ubuntu 22.04 or 24.04 VPS** and run as root:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/install.sh)
 ```
 
-The installer prints a unique administrator bootstrap password. Change it immediately.
+The installer prints a unique administrator bootstrap password. Change it after first login.
 
-## Update
-
-For installations already using the Makia bootstrap updater:
+### Update an existing installation
 
 ```bash
 sudo makia-upgrade
 ```
 
-`makia-upgrade` first fetches the newest updater from GitHub, then executes it. This prevents an older local updater from missing newly introduced service units.
-
-### One-time upgrade from v0.7.x or older
-
-Use the bootstrap updater once:
+For very old installations that do not yet have the bootstrap updater:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/upgrade.sh)
 ```
 
-After that, future updates can use `sudo makia-upgrade`.
+## Outline
 
-The updater:
-1. creates a backup;
-2. downloads the current `main`;
-3. updates application and all service units;
-4. restarts Makia workers;
-5. performs a backend health check;
-6. runs `makia-doctor`.
+Outline is installed outside the hardened web service. If Docker is not prepared yet, run:
+
+```bash
+sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade
+```
+
+Then open **Outline → Setup** and run the pinned installer command shown by Makia.
+
+For an Outline hostname behind Cloudflare DNS, the record must be **DNS Only**. Do not place raw Outline/Shadowsocks traffic behind the normal orange-cloud HTTP proxy.
+
+A managed Outline client follows this lifecycle:
+
+```text
+Create real server key
+        ↓
+Validate ss:// credential
+        ↓
+Apply name + quota
+        ↓
+Store encrypted Makia artifact
+        ↓
+QR / Client Portal / Protected ZIP
+        ↓
+Renew / Reissue / Revoke
+```
+
+If a partial create fails, Makia removes the newly created runtime key instead of leaving an orphan credential.
+
+## Backup & Disaster Recovery
+
+Full Migration backups are encrypted and designed for replacement-VPS recovery. The intended flow is:
+
+1. create/verify Full Migration backup;
+2. copy locally or through configured SCP;
+3. install Makia on the replacement VPS;
+4. restore the migration bundle;
+5. run runtime/host verification;
+6. update the DNS A record / Cloudflare cutover to the new public IP.
+
+Restore preflight validates the bundle before mutation and keeps rollback behavior for supported state. Outline runtime state is included when present.
 
 ## Diagnostics
+
+After install/update:
 
 ```bash
 sudo makia-doctor
 sudo makia-uat-smoke
 ```
 
-It checks the Makia backend, Nginx, Policy Enforcer, Metrics Sampler, Protocol Traffic Collector, Fail2ban and installed optional protocol tooling.
-
-## Other commands
+Useful commands:
 
 ```bash
 sudo makia-backup
 sudo makia-uninstall
 ```
 
-## Runtime layout
-
-```text
-/opt/makia-vps-manager
-├── app
-├── data
-├── .venv
-└── VERSION
-
-/etc/systemd/system/
-├── makia-vps-manager.service
-├── makia-policy-enforcer.service
-├── makia-metrics-sampler.service
-└── makia-protocol-traffic.service
-
-/etc/nginx/sites-available/makia-vps-manager
-/var/backups/makia-vps-manager
-```
-
-## Security design
-
-The browser is not given a generic root-shell endpoint. Privileged operations are explicit and validated.
-
-Important:
-- Admin passwords remain stronger than SSH user PINs.
-- Four-digit SSH PINs are optional and intentionally labelled low-security.
-- Use HTTPS before exposing the admin panel publicly.
-- Keep Fail2ban active.
-- Prefer trusted admin IPs/VPN access where possible.
-- Test Xray/WireGuard/OpenVPN changes on a disposable VPS before production.
-
-## Release gate
-
-`v0.10.0-rc1` must pass:
-- Python compilation
-- unit tests
-- Bash syntax
-- JavaScript syntax
-- dangerous-pattern guard
-- packaging contract
-- real Ubuntu 22.04/24.04 host UAT
-
-See `docs/UAT-0.12.0-RC1.md` and `docs/PARITY-3XUI.md`.
-
-## License
-
-GPL-3.0-or-later. Third-party source is only incorporated where its license and attribution requirements are compatible.
-
-## Recovery
-
-If Nginx shows `502 Bad Gateway`, check the backend first:
+If the panel returns 502:
 
 ```bash
 sudo systemctl status makia-vps-manager --no-pager -l
@@ -336,40 +142,64 @@ sudo journalctl -u makia-vps-manager -n 120 --no-pager
 curl -v http://127.0.0.1:8787/healthz
 ```
 
-Reset a forgotten administrator password locally on the VPS:
+## Security model
 
-```bash
-sudo makia-reset-admin --generate
+- authenticated admin sessions with mutation request checks;
+- optional admin-network CIDR restriction;
+- login-rate limiting and Fail2ban integration;
+- encrypted access artifacts and protected ZIP exports;
+- no browser-accessible generic root command endpoint;
+- secret/token redaction in integration errors;
+- Cloudflare raw access records forced to DNS-only workflows;
+- strict SSH host-key verification for remote backup;
+- owner-only local data/secret permissions;
+- explicit audit events for management operations.
+
+Treat Client Portal links and VPN credentials as secrets.
+
+## v1 quality gate
+
+The repository CI for v1 covers:
+
+- Python compilation and application import/startup;
+- full pytest suite and DB/migration compatibility;
+- JavaScript syntax;
+- browser/Playwright smoke;
+- UI action → JavaScript handler contract;
+- UI API → FastAPI route contract;
+- duplicate-route detection;
+- Outline create/delete/reissue/quota/renew regression tests;
+- Xray/Outline engine isolation;
+- backup/restore static and cryptographic safety;
+- mocked Cloudflare / Telegram / Outline API flows;
+- Xray Core smoke;
+- Bash/systemd/packaging/security guards;
+- official Makia brand asset presence.
+
+Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
+
+See **[docs/UAT-1.0.0.md](docs/UAT-1.0.0.md)**.
+
+## Runtime layout
+
+```text
+/opt/makia-vps-manager/
+├── app/
+├── data/
+├── .venv/
+└── VERSION
+
+/etc/systemd/system/
+├── makia-vps-manager.service
+├── makia-policy-enforcer.service
+├── makia-metrics-sampler.service
+├── makia-protocol-traffic.service
+├── makia-scheduled-backup.service
+├── makia-scheduled-backup.timer
+├── makia-ops-monitor.service
+└── makia-ops-monitor.timer
 ```
 
-Or choose the password interactively:
+## License
 
-```bash
-sudo makia-reset-admin
-```
-
-If the TOTP secret is also unavailable:
-
-```bash
-sudo makia-reset-admin --generate --disable-2fa
-```
-
-From v0.9.1-rc1 onward, the updater creates a runtime rollback point before replacing the application and automatically restores the previous runtime when the new backend fails its health check.
-
-
-## NPV / QR security note
-A QR code or `npvt-ssh://` / Xray share URI contains credentials needed by the client application. Once a user imports a working profile, no panel can cryptographically prevent that authorized user from extracting or forwarding those credentials. Makia therefore combines easy import with server-side expiry, concurrent-session/IP limits, quota where supported, revocation, and encrypted operator delivery packages.
-
-## Portable VPS migration
-
-For migration-safe deployments, configure a stable panel/domain name and provision clients with that domain instead of a server IP. In **Backups → Portable Migration**, Makia can build an AES-256 encrypted migration bundle containing application data and the protocol/service state required to preserve credentials. On a freshly installed destination VPS, validate and restore it with:
-
-```bash
-sudo makia-restore-portable /path/to/makia-portable-....zip
-sudo makia-restore-portable /path/to/makia-portable-....zip --apply
-sudo makia-uat-smoke
-```
-
-The restore preserves Xray/REALITY keys, WireGuard keys, OpenVPN PKI, the Makia server secret and managed SSH password hashes. After restore and validation, move the domain's DNS A/AAAA record to the destination VPS. DNS propagation can still cause a short cutover window; the goal is credential continuity, not an impossible zero-packet-loss guarantee.
-
-WireGuard compatibility defaults (UDP/443, MTU 1280, keepalive 15) address common NAT/MTU issues but cannot guarantee operation on networks that filter WireGuard itself. Use the validated Xray/REALITY path where a different transport is required.
+GPL-3.0-or-later. Third-party software remains subject to its own license and attribution requirements.

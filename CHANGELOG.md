@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.0] - 2026-09-29
+
+### First public release
+- Consolidated the Makia RC line into the first v1 installation baseline.
+- Added the official Makia brand asset to the login shell, sidebar and GitHub documentation.
+- Reworked README documentation around installation, supported protocols, operations, security, backup/DR and host acceptance instead of RC history.
+
+### Outline
+- Fixed managed Outline deletion from the unified access drawer.
+- Added safe runtime-aware revoke: Management API reachability is verified before local state is removed.
+- Runtime keys already absent can be cleaned locally without producing a false failure.
+- API-unreachable deletes preserve local state for a safe retry.
+- Retains create → rename → quota key lifecycle, `ss://` validation, partial-create rollback, renew, reissue, quota, traffic, portal, QR, protected ZIP and diagnostics.
+
+### Release quality
+- Added v1 gates for all UI actions having handlers, UI API calls mapping to backend routes and duplicate FastAPI routes.
+- Added functional tests for managed Outline revoke/delete lifecycle.
+- Full Migration compatibility extends directionally through 1.0.0.
+- Real host/client UAT remains required per deployment for networking, DNS, Docker/Shadowbox, SCP and external client connectivity.
+
+
 ## [0.26.0-rc11] - 2026-09-29
 
 ### Outline runtime

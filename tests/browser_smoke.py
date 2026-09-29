@@ -92,6 +92,7 @@ def main():
             page.on("pageerror",lambda exc: page_errors.append(str(exc)))
             page.goto(BASE_URL+"/login",wait_until="networkidle")
             page.screenshot(path='/tmp/makia-login.png',full_page=True)
+            assert page.locator('.pro-login-logo img[src*="makia-brand.png"]').count()==1
             # Login controls must be real controls, not decorative buttons.
             assert page.locator('body.pro-login[data-theme="dark"], body.pro-login[data-theme="light"]').count()==1
             before_theme=page.locator("body").get_attribute("data-theme")
@@ -113,6 +114,7 @@ def main():
             assert page.locator(".sx-system-cell").count()==4
             assert page.locator(".sx-protocol-row").count()==4
             assert page.locator(".pro-nav").count()==1
+            assert page.locator('.pro-brand img[src*="makia-brand.png"]').count()==1
             assert "Inboundها" in page.locator(".pro-sidebar").inner_text()
             assert page.locator('.pro-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)

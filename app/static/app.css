@@ -1442,7 +1442,7 @@ body.makia-pro-shell{
   height:72px;display:flex;align-items:center;gap:11px;padding:0 18px;
   border-bottom:1px solid var(--pro-line-soft);
 }
-.pro-brand img{width:39px;height:39px;border-radius:10px;filter:drop-shadow(0 0 12px rgba(59,130,246,.22))}
+.pro-brand img{width:42px;height:42px;border-radius:11px;object-fit:cover;filter:drop-shadow(0 0 14px rgba(59,130,246,.28))}
 .pro-brand strong{display:block;font-size:15px;letter-spacing:1.8px}
 .pro-brand span{display:block;color:#69a7ef;font-size:8px;letter-spacing:1.2px;margin-top:1px}
 .sidebar-mobile-close{display:none;margin-right:auto;width:34px;height:34px;border:1px solid var(--pro-line);border-radius:9px;background:#111e30;color:#c9d5e3}
@@ -1946,3 +1946,6 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 .portal-device-card div{display:grid;gap:4px}.portal-device-card span{color:var(--muted);font-size:11px}
 .one-tap-portal{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 14px;border-radius:12px;text-decoration:none;font-weight:800;background:linear-gradient(135deg,#35d6ff,#6c7cff);color:#06111a}
 @media(max-width:900px){.ops-card-grid{grid-template-columns:1fr}.plan-facts{grid-template-columns:1fr 1fr}.ops-row{grid-template-columns:1fr;gap:6px}}
+
+/* Makia v1 official brand asset */
+.pro-login-logo img{object-fit:cover;border-radius:18px}
