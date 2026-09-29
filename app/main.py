@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
-from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
+from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
 from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops
 
@@ -684,6 +684,15 @@ def _validate_service_plan(payload:ServicePlanPayload):
             except Exception:raise HTTPException(400,f"invalid plan field: {key}")
             if value<low or value>high:
                 raise HTTPException(400,f"plan field out of range: {key}")
+    enforceable={
+        "ssh":{"expire_days","quota_gb","device_limit","connection_limit"},
+        "xray":{"expire_days","quota_gb","ip_limit","reset_days"},
+        "outline":{"expire_days","quota_gb"},
+        "wireguard":set(),
+        "openvpn":set(),
+    }[kind]
+    for key in set(numeric)-enforceable:
+        cfg.pop(key,None)
     return kind,cfg
 
 @app.get("/api/plans")
@@ -2557,8 +2566,20 @@ def outline_keys_get(request:Request):
         keys=integration_ops.outline_list_keys()
     except integration_ops.IntegrationError as exc:
         raise HTTPException(400,str(exc))
+    try:metrics=integration_ops.outline_transfer_metrics()
+    except integration_ops.IntegrationError:metrics={}
     managed={str(row.get("inbound_tag") or ""):row for row in list_protocol_clients() if row.get("engine")=="outline"}
-    return [{**item,"managed":managed.get(str(item.get("id") or ""))} for item in keys]
+    rows=[]
+    for item in keys:
+        key_id=str(item.get("id") or "")
+        row=managed.get(key_id)
+        enriched={**item,"usage_bytes":int(metrics.get(key_id,0) or 0),"managed":row}
+        if row:
+            enriched["quota_bytes"]=int(row.get("quota_bytes") or 0)
+            enriched["expire_at"]=int(row.get("expire_at") or 0)
+            enriched["enabled"]=bool(row.get("enabled"))
+        rows.append(enriched)
+    return rows
 
 @app.post("/api/protocols/outline/keys")
 def outline_key_create(payload:OutlineKeyCreate,request:Request):
@@ -2609,6 +2630,89 @@ def outline_key_delete(key_id:str,request:Request):
         delete_protocol_client(row["id"])
     audit(actor,"outline_key_delete",key_id,ip=ip(request))
     return result
+
+
+class OutlineQuotaUpdate(BaseModel):
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+
+
+def _outline_reissue_managed_client(row,quota_bytes=None):
+    if not row or row.get("engine")!="outline":
+        raise RuntimeError("Outline client not found")
+    quota=int(row.get("quota_bytes") or 0) if quota_bytes is None else max(0,int(quota_bytes))
+    old_id=str(row.get("inbound_tag") or "")
+    old_credential=str(row.get("credential") or "")
+    old_share=str(row.get("share_link") or "")
+    created=None
+    try:
+        created=integration_ops.outline_create_key(row["name"],quota)
+        new_id=str(created.get("id") or "")
+        access_url=str(created.get("accessUrl") or "")
+        if not new_id or not access_url.startswith("ss://"):
+            raise RuntimeError("Outline did not return a valid replacement access key")
+        replace_protocol_client_identity(row["id"],new_id,new_id,access_url)
+        update_protocol_client_state(row["id"],True,quota,int(row.get("expire_at") or 0),None,None)
+        delivery=access_ops.outline_payload(row["name"],access_url,new_id,quota)
+        artifact_save("outline",str(row["id"]),row["name"],"outline",delivery,{
+            "client_id":row["id"],"outline_key_id":new_id,"quota_bytes":quota
+        })
+    except Exception:
+        if created and created.get("id"):
+            try:integration_ops.outline_delete_key(created["id"])
+            except Exception:pass
+        try:
+            replace_protocol_client_identity(row["id"],old_id,old_credential,old_share)
+            update_protocol_client_state(
+                row["id"],bool(row.get("enabled")),int(row.get("quota_bytes") or 0),
+                int(row.get("expire_at") or 0),None,None
+            )
+        except Exception:pass
+        raise
+    cleanup_error=""
+    if old_id and old_id!=new_id and bool(row.get("enabled")):
+        try:integration_ops.outline_delete_key(old_id)
+        except Exception as exc:cleanup_error=str(exc)[:200]
+    return {
+        "client_id":row["id"],"outline_key_id":new_id,"access_url":access_url,
+        "quota_bytes":quota,"cleanup_warning":cleanup_error,
+    }
+
+
+@app.post("/api/protocols/outline/clients/{client_id}/reissue")
+def outline_client_reissue(client_id:int,request:Request):
+    actor=require_capability(request,"outline",True)
+    row=get_protocol_client(client_id)
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    try:result=_outline_reissue_managed_client(row)
+    except Exception as exc:raise HTTPException(400,str(exc))
+    audit(actor,"outline_key_reissue",str(client_id),f"outline_key_id={result['outline_key_id']}",ip(request))
+    return result
+
+
+@app.put("/api/protocols/outline/clients/{client_id}/quota")
+def outline_client_quota(client_id:int,payload:OutlineQuotaUpdate,request:Request):
+    actor=require_capability(request,"outline",True)
+    row=get_protocol_client(client_id)
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    if bool(row.get("enabled")):
+        try:integration_ops.outline_set_limit(str(row.get("inbound_tag") or ""),quota_bytes)
+        except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    update_protocol_client_state(client_id,None,quota_bytes,None,None,None)
+    artifact=get_access_artifact_by_key("outline",str(client_id))
+    if artifact:
+        try:
+            current=access_ops.open_payload(artifact["payload_enc"])
+            access_url=str(current.get("share_text") or current.get("primary_text") or row.get("share_link") or "")
+            delivery=access_ops.outline_payload(row["name"],access_url,str(row.get("inbound_tag") or ""),quota_bytes)
+            artifact_save("outline",str(client_id),row["name"],"outline",delivery,{
+                "client_id":client_id,"outline_key_id":str(row.get("inbound_tag") or ""),"quota_bytes":quota_bytes
+            })
+        except Exception:pass
+    audit(actor,"outline_quota_update",str(client_id),f"quota_bytes={quota_bytes}",ip(request))
+    return {"ok":True,"client_id":client_id,"quota_bytes":quota_bytes}
 
 
 class ManagedBulkItem(BaseModel):
@@ -2662,21 +2766,11 @@ def _renew_managed_item(kind,key,days,quota_add_gb,actor,request):
                 integration_ops.outline_set_limit(key_id,quota)
                 update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
             else:
-                # Expired Outline keys are revoked because Outline has no pause API.
-                # Renewal therefore reissues a new key and refreshes the same Makia client/artifact.
-                created=integration_ops.outline_create_key(row["name"],quota)
-                new_id=str(created.get("id") or "")
-                access_url=str(created.get("accessUrl") or "")
-                with connect() as con:
-                    con.execute(
-                        "UPDATE protocol_clients SET inbound_tag=?,credential=?,share_link=?,quota_bytes=?,expire_at=?,enabled=1,disabled_reason='',updated_at=? WHERE id=?",
-                        (new_id,new_id,access_url,quota,expire_at,datetime.utcnow().isoformat(),row["id"])
-                    )
-                delivery=access_ops.outline_payload(row["name"],access_url,new_id,quota)
-                artifact_save("outline",str(row["id"]),row["name"],"outline",delivery,{
-                    "client_id":row["id"],"outline_key_id":new_id,"quota_bytes":quota
-                })
-                key_id=new_id
+                # Expired/revoked Outline access has no pause state. Renewal rotates
+                # the runtime credential and keeps the same Makia managed-client identity.
+                result=_outline_reissue_managed_client(row,quota)
+                key_id=result["outline_key_id"]
+                update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
             return {"kind":kind,"key":key,"expire_at":expire_at,"quota_bytes":quota,"outline_key_id":key_id}
         return {"kind":kind,"key":key,"expire_at":expire_at,"quota_bytes":quota}
     raise RuntimeError("renew is not enforceable for this access type")

@@ -517,6 +517,16 @@ def update_protocol_client_state(client_id,enabled=None,quota_bytes=None,expire_
     with connect() as con:
         con.execute("UPDATE protocol_clients SET "+",".join(fields)+" WHERE id=?",values)
 
+def replace_protocol_client_identity(client_id,inbound_tag,credential,share_link):
+    with connect() as con:
+        con.execute(
+            """UPDATE protocol_clients
+               SET inbound_tag=?,credential=?,share_link=?,updated_at=?
+               WHERE id=?""",
+            (str(inbound_tag or ""),str(credential or ""),str(share_link or ""),now(),int(client_id))
+        )
+
+
 def delete_protocol_client(client_id):
     with connect() as con:
         con.execute("DELETE FROM protocol_clients WHERE id=?",(int(client_id),))
