@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.2] - 2026-09-29
+
+### Telegram Proxy persistence
+- Fixed an MTProxy transaction edge case where a UFW rule failure could delete a newly valid proxy configuration after the service had already started.
+- Firewall-rule failures now remain fail-closed and visible as warnings without deleting hostname, port, secret, links or QR state.
+- Added persistent firewall status to the Telegram Proxy view so page Refresh no longer looks like the proxy was silently removed.
+- Added regression coverage for save → refresh persistence and retained the v1.2.1 update-time state-preservation invariants.
+
+
 ## [1.2.1] - 2026-09-29
 
 ### Update persistence
