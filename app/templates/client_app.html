@@ -16,6 +16,7 @@
     </div>
     <div class="mc-top-actions">
       <span class="mc-user">{{ display_name }}</span>
+      <button class="mc-ghost" id="installClient" type="button" hidden>نصب برنامه</button>
       <form method="post" action="/client/logout"><button class="mc-ghost" type="submit">خروج</button></form>
     </div>
   </header>
@@ -68,9 +69,9 @@
     </section>
 
     <section class="mc-section mc-connect-note">
-      <span class="mc-eyebrow">PHASE 1</span>
-      <h2>Client Portal آماده است</h2>
-      <p>در این نسخه وب، دکمه اتصال اطلاعات همان دسترسی اختصاصی را تحویل می‌دهد. Agent ویندوز و Engine بومی Android/iOS در فاز بعدی همین حساب و Device Binding را مصرف می‌کنند تا اتصال VPN بدون Import دستی انجام شود.</p>
+      <span class="mc-eyebrow">WEB CLIENT</span>
+      <h2>دسترسی امن از موبایل و ویندوز</h2>
+      <p>این نسخه به‌صورت PWA نصب می‌شود و پروفایل‌های اختصاصی شما را با QR، کپی یا فایل اصلی تحویل می‌دهد. برای WireGuard و OpenVPN فایل را در کلاینت رسمی Import کنید؛ برای Xray/Outline/SSH سازگار، لینک مستقیم در صورت پشتیبانی دستگاه قابل باز شدن است.</p>
     </section>
   </main>
 
@@ -80,8 +81,16 @@
       <button class="mc-icon-btn" id="closeDelivery" type="button" aria-label="بستن">×</button>
     </div>
     <p id="deliveryProtocol" class="mc-muted"></p>
-    <textarea id="deliveryValue" readonly dir="ltr"></textarea>
+    <div class="mc-delivery-grid">
+      <div id="deliveryQrWrap" class="mc-delivery-qr" hidden><img id="deliveryQr" alt="QR دسترسی"></div>
+      <div class="mc-delivery-main">
+        <textarea id="deliveryValue" readonly dir="ltr"></textarea>
+        <p id="deliveryHint" class="mc-muted"></p>
+      </div>
+    </div>
     <div class="mc-dialog-actions">
+      <button class="mc-ghost" id="downloadDelivery" type="button" hidden>دانلود فایل</button>
+      <button class="mc-ghost" id="openDelivery" type="button" hidden>باز کردن در برنامه</button>
       <button class="mc-primary" id="copyDelivery" type="button">کپی اطلاعات اتصال</button>
     </div>
   </dialog>
