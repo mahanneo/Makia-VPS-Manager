@@ -15,7 +15,15 @@ apt-get update
 apt-get install -y unbound dnsutils ca-certificates
 
 install -d -m 0755 /etc/unbound/unbound.conf.d
-install -d -m 0700 /etc/makia-vps-manager
+# Shared Makia config directory ownership/mode contract:
+# - if the MTProxy service group exists, keep group traverse (0710)
+# - otherwise keep the directory root-only (0700)
+# Never blindly reset this directory to 0700 after MTProxy has prepared it.
+if getent group makia-mtproxy >/dev/null 2>&1; then
+  install -d -o root -g makia-mtproxy -m 0710 /etc/makia-vps-manager
+else
+  install -d -o root -g root -m 0700 /etc/makia-vps-manager
+fi
 
 if [[ "$INSTALL_ONLY" -eq 1 ]]; then
   if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then

@@ -371,3 +371,48 @@ def test_mtproxy_first_runtime_failure_keeps_attempted_config_for_retry():
     assert "MTPROXY_ENV.unlink(missing_ok=True)" not in source
     assert "MTPROXY_CONFIG.unlink(missing_ok=True)" not in source
     assert '["systemctl","disable","--now",MTPROXY_SERVICE]' in source
+
+
+def test_dns_installer_preserves_mtproxy_shared_directory_contract():
+    dns=(ROOT/"scripts/install-dns.sh").read_text(encoding="utf-8")
+    assert "install -d -m 0700 /etc/makia-vps-manager" not in dns
+    assert "getent group makia-mtproxy" in dns
+    assert "install -d -o root -g makia-mtproxy -m 0710 /etc/makia-vps-manager" in dns
+    assert "install -d -o root -g root -m 0700 /etc/makia-vps-manager" in dns
+
+
+def test_install_and_update_reassert_shared_config_permissions_after_optional_installers():
+    for path in ("scripts/install.sh","scripts/update.sh"):
+        text=(ROOT/path).read_text(encoding="utf-8")
+        dns_pos=text.index("makia-install-dns --install-only")
+        repair_pos=text.index("chown root:makia-mtproxy /etc/makia-vps-manager",dns_pos)
+        assert repair_pos>dns_pos
+        assert "chmod 0710 /etc/makia-vps-manager" in text[repair_pos:]
+        assert "chmod 0600 /etc/makia-vps-manager/makia.env" in text[repair_pos:]
+        assert "chmod 0640 /etc/makia-vps-manager/mtproxy.toml" in text[repair_pos:]
+
+
+def test_update_can_land_fix_when_optional_mtproxy_was_already_broken():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    uat=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    assert "Repairing existing Telegram MTProxy with the new runtime contract" in update
+    assert "configure_mtproxy(host,0,False)" in update
+    assert "MAKIA_UAT_OPTIONAL_NETWORK_SOFTFAIL=1" in update
+    assert "pre-existing optional service; update retained" in uat
+
+
+def test_force_main_update_bypasses_pinned_archive_and_verifies_running_version():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'FORCE_MAIN="${MAKIA_FORCE_MAIN:-0}"' in update
+    assert 'ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"' in update
+    assert "ignoring any pinned release archive override" in update
+    assert "Running backend version verified" in update
+    assert 'json.load(sys.stdin).get("version","")' in update
+
+
+def test_restore_repairs_shared_config_permissions_before_mtproxy_start():
+    restore=(ROOT/"scripts/restore-portable.py").read_text(encoding="utf-8")
+    assert "def repair_shared_config_permissions" in restore
+    assert "os.chmod(root,0o710)" in restore
+    assert "os.chmod(config,0o640)" in restore
+    assert "repair_shared_config_permissions()" in restore

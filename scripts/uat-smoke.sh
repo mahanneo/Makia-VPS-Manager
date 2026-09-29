@@ -257,9 +257,13 @@ if [[ -f /etc/makia-vps-manager/mtproxy.env ]]; then
     MTPORT="$(awk -F= '$1=="MTPROXY_PORT"{print $2;exit}' /etc/makia-vps-manager/mtproxy.env)"
     if [[ -n "$MTPORT" ]] && ss -H -ltn 2>/dev/null | grep -Eq ":${MTPORT}([[:space:]]|$)"; then
       ok "Telegram MTProxy runtime + listener"
+    elif [[ "${MAKIA_UAT_OPTIONAL_NETWORK_SOFTFAIL:-0}" == "1" ]]; then
+      warn "Telegram MTProxy listener missing (pre-existing optional service; update retained)"
     else
       bad "Telegram MTProxy listener missing"
     fi
+  elif [[ "${MAKIA_UAT_OPTIONAL_NETWORK_SOFTFAIL:-0}" == "1" ]]; then
+    warn "Telegram MTProxy configured but runtime missing/inactive (update retained)"
   else
     bad "Telegram MTProxy configured but runtime missing/inactive"
   fi
