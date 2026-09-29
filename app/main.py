@@ -2810,7 +2810,11 @@ def scheduled_backups_get(request:Request):
 def scheduled_backups_create(payload:BackupSchedulePayload,request:Request):
     actor=require_local_admin(request);require_mutation(request)
     if payload.backup_type not in {"quick","full_migration"}:raise HTTPException(400,"invalid backup type")
-    if payload.backup_type=="full_migration" and len(payload.password)<10:raise HTTPException(400,"Full Migration schedule password must be at least 10 characters")
+    remote_type=str((payload.remote or {}).get("type") or "none").lower()
+    if payload.backup_type=="full_migration" and len(payload.password)<10:
+        raise HTTPException(400,"Full Migration schedule password must be at least 10 characters")
+    if remote_type not in {"","none"} and payload.backup_type!="full_migration":
+        raise HTTPException(400,"Remote backups must use encrypted Full Migration format; Quick Backup is local-only")
     cfg={"password":payload.password,"remote":payload.remote}
     schedule_id=create_backup_schedule(payload.name,payload.backup_type,payload.interval_hours,payload.keep_last,automation_ops.seal_config(cfg),payload.enabled,int(time.time())+payload.interval_hours*3600)
     audit(actor,"backup_schedule_create",str(schedule_id),payload.name,ip(request))
@@ -2881,7 +2885,9 @@ def cloudflare_cutover(payload:CloudflareCutoverPayload,request:Request):
     cf=cfg.get("cloudflare") or {}
     if payload.confirm_record.strip().lower()!=str(cf.get("record") or "").strip().lower():
         raise HTTPException(400,"record confirmation does not match configured Cloudflare record")
-    try:result=automation_ops.cloudflare_update_a(cf.get("api_token"),cf.get("zone"),cf.get("record"),payload.ipv4,cf.get("ttl",60),cf.get("proxied",False))
+    # Raw VPN/SSH endpoints must remain DNS-only. Do not allow API-supplied
+    # integration metadata to accidentally orange-cloud a migration record.
+    try:result=automation_ops.cloudflare_update_a(cf.get("api_token"),cf.get("zone"),cf.get("record"),payload.ipv4,cf.get("ttl",60),False)
     except automation_ops.AutomationError as exc:raise HTTPException(400,str(exc))
     audit(actor,"cloudflare_cutover",cf.get("record",""),f"new_ipv4={payload.ipv4}",ip(request))
     return {"ok":True,**result}
