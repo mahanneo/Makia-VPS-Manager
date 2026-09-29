@@ -438,7 +438,7 @@ function renderProvisionWizard(){
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
-      return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+x[4]+'</span><div><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
+      return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+protocolGlyph(x[0])+'</span><div class="protocol-card-copy"><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
     }).join('')+'</div>';
   }else if(s.step===2){
     body=wizardIdentityFields(s);
@@ -1242,7 +1242,7 @@ async function setupWStunnel(){
 
 async function installProtocol(component){if(!confirm('Install '+component+' and required packages?'))return;try{await api('/api/protocols/install',{method:'POST',body:JSON.stringify({component})});toast(component+' installed');await protocols()}catch(e){alert(e.message)}}
 function showXrayInbounds(){document.querySelector('.protocol-grid')?.nextElementSibling?.scrollIntoView({behavior:'smooth'})}
-function createXrayInbound(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY CLIENT + INBOUND</div><h3>ساخت دسترسی Xray</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Protocol<select id="xiProtocol" onchange="syncXrayForm()"><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks</option><option value="hysteria2">Hysteria2</option><option value="http">HTTP Proxy</option><option value="socks">SOCKS5</option></select></label><label>Transport<select id="xiTransport" onchange="syncXrayForm()"><option value="tcp">RAW / TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option><option value="httpupgrade">HTTPUpgrade</option><option value="xhttp">XHTTP</option><option value="kcp">mKCP</option></select></label><label>Security<select id="xiSecurity" onchange="syncXrayForm()"><option value="none">None</option><option value="tls">TLS</option><option value="reality">REALITY</option></select></label><label>Port<input id="xiPort" type="number" min="1" max="65535" value="2087"></label><label>Client name<input id="xiName" value="client01"></label><label>Public domain / IP<input id="xiEndpoint" value="${window.PANEL_DOMAIN||location.hostname}"></label><label id="xiPathWrap">Path / Service<input id="xiPath" value="/makia"></label><label id="xiSniWrap">Domain / SNI<input id="xiSni" value="${window.PANEL_DOMAIN||''}" placeholder="vpn.example.com"></label><label id="xiRealityWrap">REALITY target<input id="xiRealityDest" value="www.cloudflare.com:443" placeholder="www.example.com:443"></label><label>Traffic quota (GB)<input id="xiQuota" type="number" min="0" step="1" value="50"><div class="password-tools quota-tools"><button class="soft" onclick="setFieldValue('xiQuota',0)">∞</button><button class="soft" onclick="setFieldValue('xiQuota',10)">10</button><button class="soft" onclick="setFieldValue('xiQuota',20)">20</button><button class="soft recommended" onclick="setFieldValue('xiQuota',50)">50</button><button class="soft" onclick="setFieldValue('xiQuota',100)">100</button><button class="soft" onclick="setFieldValue('xiQuota',200)">200</button><button class="soft" onclick="setFieldValue('xiQuota',500)">500</button></div><span class="muted">0 = Unlimited</span></label><label>Expiry days<input id="xiDays" type="number" min="0" max="3650" value="30"><div class="password-tools duration-tools"><button class="soft" onclick="setFieldValue('xiDays',1)">1D</button><button class="soft" onclick="setFieldValue('xiDays',3)">3D</button><button class="soft" onclick="setFieldValue('xiDays',7)">7D</button><button class="soft" onclick="setFieldValue('xiDays',15)">15D</button><button class="soft recommended" onclick="setFieldValue('xiDays',30)">30D</button><button class="soft" onclick="setFieldValue('xiDays',60)">60D</button><button class="soft" onclick="setFieldValue('xiDays',90)">90D</button><button class="soft" onclick="setFieldValue('xiDays',0)">∞</button></div></label><label>Traffic reset cycle<input id="xiResetDays" type="number" min="0" max="3650" value="30"><div class="password-tools"><button class="soft" onclick="setFieldValue('xiResetDays',0)">Never</button><button class="soft" onclick="setFieldValue('xiResetDays',7)">7D</button><button class="soft recommended" onclick="setFieldValue('xiResetDays',30)">30D</button><button class="soft" onclick="setFieldValue('xiResetDays',60)">60D</button><button class="soft" onclick="setFieldValue('xiResetDays',90)">90D</button></div><span class="muted">حجم مصرفی در شروع هر دوره صفر می‌شود.</span></label><label>IP / Device limit<input id="xiIpLimit" type="number" min="1" max="50" value="1"><div class="password-tools"><button class="soft recommended" onclick="setFieldValue('xiIpLimit',1)">1</button><button class="soft" onclick="setFieldValue('xiIpLimit',2)">2</button><button class="soft" onclick="setFieldValue('xiIpLimit',3)">3</button><button class="soft" onclick="setFieldValue('xiIpLimit',5)">5</button><button class="soft" onclick="setFieldValue('xiIpLimit',10)">10</button></div><span class="muted">با Online-IP API هسته Xray مانیتور و توسط Policy Worker enforce می‌شود؛ روی Coreهای فاقد این API فقط وضعیت Unavailable نشان داده می‌شود.</span></label></div><div id="xiCompatNote" class="notice"></div><div class="toolbar"><button class="primary" onclick="submitXrayInbound()">Create, Validate & Restart</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`;syncXrayForm()}
+async function createXrayInbound(){const defs=await api('/api/accounts/new-defaults').catch(()=>({username:'user001'}));modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY CLIENT + INBOUND</div><h3>ساخت دسترسی Xray</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Protocol<select id="xiProtocol" onchange="syncXrayForm()"><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks</option><option value="hysteria2">Hysteria2</option><option value="http">HTTP Proxy</option><option value="socks">SOCKS5</option></select></label><label>Transport<select id="xiTransport" onchange="syncXrayForm()"><option value="tcp">RAW / TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option><option value="httpupgrade">HTTPUpgrade</option><option value="xhttp">XHTTP</option><option value="kcp">mKCP</option></select></label><label>Security<select id="xiSecurity" onchange="syncXrayForm()"><option value="none">None</option><option value="tls">TLS</option><option value="reality">REALITY</option></select></label><label>Port<input id="xiPort" type="number" min="1" max="65535" value="2087"></label><label>Client name<input id="xiName" value="${htmlEsc(defs.username||'user001')}"></label><label>Public domain / IP<input id="xiEndpoint" value="${window.PANEL_DOMAIN||location.hostname}"></label><label id="xiPathWrap">Path / Service<input id="xiPath" value="/makia"></label><label id="xiSniWrap">Domain / SNI<input id="xiSni" value="${window.PANEL_DOMAIN||''}" placeholder="vpn.example.com"></label><label id="xiRealityWrap">REALITY target<input id="xiRealityDest" value="www.cloudflare.com:443" placeholder="www.example.com:443"></label><label>Traffic quota (GB)<input id="xiQuota" type="number" min="0" step="1" value="50"><div class="password-tools quota-tools"><button class="soft" onclick="setFieldValue('xiQuota',0)">∞</button><button class="soft" onclick="setFieldValue('xiQuota',10)">10</button><button class="soft" onclick="setFieldValue('xiQuota',20)">20</button><button class="soft recommended" onclick="setFieldValue('xiQuota',50)">50</button><button class="soft" onclick="setFieldValue('xiQuota',100)">100</button><button class="soft" onclick="setFieldValue('xiQuota',200)">200</button><button class="soft" onclick="setFieldValue('xiQuota',500)">500</button></div><span class="muted">0 = Unlimited</span></label><label>Expiry days<input id="xiDays" type="number" min="0" max="3650" value="30"><div class="password-tools duration-tools"><button class="soft" onclick="setFieldValue('xiDays',1)">1D</button><button class="soft" onclick="setFieldValue('xiDays',3)">3D</button><button class="soft" onclick="setFieldValue('xiDays',7)">7D</button><button class="soft" onclick="setFieldValue('xiDays',15)">15D</button><button class="soft recommended" onclick="setFieldValue('xiDays',30)">30D</button><button class="soft" onclick="setFieldValue('xiDays',60)">60D</button><button class="soft" onclick="setFieldValue('xiDays',90)">90D</button><button class="soft" onclick="setFieldValue('xiDays',0)">∞</button></div></label><label>Traffic reset cycle<input id="xiResetDays" type="number" min="0" max="3650" value="30"><div class="password-tools"><button class="soft" onclick="setFieldValue('xiResetDays',0)">Never</button><button class="soft" onclick="setFieldValue('xiResetDays',7)">7D</button><button class="soft recommended" onclick="setFieldValue('xiResetDays',30)">30D</button><button class="soft" onclick="setFieldValue('xiResetDays',60)">60D</button><button class="soft" onclick="setFieldValue('xiResetDays',90)">90D</button></div><span class="muted">حجم مصرفی در شروع هر دوره صفر می‌شود.</span></label><label>IP / Device limit<input id="xiIpLimit" type="number" min="1" max="50" value="1"><div class="password-tools"><button class="soft recommended" onclick="setFieldValue('xiIpLimit',1)">1</button><button class="soft" onclick="setFieldValue('xiIpLimit',2)">2</button><button class="soft" onclick="setFieldValue('xiIpLimit',3)">3</button><button class="soft" onclick="setFieldValue('xiIpLimit',5)">5</button><button class="soft" onclick="setFieldValue('xiIpLimit',10)">10</button></div><span class="muted">با Online-IP API هسته Xray مانیتور و توسط Policy Worker enforce می‌شود؛ روی Coreهای فاقد این API فقط وضعیت Unavailable نشان داده می‌شود.</span></label></div><div id="xiCompatNote" class="notice"></div><div class="toolbar"><button class="primary" onclick="submitXrayInbound()">Create, Validate & Restart</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`;syncXrayForm()}
 function syncXrayForm(){
   const protocolEl=formEl('xiProtocol'),transportEl=formEl('xiTransport'),securityEl=formEl('xiSecurity');
   const pathWrap=formEl('xiPathWrap'),sniWrap=formEl('xiSniWrap'),realityWrap=formEl('xiRealityWrap');
@@ -1672,7 +1672,7 @@ async function repairXrayRuntime(){
 }
 
 async function bootstrapWireGuard(){const d=window.__operatorSettings?.defaults||{};const port=Number(prompt('WireGuard UDP port',String(d.wireguard_port||443)));if(!port)return;const cidr=prompt('Server tunnel CIDR',d.wireguard_cidr||'10.66.66.1/24');if(!cidr)return;try{const r=await api('/api/protocols/wireguard/bootstrap',{method:'POST',body:JSON.stringify({port,cidr,mtu:Number(d.wireguard_mtu||1280)})});toast('WireGuard '+r.interface+' started');await protocols()}catch(e){alert(e.message)}}
-async function createWireGuardPeer(){const d=window.__operatorSettings?.defaults||{};const name=prompt('Peer name','client01');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const dns=prompt('Client DNS',d.wireguard_dns||'1.1.1.1')||'1.1.1.1';try{const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns,mtu:Number(d.wireguard_mtu||1280),keepalive:Number(d.wireguard_keepalive??15),allowed_ips:d.wireguard_allowed_ips||'0.0.0.0/0'})});configModal('WireGuard · '+name,r.config,name+'.conf','wireguard',name);if(r.diagnostics&&!r.diagnostics.ok)toast('Config ساخته شد؛ WireGuard Diagnostics نیاز به بررسی دارد')}catch(e){alert(e.message)}}
+async function createWireGuardPeer(){const d=window.__operatorSettings?.defaults||{};const defs=await api('/api/accounts/new-defaults').catch(()=>({username:'user001'}));const name=prompt('Peer name',defs.username||'user001');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const dns=prompt('Client DNS',d.wireguard_dns||'1.1.1.1')||'1.1.1.1';try{const r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name,endpoint,dns,mtu:Number(d.wireguard_mtu||1280),keepalive:Number(d.wireguard_keepalive??15),allowed_ips:d.wireguard_allowed_ips||'0.0.0.0/0'})});configModal('WireGuard · '+name,r.config,name+'.conf','wireguard',name);if(r.diagnostics&&!r.diagnostics.ok)toast('Config ساخته شد؛ WireGuard Diagnostics نیاز به بررسی دارد')}catch(e){alert(e.message)}}
 async function openWireGuardDiagnostics(target=''){
   try{
     const endpoint=target||prompt('Endpoint داخل فایل WireGuard کلاینت (دامنه یا IP)',window.PANEL_DOMAIN||location.hostname);
@@ -1737,7 +1737,7 @@ async function openEndpointMatrix(){
 }
 
 async function bootstrapOpenVPN(){const port=Number(prompt('OpenVPN port','1194'));if(!port)return;const proto=(prompt('Protocol: udp or tcp','udp')||'udp').toLowerCase();try{await api('/api/protocols/openvpn/bootstrap',{method:'POST',body:JSON.stringify({port,proto})});toast('OpenVPN server started');await protocols()}catch(e){alert(e.message)}}
-async function createOpenVPNClient(){const name=prompt('Client name','client01');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const port=Number(prompt('OpenVPN port',String(window.__operatorSettings?.defaults?.openvpn_port||1194)))||1194;const proto=(prompt('Protocol: udp or tcp',window.__operatorSettings?.defaults?.openvpn_proto||'udp')||'udp').toLowerCase();try{const r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name,endpoint,port,proto})});configModal('OpenVPN · '+name,r.config,name+'.ovpn','openvpn',name);if(r.diagnostics?.warnings?.length)toast('OpenVPN ساخته شد؛ Domain Diagnostics هشدار دارد')}catch(e){alert(e.message)}}
+async function createOpenVPNClient(){const defs=await api('/api/accounts/new-defaults').catch(()=>({username:'user001'}));const name=prompt('Client name',defs.username||'user001');if(!name)return;const endpoint=prompt('Public domain or server IP',window.PANEL_DOMAIN||location.hostname);if(!endpoint)return;const port=Number(prompt('OpenVPN port',String(window.__operatorSettings?.defaults?.openvpn_port||1194)))||1194;const proto=(prompt('Protocol: udp or tcp',window.__operatorSettings?.defaults?.openvpn_proto||'udp')||'udp').toLowerCase();try{const r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name,endpoint,port,proto})});configModal('OpenVPN · '+name,r.config,name+'.ovpn','openvpn',name);if(r.diagnostics?.warnings?.length)toast('OpenVPN ساخته شد؛ Domain Diagnostics هشدار دارد')}catch(e){alert(e.message)}}
 function configModal(titleText,textData,fileName,kind=null,key=null){
   window.__lastConfigFilename=fileName||'config.txt';
   const secure=kind&&key?'<button class="primary" data-action="protected-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(key)+'">Protected ZIP</button><button class="ghost" data-action="native-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'">Native file</button>':'';
@@ -2187,7 +2187,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:formValue('oldP',''),new_password:formValue('newP','')})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
+const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Telegram Proxy','telegramproxy'],['DNS Center','dnscenter'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -2228,6 +2228,9 @@ async function handleMakiaAction(btn){
   const action=btn.dataset.action;if(!action)return;
   if(action==='nav'){closeModal();switchView(btn.dataset.view);return}
   if(action==='nav-settings'){closeModal();window.__settingsTab=btn.dataset.tab||'general';switchView('settings');return}
+  if(action==='mtproxy-configure'){await configureTelegramProxy(false);return}
+  if(action==='mtproxy-rotate'){await configureTelegramProxy(true);return}
+  if(action==='dns-configure'){await configureDnsCenter();return}
   if(action==='xray-inbound-builder'){await openXrayInboundBuilder();return}
   if(action==='xray-inbound-client'){openXrayInboundClient(dataDec(btn.dataset.tag),btn.dataset.protocol||'');return}
   if(action==='xray-inbound-client-create'){await createXrayInboundClient(dataDec(btn.dataset.tag));return}
@@ -2426,9 +2429,150 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
   ].join('');
 }
 
+
+function networkState(ok,labelOk,labelBad){
+  return '<span class="status-chip '+(ok?'ok':'bad')+'">'+htmlEsc(ok?labelOk:labelBad)+'</span>';
+}
+
+async function telegramProxyCenter(renderToken=window.__viewRenderToken){
+  title.textContent=tr('پروکسی تلگرام','Telegram Proxy');setPageContext('TELEGRAM MTPROXY');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال بررسی MTProxy…','Checking MTProxy…'))+'</b></div>';
+  const r=await api('/api/network/mtproxy');
+  if(renderToken!==window.__viewRenderToken||activeView!=='telegramproxy')return;
+  const health=Boolean(r.installed&&r.configured&&r.service_active&&r.listener);
+  const install=r.installed?'':[
+    '<section class="network-tool-card install-card">',
+      '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب MTProxy مدرن (mtg)','Install maintained Telegram MTProxy (mtg)'))+'</h3>',
+      '<p>'+htmlEsc(tr('نصب از داخل Web Service انجام نمی‌شود. دستور زیر Installer پین‌شده Makia را اجرا می‌کند.','Host installation is intentionally outside the web service. Run the pinned Makia installer below.'))+'</p></div>',
+      '<textarea id="mtInstallCommand" readonly>'+htmlEsc(r.install_command||'sudo makia-install-mtproxy')+'</textarea>',
+      '<button class="primary" data-action="copy-target" data-target="mtInstallCommand">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button>',
+    '</section>'
+  ].join('');
+  const delivery=(r.configured?[
+    '<section class="network-tool-card delivery-card">',
+      '<div class="tool-card-head"><div><span class="pro-kicker">USER DELIVERY</span><h3>'+htmlEsc(tr('لینک آماده Telegram','Telegram connection link'))+'</h3></div>'+networkState(health,tr('آماده','READY'),tr('نیازمند بررسی','CHECK'))+'</div>',
+      '<div class="network-delivery-grid">',
+        (r.qr?'<div class="network-qr"><img src="'+htmlEsc(r.qr)+'" alt="Telegram Proxy QR"></div>':''),
+        '<div class="network-link-stack">',
+          '<label>t.me link<textarea id="mtHttpsLink" readonly>'+htmlEsc(r.https_link||'')+'</textarea></label>',
+          '<label>tg:// link<textarea id="mtTgLink" readonly>'+htmlEsc(r.tg_link||'')+'</textarea></label>',
+          '<div class="toolbar"><button class="primary" data-action="copy-target" data-target="mtHttpsLink">'+htmlEsc(tr('کپی لینک برای کاربر','Copy user link'))+'</button><button class="ghost" data-action="copy-target" data-target="mtTgLink">tg://</button>'+(r.https_link?'<a class="ghost link-btn" href="'+htmlEsc(r.https_link)+'" target="_blank" rel="noopener noreferrer">'+htmlEsc(tr('باز کردن در Telegram','Open in Telegram'))+'</a>':'')+'</div>',
+        '</div>',
+      '</div>',
+      '<div class="notice">'+htmlEsc(tr('Secret تحویلی با FakeTLS secret نسخه mtg ساخته می‌شود. اپراتور Proxy به محتوای چت‌های Telegram دسترسی ندارد.','The delivered secret uses mtg FakeTLS format. A proxy operator cannot read Telegram chat contents.'))+'</div>',
+    '</section>'
+  ].join(''):'');
+  content.innerHTML=[
+    '<div class="pro-page network-tools-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">TELEGRAM MTPROXY</span><h1>'+htmlEsc(tr('پروکسی اختصاصی Telegram','Private Telegram Proxy'))+'</h1><p>'+htmlEsc(tr('MTProto Proxy واقعی با Secret، لینک مستقیم، QR و Port collision detection.','Real MTProto proxy with secret, direct links, QR and port collision detection.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="refresh">'+htmlEsc(tr('بروزرسانی','Refresh'))+'</button></div></section>',
+      '<section class="network-health-grid">',
+        '<div><span>Installed</span><b>'+networkState(Boolean(r.installed),'YES','NO')+'</b></div>',
+        '<div><span>Configured</span><b>'+networkState(Boolean(r.configured),'YES','NO')+'</b></div>',
+        '<div><span>Service</span><b>'+networkState(Boolean(r.service_active),'ACTIVE','DOWN')+'</b></div>',
+        '<div><span>Listener</span><b>'+networkState(Boolean(r.listener),'TCP/'+htmlEsc(String(r.port||'')),'OFFLINE')+'</b></div>',
+      '</section>',
+      install,
+      (r.installed?[
+        '<section class="network-tool-card">',
+          '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('اگر Port اشغال باشد Makia خودکار Port آزاد انتخاب می‌کند.','If the requested port is busy, Makia automatically selects a free managed port.'))+'</small></div>',
+          '<div class="wizard-form two">',
+            '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.host||'')+'" placeholder="proxy.example.com"></label>',
+            '<label>'+htmlEsc(tr('Port ترجیحی','Preferred port'))+'<input id="mtPort" type="number" min="1" max="65535" value="'+Number(r.port||443)+'"></label>',
+          '</div>',
+          '<div class="toolbar"><button class="primary" data-action="mtproxy-configure">'+htmlEsc(tr('ذخیره و راه‌اندازی','Save & start'))+'</button><button class="danger" data-action="mtproxy-rotate">'+htmlEsc(tr('تعویض Secret','Rotate secret'))+'</button></div>',
+          '<div class="notice">'+htmlEsc(tr('تعویض Secret لینک قبلی کاربران را باطل می‌کند.','Rotating the secret invalidates previously issued proxy links.'))+'</div>',
+        '</section>'
+      ].join(''):''),
+      delivery,
+    '</div>'
+  ].join('');
+}
+
+async function configureTelegramProxy(rotate=false){
+  const host=(document.getElementById('mtHost')?.value||'').trim();
+  const port=Number(document.getElementById('mtPort')?.value||443);
+  if(!host){alert(tr('دامنه DNS پروکسی را وارد کن.','Enter the proxy DNS hostname.'));return}
+  if(/^\[?[0-9a-f:.]+\]?$/i.test(host)){alert(tr('برای FakeTLS باید دامنه DNS وارد شود؛ IP خام قابل قبول نیست.','FakeTLS requires a DNS hostname; a raw IP is not accepted.'));return}
+  if(rotate&&!confirm(tr('Secret قبلی باطل شود؟','Invalidate the previous secret?')))return;
+  try{
+    const r=await api('/api/network/mtproxy/configure',{method:'POST',body:JSON.stringify({host,port,rotate_secret:Boolean(rotate)})});
+    toast(r.port_adjusted?tr('Proxy ساخته شد؛ Port آزاد جایگزین شد.','Proxy saved; a free port was selected.'):tr('Proxy آماده است.','Proxy is ready.'));
+    await telegramProxyCenter();
+  }catch(e){alert('MTProxy: '+e.message)}
+}
+
+async function dnsCenter(renderToken=window.__viewRenderToken){
+  title.textContent=tr('مرکز DNS','DNS Center');setPageContext('PRIVATE DNS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال بررسی Resolver…','Checking resolver…'))+'</b></div>';
+  const r=await api('/api/network/dns');
+  if(renderToken!==window.__viewRenderToken||activeView!=='dnscenter')return;
+  const install=r.installed?'':[
+    '<section class="network-tool-card install-card">',
+      '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب Unbound Resolver','Install Unbound resolver'))+'</h3>',
+      '<p>'+htmlEsc(tr('نصب اولیه Local-only است و Open Resolver ساخته نمی‌شود.','The initial install is local-only and never creates an open resolver.'))+'</p></div>',
+      '<textarea id="dnsInstallCommand" readonly>'+htmlEsc(r.install_command||'sudo makia-install-dns')+'</textarea>',
+      '<button class="primary" data-action="copy-target" data-target="dnsInstallCommand">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button>',
+    '</section>'
+  ].join('');
+  const remoteAddresses=[...new Set([r.wireguard_address,r.public_address].filter(Boolean))];
+  const addresses=remoteAddresses.map((x,i)=>'<div class="network-copy-row"><span class="dns-address" id="dnsAddress'+i+'">'+htmlEsc(x)+'</span><button class="ghost" data-action="copy-target" data-target="dnsAddress'+i+'">'+htmlEsc(tr('کپی','Copy'))+'</button></div>').join('');
+  const dnsDeliveryLines=[];
+  if(r.wireguard_address)dnsDeliveryLines.push('WireGuard DNS: '+r.wireguard_address);
+  if(r.public_address)dnsDeliveryLines.push('Public DNS: '+r.public_address);
+  if(r.mode==='public'&&(r.allowed_cidrs||[]).length)dnsDeliveryLines.push('Allowed source: '+(r.allowed_cidrs||[]).join(', '));
+  dnsDeliveryLines.push('Upstream: '+String(r.upstream_label||r.upstream||''));
+  const dnsDeliveryText=dnsDeliveryLines.join('\n');
+  const upstreamOptions=(r.upstreams||[]).map(x=>'<option value="'+htmlEsc(x.id)+'" '+(x.id===r.upstream?'selected':'')+'>'+htmlEsc(x.label)+'</option>').join('');
+  content.innerHTML=[
+    '<div class="pro-page network-tools-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">SECURE RESOLVER</span><h1>'+htmlEsc(tr('DNS خصوصی / کم‌تاخیر','Private / low-latency DNS'))+'</h1><p>'+htmlEsc(tr('Unbound cache + DNS-over-TLS upstream، بدون ساخت Open Resolver عمومی.','Unbound cache with DNS-over-TLS upstreams, without exposing an open resolver.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="refresh">'+htmlEsc(tr('بروزرسانی','Refresh'))+'</button></div></section>',
+      '<div class="iran-boundary"><b>'+htmlEsc(tr('واقعیت فنی:','Technical note:'))+'</b><span>'+htmlEsc(r.warning||'DNS does not equal game ping.')+'</span></div>',
+      '<section class="network-health-grid">',
+        '<div><span>Installed</span><b>'+networkState(Boolean(r.installed),'YES','NO')+'</b></div>',
+        '<div><span>Service</span><b>'+networkState(Boolean(r.service_active),'ACTIVE','DOWN')+'</b></div>',
+        '<div><span>Mode</span><strong>'+htmlEsc(String(r.mode||'private').toUpperCase())+'</strong></div>',
+        '<div><span>Resolver query</span><strong>'+((r.query_ms===null||r.query_ms===undefined)?'—':Number(r.query_ms)+' ms')+'</strong></div>',
+      '</section>',
+      install,
+      (r.installed?[
+        '<section class="network-tool-card">',
+          '<div class="tool-card-head"><div><span class="pro-kicker">RESOLVER POLICY</span><h3>'+htmlEsc(tr('تنظیم DNS','DNS configuration'))+'</h3></div></div>',
+          '<div class="wizard-form two">',
+            '<label>'+htmlEsc(tr('حالت دسترسی','Access mode'))+'<select id="dnsMode"><option value="private" '+(r.mode!=='public'?'selected':'')+'>'+htmlEsc(tr('Private / VPN only','Private / VPN only'))+'</option><option value="public" '+(r.mode==='public'?'selected':'')+'>'+htmlEsc(tr('Public + IP allowlist','Public + IP allowlist'))+'</option></select></label>',
+            '<label>Upstream<select id="dnsUpstream">'+upstreamOptions+'</select></label>',
+            '<label>'+htmlEsc(tr('Public IPv4 همین VPS','This VPS public IPv4'))+'<input id="dnsPublic" dir="ltr" value="'+htmlEsc(r.public_address||'')+'" placeholder="203.0.113.10"></label>',
+            '<label>'+htmlEsc(tr('IP/CIDR مجاز کاربران','Allowed client IP/CIDR'))+'<textarea id="dnsAllowed" dir="ltr" placeholder="198.51.100.25/32">'+htmlEsc((r.allowed_cidrs||[]).join('\n'))+'</textarea></label>',
+          '</div>',
+          '<div class="notice">'+htmlEsc(tr('حالت Public بدون Allowlist عمداً Block می‌شود تا سرور شما Open Resolver و ابزار DDoS نشود.','Public mode is blocked without an allowlist so the VPS cannot become an open DNS resolver or amplification source.'))+'</div>',
+          '<div class="toolbar"><button class="primary" data-action="dns-configure">'+htmlEsc(tr('Validate & Apply','Validate & Apply'))+'</button></div>',
+        '</section>',
+        '<section class="network-tool-card">',
+          '<div class="tool-card-head"><div><span class="pro-kicker">CLIENT DELIVERY</span><h3>'+htmlEsc(tr('آدرس‌های قابل استفاده','Usable resolver addresses'))+'</h3></div></div>',
+          '<div class="dns-address-list">'+(addresses||'<div class="network-delivery-note">'+htmlEsc(tr('فعلاً فقط Localhost فعال است و چیزی برای تحویل مستقیم به کاربر راه‌دور وجود ندارد. برای کاربران WireGuard از DNS داخلی WireGuard استفاده کن؛ برای Public DNS باید IP/CIDR همان کاربر را Allowlist کنی.','Only localhost is active, so there is no remote client address to deliver yet. WireGuard users can use the WireGuard resolver; public DNS requires the client IP/CIDR to be allowlisted first.'))+'</div>')+'</div>',
+          (dnsDeliveryText?'<label>'+htmlEsc(tr('متن آماده تحویل به کاربر','Ready-to-send client DNS'))+'<textarea id="dnsUserDelivery" class="network-user-text" readonly>'+htmlEsc(dnsDeliveryText)+'</textarea></label><div class="toolbar"><button class="primary" data-action="copy-target" data-target="dnsUserDelivery">'+htmlEsc(tr('کپی اطلاعات DNS کاربر','Copy client DNS details'))+'</button></div>':''),
+          (r.mode==='public'?'<div class="network-delivery-note">'+htmlEsc(tr('قبل از ارسال Public DNS، IP یا CIDR اینترنت کاربر باید در Allowlist بالا ثبت شده باشد.','Before sharing public DNS, the client Internet IP/CIDR must be present in the allowlist above.'))+'</div>':''),
+          '<p class="muted">'+htmlEsc(tr('این Resolver می‌تواند زمان Lookup و Cache را بهتر کند؛ Ping سرور بازی یا رفع محدودیت جغرافیایی را تضمین نمی‌کند. برای Smart-DNS واقعی باید Upstream مخصوص آن سرویس جداگانه داشته باشی.','This resolver can improve lookup/cache behavior; it does not guarantee lower game-server RTT or geo-unblocking. True Smart DNS requires a specialized upstream service.'))+'</p>',
+        '</section>'
+      ].join(''):''),
+    '</div>'
+  ].join('');
+}
+
+async function configureDnsCenter(){
+  const mode=document.getElementById('dnsMode')?.value||'private';
+  const upstream=document.getElementById('dnsUpstream')?.value||'cloudflare';
+  const public_address=(document.getElementById('dnsPublic')?.value||'').trim();
+  const allowed_cidrs=(document.getElementById('dnsAllowed')?.value||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean);
+  try{
+    await api('/api/network/dns/configure',{method:'POST',body:JSON.stringify({mode,upstream,public_address,allowed_cidrs})});
+    toast(tr('DNS اعمال شد.','DNS applied.'));
+    await dnsCenter();
+  }catch(e){alert('DNS: '+e.message)}
+}
+
 function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',plans:'پلن‌ها',expiry:'مرکز تمدید',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',diagnostics:'مرکز عیب‌یابی',operations:'عملیات و انتقال',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',plans:'Plans',expiry:'Expiry Center',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',diagnostics:'Diagnostics Center',operations:'Operations / DR',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',plans:'پلن‌ها',expiry:'مرکز تمدید',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',telegramproxy:'پروکسی تلگرام',dnscenter:'DNS برای کاربران',diagnostics:'مرکز عیب‌یابی',operations:'عملیات و انتقال',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',plans:'Plans',expiry:'Expiry Center',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',telegramproxy:'Telegram Proxy',dnscenter:'Client DNS',diagnostics:'Diagnostics Center',operations:'Operations / DR',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;
   document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
   document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
@@ -2615,8 +2759,9 @@ async function setupOutline(){
     alert(e.message)
   }
 }
-function openOutlineKeyCreate(){
-  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">OUTLINE ACCESS KEY</div><h3>'+htmlEsc(tr('ساخت کاربر Outline','Create Outline client'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>'+htmlEsc(tr('نام','Name'))+'<input id="olName" value="outline01"></label><label>'+htmlEsc(tr('حجم GB','Quota GB'))+'<input id="olQuota" type="number" min="0" value="50"></label><label>'+htmlEsc(tr('مدت روز','Expiry days'))+'<input id="olDays" type="number" min="0" value="30"></label></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">'+htmlEsc(tr('انصراف','Cancel'))+'</button><button class="primary" onclick="createOutlineKey()">'+htmlEsc(tr('ساخت','Create'))+'</button></div></div></div>';
+async function openOutlineKeyCreate(){
+  const defs=await api('/api/accounts/new-defaults').catch(()=>({username:'user001'}));
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">OUTLINE ACCESS KEY</div><h3>'+htmlEsc(tr('ساخت کاربر Outline','Create Outline client'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>'+htmlEsc(tr('نام','Name'))+'<input id="olName" value="'+htmlEsc(defs.username||'user001')+'"></label><label>'+htmlEsc(tr('حجم GB','Quota GB'))+'<input id="olQuota" type="number" min="0" value="50"></label><label>'+htmlEsc(tr('مدت روز','Expiry days'))+'<input id="olDays" type="number" min="0" value="30"></label></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">'+htmlEsc(tr('انصراف','Cancel'))+'</button><button class="primary" onclick="createOutlineKey()">'+htmlEsc(tr('ساخت','Create'))+'</button></div></div></div>';
 }
 async function createOutlineKey(){
   const nameEl=document.getElementById('olName');
@@ -2731,16 +2876,16 @@ async function openDRWizard(){
   }catch(e){alert(e.message)}
 }
 
-const views={dashboard,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds','telegramproxy','dnscenter'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics','operations'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');

@@ -164,5 +164,33 @@ else
   fail "WStunnel tooling" "missing; run makia-upgrade"
 fi
 
+if [[ -f /etc/makia-vps-manager/mtproxy.env ]]; then
+  if [[ -x /opt/makia-mtproxy/mtg ]]; then
+    MTG_VERSION="$(/opt/makia-mtproxy/mtg --version 2>/dev/null | head -n1 || true)"
+    ok "Telegram MTProxy tooling" "${MTG_VERSION:-installed}"
+    check_service makia-mtproxy "Telegram MTProxy runtime" yes
+  else
+    fail "Telegram MTProxy" "configured but /opt/makia-mtproxy/mtg is missing"
+  fi
+else
+  warn "Telegram MTProxy" "optional; not configured"
+fi
+
+if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then
+  if command -v unbound-checkconf >/dev/null 2>&1 && unbound-checkconf >/tmp/makia-unbound-check.log 2>&1; then
+    ok "Makia DNS config" "valid"
+  else
+    fail "Makia DNS config" "$(tail -n 2 /tmp/makia-unbound-check.log 2>/dev/null | tr '\n' ' ')"
+  fi
+  check_service unbound "Makia DNS resolver" yes
+  if command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com +short +time=2 +tries=1 | grep -q .; then
+    ok "Makia DNS query" "localhost resolver answered"
+  else
+    fail "Makia DNS query" "local resolver did not answer"
+  fi
+else
+  warn "Makia DNS" "optional; not configured"
+fi
+
 printf '\nSummary: %d PASS · %d WARN · %d FAIL\n\n' "$PASS" "$WARN" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

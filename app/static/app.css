@@ -1972,3 +1972,102 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 .xray-preset-card.tier-compatibility .preset-tier{border-color:#65558b;color:#c4adff;background:rgba(139,92,246,.08)}
 @media(max-width:1180px){.xray-preset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.xray-preset-grid{grid-template-columns:1fr}.xray-preset-card{min-height:auto}}
+
+
+/* v1.2 — provisioning and Xray layout hardening */
+.provision-drawer{width:min(720px,100vw)}
+.pro-protocol-picker{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pro-protocol-card{
+  min-height:124px;
+  grid-template-columns:54px minmax(0,1fr);
+  grid-template-rows:auto auto;
+  column-gap:13px;
+  align-items:start;
+  overflow:hidden;
+}
+.protocol-card-icon{
+  width:50px;height:50px;
+  font-size:0;
+  overflow:hidden;
+}
+.protocol-card-icon .proto-glyph{width:50px;height:50px;margin:0}
+.protocol-card-icon .proto-glyph svg{width:25px;height:25px}
+.protocol-card-copy{min-width:0}
+.pro-protocol-card>div b,.pro-protocol-card>div small,.pro-protocol-card>div em{
+  overflow-wrap:anywhere;word-break:normal;white-space:normal
+}
+.pro-protocol-card>i{align-self:end;margin-top:8px}
+.xray-preset-section{grid-column:1/-1}
+.xray-preset-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px
+}
+.xray-preset-card{
+  min-width:0;
+  min-height:178px;
+  line-height:1.55;
+  overflow:hidden
+}
+.xray-preset-card b,.xray-preset-card small,.xray-preset-card p,.xray-preset-card em,.xray-preset-card .preset-port{
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  white-space:normal
+}
+.xray-preset-card b{line-height:1.5}
+.xray-preset-card p{line-height:1.75}
+.xray-builder-modal .form-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.xray-builder-modal label{min-width:0}
+.xray-builder-modal input,.xray-builder-modal select,.xray-builder-modal textarea{min-width:0}
+@media(max-width:760px){
+  .provision-drawer{width:100vw}
+  .pro-protocol-picker{grid-template-columns:1fr}
+  .provision-progress{grid-template-columns:repeat(2,1fr);gap:8px}
+  .provision-drawer .wizard-form.two{grid-template-columns:1fr}
+  .xray-preset-grid{grid-template-columns:1fr}
+  .xray-builder-modal .form-grid.two{grid-template-columns:1fr}
+}
+
+
+.proto-dot.telegram{background:#3ba9ff;box-shadow:0 0 10px #3ba9ff55}
+.proto-dot.dns{background:#8b5cf6;box-shadow:0 0 10px #8b5cf655}
+
+/* v1.2 — Telegram Proxy / DNS Center */
+.network-tools-page{display:grid;gap:14px}
+.network-health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.network-health-grid>div{min-width:0;padding:14px;border:1px solid var(--pro-line);border-radius:11px;background:var(--pro-surface)}
+.network-health-grid>div>span{display:block;color:#7890a8;font-size:9px;margin-bottom:7px}
+.network-health-grid>div>b,.network-health-grid>div>strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.network-tool-card{padding:17px;border:1px solid var(--pro-line);border-radius:13px;background:var(--pro-surface);min-width:0}
+.network-tool-card.install-card{border-color:#4b5f79;background:linear-gradient(180deg,#0e1d30,#0b1727)}
+.network-tool-card textarea{width:100%;min-height:72px;margin:12px 0;padding:11px;border:1px solid var(--pro-line);border-radius:9px;background:#081321;color:#d8e8f8;resize:vertical;direction:ltr}
+.tool-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}
+.tool-card-head h3{margin:3px 0 0;font-size:14px}
+.tool-card-head small{max-width:440px;color:#7890a8;font-size:9px;line-height:1.65}
+.network-delivery-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;align-items:center}
+.network-qr{display:grid;place-items:center;padding:12px;border:1px solid var(--pro-line);border-radius:12px;background:#fff}
+.network-qr img{width:150px;height:150px;display:block}
+.network-link-stack{min-width:0}
+.network-link-stack label{display:block;color:#8398ad;font-size:9px}
+.network-link-stack textarea{min-height:64px;margin-top:6px}
+.dns-address-list{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+.dns-address{display:inline-flex;align-items:center;min-height:34px;padding:0 10px;border:1px solid #31516f;border-radius:8px;background:#0d1b2d;color:#9fd3ff;font-size:10px;direction:ltr}
+.network-tool-card .quick-card{margin-top:8px}
+.network-tool-card .quick-card span{display:block;margin-top:4px;color:#9ed2ff}
+@media(max-width:860px){
+  .network-health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .network-delivery-grid{grid-template-columns:1fr}
+  .network-qr{width:max-content}
+}
+@media(max-width:560px){
+  .network-health-grid{grid-template-columns:1fr}
+  .tool-card-head{display:block}
+  .tool-card-head small{display:block;margin-top:6px}
+}
+
+/* v1.2 client delivery hardening */
+.network-copy-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.network-copy-row .dns-address{flex:1 1 180px;justify-content:flex-start}
+.network-delivery-note{margin-top:10px;padding:10px 12px;border:1px solid var(--pro-line);border-radius:9px;background:#0b1726;color:#90a5b9;font-size:10px;line-height:1.7}
+.network-user-text{min-height:92px!important}

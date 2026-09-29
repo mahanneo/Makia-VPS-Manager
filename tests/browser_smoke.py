@@ -118,6 +118,16 @@ def main():
             assert "Inboundها" in page.locator(".pro-sidebar").inner_text()
             assert page.locator('.pro-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
+
+            # v1.2 regression: protocol cards must never render the missing x[4]
+            # value as literal "undefined" or overlap the copy area.
+            page.locator('.pro-create-access[data-shell-action="create-access"]').click()
+            page.locator(".provision-drawer").wait_for()
+            assert "undefined" not in page.locator(".provision-drawer").inner_text().lower()
+            assert page.locator(".pro-protocol-card .protocol-card-icon svg").count()>=5
+            assert page.locator(".pro-protocol-card .protocol-card-copy").count()>=5
+            page.screenshot(path='/tmp/makia-create-access-v12.png',full_page=True)
+            page.locator('.close-btn[data-action="modal-close"]').click()
             page.locator('.pro-sidebar button[data-view="inbounds"]').click()
             leave_sidebar(page)
             page.locator(".sx-inbound-list").wait_for()
@@ -195,6 +205,29 @@ def main():
             leave_sidebar(page)
             page.locator(".protocol-page-header").wait_for()
             page.screenshot(path='/tmp/makia-openvpn.png',full_page=True)
+
+            # Optional network tools render real status/install workflows even
+            # on CI hosts where the root components are intentionally absent.
+            telegram_nav=page.locator('.pro-sidebar [data-group-panel="protocols"] button[data-view="telegramproxy"]')
+            dns_nav=page.locator('.pro-sidebar [data-group-panel="protocols"] button[data-view="dnscenter"]')
+            assert telegram_nav.count()==1
+            assert dns_nav.count()==1
+            telegram_nav.click()
+            leave_sidebar(page)
+            page.locator(".network-tools-page").wait_for()
+            assert "TELEGRAM MTPROXY" in page.locator("#content").inner_text()
+            assert "undefined" not in page.locator("#content").inner_text().lower()
+            page.screenshot(path='/tmp/makia-telegram-proxy.png',full_page=True)
+            dns_nav.click()
+            leave_sidebar(page)
+            page.locator(".network-tools-page").wait_for()
+            assert "SECURE RESOLVER" in page.locator("#content").inner_text()
+            assert "open resolver" in page.locator("#content").inner_text().lower()
+            page.screenshot(path='/tmp/makia-dns-center.png',full_page=True)
+
+            page.locator('.pro-sidebar button[data-view="openvpn"]').click()
+            leave_sidebar(page)
+            page.locator(".protocol-page-header").wait_for()
             page.locator('[data-action="openvpn-configure"]').first.click()
             page.locator(".engine-config-modal").wait_for()
             assert page.locator('input[name="ovpnTransport"]').count()==2

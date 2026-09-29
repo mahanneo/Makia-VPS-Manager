@@ -2258,6 +2258,49 @@ def _port_in_use(port):
     return _port_transport_in_use(port,"tcp") or _port_transport_in_use(port,"udp")
 
 
+def allocate_xray_inbound_port(requested,protocol,transport):
+    """Return a collision-free port for a new Xray inbound."""
+    requested=_validate_port(requested)
+    protocol=str(protocol or "").lower()
+    transport=str(transport or "tcp").lower()
+    transport={"raw":"tcp","websocket":"ws","mkcp":"kcp"}.get(transport,transport)
+    if protocol=="hysteria2" or transport in {"kcp","hysteria"}:
+        protos=("udp",)
+        fallback=(2053,8443,443,10443,11443,12443,2087,13001,13002,13003)
+    elif protocol in {"shadowsocks","socks"}:
+        protos=("tcp","udp")
+        fallback=(2053,2087,8443,9443,10443,11443,12443,13001,13002,13003)
+    else:
+        protos=("tcp",)
+        fallback=(2053,2087,8443,9443,10443,11443,12443,13001,13002,13003,13004,13005)
+    configured=set()
+    try:
+        for row in xray_status().get("inbounds") or []:
+            if row.get("port"):
+                configured.add(int(row["port"]))
+    except Exception:
+        pass
+    candidates=[]
+    for value in (requested,*fallback):
+        value=int(value)
+        if value not in candidates:
+            candidates.append(value)
+    for port in candidates:
+        if port in configured:
+            continue
+        if all(not _port_transport_in_use(port,proto) for proto in protos):
+            return {
+                "requested_port":requested,
+                "port":port,
+                "adjusted":port!=requested,
+                "transports":list(protos),
+            }
+    raise ProtocolError(
+        "no collision-free Xray port is available in the managed candidate set; "
+        "free a listener or choose another port"
+    )
+
+
 def _suggest_free_port(proto,candidates,exclude_ports=None):
     excluded={int(x) for x in (exclude_ports or set()) if x}
     for candidate in candidates:
@@ -3334,7 +3377,9 @@ def create_xray_full_inbound(spec):
         raise ProtocolError("invalid Xray inbound payload")
     protocol=str(spec.get("protocol") or "").lower()
     transport,security=_xray_builder_validate_combo(protocol,spec.get("transport"),spec.get("security"))
-    port=_validate_port(spec.get("port"))
+    requested_port=_validate_port(spec.get("port"))
+    allocation=allocate_xray_inbound_port(requested_port,protocol,transport)
+    port=int(allocation["port"])
     listen=_xray_builder_listen(spec.get("listen"))
     remark=str(spec.get("remark") or "").strip()
     if not remark or len(remark)>80:
@@ -3434,6 +3479,7 @@ def create_xray_full_inbound(spec):
         "security":stream.get("security"),"share_link":share,
         "reality":reality_meta,"backup":str(backup) if backup else None,
         "inbound":inbound,
+        "requested_port":requested_port,"port_adjusted":bool(allocation.get("adjusted")),
     }
 
 
@@ -3450,6 +3496,9 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         if manual else
         _validate_xray_guided_combo(protocol,transport,security)
     )
+    requested_port=port
+    allocation=allocate_xray_inbound_port(requested_port,protocol,transport)
+    port=int(allocation["port"])
     if (not manual) and protocol in {"vless","trojan"} and security=="none" and not _endpoint_is_private(endpoint):
         raise ProtocolError(f"{protocol.upper()} with security=none is intentionally blocked in Guided mode on public endpoints; switch to Manual/Expert mode if you explicitly want an unencrypted profile")
     binary=_binary()
@@ -3619,6 +3668,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         "protocol":protocol,"tag":tag,"port":port,"name":name,"credential":credential,
         "transport":method,"security":security,"share_link":link,"backup":str(backup) if backup else None,
         "reality":reality_meta,"manual":bool(manual),
+        "requested_port":requested_port,"port_adjusted":bool(allocation.get("adjusted")),
     }
 
 def create_xray_tunnel(listen_port, target_host, target_port, network="tcp,udp", name="tunnel"):

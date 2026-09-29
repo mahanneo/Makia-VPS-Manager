@@ -85,6 +85,8 @@ MANAGED_RESTORE_PATHS=[
     Path("/etc/nginx/sites-available/makia-vps-manager"),
     Path("/etc/nginx/sites-enabled/makia-vps-manager"),
     Path("/opt/outline"),
+    Path("/opt/makia-mtproxy"),
+    Path("/etc/unbound/unbound.conf.d/makia.conf"),
     Path("/etc/sysctl.d/99-makia-wireguard.conf"),
     Path("/etc/sysctl.d/99-makia-openvpn.conf"),
     Path("/etc/sysctl.d/99-makia-recovery.conf"),
@@ -92,7 +94,7 @@ MANAGED_RESTORE_PATHS=[
 for _unit in [
     "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
     "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
-    "makia-migration-restore@.service",
+    "makia-migration-restore@.service","makia-mtproxy.service",
 ]:
     MANAGED_RESTORE_PATHS.append(Path("/etc/systemd/system")/_unit)
 
@@ -316,7 +318,7 @@ def restore_ssh_users(blob:bytes):
 def stop_stack():
     services=[
         "makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic",
-        "xray","wg-quick@wg0","stunnel4","makia-wstunnel","makia-ikev2-network",
+        "xray","wg-quick@wg0","stunnel4","makia-wstunnel","makia-ikev2-network","makia-mtproxy","unbound",
         "strongswan-starter","strongswan",
     ]
     server_dir=Path("/etc/openvpn/server")
@@ -337,6 +339,7 @@ def restore_v2_system_payload(payload):
         ("payload/stunnel.tar.gz","stunnel",Path("/etc/stunnel")),
         ("payload/ipsec_d.tar.gz","ipsec_d",Path("/etc/ipsec.d")),
         ("payload/outline.tar.gz","outline",Path("/opt/outline")),
+        ("payload/mtproxy.tar.gz","mtproxy",Path("/opt/makia-mtproxy")),
     ]
     for key,root,target in mappings:
         if key in payload:
@@ -347,6 +350,7 @@ def restore_v2_system_payload(payload):
         ("payload/ipsec_conf",Path("/etc/ipsec.conf"),0o600),
         ("payload/ipsec_secrets",Path("/etc/ipsec.secrets"),0o600),
         ("payload/stunnel_defaults",Path("/etc/default/stunnel4"),0o644),
+        ("payload/unbound_conf",Path("/etc/unbound/unbound.conf.d/makia.conf"),0o600),
     ]
     # v1 compatibility
     if "payload/nginx-site.conf" in payload and "payload/nginx_site" not in payload:
@@ -361,7 +365,7 @@ def restore_v2_system_payload(payload):
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
         "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
         "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
-        "makia-ops-monitor.service","makia-ops-monitor.timer",
+        "makia-ops-monitor.service","makia-ops-monitor.timer","makia-mtproxy.service",
     }
     for key,blob in payload.items():
         if not key.startswith("payload/systemd/"):
@@ -430,6 +434,22 @@ def normalize_destination_runtime(payload=None):
     if Path("/etc/ipsec.conf").exists() and "# BEGIN MAKIA IKEV2" in Path("/etc/ipsec.conf").read_text(encoding="utf-8",errors="ignore"):
         protocol_ops._ufw_allow_if_active(500,"udp","IKEv2 restored")
         protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T restored")
+
+    if Path("/etc/makia-vps-manager/mtproxy.env").exists() or Path("/opt/makia-mtproxy/mtg").exists():
+        if not Path("/opt/makia-mtproxy/mtg").exists():
+            raise RuntimeError("Telegram MTProxy state is present but mtg is missing; run sudo makia-install-mtproxy on the destination before Restore")
+        run(["systemctl","daemon-reload"],check=True)
+        run(["systemctl","enable","--now","makia-mtproxy"],check=True)
+        env_text=Path("/etc/makia-vps-manager/mtproxy.env").read_text(encoding="utf-8",errors="ignore")
+        match=__import__("re").search(r"(?m)^MTPROXY_PORT=(\d+)\s*$",env_text)
+        if match:
+            protocol_ops._ufw_allow_if_active(int(match.group(1)),"tcp","Telegram MTProxy restored")
+
+    if Path("/etc/unbound/unbound.conf.d/makia.conf").exists():
+        if not shutil.which("unbound-checkconf"):
+            raise RuntimeError("Makia DNS state is present but Unbound is missing; run sudo makia-install-dns on the destination before Restore")
+        run(["unbound-checkconf"],check=True)
+        run(["systemctl","enable","--now","unbound"],check=True)
 
     if Path("/opt/outline/access.txt").exists():
         if not shutil.which("docker"):

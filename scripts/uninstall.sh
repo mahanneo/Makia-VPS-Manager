@@ -12,15 +12,17 @@ systemctl disable --now makia-metrics-sampler 2>/dev/null || true
 systemctl disable --now makia-protocol-traffic 2>/dev/null || true
 systemctl disable --now makia-wstunnel 2>/dev/null || true
 systemctl disable --now makia-ikev2-network 2>/dev/null || true
-rm -f /etc/systemd/system/makia-vps-manager.service /etc/systemd/system/makia-policy-enforcer.service /etc/systemd/system/makia-metrics-sampler.service /etc/systemd/system/makia-protocol-traffic.service /etc/systemd/system/makia-wstunnel.service /etc/systemd/system/makia-ikev2-network.service
+systemctl disable --now makia-mtproxy 2>/dev/null || true
+rm -f /etc/systemd/system/makia-vps-manager.service /etc/systemd/system/makia-policy-enforcer.service /etc/systemd/system/makia-metrics-sampler.service /etc/systemd/system/makia-protocol-traffic.service /etc/systemd/system/makia-wstunnel.service /etc/systemd/system/makia-ikev2-network.service /etc/systemd/system/makia-mtproxy.service
 rm -f /etc/nginx/sites-enabled/makia-vps-manager /etc/nginx/sites-available/makia-vps-manager
-rm -f /usr/local/sbin/makia-update /usr/local/sbin/makia-backup /usr/local/sbin/makia-uninstall /usr/local/sbin/makia-doctor /usr/local/sbin/makia-uat-smoke /usr/local/sbin/makia-reset-admin /usr/local/sbin/makia-upgrade /usr/local/sbin/makia-ikev2-network /usr/local/sbin/makia-install-wstunnel
+rm -f /usr/local/sbin/makia-update /usr/local/sbin/makia-backup /usr/local/sbin/makia-uninstall /usr/local/sbin/makia-doctor /usr/local/sbin/makia-uat-smoke /usr/local/sbin/makia-reset-admin /usr/local/sbin/makia-upgrade /usr/local/sbin/makia-ikev2-network /usr/local/sbin/makia-install-wstunnel /usr/local/sbin/makia-install-mtproxy /usr/local/sbin/makia-refresh-mtproxy /usr/local/sbin/makia-install-dns
 rm -f /usr/local/sbin/dragon-update /usr/local/sbin/dragon-backup /usr/local/sbin/dragon-uninstall
 systemctl daemon-reload
 nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
 rm -rf "$APP"
 echo "Makia VPS Manager removed. Backups and protocol credentials/configs are preserved."
-echo "IKEv2 / Stunnel / WStunnel protocol configs under /etc are intentionally not purged."
+echo "IKEv2 / Stunnel / WStunnel / MTProxy / DNS protocol configs are intentionally not purged."
+echo "Makia MTProxy is disabled; Unbound is left untouched because it may be shared with other host workloads."
 
 rm -f /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
 rm -f /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
