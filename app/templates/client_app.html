@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <title>Makia Client</title>
+  <link rel="manifest" href="/client/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/client.css?v={{ version }}">
+</head>
+<body class="mc-body">
+  <header class="mc-topbar">
+    <div class="mc-brand mc-brand-inline">
+      <span class="mc-brand-mark">M</span>
+      <div><strong>MAKIA</strong><small>CLIENT</small></div>
+    </div>
+    <div class="mc-top-actions">
+      <span class="mc-user">{{ display_name }}</span>
+      <form method="post" action="/client/logout"><button class="mc-ghost" type="submit">خروج</button></form>
+    </div>
+  </header>
+
+  <main class="mc-shell" id="clientApp" data-username="{{ username }}">
+    <section class="mc-hero">
+      <div>
+        <span class="mc-eyebrow">MY ACCESS</span>
+        <h1>سلام {{ display_name }}</h1>
+        <p id="clientStatusText">در حال دریافت وضعیت اشتراک…</p>
+      </div>
+      <div class="mc-status-pill" id="accountState"><span></span> در حال بررسی</div>
+    </section>
+
+    <section class="mc-grid mc-grid-3">
+      <article class="mc-card">
+        <span class="mc-card-label">اشتراک</span>
+        <strong id="planName">—</strong>
+        <small id="expireText">—</small>
+      </article>
+      <article class="mc-card">
+        <span class="mc-card-label">مصرف</span>
+        <strong id="usageText">—</strong>
+        <div class="mc-progress"><i id="usageBar"></i></div>
+      </article>
+      <article class="mc-card">
+        <span class="mc-card-label">دستگاه‌ها</span>
+        <strong id="deviceCount">—</strong>
+        <small id="deviceLimitText">—</small>
+      </article>
+    </section>
+
+    <section class="mc-section">
+      <div class="mc-section-head">
+        <div><span class="mc-eyebrow">CONNECTIONS</span><h2>دسترسی‌های من</h2></div>
+        <button class="mc-ghost" id="refreshClient" type="button">بروزرسانی</button>
+      </div>
+      <div id="protocolList" class="mc-protocol-list">
+        <div class="mc-empty">در حال دریافت پروتکل‌ها…</div>
+      </div>
+    </section>
+
+    <section class="mc-section">
+      <div class="mc-section-head">
+        <div><span class="mc-eyebrow">DEVICES</span><h2>دستگاه‌های حساب</h2></div>
+      </div>
+      <div id="deviceList" class="mc-device-list">
+        <div class="mc-empty">در حال دریافت دستگاه‌ها…</div>
+      </div>
+    </section>
+
+    <section class="mc-section mc-connect-note">
+      <span class="mc-eyebrow">PHASE 1</span>
+      <h2>Client Portal آماده است</h2>
+      <p>در این نسخه وب، دکمه اتصال اطلاعات همان دسترسی اختصاصی را تحویل می‌دهد. Agent ویندوز و Engine بومی Android/iOS در فاز بعدی همین حساب و Device Binding را مصرف می‌کنند تا اتصال VPN بدون Import دستی انجام شود.</p>
+    </section>
+  </main>
+
+  <dialog id="deliveryDialog" class="mc-dialog">
+    <div class="mc-dialog-head">
+      <div><span class="mc-eyebrow">ACCESS DELIVERY</span><h3 id="deliveryTitle">دسترسی</h3></div>
+      <button class="mc-icon-btn" id="closeDelivery" type="button" aria-label="بستن">×</button>
+    </div>
+    <p id="deliveryProtocol" class="mc-muted"></p>
+    <textarea id="deliveryValue" readonly dir="ltr"></textarea>
+    <div class="mc-dialog-actions">
+      <button class="mc-primary" id="copyDelivery" type="button">کپی اطلاعات اتصال</button>
+    </div>
+  </dialog>
+
+  <script src="/static/client.js?v={{ version }}" defer></script>
+</body>
+</html>
