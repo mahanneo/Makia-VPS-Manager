@@ -20,8 +20,7 @@ v1.2.4 repairs the parent directory to `0710 root:makia-mtproxy`: the service gr
 
 ## Failure behavior
 
-- Before service start Makia validates the mtg config with `mtg doctor`.
-- Makia verifies that the real `makia-mtproxy` service account can read the config.
+- Before service start Makia verifies that the real `makia-mtproxy` account can traverse and read the generated config.
 - On a first-start runtime failure, the attempted hostname/secret/port are kept for diagnostics and retry instead of being deleted.
 - Existing valid configuration still rolls back if a reconfiguration fails.
 - v1.2.1 update preservation, v1.2.2 firewall non-destructive behavior and v1.2.3 runtime diagnostics remain active.
