@@ -82,7 +82,8 @@ def main():
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
             assert "اتصال روی موبایل و کامپیوتر" in portal.locator("body").inner_text()
-            assert portal.locator(".visual-steps").count()==4
+            assert portal.locator(".visual-steps").count()==5
+            assert portal.locator('#outline').count()==1
             assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
 
