@@ -172,6 +172,62 @@ def init_db():
           updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_service_plans_active ON service_plans(active);
+
+        -- Client Control Plane v1.3 Phase A. These tables are additive and do
+        -- not alter existing protocol/client runtime rows.
+        CREATE TABLE IF NOT EXISTS client_accounts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT COLLATE NOCASE UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          display_name TEXT NOT NULL DEFAULT '',
+          profile_username TEXT NOT NULL DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_accounts_active ON client_accounts(active);
+        CREATE TABLE IF NOT EXISTS client_devices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          device_hash TEXT NOT NULL,
+          label TEXT NOT NULL DEFAULT '',
+          platform TEXT NOT NULL DEFAULT '',
+          public_key TEXT NOT NULL DEFAULT '',
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          last_ip TEXT NOT NULL DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1,
+          UNIQUE(account_id,device_hash),
+          FOREIGN KEY(account_id) REFERENCES client_accounts(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_devices_account ON client_devices(account_id,active);
+        CREATE TABLE IF NOT EXISTS client_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          device_id INTEGER NOT NULL,
+          token_hash TEXT UNIQUE NOT NULL,
+          created_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          revoked_at INTEGER NOT NULL DEFAULT 0,
+          ip TEXT NOT NULL DEFAULT '',
+          user_agent TEXT NOT NULL DEFAULT '',
+          FOREIGN KEY(account_id) REFERENCES client_accounts(id) ON DELETE CASCADE,
+          FOREIGN KEY(device_id) REFERENCES client_devices(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_sessions_account ON client_sessions(account_id,revoked_at,expires_at);
+        CREATE TABLE IF NOT EXISTS client_access_bindings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          external_key TEXT NOT NULL,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          UNIQUE(account_id,kind,external_key),
+          FOREIGN KEY(account_id) REFERENCES client_accounts(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_access_bindings_account ON client_access_bindings(account_id,active);
+
         CREATE TABLE IF NOT EXISTS notification_events (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           level TEXT NOT NULL DEFAULT 'info',
