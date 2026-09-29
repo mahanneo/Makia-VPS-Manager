@@ -1,7 +1,7 @@
 # Makia Client Platform v0.1 — Architecture & Safety Contract
 
-Status: development branch only
-Branch: `feat/client-platform-v0.1`
+Status: Release 1.3.0 candidate
+Release branch: `feat/client-platform-v0.1`
 Production default: **disabled**
 
 ## Goal
