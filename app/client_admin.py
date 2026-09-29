@@ -63,12 +63,13 @@ class ClientPlatformSettings(BaseModel):
 
 
 def register_client_admin(app,require_user,require_mutation,require_local_admin,audit_func,ip_func):
-    """Register admin-only control-plane endpoints.
+    """Register admin-only Client Platform control-plane endpoints.
 
-    This is intentionally invoked from app.main after the existing admin
-    authentication/CSRF helpers are defined. It never mutates protocol runtime;
-    it only manages client-plane accounts/devices and bindings to existing
-    protocol_client rows.
+    Normal account, device, session and binding operations do not mutate or
+    rotate protocol runtime credentials. The explicit local-admin OpenVPN
+    policy setup endpoint is the sole runtime-bootstrap exception: it performs
+    a transactional OpenVPN restart with backup/rollback so an existing server
+    can opt into hard Client expiry/quota enforcement.
     """
 
     @app.get("/api/client-platform/status")
