@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.26.0-rc7] - 2026-09-29
+
+### Operations Suite
+- Added reusable Plans/Templates with protocol, duration, quota, device/session limits, price metadata and protocol defaults.
+- Added Quick Renew and Bulk Operations for supported managed access, plus a 30-day Expiry Center.
+- Added recurring Quick/Full Migration schedules; remote targets use S3-compatible storage or strict-host-key SFTP/SCP. Remote schedules require encrypted Full Migration format.
+- Added Disaster Recovery readiness with verified portable-backup checks and optional Cloudflare DNS-only A-record cutover.
+- Added encrypted Cloudflare/Telegram integration settings, health alerts and read-only Telegram commands (/status, /expiry, /backups, /help).
+- Added device-aware Client Portal delivery with safe one-tap import only for supported URI schemes.
+- Added Diagnostics Center covering services, DNS/HTTPS, backups, Outline and Fleet readiness.
+- Expanded node heartbeat/fleet telemetry with region, public URL, user counts, traffic counters, latency and service states.
+
+### Outline
+- Added optional official Outline Server / Shadowbox management next to the existing protocols.
+- Makia uses the pinned official Outline server-v1.12.0 installer with Git blob integrity verification and optional Docker host dependency installed outside the hardened web-service sandbox.
+- Outline Management API requests pin the certificate SHA256 from /opt/outline/access.txt before managing access keys.
+- Added access-key creation, quota, expiry/revocation, portal delivery, QR/share link, plans and encrypted portable-migration preservation.
+- Outline disable/expiry now revokes the real access key. Re-enabling or renewing a revoked managed key securely reissues it and refreshes the client artifact instead of silently removing its data limit.
+
+### Recovery / security
+- Cloudflare migration cutover is forced DNS-only for raw VPN/SSH traffic.
+- Existing verified Full Migration format-v2 backups from 0.26.0-rc2 through rc6 are accepted by rc7.
+- Outline /opt/outline state is included in Full Migration and validated after restore when present.
+
+### Release status
+- Release Candidate only. Stable remains blocked on real VPS RC7 upgrade, Outline/remote-backup/migration UAT and inside-Iran client field tests.
+
+
 ## [0.26.0-rc6] - 2026-09-28
 
 ### Self-service client access portal
