@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.6] - 2026-09-29
+
+### Updater repair transaction
+- Fixed a rollback loop where a successful MTProxy repair changed the legacy port/config and was then rejected by the updater's pre-repair SHA256 invariants.
+- Optional installers are still verified against original MTProxy/DNS hashes before repair.
+- Healthy active MTProxy state is preserved byte-for-byte and skipped by the repair phase.
+- Successful repair of a previously inactive MTProxy now promotes the repaired hashes to the accepted update baseline.
+- Failed MTProxy repair must restore the original hashes exactly.
+- Final acceptance validates the accepted repaired MTProxy state rather than the obsolete pre-repair state.
+- Retains v1.2.5 shared config-permission repair, FORCE_MAIN recovery, AUTO port selection and running-version verification.
+
+
 ## [1.2.5] - 2026-09-29
 
 ### Shared network-service permission contract
