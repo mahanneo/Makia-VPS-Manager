@@ -19,8 +19,9 @@ class NetworkServiceError(RuntimeError):
 
 MTPROXY_ROOT=Path("/opt/makia-mtproxy")
 MTPROXY_BIN=MTPROXY_ROOT/"mtg"
-MTPROXY_ENV=Path("/etc/makia-vps-manager/mtproxy.env")
-MTPROXY_CONFIG=Path("/etc/makia-vps-manager/mtproxy.toml")
+MTPROXY_CONFIG_DIR=Path("/etc/makia-vps-manager")
+MTPROXY_ENV=MTPROXY_CONFIG_DIR/"mtproxy.env"
+MTPROXY_CONFIG=MTPROXY_CONFIG_DIR/"mtproxy.toml"
 MTPROXY_SERVICE="makia-mtproxy"
 
 DNS_STATE=Path("/etc/makia-vps-manager/dns.json")
@@ -122,7 +123,7 @@ def _port_busy(port,proto="tcp",address="0.0.0.0"):
         sock.close()
 
 
-def _free_port(requested,candidates,proto="tcp"):
+def _free_port(requested,candidates,proto="tcp",kernel_fallback=False):
     ordered=[]
     for raw in (requested,*candidates):
         try:port=_validate_port(raw)
@@ -130,6 +131,17 @@ def _free_port(requested,candidates,proto="tcp"):
         if port not in ordered:ordered.append(port)
     for port in ordered:
         if not _port_busy(port,proto):
+            return port
+    if kernel_fallback and str(proto).lower()=="tcp":
+        sock=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        try:
+            sock.bind(("0.0.0.0",0))
+            port=int(sock.getsockname()[1])
+        except OSError as exc:
+            raise NetworkServiceError("unable to allocate a free TCP port") from exc
+        finally:
+            sock.close()
+        if port>=1024:
             return port
     raise NetworkServiceError(f"no free {proto.upper()} port found in the managed candidate set")
 
@@ -162,6 +174,20 @@ def _atomic_write(path,text,mode=0o600):
             os.unlink(tmp)
 
 
+def _ensure_mtproxy_config_access():
+    try:
+        gid=grp.getgrnam("makia-mtproxy").gr_gid
+    except KeyError as exc:
+        raise NetworkServiceError(
+            "makia-mtproxy system user/group is missing; run sudo makia-upgrade"
+        ) from exc
+    MTPROXY_CONFIG_DIR.mkdir(parents=True,exist_ok=True)
+    # root owns the directory. Group gets traverse only, not directory listing.
+    os.chown(MTPROXY_CONFIG_DIR,0,gid)
+    os.chmod(MTPROXY_CONFIG_DIR,0o710)
+    return gid
+
+
 def _mtproxy_secret():
     if not MTPROXY_CONFIG.exists():
         return ""
@@ -183,13 +209,8 @@ def _write_mtproxy_config(secret,port):
         '[network]\n'
         'dns = "https://1.1.1.1"\n'
     )
+    gid=_ensure_mtproxy_config_access()
     _atomic_write(MTPROXY_CONFIG,text,0o640)
-    try:
-        gid=grp.getgrnam("makia-mtproxy").gr_gid
-    except KeyError as exc:
-        raise NetworkServiceError(
-            "makia-mtproxy system user/group is missing; re-run the MTProxy installer"
-        ) from exc
     os.chown(MTPROXY_CONFIG,0,gid)
     os.chmod(MTPROXY_CONFIG,0o640)
 
@@ -290,20 +311,30 @@ def mtproxy_status(host_hint=""):
     }
 
 
-def configure_mtproxy(host,port=443,rotate_secret=False):
+def configure_mtproxy(host,port=0,rotate_secret=False):
     if not MTPROXY_BIN.exists():
         raise NetworkServiceError("Telegram MTProxy is not installed; run the install command first")
     host=_validate_host(host)
     previous_state=MTPROXY_ENV.read_bytes() if MTPROXY_ENV.exists() else None
     previous_config=MTPROXY_CONFIG.read_bytes() if MTPROXY_CONFIG.exists() else None
     old=_read_env(MTPROXY_ENV)
-    requested=_validate_port(port)
+    try: requested=int(port or 0)
+    except Exception as exc: raise NetworkServiceError("invalid port") from exc
+    if requested<0 or requested>65535:
+        raise NetworkServiceError("invalid port")
     current_port=int(old.get("MTPROXY_PORT") or 0)
-    # Re-saving the active configuration must not treat Makia's own listener
-    # as a foreign collision and silently move every user to a new port.
-    selected=requested if requested==current_port and _active(MTPROXY_SERVICE) else _free_port(
-        requested,(8443,9443,10443,11443,12443,2053,2087,13010),"tcp"
-    )
+    # AUTO (0) keeps an already-running Makia port, otherwise selects a free
+    # managed high port. 443 is deliberately not preferred because the panel's
+    # HTTPS listener commonly owns it.
+    if requested==0 and current_port and _active(MTPROXY_SERVICE):
+        selected=current_port
+    elif requested and requested==current_port and _active(MTPROXY_SERVICE):
+        selected=current_port
+    else:
+        selected=_free_port(
+            requested,(8443,9443,10443,11443,12443,13010,18080,24443,30443,40443,50443),
+            "tcp",kernel_fallback=True
+        )
     secret=_mtproxy_secret()
     front_domain=host
     try:
@@ -320,9 +351,12 @@ def configure_mtproxy(host,port=443,rotate_secret=False):
         f"MTPROXY_PORT={selected}\n"
         f"MTPROXY_FRONT_DOMAIN={front_domain}\n"
     )
+    _ensure_mtproxy_config_access()
     _atomic_write(MTPROXY_ENV,state,0o600)
     _write_mtproxy_config(secret,selected)
     try:
+        _run([str(MTPROXY_BIN),"doctor",str(MTPROXY_CONFIG)],timeout=20)
+        _run(["runuser","-u","makia-mtproxy","--","test","-r",str(MTPROXY_CONFIG)],timeout=10)
         _run(["systemctl","daemon-reload"],timeout=15)
         _run(["systemctl","enable","--now",MTPROXY_SERVICE],timeout=30)
         _run(["systemctl","restart",MTPROXY_SERVICE],timeout=30)
@@ -334,18 +368,20 @@ def configure_mtproxy(host,port=443,rotate_secret=False):
             suffix=f": {detail}" if detail else ""
             raise NetworkServiceError(f"MTProxy did not reach an active TCP listener{suffix}")
     except Exception:
-        if previous_state is None:
-            MTPROXY_ENV.unlink(missing_ok=True)
-        else:
+        if previous_state is not None:
             MTPROXY_ENV.write_bytes(previous_state);os.chmod(MTPROXY_ENV,0o600)
-        if previous_config is None:
-            MTPROXY_CONFIG.unlink(missing_ok=True)
-        else:
+        if previous_config is not None:
             MTPROXY_CONFIG.write_bytes(previous_config);os.chmod(MTPROXY_CONFIG,0o640)
             try:
-                os.chown(MTPROXY_CONFIG,0,grp.getgrnam("makia-mtproxy").gr_gid)
+                os.chown(MTPROXY_CONFIG,0,_ensure_mtproxy_config_access())
             except Exception:pass
-        try:_run(["systemctl","restart",MTPROXY_SERVICE],timeout=20)
+        try:
+            if previous_state is not None and previous_config is not None:
+                _run(["systemctl","restart",MTPROXY_SERVICE],timeout=20)
+            else:
+                # Keep the first attempted host/secret/port for diagnostics/retry,
+                # but stop the failed runtime rather than deleting operator input.
+                _run(["systemctl","disable","--now",MTPROXY_SERVICE],timeout=20)
         except Exception:pass
         raise
     firewall_warning=""
