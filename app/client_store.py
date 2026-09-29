@@ -685,3 +685,63 @@ def account_admin_snapshot(account_id):
     account["bindings_detail"]=list_bindings(account_id)
     account["artifact_bindings_detail"]=list_artifact_bindings(account_id)
     return account
+
+
+def delete_account(account_id):
+    """Delete only client-plane ownership/session metadata.
+
+    Existing protocol_clients, access_artifacts and live protocol runtime state
+    are deliberately left untouched.
+    """
+    account_id=int(account_id)
+    if not get_account(account_id):
+        raise ValueError("account not found")
+    with connect() as con:
+        con.execute("DELETE FROM client_sessions WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_protocol_bindings WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_artifact_bindings WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_accounts WHERE id=?",(account_id,))
+
+
+def protocol_binding_owners():
+    with connect() as con:
+        rows=con.execute(
+            """SELECT b.protocol_client_id,b.account_id,a.username
+               FROM client_protocol_bindings b
+               JOIN client_accounts a ON a.id=b.account_id"""
+        ).fetchall()
+        return {int(r["protocol_client_id"]):{"account_id":int(r["account_id"]),"username":r["username"]} for r in rows}
+
+
+def artifact_binding_owners():
+    with connect() as con:
+        rows=con.execute(
+            """SELECT b.artifact_id,b.account_id,a.username
+               FROM client_artifact_bindings b
+               JOIN client_accounts a ON a.id=b.account_id"""
+        ).fetchall()
+        return {int(r["artifact_id"]):{"account_id":int(r["account_id"]),"username":r["username"]} for r in rows}
+
+
+def revoke_all_devices(account_id):
+    account_id=int(account_id)
+    now_ts=int(time.time())
+    ts=now_iso()
+    with connect() as con:
+        con.execute(
+            "UPDATE client_devices SET active=0,revoked_at=? WHERE account_id=? AND active=1",
+            (ts,account_id),
+        )
+        con.execute(
+            "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+            (now_ts,account_id),
+        )
+
+
+def revoke_all_sessions(account_id):
+    with connect() as con:
+        con.execute(
+            "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+            (int(time.time()),int(account_id)),
+        )
