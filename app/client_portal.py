@@ -81,8 +81,8 @@ def _no_store(response):
 def client_root(request:Request):
     _require_enabled()
     if _session(request):
-        return RedirectResponse("/client/app",302)
-    return RedirectResponse("/client/login",302)
+        return _no_store(RedirectResponse("/client/app",302))
+    return _no_store(RedirectResponse("/client/login",302))
 
 
 @router.get("/client/login",response_class=HTMLResponse)
