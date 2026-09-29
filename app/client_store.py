@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import secrets
 import time
@@ -490,13 +491,28 @@ def artifact_delivery(account_id,artifact_id):
     primary=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not primary:
         raise ValueError("artifact has no client-deliverable payload")
+    filename=artifact.get("native_filename") or payload.get("native_filename") or ""
+    files=payload.get("files") or {}
+    native=files.get(filename) if filename else None
+    if isinstance(native,str):
+        native=native.encode("utf-8")
+    native_b64=base64.b64encode(bytes(native)).decode("ascii") if isinstance(native,(bytes,bytearray)) else ""
+    qr_svg=""
+    kind=str(artifact.get("kind") or "").lower()
+    if kind in {"wireguard","outline","xray","ssh"} and primary:
+        try:
+            qr_svg="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(primary)).decode("ascii")
+        except Exception:
+            qr_svg=""
     return {
         "id":int(artifact_id),
         "name":allowed.get("label") or artifact.get("display_name") or "",
         "engine":artifact.get("kind") or "",
         "protocol":artifact.get("protocol") or artifact.get("kind") or "",
         "share_link":primary,
-        "native_filename":artifact.get("native_filename") or payload.get("native_filename") or "",
+        "native_filename":filename,
+        "native_base64":native_b64,
+        "qr":qr_svg,
         "source":"artifact",
     }
 
