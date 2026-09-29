@@ -2572,8 +2572,8 @@ def plans_get(request:Request):
 def plans_create(payload:ServicePlanPayload,request:Request):
     actor=require_mutation(request)
     kind=payload.kind.strip().lower()
-    if kind not in {"ssh","xray","wireguard","openvpn","outline"}:
-        raise HTTPException(400,"unsupported plan kind")
+    if kind not in {"ssh","xray","outline"}:
+        raise HTTPException(400,"Plans with enforced duration/quota are currently supported for SSH, Xray and Outline")
     try:
         plan_id=create_plan(payload.name,kind,payload.protocol,payload.duration_days,int(payload.quota_gb*1024),payload.ip_limit,payload.connection_limit,payload.price,payload.config,payload.active)
     except Exception as exc:
@@ -2585,8 +2585,8 @@ def plans_create(payload:ServicePlanPayload,request:Request):
 def plans_update(plan_id:int,payload:ServicePlanPayload,request:Request):
     actor=require_mutation(request)
     kind=payload.kind.strip().lower()
-    if kind not in {"ssh","xray","wireguard","openvpn","outline"}:
-        raise HTTPException(400,"unsupported plan kind")
+    if kind not in {"ssh","xray","outline"}:
+        raise HTTPException(400,"Plans with enforced duration/quota are currently supported for SSH, Xray and Outline")
     update_plan(
         plan_id,name=payload.name,kind=kind,protocol=payload.protocol,
         duration_days=payload.duration_days,quota_mb=int(payload.quota_gb*1024),
