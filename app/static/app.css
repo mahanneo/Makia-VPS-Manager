@@ -2030,6 +2030,9 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 }
 
 
+.proto-dot.telegram{background:#3ba9ff;box-shadow:0 0 10px #3ba9ff55}
+.proto-dot.dns{background:#8b5cf6;box-shadow:0 0 10px #8b5cf655}
+
 /* v1.2 — Telegram Proxy / DNS Center */
 .network-tools-page{display:grid;gap:14px}
 .network-health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
@@ -2062,3 +2065,9 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
   .tool-card-head{display:block}
   .tool-card-head small{display:block;margin-top:6px}
 }
+
+/* v1.2 client delivery hardening */
+.network-copy-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.network-copy-row .dns-address{flex:1 1 180px;justify-content:flex-start}
+.network-delivery-note{margin-top:10px;padding:10px 12px;border:1px solid var(--pro-line);border-radius:9px;background:#0b1726;color:#90a5b9;font-size:10px;line-height:1.7}
+.network-user-text{min-height:92px!important}
