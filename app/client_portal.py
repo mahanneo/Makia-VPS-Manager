@@ -302,7 +302,6 @@ def client_login(request: Request, username: str = Form(...), password: str = Fo
                 (account["id"],),
             ).fetchone()["n"]
             if int(active_devices) >= policy["device_limit"]:
-                audit(CLIENT_ACTOR_PREFIX + account["username"], "client_device_limit_blocked", ip=remote_ip)
                 response = templates.TemplateResponse(
                     "client_app_login.html",
                     {"request": request, "error": "Device limit reached. Remove an old device before signing in here."},
@@ -335,7 +334,6 @@ def client_login(request: Request, username: str = Form(...), password: str = Fo
             (account["id"], now_ts),
         ).fetchone()["n"]
         if int(active_sessions) >= policy["session_limit"]:
-            audit(CLIENT_ACTOR_PREFIX + account["username"], "client_session_limit_blocked", ip=remote_ip)
             response = templates.TemplateResponse(
                 "client_app_login.html",
                 {"request": request, "error": "Concurrent session limit reached."},
