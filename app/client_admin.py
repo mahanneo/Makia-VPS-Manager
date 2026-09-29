@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
 
 from . import client_store
-from .db import list_protocol_clients
+from .db import list_protocol_clients, list_access_artifacts
 
 
 class ClientAccountCreate(BaseModel):
@@ -36,6 +36,13 @@ class ClientPasswordUpdate(BaseModel):
 
 class ClientProtocolBinding(BaseModel):
     protocol_client_id:int=Field(gt=0)
+    label:str=Field(default="",max_length=120)
+    priority:int=Field(default=100,ge=0,le=10000)
+    enabled:bool=True
+
+
+class ClientArtifactBinding(BaseModel):
+    artifact_id:int=Field(gt=0)
     label:str=Field(default="",max_length=120)
     priority:int=Field(default=100,ge=0,le=10000)
     enabled:bool=True
@@ -148,6 +155,41 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
                 "quota_bytes":int(row.get("quota_bytes") or 0),
             })
         return {"items":items}
+
+    @app.get("/api/client-platform/artifacts")
+    def client_platform_artifacts(request:Request):
+        require_user(request)
+        allowed={"ssh","wireguard","openvpn","xray","outline"}
+        return {"items":[item for item in list_access_artifacts() if str(item.get("kind") or "").lower() in allowed]}
+
+    @app.post("/api/client-platform/accounts/{account_id}/artifact-bindings")
+    def client_platform_artifact_binding_create(account_id:int,payload:ClientArtifactBinding,request:Request):
+        actor=require_mutation(request)
+        if not client_store.get_account(account_id):
+            raise HTTPException(404,"client account not found")
+        try:
+            client_store.bind_access_artifact(
+                account_id,payload.artifact_id,payload.label,payload.priority,payload.enabled
+            )
+        except ValueError as exc:
+            raise HTTPException(400,str(exc))
+        audit_func(
+            actor,"client_artifact_bind",str(account_id),
+            f"artifact_id={payload.artifact_id}",ip_func(request),
+        )
+        return {"ok":True,"bindings":client_store.list_artifact_bindings(account_id)}
+
+    @app.delete("/api/client-platform/accounts/{account_id}/artifact-bindings/{artifact_id}")
+    def client_platform_artifact_binding_delete(account_id:int,artifact_id:int,request:Request):
+        actor=require_mutation(request)
+        if not client_store.get_account(account_id):
+            raise HTTPException(404,"client account not found")
+        client_store.unbind_access_artifact(account_id,artifact_id)
+        audit_func(
+            actor,"client_artifact_unbind",str(account_id),
+            f"artifact_id={artifact_id}",ip_func(request),
+        )
+        return {"ok":True}
 
     @app.post("/api/client-platform/accounts/{account_id}/bindings")
     def client_platform_binding_create(account_id:int,payload:ClientProtocolBinding,request:Request):
