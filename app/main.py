@@ -1314,11 +1314,16 @@ def subscription_page(subscription_id:str,request:Request):
     return response
 
 @app.get("/api/protocol-clients")
-def protocol_clients_get(request:Request):
+def protocol_clients_get(request:Request,engine:str=""):
     require_capability(request,"xray")
+    engine_filter=str(engine or "").strip().lower()
+    if engine_filter not in {"","xray","outline"}:
+        raise HTTPException(400,"unsupported protocol client engine")
     rows=[]
     now_ts=int(time.time())
     for item in list_protocol_clients():
+        if engine_filter and str(item.get("engine") or "").lower()!=engine_filter:
+            continue
         usage={"uplink":0,"downlink":0,"total":0,"available":False,"error":None}
         if item.get("engine")=="xray" and item.get("protocol") in {"vless","vmess","trojan","hysteria2"} and item.get("enabled"):
             try: usage=protocol_ops.xray_client_traffic(item["name"])
