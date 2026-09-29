@@ -134,6 +134,8 @@ def test_pwa_shell_uses_no_store_for_private_api_and_separate_service_worker():
     sw=(ROOT/"app/static/client-sw.js").read_text(encoding="utf-8")
     manifest=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
     assert 'cache:"no-store"' in js
-    assert 'u.pathname.startsWith("/client/api/")' in sw
+    assert 'u.pathname.startsWith("/client/")' in sw
+    assert 'cache:"no-store"' in sw
+    assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-icon.svg"]' in sw
     assert '"/client/sw.js"' in manifest
     assert '"display":"standalone"' in manifest
