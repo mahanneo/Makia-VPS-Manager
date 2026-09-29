@@ -2456,7 +2456,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
         '<div class="network-link-stack">',
           '<label>t.me link<textarea id="mtHttpsLink" readonly>'+htmlEsc(r.https_link||'')+'</textarea></label>',
           '<label>tg:// link<textarea id="mtTgLink" readonly>'+htmlEsc(r.tg_link||'')+'</textarea></label>',
-          '<div class="toolbar"><button class="primary" data-action="copy-target" data-target="mtHttpsLink">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><button class="ghost" data-action="copy-target" data-target="mtTgLink">tg://</button></div>',
+          '<div class="toolbar"><button class="primary" data-action="copy-target" data-target="mtHttpsLink">'+htmlEsc(tr('کپی لینک برای کاربر','Copy user link'))+'</button><button class="ghost" data-action="copy-target" data-target="mtTgLink">tg://</button>'+(r.https_link?'<a class="ghost link-btn" href="'+htmlEsc(r.https_link)+'" target="_blank" rel="noopener noreferrer">'+htmlEsc(tr('باز کردن در Telegram','Open in Telegram'))+'</a>':'')+'</div>',
         '</div>',
       '</div>',
       '<div class="notice">'+htmlEsc(tr('Secret تحویلی با FakeTLS secret نسخه mtg ساخته می‌شود. اپراتور Proxy به محتوای چت‌های Telegram دسترسی ندارد.','The delivered secret uses mtg FakeTLS format. A proxy operator cannot read Telegram chat contents.'))+'</div>',
@@ -2476,7 +2476,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
         '<section class="network-tool-card">',
           '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('اگر Port اشغال باشد Makia خودکار Port آزاد انتخاب می‌کند.','If the requested port is busy, Makia automatically selects a free managed port.'))+'</small></div>',
           '<div class="wizard-form two">',
-            '<label>'+htmlEsc(tr('Domain / IP تحویلی','Public host / IP'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.host||window.PANEL_DOMAIN||location.hostname)+'"></label>',
+            '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.host||'')+'" placeholder="proxy.example.com"></label>',
             '<label>'+htmlEsc(tr('Port ترجیحی','Preferred port'))+'<input id="mtPort" type="number" min="1" max="65535" value="'+Number(r.port||443)+'"></label>',
           '</div>',
           '<div class="toolbar"><button class="primary" data-action="mtproxy-configure">'+htmlEsc(tr('ذخیره و راه‌اندازی','Save & start'))+'</button><button class="danger" data-action="mtproxy-rotate">'+htmlEsc(tr('تعویض Secret','Rotate secret'))+'</button></div>',
@@ -2491,7 +2491,8 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
 async function configureTelegramProxy(rotate=false){
   const host=(document.getElementById('mtHost')?.value||'').trim();
   const port=Number(document.getElementById('mtPort')?.value||443);
-  if(!host){alert(tr('Domain/IP را وارد کن.','Enter a public host/IP.'));return}
+  if(!host){alert(tr('دامنه DNS پروکسی را وارد کن.','Enter the proxy DNS hostname.'));return}
+  if(/^\[?[0-9a-f:.]+\]?$/i.test(host)){alert(tr('برای FakeTLS باید دامنه DNS وارد شود؛ IP خام قابل قبول نیست.','FakeTLS requires a DNS hostname; a raw IP is not accepted.'));return}
   if(rotate&&!confirm(tr('Secret قبلی باطل شود؟','Invalidate the previous secret?')))return;
   try{
     const r=await api('/api/network/mtproxy/configure',{method:'POST',body:JSON.stringify({host,port,rotate_secret:Boolean(rotate)})});
@@ -2513,7 +2514,14 @@ async function dnsCenter(renderToken=window.__viewRenderToken){
       '<button class="primary" data-action="copy-target" data-target="dnsInstallCommand">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button>',
     '</section>'
   ].join('');
-  const addresses=(r.bind_addresses||[]).map(x=>'<span class="dns-address">'+htmlEsc(x)+'</span>').join('');
+  const remoteAddresses=[...new Set([r.wireguard_address,r.public_address].filter(Boolean))];
+  const addresses=remoteAddresses.map((x,i)=>'<div class="network-copy-row"><span class="dns-address" id="dnsAddress'+i+'">'+htmlEsc(x)+'</span><button class="ghost" data-action="copy-target" data-target="dnsAddress'+i+'">'+htmlEsc(tr('کپی','Copy'))+'</button></div>').join('');
+  const dnsDeliveryLines=[];
+  if(r.wireguard_address)dnsDeliveryLines.push('WireGuard DNS: '+r.wireguard_address);
+  if(r.public_address)dnsDeliveryLines.push('Public DNS: '+r.public_address);
+  if(r.mode==='public'&&(r.allowed_cidrs||[]).length)dnsDeliveryLines.push('Allowed source: '+(r.allowed_cidrs||[]).join(', '));
+  dnsDeliveryLines.push('Upstream: '+String(r.upstream_label||r.upstream||''));
+  const dnsDeliveryText=dnsDeliveryLines.join('\n');
   const upstreamOptions=(r.upstreams||[]).map(x=>'<option value="'+htmlEsc(x.id)+'" '+(x.id===r.upstream?'selected':'')+'>'+htmlEsc(x.label)+'</option>').join('');
   content.innerHTML=[
     '<div class="pro-page network-tools-page">',
@@ -2540,9 +2548,9 @@ async function dnsCenter(renderToken=window.__viewRenderToken){
         '</section>',
         '<section class="network-tool-card">',
           '<div class="tool-card-head"><div><span class="pro-kicker">CLIENT DELIVERY</span><h3>'+htmlEsc(tr('آدرس‌های قابل استفاده','Usable resolver addresses'))+'</h3></div></div>',
-          '<div class="dns-address-list">'+(addresses||'<span class="muted">—</span>')+'</div>',
-          (r.wireguard_address?'<div class="quick-card"><b>WireGuard DNS</b><span dir="ltr">'+htmlEsc(r.wireguard_address)+'</span></div>':''),
-          (r.public_address?'<div class="quick-card"><b>Public DNS</b><span dir="ltr">'+htmlEsc(r.public_address)+'</span></div>':''),
+          '<div class="dns-address-list">'+(addresses||'<div class="network-delivery-note">'+htmlEsc(tr('فعلاً فقط Localhost فعال است و چیزی برای تحویل مستقیم به کاربر راه‌دور وجود ندارد. برای کاربران WireGuard از DNS داخلی WireGuard استفاده کن؛ برای Public DNS باید IP/CIDR همان کاربر را Allowlist کنی.','Only localhost is active, so there is no remote client address to deliver yet. WireGuard users can use the WireGuard resolver; public DNS requires the client IP/CIDR to be allowlisted first.'))+'</div>')+'</div>',
+          (dnsDeliveryText?'<label>'+htmlEsc(tr('متن آماده تحویل به کاربر','Ready-to-send client DNS'))+'<textarea id="dnsUserDelivery" class="network-user-text" readonly>'+htmlEsc(dnsDeliveryText)+'</textarea></label><div class="toolbar"><button class="primary" data-action="copy-target" data-target="dnsUserDelivery">'+htmlEsc(tr('کپی اطلاعات DNS کاربر','Copy client DNS details'))+'</button></div>':''),
+          (r.mode==='public'?'<div class="network-delivery-note">'+htmlEsc(tr('قبل از ارسال Public DNS، IP یا CIDR اینترنت کاربر باید در Allowlist بالا ثبت شده باشد.','Before sharing public DNS, the client Internet IP/CIDR must be present in the allowlist above.'))+'</div>':''),
           '<p class="muted">'+htmlEsc(tr('این Resolver می‌تواند زمان Lookup و Cache را بهتر کند؛ Ping سرور بازی یا رفع محدودیت جغرافیایی را تضمین نمی‌کند. برای Smart-DNS واقعی باید Upstream مخصوص آن سرویس جداگانه داشته باشی.','This resolver can improve lookup/cache behavior; it does not guarantee lower game-server RTT or geo-unblocking. True Smart DNS requires a specialized upstream service.'))+'</p>',
         '</section>'
       ].join(''):''),
