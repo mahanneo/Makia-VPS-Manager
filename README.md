@@ -12,7 +12,7 @@
   <strong>Version 1.1.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1 UAT](docs/UAT-1.0.0.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1 UAT](docs/UAT-1.1.0.md)**
 
 ---
 
@@ -193,7 +193,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.0.0.md](docs/UAT-1.0.0.md)**.
+See **[docs/UAT-1.1.0.md](docs/UAT-1.1.0.md)**.
 
 ## Runtime layout
 
