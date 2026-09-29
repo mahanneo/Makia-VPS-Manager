@@ -87,6 +87,13 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
             "bindings":sum(int(a.get("bindings") or 0) for a in accounts),
             "portal_path":"/client/",
             "admin_toggle_available":source=="admin_setting",
+            "enforcement":{
+                "xray":{"expiry":True,"quota":True,"device":False,"mode":"hard"},
+                "outline":{"expiry":True,"quota":True,"device":False,"mode":"hard"},
+                "wireguard":{"expiry":True,"quota":True,"device":False,"mode":"hard"},
+                "ssh":{"expiry":True,"quota":False,"device":True,"mode":"hard"},
+                "openvpn":{"expiry":False,"quota":False,"device":False,"mode":"delivery"},
+            },
         }
 
     @app.post("/api/client-platform/settings")
@@ -293,6 +300,15 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         client_store.revoke_all_sessions(account_id)
         audit_func(actor,"client_sessions_revoke_all",str(account_id),"",ip_func(request))
         return {"ok":True}
+
+    @app.post("/api/client-platform/accounts/{account_id}/usage/reset")
+    def client_platform_usage_reset(account_id:int,request:Request):
+        actor=require_mutation(request)
+        if not client_store.get_account(account_id):
+            raise HTTPException(404,"client account not found")
+        result=client_store.reset_account_usage(account_id)
+        audit_func(actor,"client_usage_reset",str(account_id),"policy_recheck<=30s",ip_func(request))
+        return {**result,"policy_recheck_seconds":30}
 
     @app.delete("/api/client-platform/accounts/{account_id}")
     def client_platform_account_delete(account_id:int,request:Request):
