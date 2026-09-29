@@ -45,6 +45,14 @@ def seed():
         device_limit=2,concurrent_device_limit=1,
     )
     client_store.bind_protocol_client(client_account_id,client_id,"Fast Access",10,True)
+    ovpn_payload=access_ops.openvpn_payload(
+        "browser-openvpn","client\nproto udp\nremote vpn.example.test 1194\n"
+    )
+    ovpn_artifact_id=upsert_access_artifact(
+        "openvpn","browser-openvpn","browser-openvpn","openvpn",ovpn_payload["native_filename"],
+        access_ops.seal_payload(ovpn_payload),"{}",
+    )
+    client_store.bind_access_artifact(client_account_id,ovpn_artifact_id,"Browser OpenVPN",20,True)
     return client_id,get_protocol_client(client_id)["subscription_id"],client_account_id
 
 
@@ -109,11 +117,16 @@ def main():
             client_page.locator("#protocolList .mc-protocol").wait_for()
             assert "Browser Client" in client_page.locator("body").inner_text()
             assert "Fast Access" in client_page.locator("#protocolList").inner_text()
+            assert "Browser OpenVPN" in client_page.locator("#protocolList").inner_text()
             assert "Test Plan" in client_page.locator("#planName").inner_text()
             assert "1" in client_page.locator("#deviceCount").inner_text()
-            client_page.locator('[data-delivery]').click()
+            client_page.locator('[data-delivery-kind="protocol"]').click()
             client_page.locator("#deliveryDialog[open]").wait_for()
             assert client_page.locator("#deliveryValue").input_value().startswith("vless://")
+            client_page.locator("#closeDelivery").click()
+            client_page.locator('[data-delivery-kind="artifact"]').click()
+            client_page.locator("#deliveryDialog[open]").wait_for()
+            assert "remote vpn.example.test 1194" in client_page.locator("#deliveryValue").input_value()
             client_page.screenshot(path='/tmp/makia-client-platform.png',full_page=True)
             client_page.locator("#closeDelivery").click()
             client_page.close()
