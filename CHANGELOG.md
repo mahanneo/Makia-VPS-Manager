@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.10] - 2026-09-29
+
+### Immutable release source
+- Force-main updates now resolve the selected GitHub ref to an exact commit SHA before downloading source.
+- Replaced floating branch tarballs with immutable codeload commit archives.
+- Added tarball integrity validation and extracted-root identity checks against the resolved commit.
+- Added VERSION validation before critical shell preflight.
+- Prevents raw-main/bootstrap code from being paired with a stale or cached branch archive containing older runtime scripts.
+- Retains v1.2.9 atomic shell installation and SHA256 parity checks for critical runtime commands.
+- Rotated the service-worker cache to `makia-shell-v1210`.
+
+
 ## [1.2.9] - 2026-09-29
 
 ### Verified runtime shell artifacts
