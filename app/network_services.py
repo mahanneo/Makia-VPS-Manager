@@ -61,6 +61,29 @@ def _active(service):
         return False
 
 
+def _mtproxy_runtime_diagnostics(secret=""):
+    parts=[]
+    commands=(
+        ["systemctl","status",MTPROXY_SERVICE,"--no-pager","--lines=18"],
+        ["journalctl","-u",MTPROXY_SERVICE,"-n","28","--no-pager","-o","cat"],
+    )
+    for args in commands:
+        try:
+            proc=subprocess.run(args,text=True,capture_output=True,timeout=8,check=False)
+            text=(proc.stdout or proc.stderr or "").strip()
+            if text:
+                parts.append(text)
+        except Exception:
+            pass
+    text="\n".join(parts)
+    if secret:
+        text=text.replace(str(secret),"<redacted-secret>")
+    # Keep API/audit responses bounded and single-line enough for the browser dialog.
+    text=re.sub(r"\x1b\[[0-9;]*m","",text)
+    lines=[line.strip() for line in text.splitlines() if line.strip()]
+    return " | ".join(lines[-12:])[:1800]
+
+
 def _validate_port(value):
     try: port=int(value)
     except Exception as exc: raise NetworkServiceError("invalid port") from exc
@@ -245,6 +268,7 @@ def mtproxy_status(host_hint=""):
     active=_active(MTPROXY_SERVICE)
     listener=bool(port and _port_busy(port,"tcp"))
     firewall=_ufw_port_status(port,"tcp")
+    runtime_error=_mtproxy_runtime_diagnostics(secret) if configured and not active else ""
     client_secret=secret.lower() if secret else ""
     query=urllib.parse.urlencode({"server":host,"port":port,"secret":client_secret}) if configured else ""
     return {
@@ -254,6 +278,7 @@ def mtproxy_status(host_hint=""):
         "listener":listener,
         "firewall_active":bool(firewall.get("active")),
         "firewall_allowed":bool(firewall.get("allowed")),
+        "runtime_error":runtime_error,
         "host":host,
         "port":port,
         "front_domain":front_domain,
@@ -301,11 +326,13 @@ def configure_mtproxy(host,port=443,rotate_secret=False):
         _run(["systemctl","daemon-reload"],timeout=15)
         _run(["systemctl","enable","--now",MTPROXY_SERVICE],timeout=30)
         _run(["systemctl","restart",MTPROXY_SERVICE],timeout=30)
-        deadline=time.monotonic()+8
+        deadline=time.monotonic()+25
         while time.monotonic()<deadline and not (_active(MTPROXY_SERVICE) and _port_busy(selected,"tcp")):
             time.sleep(.25)
         if not _active(MTPROXY_SERVICE) or not _port_busy(selected,"tcp"):
-            raise NetworkServiceError("MTProxy did not reach an active TCP listener")
+            detail=_mtproxy_runtime_diagnostics(secret)
+            suffix=f": {detail}" if detail else ""
+            raise NetworkServiceError(f"MTProxy did not reach an active TCP listener{suffix}")
     except Exception:
         if previous_state is None:
             MTPROXY_ENV.unlink(missing_ok=True)
