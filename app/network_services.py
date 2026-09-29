@@ -233,7 +233,7 @@ def mtproxy_status(host_hint=""):
     client_secret=secret.lower() if secret else ""
     query=urllib.parse.urlencode({"server":host,"port":port,"secret":client_secret}) if configured else ""
     return {
-        "installed":MTPROXY_BIN.exists() and MTPROXY_CONFIG.exists(),
+        "installed":MTPROXY_BIN.exists(),
         "configured":configured,
         "service_active":active,
         "listener":listener,
