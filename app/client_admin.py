@@ -4,7 +4,7 @@ import sqlite3
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import client_store
+from . import client_store, protocol_ops
 from .db import list_protocol_clients, list_access_artifacts, get_setting, set_setting
 
 
@@ -62,7 +62,7 @@ class ClientPlatformSettings(BaseModel):
     enabled:bool
 
 
-def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
+def register_client_admin(app,require_user,require_mutation,require_local_admin,audit_func,ip_func):
     """Register admin-only control-plane endpoints.
 
     This is intentionally invoked from app.main after the existing admin
@@ -76,6 +76,10 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         require_user(request)
         enabled,source=_feature_state()
         accounts=client_store.list_accounts()
+        try:
+            ovpn_policy=protocol_ops.openvpn_policy_status()
+        except Exception as exc:
+            ovpn_policy={"installed":False,"configured":False,"ready":False,"conflict":str(exc)[:300]}
         return {
             "enabled":enabled,
             "enable_source":source,
@@ -92,8 +96,17 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
                 "outline":{"expiry":True,"quota":True,"device":False,"mode":"hard"},
                 "wireguard":{"expiry":True,"quota":True,"device":False,"mode":"hard"},
                 "ssh":{"expiry":True,"quota":False,"device":True,"mode":"hard"},
-                "openvpn":{"expiry":False,"quota":False,"device":False,"mode":"delivery"},
+                "openvpn":{
+                    "expiry":bool(ovpn_policy.get("ready")),
+                    "quota":bool(ovpn_policy.get("ready")),
+                    "device":False,
+                    "mode":"hard" if ovpn_policy.get("ready") else ("setup_required" if ovpn_policy.get("installed") else "unavailable"),
+                    "policy_ready":bool(ovpn_policy.get("ready")),
+                    "policy_configured":bool(ovpn_policy.get("configured")),
+                    "policy_conflict":str(ovpn_policy.get("conflict") or ""),
+                },
             },
+            "openvpn_policy":ovpn_policy,
         }
 
     @app.post("/api/client-platform/settings")
@@ -106,6 +119,21 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         audit_func(actor,"client_platform_toggle","portal",f"enabled={payload.enabled}",ip_func(request))
         enabled,source=_feature_state()
         return {"ok":True,"enabled":enabled,"enable_source":source}
+
+    @app.post("/api/client-platform/openvpn-policy/enable")
+    def client_platform_openvpn_policy_enable(request:Request):
+        actor=require_mutation(request)
+        require_local_admin(request)
+        try:
+            result=protocol_ops.enable_openvpn_policy_runtime()
+        except protocol_ops.ProtocolError as exc:
+            raise HTTPException(409,str(exc))
+        audit_func(
+            actor,"client_openvpn_policy_enable","openvpn",
+            f"configured={result.get('configured')}; ready={result.get('ready')}; changed={result.get('changed')}",
+            ip_func(request),
+        )
+        return result
 
     @app.get("/api/client-platform/accounts")
     def client_platform_accounts(request:Request):
