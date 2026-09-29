@@ -1,3 +1,12 @@
+## نسخه ۰.۲۶.۰-rc8 — Operations Suite + Outline
+
+در RC8، پنل مدیریت عملیات کامل‌تر شده است: **پلن/قالب، تمدید گروهی، مرکز انقضا، بکاپ زمان‌بندی‌شده و Remote SCP، Disaster Recovery، Cloudflare DNS Cutover، Telegram، اعلان‌ها، Diagnostics و داشبورد Multi-VPS** به مسیرهای واقعی Backend متصل‌اند.
+
+**Outline** نیز به‌صورت First-class اضافه شده است: نصب با نسخه رسمی Pin‌شده و بررسی Integrity، Management API با Certificate Fingerprint، ساخت/تعویض/حذف Access Key، Traffic واقعی، Quota و Expiry سمت سرور، QR، Protected ZIP و Client Portal خصوصی. Full Migration وضعیت `/opt/outline` را نیز نگه می‌دارد.
+
+برای جلوگیری از قابلیت Fake، WireGuard/OpenVPN در Plans فقط Template تنظیم اتصال هستند و سهمیه/انقضای per-client ساختگی نمی‌گیرند؛ SSH نیز Traffic quota ساختگی نمایش نمی‌دهد. Remote SCP فقط با SSH Host Key شناخته‌شده پذیرفته می‌شود و Cloudflare برای Endpointهای خام VPN/SSH همیشه DNS Only است.
+
+این نسخه **Stable نیست**. قبل از Stable باید UAT واقعی VPS شامل Restore روی VPS جایگزین، Outline زنده، Remote SCP، Cloudflare، Telegram و Clientهای واقعی طبق [UAT RC8](docs/UAT-0.26.0-RC8.md) انجام شود.
 ## نسخه ۰.۲۶.۰-rc2 — Connection Modes واقعی
 
 در این Release Candidate، بخش **Connection Modes** با شش مسیر واقعی اضافه شده است: **IKEv2، WireGuard، UDP، TCP، Stealth و WStunnel**. این موارد صرفاً کارت نمایشی نیستند و هر گزینه به Runtime واقعی، API واقعی، Port/Listener و Diagnostics متناظر وصل است.

@@ -157,6 +157,10 @@ def test_service_plans_strip_unenforceable_policy_fields():
     _,cfg2=main_app._validate_service_plan(outline)
     assert cfg2["expire_days"]==30 and cfg2["quota_gb"]==50
     assert "ip_limit" not in cfg2 and "reset_days" not in cfg2
+    ssh=main_app.ServicePlanPayload(name="ssh",protocol_kind="ssh",config={"expire_days":30,"quota_gb":20,"device_limit":2})
+    _,cfg3=main_app._validate_service_plan(ssh)
+    assert cfg3["expire_days"]==30 and cfg3["device_limit"]==2
+    assert "quota_gb" not in cfg3
 
 
 def test_secret_snapshots_never_return_tokens(monkeypatch):

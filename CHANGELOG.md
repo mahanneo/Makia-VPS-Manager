@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.26.0-rc8] - 2026-09-29
+
+### Operations Suite
+- Completed Plans/Templates, Expiry Center, bulk renewal, scheduled encrypted Full Migration backups, optional remote SCP retention, Disaster Recovery workflow, Cloudflare DNS cutover, Telegram integration, notifications, per-access diagnostics and richer Multi-VPS telemetry.
+- Kept WireGuard/OpenVPN plans as connection templates without fake per-client quota/expiry policy. SSH plans no longer claim a traffic quota that the host does not enforce per user.
+
+### Outline
+- Added first-class Outline Server status, pinned official installer integrity verification, local Management API certificate-fingerprint verification, Access Key create/delete/reissue, real transfer metrics, server-side data limits and enforced expiry.
+- Added Outline QR/copy delivery, Protected ZIP, private device-aware Client Portal, renew/reissue controls and per-access diagnostics.
+- Full Migration format v2 includes Outline state and the restore path validates/restarts the restored Shadowbox runtime.
+
+### Backup / DR and integration hardening
+- Scheduled backups require encrypted Full Migration packages, verify the protected archive, retain local history and optionally copy to a remote VPS over SCP.
+- Remote SCP now enforces StrictHostKeyChecking, safe absolute remote paths and private SSH identity-file permissions.
+- Cloudflare A-record cutover always writes DNS-only records for raw VPN/SSH endpoints.
+- Telegram tokens remain encrypted at rest, disabling webhook now unregisters it, and `/backup` is read-only status instead of a privileged remote backup trigger.
+- Restore remains pre-verified and rollback-safe; runtime verification precedes the Cloudflare/DNS cutover step.
+
+### Automated UAT
+- Added RC8 mocked regression gates for Outline, Cloudflare and Telegram; bulk renewal, expiry, node telemetry, secret leakage, protected backup verification, restore safety and UI action coverage.
+- Existing GitHub Actions continue to execute Python compile/import, full pytest, Bash syntax, JavaScript syntax, migration tests, browser smoke and Xray Core smoke.
+- Release metadata and the host smoke script cover scheduled-backup/ops-monitor timers and optional live Outline Management API/fingerprint health.
+
+### Release status
+- **Release Candidate only.** Automated gates must be green on the release commit.
+- Stable remains blocked on a real Ubuntu VPS upgrade/clean-install, real Outline Docker/Management API, remote SCP target, Cloudflare API/DNS propagation, Telegram webhook, replacement-VPS restore/DNS cutover and external-client connectivity UAT.
+
 ## [0.26.0-rc6] - 2026-09-28
 
 ### Self-service client access portal
