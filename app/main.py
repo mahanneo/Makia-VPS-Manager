@@ -9,9 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
-from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_plan, update_plan, list_plans, delete_plan, create_backup_schedule, list_backup_schedules, delete_backup_schedule, list_backup_runs, list_alert_events
+from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, automation_ops, outline_ops
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
@@ -29,6 +29,7 @@ async def security_headers(request:Request,call_next):
         request.url.path.startswith("/sub/") or
         request.url.path.startswith("/client/") or
         request.url.path.startswith("/access/") or
+        request.url.path=="/integrations/telegram/webhook" or
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
@@ -74,7 +75,6 @@ def startup():
     if get_setting("ui_generation","")!="glass-v1":
         set_setting("theme","glass")
         set_setting("ui_generation","glass-v1")
-    automation_ops.start_scheduler_once(VERSION)
 
 def current_user(request:Request):
     actor=read_session(request.cookies.get(COOKIE_NAME))
@@ -294,28 +294,32 @@ def _artifact_by_public_token(token):
             return get_access_artifact_by_key(item["kind"],item["external_key"])
     return None
 
-def _detect_client_device(user_agent):
-    ua=str(user_agent or "").lower()
-    if "android" in ua:return "android"
-    if "iphone" in ua or "ipad" in ua:return "ios"
-    if "windows" in ua:return "windows"
-    if "macintosh" in ua or "mac os" in ua:return "macos"
-    if "linux" in ua:return "linux"
-    return "other"
-
-def _one_tap_import_url(share_text):
-    raw=str(share_text or "").strip()
-    if not raw:return ""
-    parsed=urllib.parse.urlsplit(raw)
-    return raw if parsed.scheme.lower() in {"vless","vmess","trojan","ss","hysteria2","npvt-ssh"} else ""
-
-
 def _portal_language(request:Request):
     requested=(request.query_params.get("lang") or "").strip().lower()
     if requested in {"fa","en"}:
         return requested
     current=str(get_setting("language","fa") or "fa").lower()
     return current if current in {"fa","en"} else "fa"
+
+def _portal_device(request:Request):
+    ua=(request.headers.get("user-agent") or "").lower()
+    if "android" in ua:return {"id":"android","label":"Android"}
+    if "iphone" in ua or "ipad" in ua:return {"id":"ios","label":"iPhone / iPad"}
+    if "windows" in ua:return {"id":"windows","label":"Windows"}
+    if "macintosh" in ua or "mac os" in ua:return {"id":"macos","label":"macOS"}
+    if "linux" in ua:return {"id":"linux","label":"Linux"}
+    return {"id":"other","label":"Device"}
+
+def _portal_one_tap(kind,share_text,download_url):
+    share=str(share_text or "").strip()
+    if kind in {"xray","outline"}:
+        scheme=urllib.parse.urlsplit(share).scheme.lower()
+        if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks"}:
+            return share
+    if kind in {"wireguard","openvpn"}:
+        return download_url
+    return ""
+
 
 def _public_access_state(kind,key):
     if kind in {"xray","outline"}:
@@ -657,6 +661,76 @@ def account_new_defaults(request:Request):
         "expiry_presets":[1,7,30,60,90],
     }
 
+class ServicePlanPayload(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    protocol_kind:str=Field(default="xray",max_length=24)
+    config:dict=Field(default_factory=dict)
+    price_label:str=Field(default="",max_length=80)
+    active:bool=True
+
+def _validate_service_plan(payload:ServicePlanPayload):
+    kind=str(payload.protocol_kind or "").lower()
+    allowed={"ssh","xray","wireguard","openvpn","outline"}
+    if kind not in allowed:
+        raise HTTPException(400,"unsupported plan protocol")
+    cfg=dict(payload.config or {})
+    numeric={
+        "expire_days":(0,3650),"quota_gb":(0,100000),"ip_limit":(1,50),
+        "device_limit":(1,50),"connection_limit":(1,50),"reset_days":(0,3650),
+    }
+    for key,(low,high) in numeric.items():
+        if key in cfg:
+            try:value=float(cfg[key])
+            except Exception:raise HTTPException(400,f"invalid plan field: {key}")
+            if value<low or value>high:
+                raise HTTPException(400,f"plan field out of range: {key}")
+    enforceable={
+        "ssh":{"expire_days","device_limit","connection_limit"},
+        "xray":{"expire_days","quota_gb","ip_limit","reset_days"},
+        "outline":{"expire_days","quota_gb"},
+        "wireguard":set(),
+        "openvpn":set(),
+    }[kind]
+    for key in set(numeric)-enforceable:
+        cfg.pop(key,None)
+    return kind,cfg
+
+@app.get("/api/plans")
+def service_plans_get(request:Request,active_only:bool=False):
+    require_user(request)
+    return list_service_plans(active_only)
+
+@app.post("/api/plans")
+def service_plans_create(payload:ServicePlanPayload,request:Request):
+    actor=require_mutation(request)
+    kind,cfg=_validate_service_plan(payload)
+    try:
+        plan_id=create_service_plan(payload.name,kind,cfg,payload.price_label,payload.active)
+    except Exception as exc:
+        raise HTTPException(400,str(exc))
+    audit(actor,"plan_create",str(plan_id),f"{payload.name}; {kind}",ip(request))
+    return get_service_plan(plan_id)
+
+@app.put("/api/plans/{plan_id}")
+def service_plans_update(plan_id:int,payload:ServicePlanPayload,request:Request):
+    actor=require_mutation(request)
+    if not get_service_plan(plan_id):
+        raise HTTPException(404,"plan not found")
+    kind,cfg=_validate_service_plan(payload)
+    update_service_plan(plan_id,payload.name,kind,cfg,payload.price_label,payload.active)
+    audit(actor,"plan_update",str(plan_id),f"{payload.name}; {kind}",ip(request))
+    return get_service_plan(plan_id)
+
+@app.delete("/api/plans/{plan_id}")
+def service_plans_delete(plan_id:int,request:Request):
+    actor=require_mutation(request)
+    if not get_service_plan(plan_id):
+        raise HTTPException(404,"plan not found")
+    delete_service_plan(plan_id)
+    audit(actor,"plan_delete",str(plan_id),ip=ip(request))
+    return {"ok":True}
+
+
 @app.get("/api/accounts/generate-secret")
 def account_generate_secret(request:Request,mode:str="strong"):
     require_user(request)
@@ -824,7 +898,15 @@ def security(request:Request):
 @app.get("/api/protocols")
 def protocols(request:Request):
     require_user(request)
-    return protocol_ops.catalog()
+    result=protocol_ops.catalog()
+    try:outline=integration_ops.outline_status()
+    except Exception as exc:outline={"installed":False,"container_active":False,"api_ok":False,"error":str(exc)[:300]}
+    result["outline"]=outline
+    result.setdefault("capabilities",[]).append({
+        "id":"outline","engine":"outline","available":bool(outline.get("installed") and outline.get("api_ok")),
+        "installed":bool(outline.get("installed")),"mode":"managed"
+    })
+    return result
 
 @app.get("/api/protocols/modes")
 def protocol_modes_get(request:Request):
@@ -1286,20 +1368,7 @@ def protocol_client_update(client_id:int,payload:ProtocolClientPolicy,request:Re
     quota_bytes=int(payload.quota_gb*1024*1024*1024) if payload.quota_gb is not None else None
     expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days is not None and payload.expire_days>0 else (0 if payload.expire_days==0 else None)
 
-    if row.get("engine")=="outline":
-        target_quota=quota_bytes if quota_bytes is not None else int(row.get("quota_bytes") or 0)
-        current_enabled=bool(row.get("enabled"))
-        target_enabled=current_enabled if payload.enabled is None else bool(payload.enabled)
-        if target_enabled:
-            if current_enabled:
-                outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-                try:outline_ops.set_data_limit(outline_id,target_quota)
-                except outline_ops.OutlineError as e:raise HTTPException(400,str(e))
-            else:
-                _outline_reissue_managed_client(row,target_quota)
-        elif current_enabled:
-            _outline_disable_managed_client(row,"manual")
-    elif payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
+    if payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
         if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2","http","socks"}:
             try:
                 if payload.enabled:
@@ -1633,22 +1702,6 @@ def _resolve_access_payload(kind,key,request):
             return access_ops.open_payload(artifact["payload_enc"]),artifact
         except access_ops.AccessPackageError as e:
             raise HTTPException(500,str(e))
-    if kind=="outline":
-        try: row=get_protocol_client(int(key))
-        except Exception: row=None
-        if not row or row.get("engine")!="outline":
-            raise HTTPException(404,"Outline client not found")
-        filename=f"{access_ops.safe_filename(row['name'])}-outline.txt"
-        payload={
-            "native_filename":filename,
-            "files":{filename:(row.get("share_link") or "").encode("utf-8")},
-            "primary_text":row.get("share_link") or "",
-            "share_text":row.get("share_link") or "",
-            "share_type":"outline",
-            "summary":{"name":row["name"],"protocol":"outline","access_key_id":str(row.get("inbound_tag") or "").replace("outline:","")},
-        }
-        artifact_save("outline",str(row["id"]),row["name"],"outline",payload,{"client_id":row["id"]})
-        return payload,get_access_artifact_by_key("outline",str(row["id"]))
     if kind=="xray":
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -1667,6 +1720,18 @@ def _resolve_access_payload(kind,key,request):
         })
         artifact=get_access_artifact_by_key("xray",str(row["id"]))
         return payload,artifact
+    if kind=="outline":
+        try: row=get_protocol_client(int(key))
+        except Exception: row=None
+        if not row or row.get("engine")!="outline":
+            raise HTTPException(404,"Outline client not found")
+        payload=access_ops.outline_payload(
+            row["name"],row.get("share_link") or "",row.get("inbound_tag") or "",row.get("quota_bytes") or 0
+        )
+        artifact_save("outline",str(row["id"]),row["name"],"outline",payload,{
+            "client_id":row["id"],"outline_key_id":row.get("inbound_tag") or "",
+        })
+        return payload,get_access_artifact_by_key("outline",str(row["id"]))
     if kind=="openvpn":
         try:
             rendered=protocol_ops.render_openvpn_client(key,public_host(request))
@@ -1738,7 +1803,7 @@ def _current_delivery_payload(kind,key,payload,request):
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
-        if kind in {"xray","outline"}:
+        if kind=="xray":
             try:
                 protocol=(get_protocol_client(int(key)) or {}).get("protocol") or ""
             except Exception:
@@ -1770,28 +1835,20 @@ def access_entries(request:Request):
         })
 
     protocol_rows=protocol_clients_get(request)
-    for item in [x for x in protocol_rows if x.get("engine")=="xray"]:
+    for item in protocol_rows:
+        engine=str(item.get("engine") or "xray").lower()
+        if engine not in {"xray","outline"}:
+            continue
+        kind=engine
         key=str(item["id"])
-        art=artifacts.get(("xray",key))
+        art=artifacts.get((kind,key))
         rows.append({
-            "id":f"xray:{key}","kind":"xray","key":key,"name":item["name"],"protocol":item["protocol"],
+            "id":f"{kind}:{key}","kind":kind,"key":key,"name":item["name"],"protocol":item["protocol"],
             "status":"expired" if item.get("expired") else ("active" if item.get("enabled") else "disabled"),
-            "online":item.get("online_ip_count",0),"device_limit":item.get("ip_limit",1),
+            "online":item.get("online_ip_count",0) if kind=="xray" else None,"device_limit":item.get("ip_limit",1),
             "quota_bytes":item.get("quota_bytes",0),"used_bytes":item.get("usage",{}).get("total",0),
             "expire_at":item.get("expire_at",0),"can_export":True,
-            "artifact_id":art["id"] if art else None,"subscription_id":item.get("subscription_id",""),
-            "legacy":not bool(art),"endpoint":saved_endpoint(art)
-        })
-
-    for item in [x for x in protocol_rows if x.get("engine")=="outline"]:
-        key=str(item["id"])
-        art=artifacts.get(("outline",key))
-        rows.append({
-            "id":f"outline:{key}","kind":"outline","key":key,"name":item["name"],"protocol":"outline",
-            "status":"expired" if item.get("expired") else ("active" if item.get("enabled") else "disabled"),
-            "online":None,"device_limit":1,"quota_bytes":item.get("quota_bytes",0),
-            "used_bytes":item.get("usage",{}).get("total",0),"expire_at":item.get("expire_at",0),
-            "can_export":bool(art),"artifact_id":art["id"] if art else None,
+            "artifact_id":art["id"] if art else None,"subscription_id":item.get("subscription_id","") if kind=="xray" else "",
             "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
@@ -1907,8 +1964,6 @@ def public_access_portal(token:str,request:Request):
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
-    device=_detect_client_device(request.headers.get("user-agent") or "")
-    one_tap_url=_one_tap_import_url(share_text)
     portal_url=f"{public_origin(request)}/access/{token}"
     response=templates.TemplateResponse("access_portal.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
@@ -1919,10 +1974,11 @@ def public_access_portal(token:str,request:Request):
         "native_filename":native_filename,"public_files":public_files,
         "details_text":str(payload.get("primary_text") or "") if kind=="ssh" else "",
         "portal_url":portal_url,
+        "device":_portal_device(request),
         "guide_url":f"{public_origin(request)}/help/connect#{guide_kind}",
-        "device":device,"one_tap_url":one_tap_url,
         "download_url":f"/access/{token}/download",
         "qr_url":f"/access/{token}/qr.svg" if qr else "",
+        "one_tap_url":_portal_one_tap(kind,share_text,f"/access/{token}/download") if state.get("active") else "",
     })
     response.headers["Cache-Control"]="no-store, private"
     response.headers["Pragma"]="no-cache"
@@ -2041,7 +2097,7 @@ def access_share(kind:str,key:str,request:Request):
             sid=xray_row["subscription_id"]
             summary["subscription_url"]=f"{public_origin(request)}/sub/{sid}?format={subscription_settings['default_format']}" if subscription_settings["enabled"] else ""
             summary["client_url"]=f"{public_origin(request)}/client/{sid}" if subscription_settings["client_page_enabled"] else ""
-    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'outline' if kind=='outline' else 'ssh'}"
+    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'ssh'}"
     subscription=str(summary.get("subscription_url") or "")
     subscription_qr=""
     if subscription:
@@ -2181,17 +2237,9 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
-        elif kind=="outline":
-            row=get_protocol_client(int(key))
-            if not row or row.get("engine")!="outline":
-                raise HTTPException(404,"Outline client not found")
-            outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-            outline_ops.delete_key(outline_id)
-            delete_protocol_client(int(key))
-            delete_access_artifact_by_key("outline",key)
         else:
             raise HTTPException(404,"unsupported access kind")
-    except (system_ops.OperationError,protocol_ops.ProtocolError,outline_ops.OutlineError) as e:
+    except (system_ops.OperationError,protocol_ops.ProtocolError) as e:
         raise HTTPException(400,str(e))
     audit(actor,"access_revoke",f"{kind}:{key}",ip=ip(request))
     return {"ok":True}
@@ -2476,6 +2524,673 @@ def backup_restore_status(job_id:str,request:Request):
     return status
 
 
+
+class OutlineInstallPayload(BaseModel):
+    hostname:str=Field(default="",max_length=255)
+    keys_port:int=Field(default=0,ge=0,le=65535)
+
+class OutlineKeyCreate(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+
+@app.get("/api/protocols/outline/status")
+def outline_status_get(request:Request):
+    require_capability(request,"outline")
+    return integration_ops.outline_status()
+
+@app.post("/api/protocols/outline/install")
+def outline_install(payload:OutlineInstallPayload,request:Request):
+    """Return the root setup command; package installation never runs inside the hardened web service."""
+    actor=require_local_admin(request)
+    require_mutation(request)
+    try:
+        command=integration_ops.outline_install_command(payload.hostname,payload.keys_port)
+    except integration_ops.IntegrationError as exc:
+        raise HTTPException(400,str(exc))
+    status=integration_ops.outline_status()
+    if status.get("api_ok"):
+        return {"ok":True,"already_ready":True,"status":status,"command":""}
+    audit(actor,"outline_install_command","outline",f"keys_port={payload.keys_port}",ip(request))
+    docker_ready=bool(status.get("docker"))
+    return {
+        "ok":False,"already_ready":False,"requires_root":True,
+        "requires_dependency":not docker_ready,
+        "dependency_command":"sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade" if not docker_ready else "",
+        "command":command,
+        "note":"Run the host preparation command first when Docker is missing, then run the pinned Outline installer command. Makia intentionally does not run APT/Docker installers inside the hardened web service.",
+        "status":status,
+    }
+
+@app.get("/api/protocols/outline/keys")
+def outline_keys_get(request:Request):
+    require_capability(request,"outline")
+    try:
+        keys=integration_ops.outline_list_keys()
+    except integration_ops.IntegrationError as exc:
+        raise HTTPException(400,str(exc))
+    try:metrics=integration_ops.outline_transfer_metrics()
+    except integration_ops.IntegrationError:metrics={}
+    managed={str(row.get("inbound_tag") or ""):row for row in list_protocol_clients() if row.get("engine")=="outline"}
+    rows=[]
+    for item in keys:
+        key_id=str(item.get("id") or "")
+        row=managed.get(key_id)
+        enriched={**item,"usage_bytes":int(metrics.get(key_id,0) or 0),"managed":row}
+        if row:
+            enriched["quota_bytes"]=int(row.get("quota_bytes") or 0)
+            enriched["expire_at"]=int(row.get("expire_at") or 0)
+            enriched["enabled"]=bool(row.get("enabled"))
+        rows.append(enriched)
+    return rows
+
+@app.post("/api/protocols/outline/keys")
+def outline_key_create(payload:OutlineKeyCreate,request:Request):
+    actor=require_capability(request,"outline",True)
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+    created=None
+    client_id=None
+    try:
+        created=integration_ops.outline_create_key(payload.name,quota_bytes)
+        key_id=str(created.get("id") or "")
+        access_url=str(created.get("accessUrl") or "")
+        client_id=create_protocol_client(
+            payload.name,"outline","outline",key_id,key_id,access_url,
+            quota_bytes,expire_at,1,0
+        )
+        delivery=access_ops.outline_payload(payload.name,access_url,key_id,quota_bytes)
+        artifact_id=artifact_save("outline",str(client_id),payload.name,"outline",delivery,{
+            "client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes
+        })
+    except (integration_ops.IntegrationError,Exception) as exc:
+        if created and created.get("id"):
+            try:integration_ops.outline_delete_key(created["id"])
+            except Exception:pass
+        if client_id:
+            try:delete_protocol_client(client_id)
+            except Exception:pass
+        if isinstance(exc,HTTPException):raise
+        raise HTTPException(400,str(exc))
+    audit(actor,"outline_key_create",str(created.get("id") or ""),f"name={payload.name}; quota={quota_bytes}; expire_at={expire_at}",ip(request))
+    qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(created["accessUrl"])).decode("ascii")
+    return {
+        "id":created.get("id"),"name":payload.name,"access_url":created.get("accessUrl"),
+        "client_id":client_id,"artifact_id":artifact_id,"quota_bytes":quota_bytes,
+        "expire_at":expire_at,"qr":qr
+    }
+
+@app.delete("/api/protocols/outline/keys/{key_id}")
+def outline_key_delete(key_id:str,request:Request):
+    actor=require_capability(request,"outline",True)
+    row=next((x for x in list_protocol_clients() if x.get("engine")=="outline" and str(x.get("inbound_tag"))==str(key_id)),None)
+    try:
+        result=integration_ops.outline_delete_key(key_id)
+    except integration_ops.IntegrationError as exc:
+        raise HTTPException(400,str(exc))
+    if row:
+        delete_access_artifact_by_key("outline",str(row["id"]))
+        delete_protocol_client(row["id"])
+    audit(actor,"outline_key_delete",key_id,ip=ip(request))
+    return result
+
+
+class OutlineQuotaUpdate(BaseModel):
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+
+
+def _outline_reissue_managed_client(row,quota_bytes=None):
+    if not row or row.get("engine")!="outline":
+        raise RuntimeError("Outline client not found")
+    quota=int(row.get("quota_bytes") or 0) if quota_bytes is None else max(0,int(quota_bytes))
+    old_id=str(row.get("inbound_tag") or "")
+    old_credential=str(row.get("credential") or "")
+    old_share=str(row.get("share_link") or "")
+    created=None
+    try:
+        created=integration_ops.outline_create_key(row["name"],quota)
+        new_id=str(created.get("id") or "")
+        access_url=str(created.get("accessUrl") or "")
+        if not new_id or not access_url.startswith("ss://"):
+            raise RuntimeError("Outline did not return a valid replacement access key")
+        replace_protocol_client_identity(row["id"],new_id,new_id,access_url)
+        update_protocol_client_state(row["id"],True,quota,int(row.get("expire_at") or 0),None,None)
+        delivery=access_ops.outline_payload(row["name"],access_url,new_id,quota)
+        artifact_save("outline",str(row["id"]),row["name"],"outline",delivery,{
+            "client_id":row["id"],"outline_key_id":new_id,"quota_bytes":quota
+        })
+    except Exception:
+        if created and created.get("id"):
+            try:integration_ops.outline_delete_key(created["id"])
+            except Exception:pass
+        try:
+            replace_protocol_client_identity(row["id"],old_id,old_credential,old_share)
+            update_protocol_client_state(
+                row["id"],bool(row.get("enabled")),int(row.get("quota_bytes") or 0),
+                int(row.get("expire_at") or 0),None,None
+            )
+        except Exception:pass
+        raise
+    cleanup_error=""
+    if old_id and old_id!=new_id and bool(row.get("enabled")):
+        try:integration_ops.outline_delete_key(old_id)
+        except Exception as exc:cleanup_error=str(exc)[:200]
+    return {
+        "client_id":row["id"],"outline_key_id":new_id,"access_url":access_url,
+        "quota_bytes":quota,"cleanup_warning":cleanup_error,
+    }
+
+
+@app.post("/api/protocols/outline/clients/{client_id}/reissue")
+def outline_client_reissue(client_id:int,request:Request):
+    actor=require_capability(request,"outline",True)
+    row=get_protocol_client(client_id)
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    try:result=_outline_reissue_managed_client(row)
+    except Exception as exc:raise HTTPException(400,str(exc))
+    audit(actor,"outline_key_reissue",str(client_id),f"outline_key_id={result['outline_key_id']}",ip(request))
+    return result
+
+
+@app.put("/api/protocols/outline/clients/{client_id}/quota")
+def outline_client_quota(client_id:int,payload:OutlineQuotaUpdate,request:Request):
+    actor=require_capability(request,"outline",True)
+    row=get_protocol_client(client_id)
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    if bool(row.get("enabled")):
+        try:integration_ops.outline_set_limit(str(row.get("inbound_tag") or ""),quota_bytes)
+        except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    update_protocol_client_state(client_id,None,quota_bytes,None,None,None)
+    artifact=get_access_artifact_by_key("outline",str(client_id))
+    if artifact:
+        try:
+            current=access_ops.open_payload(artifact["payload_enc"])
+            access_url=str(current.get("share_text") or current.get("primary_text") or row.get("share_link") or "")
+            delivery=access_ops.outline_payload(row["name"],access_url,str(row.get("inbound_tag") or ""),quota_bytes)
+            artifact_save("outline",str(client_id),row["name"],"outline",delivery,{
+                "client_id":client_id,"outline_key_id":str(row.get("inbound_tag") or ""),"quota_bytes":quota_bytes
+            })
+        except Exception:pass
+    audit(actor,"outline_quota_update",str(client_id),f"quota_bytes={quota_bytes}",ip(request))
+    return {"ok":True,"client_id":client_id,"quota_bytes":quota_bytes}
+
+
+class ManagedBulkItem(BaseModel):
+    kind:str
+    key:str
+
+class ManagedBulkAction(BaseModel):
+    items:list[ManagedBulkItem]=Field(min_length=1,max_length=200)
+    action:str
+    days:int=Field(default=0,ge=0,le=3650)
+    quota_add_gb:float=Field(default=0,ge=0,le=100000)
+
+def _renew_managed_item(kind,key,days,quota_add_gb,actor,request):
+    now_ts=int(time.time())
+    if kind=="ssh":
+        profile=all_profiles().get(key)
+        if not profile:
+            raise RuntimeError("SSH profile not found")
+        base=date.today()
+        raw=profile.get("expire_date")
+        if raw:
+            try:
+                d=date.fromisoformat(str(raw))
+                if d>base:base=d
+            except Exception:pass
+        expire=(base+timedelta(days=max(1,days))).isoformat()
+        system_ops.update_ssh_user(key,expire=expire)
+        upsert_profile(
+            key,profile.get("plan",""),profile.get("note",""),expire,
+            profile.get("connection_limit",1),profile.get("quota_mb",0),1,
+            profile.get("device_limit",1),profile.get("renewal_days",0)
+        )
+        try:system_ops.lock_user(key,False)
+        except Exception:pass
+        return {"kind":kind,"key":key,"expire_date":expire}
+    if kind in {"xray","outline"}:
+        try:row=get_protocol_client(int(key))
+        except Exception:row=None
+        if not row or row.get("engine")!=kind:
+            raise RuntimeError(f"{kind} client not found")
+        base=max(now_ts,int(row.get("expire_at") or 0))
+        expire_at=base+max(1,days)*86400
+        quota=int(row.get("quota_bytes") or 0)+int(float(quota_add_gb or 0)*1024*1024*1024)
+        if kind=="xray":
+            if not row.get("enabled"):
+                protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+            update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
+        else:
+            key_id=str(row.get("inbound_tag") or "")
+            if row.get("enabled"):
+                integration_ops.outline_set_limit(key_id,quota)
+                update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
+            else:
+                # Expired/revoked Outline access has no pause state. Renewal rotates
+                # the runtime credential and keeps the same Makia managed-client identity.
+                result=_outline_reissue_managed_client(row,quota)
+                key_id=result["outline_key_id"]
+                update_protocol_client_state(row["id"],True,quota,expire_at,None,None)
+            return {"kind":kind,"key":key,"expire_at":expire_at,"quota_bytes":quota,"outline_key_id":key_id}
+        return {"kind":kind,"key":key,"expire_at":expire_at,"quota_bytes":quota}
+    raise RuntimeError("renew is not enforceable for this access type")
+
+@app.post("/api/access/bulk")
+def managed_bulk_action(payload:ManagedBulkAction,request:Request):
+    actor=require_mutation(request)
+    if payload.action not in {"renew","enable","disable"}:
+        raise HTTPException(400,"unsupported bulk action")
+    if payload.action=="renew" and payload.days<1:
+        raise HTTPException(400,"renewal days must be at least 1")
+    done=[];failed=[]
+    for item in payload.items:
+        kind=str(item.kind or "").lower()
+        key=str(item.key or "")
+        try:
+            if payload.action=="renew":
+                result=_renew_managed_item(kind,key,payload.days,payload.quota_add_gb,actor,request)
+            elif kind=="ssh":
+                system_ops.lock_user(key,payload.action=="disable")
+                p=all_profiles().get(key,{})
+                upsert_profile(key,p.get("plan",""),p.get("note",""),p.get("expire_date"),p.get("connection_limit",1),p.get("quota_mb",0),1 if payload.action=="enable" else 0,p.get("device_limit",1),p.get("renewal_days",0))
+                result={"kind":kind,"key":key}
+            elif kind=="xray":
+                row=get_protocol_client(int(key))
+                if not row:raise RuntimeError("client not found")
+                if payload.action=="enable":
+                    protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+                else:
+                    protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
+                update_protocol_client_state(row["id"],payload.action=="enable",None,None,None,None)
+                result={"kind":kind,"key":key}
+            elif kind=="outline":
+                row=get_protocol_client(int(key))
+                if not row or row.get("engine")!="outline":raise RuntimeError("client not found")
+                if payload.action=="disable":
+                    integration_ops.outline_delete_key(row["inbound_tag"])
+                    update_protocol_client_state(row["id"],False,None,None,None,None)
+                else:
+                    raise RuntimeError("disabled Outline keys must be renewed/reissued")
+                result={"kind":kind,"key":key}
+            else:
+                raise RuntimeError("bulk enable/disable is not supported for this access type")
+            done.append(result)
+        except Exception as exc:
+            failed.append({"kind":kind,"key":key,"error":str(exc)[:200]})
+    audit(actor,f"access_bulk_{payload.action}",str(len(done)),f"failed={len(failed)}; days={payload.days}; quota_add_gb={payload.quota_add_gb}",ip(request))
+    return {"done":done,"failed":failed}
+
+
+def _expiry_snapshot(days=30):
+    horizon=max(0,min(int(days),3650))
+    today=date.today()
+    now_ts=int(time.time())
+    rows=[]
+    for username,p in all_profiles().items():
+        raw=p.get("expire_date")
+        if not raw:continue
+        try:d=date.fromisoformat(str(raw))
+        except Exception:continue
+        left=(d-today).days
+        if left<=horizon:
+            rows.append({"kind":"ssh","key":username,"name":username,"protocol":"ssh","days_left":left,"expire_date":str(raw),"expired":left<0,"renew_supported":True})
+    for row in list_protocol_clients():
+        expire_at=int(row.get("expire_at") or 0)
+        if not expire_at:continue
+        left=(expire_at-now_ts)//86400
+        if left<=horizon:
+            rows.append({
+                "kind":row.get("engine"),"key":str(row.get("id")),"name":row.get("name"),"protocol":row.get("protocol"),
+                "days_left":left,"expire_at":expire_at,"expired":expire_at<now_ts,"renew_supported":row.get("engine") in {"xray","outline"},
+                "enabled":bool(row.get("enabled"))
+            })
+    rows.sort(key=lambda x:x.get("days_left",999999))
+    return {"days":horizon,"count":len(rows),"expired":sum(1 for x in rows if x.get("expired")),"rows":rows}
+
+@app.get("/api/expiry")
+def expiry_center(request:Request,days:int=30):
+    require_user(request)
+    return _expiry_snapshot(days)
+
+
+@app.get("/api/notifications")
+def notifications_get(request:Request):
+    require_user(request)
+    events=list_notification_events(100)
+    expiry=_expiry_snapshot(7)
+    stale=[]
+    now=time.time()
+    for node in list_nodes():
+        seen=node.get("last_seen_at")
+        age=None
+        if seen:
+            try:age=max(0,int(now-datetime.fromisoformat(str(seen)).timestamp()))
+            except Exception:age=None
+        if node.get("active") and (age is None or age>180):
+            stale.append({"id":node.get("id"),"name":node.get("name"),"age":age})
+    return {
+        "events":events,
+        "summary":{"expiring_7d":expiry["count"],"expired":expiry["expired"],"nodes_offline":len(stale)},
+        "nodes_offline":stale,
+    }
+
+
+@app.get("/api/diagnostics/access/{kind}/{key}")
+def access_diagnostics(kind:str,key:str,request:Request):
+    require_access_kind(request,kind)
+    checks=[]
+    def add(name,ok,detail=""):
+        checks.append({"name":name,"ok":bool(ok),"detail":str(detail or "")[:500]})
+    artifact=get_access_artifact_by_key(kind,key)
+    add("artifact",bool(artifact),"encrypted delivery artifact available" if artifact else "delivery artifact missing")
+    payload=None
+    if artifact:
+        try:
+            payload=access_ops.open_payload(artifact["payload_enc"])
+            add("artifact_decrypt",True,"payload decrypt PASS")
+        except Exception as exc:add("artifact_decrypt",False,exc)
+    state=_public_access_state(kind,key)
+    add("policy_active",state.get("active"),state.get("reason"))
+    if payload:
+        files=payload.get("files") or {}
+        add("native_file",bool(payload.get("native_filename") in files),payload.get("native_filename") or "none")
+        share=str(payload.get("share_text") or "")
+        add("share_payload",bool(share) if kind in {"xray","wireguard","ssh","outline"} else True,"available" if share else "not applicable")
+    endpoint=""
+    meta=_artifact_public_meta(artifact) if artifact else {}
+    endpoint=str(meta.get("endpoint") or "")
+    if endpoint:
+        try:
+            resolved=sorted({x[4][0] for x in socket.getaddrinfo(endpoint,None,socket.AF_INET)})
+            add("endpoint_dns",bool(resolved),", ".join(resolved))
+        except Exception as exc:add("endpoint_dns",False,exc)
+    if kind=="xray":
+        try:
+            row=get_protocol_client(int(key))
+            diag=protocol_ops.xray_diagnostics()
+            add("xray_service",bool(diag.get("service_active")),diag.get("journal") or "")
+            if row:
+                config=protocol_ops.read_xray_config()
+                inbound=next((x for x in config.get("inbounds",[]) if x.get("tag")==row.get("inbound_tag")),None)
+                add("inbound",bool(inbound),row.get("inbound_tag"))
+                if inbound:add("listener",protocol_ops._listener_present(int(inbound.get("port") or 0),"udp" if (inbound.get("streamSettings") or {}).get("method") in {"mkcp","hysteria"} else "tcp"),str(inbound.get("port")))
+        except Exception as exc:add("xray_runtime",False,exc)
+    elif kind=="wireguard":
+        try:
+            d=protocol_ops.wireguard_endpoint_diagnostics(endpoint or public_host(request))
+            add("wireguard_runtime",bool(d.get("runtime_ok")),"; ".join(d.get("warnings") or []))
+        except Exception as exc:add("wireguard_runtime",False,exc)
+    elif kind=="openvpn":
+        try:
+            d=protocol_ops.openvpn_endpoint_diagnostics(endpoint or public_host(request))
+            add("openvpn_runtime",bool(d.get("service_active") and d.get("listener")),"; ".join(d.get("warnings") or []))
+        except Exception as exc:add("openvpn_runtime",False,exc)
+    elif kind=="outline":
+        try:
+            d=integration_ops.outline_status()
+            add("outline_api",bool(d.get("api_ok")),d.get("error") or f"{d.get('key_count',0)} keys")
+        except Exception as exc:add("outline_api",False,exc)
+    return {"kind":kind,"key":key,"ok":all(x["ok"] for x in checks),"checks":checks,"state":state}
+
+
+
+class BackupSchedulePayload(BaseModel):
+    enabled:bool=True
+    frequency_hours:int=Field(default=24,ge=1,le=168)
+    keep_local:int=Field(default=7,ge=1,le=50)
+    password:str=Field(default="",max_length=128)
+    remote_enabled:bool=False
+    remote_host:str=Field(default="",max_length=255)
+    remote_user:str=Field(default="",max_length=32)
+    remote_path:str=Field(default="/var/backups/makia",max_length=240)
+    remote_port:int=Field(default=22,ge=1,le=65535)
+    remote_key_path:str=Field(default="",max_length=240)
+
+def _backup_schedule_snapshot():
+    try:cfg=json.loads(get_setting("backup_schedule_json","{}") or "{}")
+    except Exception:cfg={}
+    try:status=json.loads(get_setting("backup_schedule_status","{}") or "{}")
+    except Exception:status={}
+    return {
+        "enabled":bool(cfg.get("enabled",False)),
+        "frequency_hours":int(cfg.get("frequency_hours") or 24),
+        "keep_local":int(cfg.get("keep_local") or 7),
+        "remote":cfg.get("remote") or {},
+        "has_password":bool(get_setting("backup_schedule_secret","")),
+        "last_run":int(get_setting("backup_schedule_last_run","0") or 0),
+        "status":status,
+    }
+
+@app.get("/api/backups/schedule")
+def backup_schedule_get(request:Request):
+    require_local_admin(request)
+    return _backup_schedule_snapshot()
+
+@app.put("/api/backups/schedule")
+def backup_schedule_put(payload:BackupSchedulePayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    if payload.enabled and not payload.password and not get_setting("backup_schedule_secret",""):
+        raise HTTPException(400,"set a Full Migration backup password before enabling scheduled backups")
+    remote={
+        "enabled":bool(payload.remote_enabled),
+        "host":payload.remote_host.strip(),
+        "user":payload.remote_user.strip(),
+        "path":payload.remote_path.strip(),
+        "port":payload.remote_port,
+        "key_path":payload.remote_key_path.strip(),
+    }
+    if remote["enabled"]:
+        # Validate without transmitting a file.
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,255}",remote["host"]):
+            raise HTTPException(400,"invalid remote backup host")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}",remote["user"]):
+            raise HTTPException(400,"invalid remote backup user")
+        if remote["key_path"] and not Path(remote["key_path"]).is_file():
+            raise HTTPException(400,"remote backup SSH key does not exist")
+    cfg={"enabled":payload.enabled,"frequency_hours":payload.frequency_hours,"keep_local":payload.keep_local,"remote":remote}
+    set_setting("backup_schedule_json",json.dumps(cfg,ensure_ascii=False,separators=(",",":")))
+    if payload.password:
+        if len(payload.password)<10:raise HTTPException(400,"backup password must be at least 10 characters")
+        set_setting("backup_schedule_secret",integration_ops.seal_secret({"password":payload.password}))
+    audit(actor,"backup_schedule_update","scheduler",f"enabled={payload.enabled}; remote={payload.remote_enabled}",ip(request))
+    return _backup_schedule_snapshot()
+
+@app.post("/api/backups/schedule/run")
+def backup_schedule_run(request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    try:
+        from . import scheduled_backup
+        result=scheduled_backup.run_once(True)
+    except Exception as exc:
+        raise HTTPException(400,str(exc))
+    audit(actor,"backup_schedule_run",result.get("name","manual"),ip=ip(request))
+    return result
+
+
+class CloudflareIntegrationPayload(BaseModel):
+    api_token:str=Field(default="",max_length=256)
+    zone_id:str=Field(default="",max_length=80)
+    record_name:str=Field(default="",max_length=253)
+    ttl:int=Field(default=60,ge=60,le=86400)
+
+class CloudflareCutoverPayload(BaseModel):
+    ipv4:str=Field(min_length=7,max_length=64)
+
+def _cloudflare_snapshot():
+    return {
+        "configured":bool(get_setting("cloudflare_secret","") and get_setting("cloudflare_zone_id","") and get_setting("cloudflare_record_name","")),
+        "zone_id":get_setting("cloudflare_zone_id",""),
+        "record_name":get_setting("cloudflare_record_name",""),
+        "ttl":_setting_int("cloudflare_ttl",60,60,86400),
+    }
+
+@app.get("/api/integrations/cloudflare")
+def cloudflare_get(request:Request):
+    require_local_admin(request)
+    return _cloudflare_snapshot()
+
+@app.put("/api/integrations/cloudflare")
+def cloudflare_put(payload:CloudflareIntegrationPayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    zone=payload.zone_id.strip();name=payload.record_name.strip().lower().rstrip(".")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,80}",zone):raise HTTPException(400,"invalid Cloudflare zone id")
+    if not name or "." not in name:raise HTTPException(400,"invalid Cloudflare A-record name")
+    if payload.api_token:
+        if len(payload.api_token)<20:raise HTTPException(400,"invalid Cloudflare API token")
+        set_setting("cloudflare_secret",integration_ops.seal_secret({"api_token":payload.api_token.strip()}))
+    elif not get_setting("cloudflare_secret",""):
+        raise HTTPException(400,"Cloudflare API token is required")
+    set_setting("cloudflare_zone_id",zone);set_setting("cloudflare_record_name",name);set_setting("cloudflare_ttl",payload.ttl)
+    audit(actor,"cloudflare_settings_update",name,ip=ip(request))
+    return _cloudflare_snapshot()
+
+def _cloudflare_token():
+    secret=get_setting("cloudflare_secret","")
+    if not secret:return ""
+    try:return str(integration_ops.open_secret(secret).get("api_token") or "")
+    except Exception:return ""
+
+@app.post("/api/integrations/cloudflare/test")
+def cloudflare_test(request:Request):
+    require_local_admin(request);require_mutation(request)
+    cfg=_cloudflare_snapshot()
+    try:record=integration_ops.cloudflare_record(_cloudflare_token(),cfg["zone_id"],cfg["record_name"])
+    except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    return {"ok":True,"record":record,"dns_only":None if not record else not bool(record.get("proxied"))}
+
+@app.post("/api/integrations/cloudflare/cutover")
+def cloudflare_cutover(payload:CloudflareCutoverPayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    cfg=_cloudflare_snapshot()
+    if not cfg["configured"]:raise HTTPException(409,"Cloudflare integration is not configured")
+    try:
+        result=integration_ops.cloudflare_update_a(_cloudflare_token(),cfg["zone_id"],cfg["record_name"],payload.ipv4,cfg["ttl"])
+    except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    audit(actor,"cloudflare_dns_cutover",cfg["record_name"],f"ipv4={payload.ipv4}; dns_only=true",ip(request))
+    resolved=[]
+    try:resolved=sorted({x[4][0] for x in socket.getaddrinfo(cfg["record_name"],443,socket.AF_INET,socket.SOCK_STREAM)})
+    except OSError:pass
+    return {"ok":True,"record":result,"resolved_ipv4":resolved,"propagated":payload.ipv4 in resolved}
+
+
+class TelegramIntegrationPayload(BaseModel):
+    bot_token:str=Field(default="",max_length=256)
+    chat_id:str=Field(default="",max_length=40)
+    enable_webhook:bool=False
+
+def _telegram_snapshot():
+    return {
+        "configured":bool(get_setting("telegram_secret","") and get_setting("telegram_chat_id","")),
+        "chat_id":get_setting("telegram_chat_id",""),
+        "webhook_enabled":_setting_bool("telegram_webhook_enabled",False),
+    }
+
+def _telegram_token():
+    raw=get_setting("telegram_secret","")
+    if not raw:return ""
+    try:return str(integration_ops.open_secret(raw).get("bot_token") or "")
+    except Exception:return ""
+
+@app.get("/api/integrations/telegram")
+def telegram_get(request:Request):
+    require_local_admin(request)
+    return _telegram_snapshot()
+
+@app.put("/api/integrations/telegram")
+def telegram_put(payload:TelegramIntegrationPayload,request:Request):
+    actor=require_local_admin(request);require_mutation(request)
+    chat=payload.chat_id.strip()
+    if not re.fullmatch(r"-?\d{5,30}",chat):raise HTTPException(400,"invalid Telegram chat id")
+    if payload.bot_token:
+        token=payload.bot_token.strip()
+        if not re.fullmatch(r"\d{6,15}:[A-Za-z0-9_-]{20,}",token):
+            raise HTTPException(400,"invalid Telegram bot token")
+        set_setting("telegram_secret",integration_ops.seal_secret({"bot_token":token}))
+    elif not get_setting("telegram_secret",""):
+        raise HTTPException(400,"Telegram bot token is required")
+    set_setting("telegram_chat_id",chat)
+    if payload.enable_webhook:
+        domain=(get_setting("panel_domain","") or "").strip()
+        if not domain:raise HTTPException(409,"HTTPS panel domain is required for Telegram webhook")
+        secret=get_setting("telegram_webhook_secret","") or secrets.token_urlsafe(32)
+        set_setting("telegram_webhook_secret",secret)
+        try:integration_ops.telegram_set_webhook(_telegram_token(),f"https://{domain}/integrations/telegram/webhook",secret)
+        except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+        set_setting("telegram_webhook_enabled","1")
+    elif _setting_bool("telegram_webhook_enabled",False):
+        try:integration_ops.telegram_delete_webhook(_telegram_token())
+        except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+        set_setting("telegram_webhook_enabled","0")
+    audit(actor,"telegram_settings_update","telegram",f"webhook={payload.enable_webhook}",ip(request))
+    return _telegram_snapshot()
+
+@app.post("/api/integrations/telegram/test")
+def telegram_test(request:Request):
+    require_local_admin(request);require_mutation(request)
+    try:result=integration_ops.telegram_send(_telegram_token(),get_setting("telegram_chat_id",""),f"✅ Makia {VERSION}\nTelegram integration is working.")
+    except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+    return {"ok":True,"message_id":result.get("message_id")}
+
+@app.post("/integrations/telegram/webhook")
+async def telegram_webhook(request:Request):
+    secret=str(get_setting("telegram_webhook_secret","") or "")
+    received=str(request.headers.get("x-telegram-bot-api-secret-token") or "")
+    if not secret or not secrets.compare_digest(secret,received):
+        raise HTTPException(403,"invalid webhook secret")
+    try:payload=await request.json()
+    except Exception:raise HTTPException(400,"invalid update")
+    message=payload.get("message") or {}
+    chat=str((message.get("chat") or {}).get("id") or "")
+    configured=str(get_setting("telegram_chat_id","") or "")
+    if not chat or chat!=configured:
+        return {"ok":True}
+    text=str(message.get("text") or "").strip().split()[0].lower()
+    response=""
+    if text in {"/status","/start"}:
+        m=system_ops.metrics();stack=protocol_ops.catalog()
+        response=f"Makia {VERSION}\nCPU {m['cpu']:.0f}% · RAM {m['memory']:.0f}% · Disk {m['disk']:.0f}%\nXray: {'UP' if stack.get('xray',{}).get('service_active') else 'DOWN'}\nWG: {'UP' if stack.get('wireguard',{}).get('service_active') else 'DOWN'}\nOpenVPN: {'UP' if stack.get('openvpn',{}).get('service_active') else 'DOWN'}"
+    elif text=="/expiry":
+        expiry=_expiry_snapshot(7)
+        response=f"Expiring/expired in 7 days: {expiry['count']}\nExpired: {expiry['expired']}"
+    elif text=="/backup":
+        rows=system_ops.backup_list()
+        latest=rows[0] if rows else None
+        schedule=_backup_schedule_snapshot()
+        if latest:
+            response=(
+                f"Latest backup: {latest.get('name')}\n"
+                f"Type: {latest.get('type')} · Encrypted: {'yes' if latest.get('encrypted') else 'no'}\n"
+                f"Scheduled backup: {'ON' if schedule.get('enabled') else 'OFF'}"
+            )
+        else:
+            response=f"No backups found.\nScheduled backup: {'ON' if schedule.get('enabled') else 'OFF'}"
+    else:
+        response="Commands: /status /expiry /backup"
+    try:integration_ops.telegram_send(_telegram_token(),configured,response)
+    except Exception:pass
+    return {"ok":True}
+
+
+@app.get("/api/disaster-recovery/summary")
+def disaster_recovery_summary(request:Request):
+    require_local_admin(request)
+    readiness=backup_migration_readiness(request)
+    cf=_cloudflare_snapshot()
+    backups=system_ops.backup_list()
+    full=next((x for x in backups if x.get("type")=="full_migration"),None)
+    return {
+        "readiness":readiness,"cloudflare":cf,"latest_full_backup":full,
+        "steps":[
+            "preflight","full_backup","install_destination","verify_bundle",
+            "restore","runtime_verification","dns_cutover","client_uat"
+        ],
+        "stable_config_cutover":bool(readiness.get("same_config_cutover_ready")),
+    }
+
+
 @app.get("/api/audit")
 def audit_list(request:Request,limit:int=100):
     require_user(request); limit=max(1,min(limit,500))
@@ -2551,487 +3266,6 @@ def admin_token_revoke(token_id:int,request:Request):
     audit(actor,"api_token_revoke",str(token_id),ip=ip(request))
     return {"ok":True}
 
-class ServicePlanPayload(BaseModel):
-    name:str=Field(min_length=1,max_length=80)
-    kind:str
-    protocol:str=""
-    duration_days:int=Field(default=30,ge=0,le=3650)
-    quota_gb:float=Field(default=0,ge=0,le=100000)
-    ip_limit:int=Field(default=1,ge=1,le=50)
-    connection_limit:int=Field(default=1,ge=1,le=50)
-    price:float=Field(default=0,ge=0,le=1_000_000_000)
-    config:dict=Field(default_factory=dict)
-    active:bool=True
-
-@app.get("/api/plans")
-def plans_get(request:Request):
-    require_user(request)
-    return list_plans()
-
-@app.post("/api/plans")
-def plans_create(payload:ServicePlanPayload,request:Request):
-    actor=require_mutation(request)
-    kind=payload.kind.strip().lower()
-    if kind not in {"ssh","xray","outline"}:
-        raise HTTPException(400,"Plans with enforced duration/quota are currently supported for SSH, Xray and Outline")
-    try:
-        plan_id=create_plan(payload.name,kind,payload.protocol,payload.duration_days,int(payload.quota_gb*1024),payload.ip_limit,payload.connection_limit,payload.price,payload.config,payload.active)
-    except Exception as exc:
-        raise HTTPException(400,str(exc))
-    audit(actor,"plan_create",str(plan_id),payload.name,ip(request))
-    return next(x for x in list_plans() if int(x["id"])==plan_id)
-
-@app.put("/api/plans/{plan_id}")
-def plans_update(plan_id:int,payload:ServicePlanPayload,request:Request):
-    actor=require_mutation(request)
-    kind=payload.kind.strip().lower()
-    if kind not in {"ssh","xray","outline"}:
-        raise HTTPException(400,"Plans with enforced duration/quota are currently supported for SSH, Xray and Outline")
-    update_plan(
-        plan_id,name=payload.name,kind=kind,protocol=payload.protocol,
-        duration_days=payload.duration_days,quota_mb=int(payload.quota_gb*1024),
-        ip_limit=payload.ip_limit,connection_limit=payload.connection_limit,
-        price=payload.price,config_json=payload.config,active=payload.active,
-    )
-    audit(actor,"plan_update",str(plan_id),payload.name,ip(request))
-    row=next((x for x in list_plans() if int(x["id"])==plan_id),None)
-    if not row:raise HTTPException(404,"plan not found")
-    return row
-
-@app.delete("/api/plans/{plan_id}")
-def plans_delete(plan_id:int,request:Request):
-    actor=require_mutation(request)
-    delete_plan(plan_id)
-    audit(actor,"plan_delete",str(plan_id),ip=ip(request))
-    return {"ok":True}
-
-
-class AccessRenewPayload(BaseModel):
-    days:int=Field(default=0,ge=0,le=3650)
-    add_gb:float=Field(default=0,ge=0,le=100000)
-
-
-def _outline_delivery_payload(name,access_url):
-    filename=f"{access_ops.safe_filename(name)}-outline.txt"
-    return {
-        "native_filename":filename,
-        "files":{
-            filename:str(access_url).encode("utf-8"),
-            "connection-guide-fa.txt":access_ops.client_guide_text("outline","outline").encode("utf-8"),
-        },
-        "primary_text":str(access_url),"share_text":str(access_url),"share_type":"outline",
-        "summary":{"name":name,"protocol":"outline"},
-    }
-
-def _outline_reissue_managed_client(row,quota_bytes=None):
-    if not row or row.get("engine")!="outline":
-        raise HTTPException(404,"Outline client not found")
-    quota=int(row.get("quota_bytes") or 0) if quota_bytes is None else max(0,int(quota_bytes))
-    try:
-        key=outline_ops.create_key(row["name"],quota)
-    except outline_ops.OutlineError as exc:
-        raise HTTPException(400,str(exc))
-    outline_id=str(key.get("id") or "")
-    access_url=str(key.get("accessUrl") or "")
-    if not outline_id or not access_url.startswith("ss://"):
-        if outline_id:
-            try:outline_ops.delete_key(outline_id)
-            except Exception:pass
-        raise HTTPException(502,"Outline did not return a valid replacement access key")
-    try:
-        replace_protocol_client_identity(row["id"],f"outline:{outline_id}",outline_id,access_url)
-        artifact_save(
-            "outline",str(row["id"]),row["name"],"outline",
-            _outline_delivery_payload(row["name"],access_url),
-            {"client_id":row["id"],"outline_id":outline_id,"quota_bytes":quota}
-        )
-    except Exception:
-        try:outline_ops.delete_key(outline_id)
-        except Exception:pass
-        raise
-    return {"outline_id":outline_id,"access_url":access_url,"quota_bytes":quota}
-
-def _outline_disable_managed_client(row,reason="manual"):
-    if not row or row.get("engine")!="outline":
-        raise HTTPException(404,"Outline client not found")
-    outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-    if outline_id:
-        try:outline_ops.delete_key(outline_id)
-        except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
-    from .db import set_protocol_client_enabled
-    set_protocol_client_enabled(row["id"],False,reason)
-    return {"disabled":True,"outline_id":outline_id}
-
-
-def _renew_access(kind,key,days,add_gb):
-    kind=str(kind).lower()
-    now_ts=int(time.time())
-    if kind=="ssh":
-        profiles=all_profiles(); p=profiles.get(key)
-        if not p:raise HTTPException(404,"SSH account not found")
-        base=date.today()
-        if p.get("expire_date"):
-            try:
-                current=date.fromisoformat(str(p["expire_date"]))
-                if current>base:base=current
-            except Exception:pass
-        new_expire=(base+timedelta(days=int(days))).isoformat() if days else p.get("expire_date")
-        new_quota=max(0,int(p.get("quota_mb") or 0)+int(float(add_gb)*1024))
-        try:
-            system_ops.update_ssh_user(key,expire=new_expire)
-            upsert_profile(key,p.get("plan",""),p.get("note",""),new_expire,p.get("connection_limit",1),new_quota,p.get("enabled",1),p.get("device_limit",1),p.get("renewal_days",0))
-        except system_ops.OperationError as exc:raise HTTPException(400,str(exc))
-        return {"kind":kind,"key":key,"expire_date":new_expire,"quota_mb":new_quota}
-    if kind in {"xray","outline"}:
-        try:row=get_protocol_client(int(key))
-        except Exception:row=None
-        if not row or row.get("engine")!=kind:
-            raise HTTPException(404,f"{kind} client not found")
-        expire=int(row.get("expire_at") or 0)
-        if days:
-            base=max(now_ts,expire)
-            expire=base+int(days)*86400
-        quota=max(0,int(row.get("quota_bytes") or 0)+int(float(add_gb)*1024*1024*1024))
-        if kind=="outline":
-            if bool(row.get("enabled")):
-                outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-                try:outline_ops.set_data_limit(outline_id,quota)
-                except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
-            else:
-                _outline_reissue_managed_client(row,quota)
-        update_protocol_client_state(int(key),True,quota,expire,None,None)
-        return {"kind":kind,"key":key,"expire_at":expire,"quota_bytes":quota,"reissued":bool(kind=="outline" and not row.get("enabled"))}
-    raise HTTPException(400,"renew is supported for SSH, Xray and Outline managed clients")
-
-@app.post("/api/access/{kind}/{key}/renew")
-def access_renew(kind:str,key:str,payload:AccessRenewPayload,request:Request):
-    actor=require_mutation(request)
-    if payload.days<1 and payload.add_gb<=0:raise HTTPException(400,"days or add_gb is required")
-    result=_renew_access(kind,key,payload.days,payload.add_gb)
-    audit(actor,"access_renew",f"{kind}:{key}",f"days={payload.days}; add_gb={payload.add_gb}",ip(request))
-    return result
-
-class BulkAccessItem(BaseModel):
-    kind:str
-    key:str
-
-class BulkAccessPayload(BaseModel):
-    items:list[BulkAccessItem]=Field(min_length=1,max_length=200)
-    action:str
-    days:int=Field(default=0,ge=0,le=3650)
-    add_gb:float=Field(default=0,ge=0,le=100000)
-
-def _set_access_enabled(kind,key,enabled):
-    kind=str(kind).lower()
-    if kind=="ssh":
-        try:system_ops.lock_user(key,not enabled)
-        except system_ops.OperationError as exc:raise HTTPException(400,str(exc))
-        p=all_profiles().get(key,{})
-        upsert_profile(key,p.get("plan",""),p.get("note",""),p.get("expire_date"),p.get("connection_limit",1),p.get("quota_mb",0),1 if enabled else 0,p.get("device_limit",1),p.get("renewal_days",0))
-        return
-    if kind=="wireguard":
-        try:protocol_ops.set_wireguard_peer_enabled(key,enabled)
-        except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
-        return
-    if kind in {"xray","outline"}:
-        try:row=get_protocol_client(int(key))
-        except Exception:row=None
-        if not row or row.get("engine")!=kind:raise HTTPException(404,"managed client not found")
-        if kind=="xray":
-            try:
-                if enabled:protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
-                else:protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
-            except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
-        else:
-            if enabled:
-                if not bool(row.get("enabled")):_outline_reissue_managed_client(row)
-            else:
-                _outline_disable_managed_client(row,"manual")
-                return
-        update_protocol_client_state(int(key),enabled,None,None,None,None)
-        return
-    raise HTTPException(400,"enable/disable not supported for this access type")
-
-@app.post("/api/access/bulk")
-def access_bulk(payload:BulkAccessPayload,request:Request):
-    actor=require_mutation(request)
-    action=payload.action.strip().lower()
-    if action not in {"enable","disable","renew","add_quota"}:raise HTTPException(400,"bulk action not allowed")
-    done=[];failed=[]
-    for item in payload.items:
-        try:
-            if action in {"enable","disable"}:_set_access_enabled(item.kind,item.key,action=="enable")
-            elif action=="renew":
-                if payload.days<1:raise HTTPException(400,"days must be at least 1")
-                _renew_access(item.kind,item.key,payload.days,payload.add_gb)
-            else:
-                if payload.add_gb<=0:raise HTTPException(400,"add_gb must be greater than 0")
-                _renew_access(item.kind,item.key,0,payload.add_gb)
-            done.append({"kind":item.kind,"key":item.key})
-        except Exception as exc:
-            detail=exc.detail if isinstance(exc,HTTPException) else str(exc)
-            failed.append({"kind":item.kind,"key":item.key,"error":str(detail)})
-    audit(actor,"access_bulk",action,f"done={len(done)}; failed={len(failed)}",ip(request))
-    return {"action":action,"done":done,"failed":failed}
-
-@app.get("/api/operations/expiry")
-def expiry_center(request:Request,days:int=30):
-    require_user(request)
-    horizon=max(1,min(int(days),3650))
-    now_ts=int(time.time())
-    rows=[]
-    for item in account_rows():
-        d=item.get("days_left")
-        if d is not None and d<=horizon:
-            rows.append({"kind":"ssh","key":item["username"],"name":item["username"],"protocol":"ssh","days_left":d,"expired":d<0,"expire_date":item.get("expire_date"),"quota_bytes":int(item.get("quota_mb") or 0)*1024*1024})
-    for item in list_protocol_clients():
-        expire=int(item.get("expire_at") or 0)
-        if not expire:continue
-        d=(expire-now_ts)//86400
-        if d<=horizon:
-            rows.append({"kind":item.get("engine"),"key":str(item["id"]),"name":item["name"],"protocol":item["protocol"],"days_left":int(d),"expired":expire<now_ts,"expire_at":expire,"quota_bytes":int(item.get("quota_bytes") or 0)})
-    rows.sort(key=lambda x:x["days_left"])
-    return {"days":horizon,"items":rows,"expired":sum(1 for x in rows if x["expired"]),"soon":sum(1 for x in rows if not x["expired"])}
-
-
-class BackupSchedulePayload(BaseModel):
-    name:str=Field(min_length=1,max_length=80)
-    backup_type:str="quick"
-    interval_hours:int=Field(default=24,ge=1,le=24*30)
-    keep_last:int=Field(default=7,ge=1,le=100)
-    password:str=Field(default="",max_length=128)
-    remote:dict=Field(default_factory=dict)
-    enabled:bool=True
-
-@app.get("/api/automation/backups")
-def scheduled_backups_get(request:Request):
-    require_local_admin(request)
-    rows=[]
-    for item in list_backup_schedules():
-        cfg=automation_ops.open_config(item.get("config_enc") or "") if item.get("config_enc") else {}
-        rows.append({k:v for k,v in item.items() if k!="config_enc"}|{"remote_type":str((cfg.get("remote") or {}).get("type") or "none")})
-    return {"schedules":rows,"runs":list_backup_runs(50)}
-
-@app.post("/api/automation/backups")
-def scheduled_backups_create(payload:BackupSchedulePayload,request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    if payload.backup_type not in {"quick","full_migration"}:raise HTTPException(400,"invalid backup type")
-    remote_type=str((payload.remote or {}).get("type") or "none").lower()
-    if payload.backup_type=="full_migration" and len(payload.password)<10:
-        raise HTTPException(400,"Full Migration schedule password must be at least 10 characters")
-    if remote_type not in {"","none"} and payload.backup_type!="full_migration":
-        raise HTTPException(400,"Remote backups must use encrypted Full Migration format; Quick Backup is local-only")
-    cfg={"password":payload.password,"remote":payload.remote}
-    schedule_id=create_backup_schedule(payload.name,payload.backup_type,payload.interval_hours,payload.keep_last,automation_ops.seal_config(cfg),payload.enabled,int(time.time())+payload.interval_hours*3600)
-    audit(actor,"backup_schedule_create",str(schedule_id),payload.name,ip(request))
-    return {"id":schedule_id,"ok":True}
-
-@app.delete("/api/automation/backups/{schedule_id}")
-def scheduled_backups_delete(schedule_id:int,request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    delete_backup_schedule(schedule_id);audit(actor,"backup_schedule_delete",str(schedule_id),ip=ip(request))
-    return {"ok":True}
-
-@app.post("/api/automation/backups/{schedule_id}/run")
-def scheduled_backups_run(schedule_id:int,request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    schedule=next((x for x in list_backup_schedules() if int(x["id"])==schedule_id),None)
-    if not schedule:raise HTTPException(404,"backup schedule not found")
-    try:result=automation_ops.execute_backup_schedule(schedule,VERSION)
-    except Exception as exc:raise HTTPException(400,str(exc))
-    audit(actor,"backup_schedule_run",str(schedule_id),result["backup"]["name"],ip(request))
-    return result
-
-
-class IntegrationsPayload(BaseModel):
-    cloudflare:dict=Field(default_factory=dict)
-    telegram:dict=Field(default_factory=dict)
-
-@app.get("/api/integrations")
-def integrations_get(request:Request):
-    require_local_admin(request)
-    raw=get_setting("integrations_config_enc","")
-    cfg=automation_ops.open_config(raw) if raw else {}
-    cf=cfg.get("cloudflare") or {}; tg=cfg.get("telegram") or {}
-    return {
-        "cloudflare":{"enabled":bool(cf.get("enabled")),"configured":bool(cf.get("api_token")),"zone":cf.get("zone",""),"record":cf.get("record",""),"ttl":cf.get("ttl",60),"proxied":bool(cf.get("proxied",False))},
-        "telegram":{"enabled":bool(tg.get("enabled")),"configured":bool(tg.get("bot_token") and tg.get("chat_id")),"chat_id":str(tg.get("chat_id") or "")[-6:]},
-    }
-
-@app.post("/api/integrations")
-def integrations_save(payload:IntegrationsPayload,request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    old_raw=get_setting("integrations_config_enc","")
-    old=automation_ops.open_config(old_raw) if old_raw else {}
-    cf=dict(payload.cloudflare or {});tg=dict(payload.telegram or {})
-    if not cf.get("api_token"):cf["api_token"]=(old.get("cloudflare") or {}).get("api_token","")
-    if not tg.get("bot_token"):tg["bot_token"]=(old.get("telegram") or {}).get("bot_token","")
-    set_setting("integrations_config_enc",automation_ops.seal_config({"cloudflare":cf,"telegram":tg}))
-    audit(actor,"integrations_save","integrations",f"cloudflare={bool(cf.get('enabled'))}; telegram={bool(tg.get('enabled'))}",ip(request))
-    return integrations_get(request)
-
-@app.post("/api/integrations/cloudflare/test")
-def cloudflare_test(request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    raw=get_setting("integrations_config_enc","");cfg=automation_ops.open_config(raw) if raw else {}
-    cf=cfg.get("cloudflare") or {}
-    try:result=automation_ops.cloudflare_resolve(cf.get("api_token"),cf.get("zone"),cf.get("record"))
-    except automation_ops.AutomationError as exc:raise HTTPException(400,str(exc))
-    audit(actor,"cloudflare_test",cf.get("record",""),ip=ip(request))
-    return {"ok":True,"zone_id":result["zone_id"],"record":result["record"]}
-
-class CloudflareCutoverPayload(BaseModel):
-    ipv4:str
-    confirm_record:str
-
-@app.post("/api/integrations/cloudflare/cutover")
-def cloudflare_cutover(payload:CloudflareCutoverPayload,request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    raw=get_setting("integrations_config_enc","");cfg=automation_ops.open_config(raw) if raw else {}
-    cf=cfg.get("cloudflare") or {}
-    if payload.confirm_record.strip().lower()!=str(cf.get("record") or "").strip().lower():
-        raise HTTPException(400,"record confirmation does not match configured Cloudflare record")
-    # Raw VPN/SSH endpoints must remain DNS-only. Do not allow API-supplied
-    # integration metadata to accidentally orange-cloud a migration record.
-    try:result=automation_ops.cloudflare_update_a(cf.get("api_token"),cf.get("zone"),cf.get("record"),payload.ipv4,cf.get("ttl",60),False)
-    except automation_ops.AutomationError as exc:raise HTTPException(400,str(exc))
-    audit(actor,"cloudflare_cutover",cf.get("record",""),f"new_ipv4={payload.ipv4}",ip(request))
-    return {"ok":True,**result}
-
-@app.post("/api/integrations/telegram/test")
-def telegram_test(request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    raw=get_setting("integrations_config_enc","");cfg=automation_ops.open_config(raw) if raw else {}
-    tg=cfg.get("telegram") or {}
-    try:result=automation_ops.telegram_send(tg.get("bot_token"),tg.get("chat_id"),f"Makia {VERSION}: Telegram integration test PASS")
-    except automation_ops.AutomationError as exc:raise HTTPException(400,str(exc))
-    audit(actor,"telegram_test","telegram",ip=ip(request))
-    return {"ok":True,"message_id":result.get("message_id")}
-
-@app.get("/api/alerts")
-def alerts_get(request:Request):
-    require_user(request)
-    return list_alert_events(100)
-
-
-@app.get("/api/operations/diagnostics")
-def operations_diagnostics(request:Request):
-    require_user(request)
-    checks=[]
-    def add(name,ok,detail="",action=""):
-        checks.append({"name":name,"ok":bool(ok),"detail":str(detail or ""), "action":action})
-    domain=(get_setting("panel_domain","") or "").strip()
-    try:
-        ds=panel_ops.domain_status(domain or None)
-        add("Panel HTTPS",bool(ds.get("certificate") and ds.get("https_listener")) if domain else False,(domain or "No panel domain"),"settings")
-        if domain:add("DNS matches VPS",ds.get("dns_matches_server") is True,", ".join(ds.get("resolved_ipv4") or []),"integrations")
-    except Exception as exc:add("Panel domain",False,str(exc),"settings")
-    for name,label in ALLOWED_SERVICES.items():
-        try:
-            s=system_ops.service_status(name);add(label,bool(s.get("active")),s.get("state") or "","services")
-        except Exception as exc:add(label,False,str(exc),"services")
-    try:
-        out=outline_ops.status()
-        if out.get("installed"):add("Outline",bool(out.get("container_active") and out.get("api_reachable")),f"{out.get('keys',0)} keys","outline")
-    except Exception as exc:add("Outline",False,str(exc),"outline")
-    backups=system_ops.backup_list()
-    add("Full Migration backup",any(x.get("type")=="full_migration" and x.get("restore_ready") for x in backups),f"{sum(1 for x in backups if x.get('type')=='full_migration')} portable backup(s)","backups")
-    nodes=list_nodes();fresh=0
-    for node in nodes:
-        try:
-            seen=datetime.fromisoformat(node["last_seen_at"]).timestamp() if node.get("last_seen_at") else 0
-            if time.time()-seen<120:fresh+=1
-        except Exception:pass
-    if nodes:add("Fleet nodes",fresh==len([x for x in nodes if x.get("active")]),f"{fresh}/{len(nodes)} recent heartbeat","nodes")
-    return {"ok":all(x["ok"] for x in checks if x["name"] not in {"Panel HTTPS","Full Migration backup"}),"checks":checks,"passed":sum(1 for x in checks if x["ok"]),"total":len(checks)}
-
-
-@app.get("/api/operations/disaster-readiness")
-def disaster_readiness(request:Request):
-    require_local_admin(request)
-    base=backup_migration_readiness(request)
-    full=[x for x in system_ops.backup_list() if x.get("type")=="full_migration" and x.get("restore_ready")]
-    integration=integrations_get(request)
-    nodes=list_nodes()
-    return {
-        **base,
-        "latest_full_backup":full[0] if full else None,
-        "cloudflare":integration["cloudflare"],
-        "telegram":integration["telegram"],
-        "nodes":len(nodes),
-        "ready":bool(base.get("same_config_cutover_ready") and full),
-        "steps":[
-            {"id":"backup","ok":bool(full),"label":"Verified Full Migration Backup"},
-            {"id":"domain","ok":bool(base.get("domain_configured")),"label":"Stable domain configured"},
-            {"id":"clients","ok":not bool(base.get("ip_based")),"label":"No known literal-IP client configs"},
-            {"id":"dns","ok":bool(integration["cloudflare"].get("configured")),"label":"Cloudflare integration configured"},
-        ],
-    }
-
-
-class OutlineSetupPayload(BaseModel):
-    hostname:str=""
-    keys_port:int=Field(default=0,ge=0,le=65535)
-
-class OutlineClientPayload(BaseModel):
-    name:str=Field(min_length=1,max_length=80)
-    quota_gb:float=Field(default=0,ge=0,le=100000)
-    expire_days:int=Field(default=0,ge=0,le=3650)
-
-@app.get("/api/protocols/outline")
-def outline_status(request:Request):
-    require_capability(request,"outline")
-    status=outline_ops.status()
-    if status.get("api_reachable"):
-        try:status["access_keys"]=outline_ops.list_keys()
-        except Exception:status["access_keys"]=[]
-    return status
-
-@app.post("/api/protocols/outline/setup")
-def outline_setup(payload:OutlineSetupPayload,request:Request):
-    actor=require_local_admin(request);require_mutation(request)
-    try:result=outline_ops.setup(payload.hostname,payload.keys_port)
-    except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
-    audit(actor,"outline_setup","outline",f"keys_port={payload.keys_port}",ip(request))
-    return result
-
-@app.post("/api/protocols/outline/clients")
-def outline_client_create(payload:OutlineClientPayload,request:Request):
-    actor=require_capability(request,"outline",True)
-    quota=int(payload.quota_gb*1024*1024*1024)
-    try:key=outline_ops.create_key(payload.name,quota)
-    except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
-    access_url=str(key.get("accessUrl") or "")
-    outline_id=str(key.get("id") or "")
-    if not access_url or not outline_id:
-        try:outline_ops.delete_key(outline_id)
-        except Exception:pass
-        raise HTTPException(500,"Outline returned an incomplete access key")
-    expire=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
-    client_id=create_protocol_client(payload.name,"outline","shadowsocks",f"outline:{outline_id}",outline_id,access_url,quota,expire,1,0)
-    filename=f"{access_ops.safe_filename(payload.name)}-outline.txt"
-    delivery={
-        "native_filename":filename,
-        "files":{filename:access_url.encode("utf-8"),"connection-guide-fa.txt":access_ops.client_guide_text("outline","outline").encode("utf-8")},
-        "primary_text":access_url,"share_text":access_url,"share_type":"outline",
-        "summary":{"name":payload.name,"protocol":"outline","access_key_id":outline_id},
-    }
-    artifact_id=artifact_save("outline",str(client_id),payload.name,"outline",delivery,{"client_id":client_id,"outline_id":outline_id})
-    audit(actor,"outline_client_create",outline_id,payload.name,ip(request))
-    return {"client_id":client_id,"outline_id":outline_id,"name":payload.name,"access_url":access_url,"quota_bytes":quota,"expire_at":expire,"artifact_id":artifact_id}
-
-@app.delete("/api/protocols/outline/clients/{client_id}")
-def outline_client_delete(client_id:int,request:Request):
-    actor=require_capability(request,"outline",True)
-    row=get_protocol_client(client_id)
-    if not row or row.get("engine")!="outline":raise HTTPException(404,"Outline client not found")
-    outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-    try:outline_ops.delete_key(outline_id)
-    except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
-    delete_protocol_client(client_id);delete_access_artifact_by_key("outline",str(client_id))
-    audit(actor,"outline_client_delete",outline_id,row["name"],ip(request))
-    return {"ok":True}
-
 class NodeCreate(BaseModel):
     name:str=Field(min_length=1,max_length=80)
 
@@ -3041,14 +3275,13 @@ class NodeHeartbeat(BaseModel):
     cpu:float=Field(ge=0,le=100)
     memory:float=Field(ge=0,le=100)
     disk:float=Field(ge=0,le=100)
+    public_ip:str=Field(default="",max_length=64)
     region:str=Field(default="",max_length=80)
-    public_url:str=Field(default="",max_length=255)
-    users:int=Field(default=0,ge=0,le=1_000_000)
-    online_users:int=Field(default=0,ge=0,le=1_000_000)
-    rx:int=Field(default=0,ge=0)
-    tx:int=Field(default=0,ge=0)
-    latency_ms:float=Field(default=0,ge=0,le=60000)
+    users:int=Field(default=0,ge=0,le=1000000)
+    online_users:int=Field(default=0,ge=0,le=1000000)
+    traffic_bytes:int=Field(default=0,ge=0)
     services:dict=Field(default_factory=dict)
+    last_error:str=Field(default="",max_length=500)
 
 @app.get("/api/nodes")
 def nodes_get(request:Request):
@@ -3077,10 +3310,9 @@ def node_heartbeat(payload:NodeHeartbeat,request:Request):
         raise HTTPException(403,"invalid node token")
     update_node_heartbeat(
         node["id"],payload.hostname,payload.version,payload.cpu,payload.memory,payload.disk,
-        payload.region,payload.public_url,payload.users,payload.online_users,payload.rx,payload.tx,
-        payload.latency_ms,payload.services
+        payload.public_ip,payload.region,payload.users,payload.online_users,payload.traffic_bytes,payload.services,payload.last_error
     )
-    return {"ok":True,"node_id":node["id"]}
+    return {"ok":True,"node_id":node["id"],"server_time":int(time.time())}
 
 class GeneralSettings(BaseModel):
     language:str="fa"

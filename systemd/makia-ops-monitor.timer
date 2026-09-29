@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Makia Operations Monitor
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=makia-ops-monitor.service
+
+[Install]
+WantedBy=timers.target

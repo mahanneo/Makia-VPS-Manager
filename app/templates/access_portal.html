@@ -61,24 +61,16 @@
       {% endif %}
 
       {% if state.active %}
-      <section class="portal-device-card">
+      <div class="portal-device-card">
         <div>
-          <span class="eyebrow">{{ 'دستگاه شناسایی‌شده' if fa else 'DETECTED DEVICE' }}</span>
-          <b>{{ {'android':'Android','ios':'iPhone / iPad','windows':'Windows','macos':'macOS','linux':'Linux','other':('دستگاه فعلی' if fa else 'Current device')}[device] }}</b>
-          <p>
-            {% if device in ['android','ios'] %}
-              {{ 'برای موبایل، QR یا ورود مستقیم معمولاً سریع‌ترین روش است.' if fa else 'On mobile, QR or one-tap import is usually the fastest method.' }}
-            {% else %}
-              {{ 'برای لپ‌تاپ/دسکتاپ، دانلود فایل یا کپی لینک پیشنهاد می‌شود.' if fa else 'On desktop, downloading the file or copying the link is recommended.' }}
-            {% endif %}
-          </p>
+          <b>{{ 'دستگاه شناسایی‌شده' if fa else 'Detected device' }}: {{device.label}}</b>
+          <span>{{ 'راهنمای پایین بر اساس دستگاه شما اولویت‌بندی شده است.' if fa else 'The guide below is prioritized for your device.' }}</span>
         </div>
         {% if one_tap_url %}
-        <a class="primary link-btn" href="{{one_tap_url}}" rel="nofollow">{{ 'باز کردن در برنامه سازگار' if fa else 'Open in compatible app' }}</a>
-        {% elif has_native %}
-        <a class="primary link-btn" href="{{download_url}}">{{ 'دانلود فایل پیشنهادی' if fa else 'Download recommended file' }}</a>
+        <a class="one-tap-portal" href="{{one_tap_url}}">{{ 'باز کردن / وارد کردن مستقیم' if fa else 'Open / import directly' }}</a>
         {% endif %}
-      </section>
+      </div>
+
       <section class="portal-action-grid">
         {% if has_native %}
         <a class="portal-action primary-card" href="{{download_url}}">
@@ -163,10 +155,10 @@
           </ol>
         {% elif kind == 'outline' %}
           <ol>
-            <li>{{ 'Outline Client را نصب کنید.' if fa else 'Install Outline Client.' }}</li>
-            <li>{{ 'روی «باز کردن در برنامه سازگار» بزنید یا Access Key با ss:// را کپی کنید.' if fa else 'Tap “Open in compatible app” or copy the ss:// access key.' }}</li>
-            <li>{{ 'در Outline Client گزینه Add Server / Paste Access Key را انتخاب کنید.' if fa else 'In Outline Client choose Add Server / Paste Access Key.' }}</li>
-            <li>{{ 'Access Key را عمومی نکنید.' if fa else 'Keep the access key private.' }}</li>
+            <li>{{ 'Outline Client رسمی را روی Android، iPhone، Windows یا macOS نصب کنید.' if fa else 'Install the official Outline Client on Android, iPhone, Windows or macOS.' }}</li>
+            <li>{{ 'روی دکمه ورود مستقیم بزنید یا Access Key را کپی و داخل Outline Client وارد کنید.' if fa else 'Use the direct import button or copy the Access Key into Outline Client.' }}</li>
+            <li>{{ 'در موبایل می‌توانید QR را نیز اسکن کنید.' if fa else 'On mobile you can also scan the QR code.' }}</li>
+            <li>{{ 'Access Key را مانند رمز عبور محرمانه نگه دارید.' if fa else 'Treat the Access Key like a private password.' }}</li>
           </ol>
         {% elif kind == 'xray' %}
           <ol>

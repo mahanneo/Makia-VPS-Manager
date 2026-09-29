@@ -192,14 +192,6 @@ def client_guide_text(kind,protocol=""):
             "4) UUID/Password/SNI/Public Key/Short ID/Port را بدون هماهنگی تغییر ندهید.\n"
             "5) اگر وصل نشد، Wi-Fi و Mobile Data را جداگانه تست و متن خطا را برای مدیر ارسال کنید.\n"
         )
-    if kind=="outline":
-        return common+(
-            "Outline / Shadowsocks\n"
-            "1) Outline Client را روی Android، iPhone/iPad، Windows، macOS یا Linux نصب کنید.\n"
-            "2) Access Key با ss:// شروع می‌شود؛ آن را Copy و در Outline Client با Add Server / Paste Access Key وارد کنید.\n"
-            "3) لینک را عمومی نکنید؛ هر کسی Access Key را داشته باشد می‌تواند از سرویس استفاده کند.\n"
-            "4) اگر مدیر حجم یا دسترسی را تغییر داد، همان Access Key معتبر می‌ماند مگر اینکه صریحاً Revoke شود.\n"
-        )
     if kind=="wireguard":
         return common+(
             "WireGuard\n"
@@ -214,6 +206,14 @@ def client_guide_text(kind,protocol=""):
             "2) Upload File / Import Profile را انتخاب کنید.\n"
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
+        )
+    if kind=="outline":
+        return common+(
+            "Outline\n"
+            "1) برنامه رسمی Outline Client را روی Android، iPhone، Windows یا macOS نصب کنید.\n"
+            "2) Access Key را از Clipboard وارد کنید یا QR را اسکن کنید.\n"
+            "3) کلید Outline یک Secret کامل است؛ آن را عمومی نکنید.\n"
+            "4) در صورت تعویض کلید، نسخه قبلی را حذف و کلید جدید را Import کنید.\n"
         )
     return common+(
         "SSH / NPV Tunnel\n"
@@ -364,6 +364,35 @@ def xray_payload(name,protocol,share_link,subscription_url=None,client_url=None)
         "share_type":"xray",
         "summary":{"protocol":protocol,"subscription_url":subscription_url or "","client_url":client_url or ""},
     }
+
+def outline_payload(name,access_url,key_id="",data_limit_bytes=0):
+    name=str(name or "outline").strip()
+    access_url=str(access_url or "").strip()
+    if not access_url.startswith("ss://"):
+        raise AccessPackageError("Outline access key must be an ss:// URL")
+    filename=f"{safe_filename(name)}-outline.txt"
+    text=(
+        "Makia Outline Access\n"
+        f"Name: {name}\n"
+        f"Key ID: {key_id}\n"
+        f"Data limit bytes: {int(data_limit_bytes or 0)}\n\n"
+        "Access Key:\n"
+        f"{access_url}\n"
+    )
+    files={
+        filename:text.encode("utf-8"),
+        f"{safe_filename(name)}-outline-qr.svg":make_qr_svg(access_url),
+        "connection-guide-fa.txt":client_guide_text("outline").encode("utf-8"),
+    }
+    return {
+        "native_filename":filename,
+        "files":files,
+        "primary_text":access_url,
+        "share_text":access_url,
+        "share_type":"outline",
+        "summary":{"protocol":"outline","key_id":str(key_id or ""),"data_limit_bytes":int(data_limit_bytes or 0)},
+    }
+
 
 def protected_zip(files:dict[str,bytes|str],password:str)->bytes:
     password=str(password or "")

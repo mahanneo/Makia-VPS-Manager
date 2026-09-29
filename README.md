@@ -4,8 +4,34 @@ Modern web-first VPS and access-infrastructure control center for Ubuntu.
 
 **[راهنمای کامل فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)**
 
-> **Current code baseline:** `v0.20.0`
+> **Current code baseline:** `v0.26.0-rc10`
 > CI validates the repository; connectivity on a real VPS still requires external-client UAT.
+
+## v0.26.0-rc10 Outline + unified access management
+
+- Fixes the real Outline setup failure path seen when Docker is not ready: the panel now shows a two-step root-shell workflow instead of a raw browser alert.
+- Makes the host preparation command explicit: `sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade`, followed by the pinned Outline installer command.
+- Unifies SSH, Xray, WireGuard, OpenVPN and managed Outline user operations behind the same `•••` detail drawer with protocol-specific management and common delivery tools.
+- Adds Outline to the Clients filter, renders real Outline quota/usage/expiry in lists, keeps the protocol group expanded, and adds a dedicated public Outline connection guide.
+- Automated gates are documented in [UAT 0.26.0 RC10](docs/UAT-0.26.0-RC10.md). This is still a **Release Candidate**, not Stable.
+
+## v0.26.0-rc9 DR + secret-path hardening
+
+- Preserves the RC8 Operations Suite + Outline scope and closes production issues found during branch audit.
+- Outline-bearing replacement-VPS restores now stop before mutation when Docker is missing; root install/upgrade supports `MAKIA_ENABLE_OUTLINE=1` for safe dependency preparation.
+- Remote SCP backup failures no longer advance `last_run`, so the hourly timer can retry instead of suppressing attempts for the full interval.
+- Credential-bearing request URLs are redacted from integration error paths.
+- Full Migration compatibility is explicitly gated through RC9.
+- See [UAT 0.26.0 RC9](docs/UAT-0.26.0-RC9.md). This remains a **Release Candidate**, not Stable.
+
+## v0.26.0-rc8 Operations Suite + Outline
+
+- Adds production-oriented **Plans/Templates, Bulk Renew, Expiry Center, Scheduled/Remote Backup, Disaster Recovery, Cloudflare DNS cutover, Telegram alerts/status bot, Notifications, Diagnostics and Multi-VPS telemetry**.
+- Adds **Outline Server** as a first-class protocol with pinned official installer integrity, certificate-fingerprint-checked Management API access, Access Key create/reissue/revoke, real traffic metrics, server-side quota, expiry enforcement, QR/Protected ZIP and private Client Portal delivery.
+- Full Migration format v2 preserves Makia data plus protocol identity/runtime state including `/opt/outline`; restore remains pre-verified, rollback-safe and requires post-restore runtime checks before DNS cutover.
+- Remote SCP requires strict SSH host-key verification and private identity-file permissions. Cloudflare VPN/SSH cutover is always **DNS Only**.
+- WireGuard/OpenVPN plans remain useful connection templates, but Makia does not claim per-client quota/expiry those engines do not enforce. SSH plans likewise do not claim per-user traffic quota.
+- Automated RC8 gates are documented in [UAT 0.26.0 RC8](docs/UAT-0.26.0-RC8.md). This is still a **Release Candidate**, not Stable, until the documented live-host/real-client checks pass.
 
 ## v0.19 WireGuard workspace
 - A dedicated WireGuard navigation entry shows peer state, recent handshake, traffic, endpoint and delivery actions with clearer desktop/mobile navigation.

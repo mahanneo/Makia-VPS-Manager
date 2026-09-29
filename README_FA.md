@@ -1,3 +1,26 @@
+## نسخه ۰.۲۶.۰-rc10 — اصلاح Outline و یکپارچه‌سازی مدیریت کاربران
+
+در RC10 مسیر واقعی Setup مربوط به Outline اصلاح شده است. اگر Docker روی VPS آماده نباشد، پنل دیگر فقط خطای Browser Alert نمایش نمی‌دهد؛ یک Workflow مشخص دو مرحله‌ای نشان می‌دهد: ابتدا `sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade` برای آماده‌سازی Host از مسیر Root، سپس دستور نصب Pin‌شده Outline.
+
+مدیریت کاربران نیز در SSH، Xray، WireGuard، OpenVPN و Outline یکدست شده است: ورودی `•••` برای جزئیات/مدیریت وجود دارد و از همان Drawer می‌توان ابزارهای مرتبط با هر پروتکل و امکانات تحویل شامل Config/Access Key، QR/Share، Client Portal، Protected ZIP و راهنمای اتصال را باز کرد. Outline به فیلتر کاربران و راهنمای عمومی نیز اضافه شده و Usage/Quota/Expiry آن به‌صورت واقعی نمایش داده می‌شود.
+
+این نسخه همچنان **Release Candidate** است. UAT واقعی VPS، Docker/Shadowbox، Outline Client، Restore روی VPS جایگزین و Clientهای واقعی قبل از Stable الزامی هستند. جزئیات: [UAT RC10](docs/UAT-0.26.0-RC10.md).
+
+## نسخه ۰.۲۶.۰-rc9 — سخت‌سازی Disaster Recovery و مسیرهای Secret
+
+RC9 قابلیت‌های RC8 را حفظ می‌کند و سه شکاف Production را می‌بندد: Restore بکاپ دارای Outline قبل از هر تغییر، وجود Docker را بررسی می‌کند و مسیر Root برای آماده‌سازی آن با `MAKIA_ENABLE_OUTLINE=1` وجود دارد؛ شکست Remote SCP دیگر زمان اجرای موفق بکاپ را جلو نمی‌برد و در چک ساعتی بعدی دوباره تلاش می‌شود؛ و خطاهای شبکه URLهای دارای Secret را Redact می‌کنند تا Bot Token تلگرام یا Secret مسیر Management API Outline وارد UI/Log نشود.
+
+سازگاری Full Migration تا RC9 نیز به‌صورت صریح Gate شده است. این نسخه هنوز **Release Candidate** است و Stable شدن به UAT واقعی VPS جایگزین، Outline زنده، Remote SCP، Cloudflare، Telegram و Clientهای واقعی وابسته است. جزئیات: [UAT RC9](docs/UAT-0.26.0-RC9.md).
+
+## نسخه ۰.۲۶.۰-rc8 — Operations Suite + Outline
+
+در RC8، پنل مدیریت عملیات کامل‌تر شده است: **پلن/قالب، تمدید گروهی، مرکز انقضا، بکاپ زمان‌بندی‌شده و Remote SCP، Disaster Recovery، Cloudflare DNS Cutover، Telegram، اعلان‌ها، Diagnostics و داشبورد Multi-VPS** به مسیرهای واقعی Backend متصل‌اند.
+
+**Outline** نیز به‌صورت First-class اضافه شده است: نصب با نسخه رسمی Pin‌شده و بررسی Integrity، Management API با Certificate Fingerprint، ساخت/تعویض/حذف Access Key، Traffic واقعی، Quota و Expiry سمت سرور، QR، Protected ZIP و Client Portal خصوصی. Full Migration وضعیت `/opt/outline` را نیز نگه می‌دارد.
+
+برای جلوگیری از قابلیت Fake، WireGuard/OpenVPN در Plans فقط Template تنظیم اتصال هستند و سهمیه/انقضای per-client ساختگی نمی‌گیرند؛ SSH نیز Traffic quota ساختگی نمایش نمی‌دهد. Remote SCP فقط با SSH Host Key شناخته‌شده پذیرفته می‌شود و Cloudflare برای Endpointهای خام VPN/SSH همیشه DNS Only است.
+
+این نسخه **Stable نیست**. قبل از Stable باید UAT واقعی VPS شامل Restore روی VPS جایگزین، Outline زنده، Remote SCP، Cloudflare، Telegram و Clientهای واقعی طبق [UAT RC8](docs/UAT-0.26.0-RC8.md) انجام شود.
 ## نسخه ۰.۲۶.۰-rc2 — Connection Modes واقعی
 
 در این Release Candidate، بخش **Connection Modes** با شش مسیر واقعی اضافه شده است: **IKEv2، WireGuard، UDP، TCP، Stealth و WStunnel**. این موارد صرفاً کارت نمایشی نیستند و هر گزینه به Runtime واقعی، API واقعی، Port/Listener و Diagnostics متناظر وصل است.

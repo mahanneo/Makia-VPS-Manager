@@ -1,32 +1,70 @@
 # Changelog
 
-## [0.26.0-rc7] - 2026-09-29
+## [0.26.0-rc10] - 2026-09-29
+
+### Outline setup
+- Replaced the raw missing-Docker failure experience with an explicit two-step root-shell setup workflow.
+- Outline install API now reports dependency readiness and the required host-preparation command without running package managers from the web service.
+- Added a dedicated public Outline connection guide and correct guide routing.
+
+### Unified access management
+- Standardized managed-user actions across SSH, Xray, WireGuard, OpenVPN and Outline behind the same `•••` detail drawer.
+- Added protocol-specific management controls inside the drawer while preserving common QR/share, native download, Client Portal, Protected ZIP and guide delivery.
+- Added Outline to the unified Clients filter and corrected Outline quota/usage/expiry rendering.
+- Kept the protocol sidebar expanded while Outline is selected.
+
+### Regression coverage
+- Expanded Playwright to cover all RC10 operational views, six Client filters and unified detail entries.
+- Updated the public visual-guide contract from four protocols to five.
+- Added static gates for Outline setup commands, guide routing and unified access menus.
+- **Release Candidate only.** Real VPS/Outline/client UAT is still required before Stable.
+
+
+## [0.26.0-rc9] - 2026-09-29
+
+### Disaster recovery and backup reliability
+- Added a pre-mutation restore blocker when a migration bundle contains Outline state but Docker is absent on the replacement VPS.
+- Added root-only optional Outline dependency preparation through `MAKIA_ENABLE_OUTLINE=1` in clean install/upgrade flows.
+- Scheduled remote backups now update `last_run` only after the configured remote destination succeeds, allowing hourly retry after SCP failures.
+- Local retention is applied before remote transfer so repeated remote failures do not grow local backup history without bound.
+
+### Secret handling
+- Network exception text redacts credential-bearing request URLs.
+- Telegram webhook setup validates the bot token before any network request.
+- Added regression coverage proving Telegram tokens are absent from network-error messages.
+
+### Compatibility / release gates
+- Full Migration compatibility explicitly accepts verified RC2-RC8 bundles on RC9 and remains directional.
+- Added RC9 hardening tests and UAT documentation.
+- **Release Candidate only.** Real host and external-client UAT remain mandatory before Stable.
+
+
+## [0.26.0-rc8] - 2026-09-29
 
 ### Operations Suite
-- Added reusable Plans/Templates with protocol, duration, quota, device/session limits, price metadata and protocol defaults.
-- Added Quick Renew and Bulk Operations for supported managed access, plus a 30-day Expiry Center.
-- Added recurring Quick/Full Migration schedules; remote targets use S3-compatible storage or strict-host-key SFTP/SCP. Remote schedules require encrypted Full Migration format.
-- Added Disaster Recovery readiness with verified portable-backup checks and optional Cloudflare DNS-only A-record cutover.
-- Added encrypted Cloudflare/Telegram integration settings, health alerts and read-only Telegram commands (/status, /expiry, /backups, /help).
-- Added device-aware Client Portal delivery with safe one-tap import only for supported URI schemes.
-- Added Diagnostics Center covering services, DNS/HTTPS, backups, Outline and Fleet readiness.
-- Expanded node heartbeat/fleet telemetry with region, public URL, user counts, traffic counters, latency and service states.
+- Completed Plans/Templates, Expiry Center, bulk renewal, scheduled encrypted Full Migration backups, optional remote SCP retention, Disaster Recovery workflow, Cloudflare DNS cutover, Telegram integration, notifications, per-access diagnostics and richer Multi-VPS telemetry.
+- Kept WireGuard/OpenVPN plans as connection templates without fake per-client quota/expiry policy. SSH plans no longer claim a traffic quota that the host does not enforce per user.
 
 ### Outline
-- Added optional official Outline Server / Shadowbox management next to the existing protocols.
-- Makia uses the pinned official Outline server-v1.12.0 installer with Git blob integrity verification and optional Docker host dependency installed outside the hardened web-service sandbox.
-- Outline Management API requests pin the certificate SHA256 from /opt/outline/access.txt before managing access keys.
-- Added access-key creation, quota, expiry/revocation, portal delivery, QR/share link, plans and encrypted portable-migration preservation.
-- Outline disable/expiry now revokes the real access key. Re-enabling or renewing a revoked managed key securely reissues it and refreshes the client artifact instead of silently removing its data limit.
+- Added first-class Outline Server status, pinned official installer integrity verification, local Management API certificate-fingerprint verification, Access Key create/delete/reissue, real transfer metrics, server-side data limits and enforced expiry.
+- Added Outline QR/copy delivery, Protected ZIP, private device-aware Client Portal, renew/reissue controls and per-access diagnostics.
+- Full Migration format v2 includes Outline state and the restore path validates/restarts the restored Shadowbox runtime.
 
-### Recovery / security
-- Cloudflare migration cutover is forced DNS-only for raw VPN/SSH traffic.
-- Existing verified Full Migration format-v2 backups from 0.26.0-rc2 through rc6 are accepted by rc7.
-- Outline /opt/outline state is included in Full Migration and validated after restore when present.
+### Backup / DR and integration hardening
+- Scheduled backups require encrypted Full Migration packages, verify the protected archive, retain local history and optionally copy to a remote VPS over SCP.
+- Remote SCP now enforces StrictHostKeyChecking, safe absolute remote paths and private SSH identity-file permissions.
+- Cloudflare A-record cutover always writes DNS-only records for raw VPN/SSH endpoints.
+- Telegram tokens remain encrypted at rest, disabling webhook now unregisters it, and `/backup` is read-only status instead of a privileged remote backup trigger.
+- Restore remains pre-verified and rollback-safe; runtime verification precedes the Cloudflare/DNS cutover step.
+
+### Automated UAT
+- Added RC8 mocked regression gates for Outline, Cloudflare and Telegram; bulk renewal, expiry, node telemetry, secret leakage, protected backup verification, restore safety and UI action coverage.
+- Existing GitHub Actions continue to execute Python compile/import, full pytest, Bash syntax, JavaScript syntax, migration tests, browser smoke and Xray Core smoke.
+- Release metadata and the host smoke script cover scheduled-backup/ops-monitor timers and optional live Outline Management API/fingerprint health.
 
 ### Release status
-- Release Candidate only. Stable remains blocked on real VPS RC7 upgrade, Outline/remote-backup/migration UAT and inside-Iran client field tests.
-
+- **Release Candidate only.** Automated gates must be green on the release commit.
+- Stable remains blocked on a real Ubuntu VPS upgrade/clean-install, real Outline Docker/Management API, remote SCP target, Cloudflare API/DNS propagation, Telegram webhook, replacement-VPS restore/DNS cutover and external-client connectivity UAT.
 
 ## [0.26.0-rc6] - 2026-09-28
 

@@ -135,6 +135,10 @@ for item in \
   "etc/systemd/system/makia-policy-enforcer.service" \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
+  "etc/systemd/system/makia-scheduled-backup.service" \
+  "etc/systemd/system/makia-scheduled-backup.timer" \
+  "etc/systemd/system/makia-ops-monitor.service" \
+  "etc/systemd/system/makia-ops-monitor.timer" \
   "etc/nginx/sites-available/makia-vps-manager"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
@@ -167,7 +171,7 @@ if [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" || -s /opt/outline/access.txt ]]; then
   dpkg-query -W -f='${Status}' docker.io 2>/dev/null | grep -q 'install ok installed' || OUTLINE_HOST_PACKAGES+=(docker.io)
 fi
 if [[ "$NEED_HOST_PACKAGES" -eq 1 || "${#OUTLINE_HOST_PACKAGES[@]}" -gt 0 ]]; then
-  echo "Ensuring host security/TLS/VPN packages outside the hardened web-service sandbox..."
+  echo "Ensuring host security/TLS/VPN/Outline packages outside the hardened web-service sandbox..."
   apt-get update
   apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins "${OUTLINE_HOST_PACKAGES[@]}"
 fi
@@ -203,6 +207,10 @@ install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/syste
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
+install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
+install -m 0644 "$SRC/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
+install -m 0644 "$SRC/systemd/makia-ops-monitor.service" /etc/systemd/system/makia-ops-monitor.service
+install -m 0644 "$SRC/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -340,6 +348,8 @@ systemctl enable --now makia-policy-enforcer
 systemctl restart makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
+systemctl enable --now makia-scheduled-backup.timer
+systemctl enable --now makia-ops-monitor.timer
 systemctl restart makia-metrics-sampler
 systemctl restart makia-protocol-traffic
 systemctl enable --now fail2ban

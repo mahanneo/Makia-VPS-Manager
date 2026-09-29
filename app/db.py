@@ -164,57 +164,24 @@ def init_db():
         CREATE TABLE IF NOT EXISTS service_plans (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE NOT NULL,
-          kind TEXT NOT NULL,
-          protocol TEXT NOT NULL DEFAULT '',
-          duration_days INTEGER NOT NULL DEFAULT 30,
-          quota_mb INTEGER NOT NULL DEFAULT 0,
-          ip_limit INTEGER NOT NULL DEFAULT 1,
-          connection_limit INTEGER NOT NULL DEFAULT 1,
-          price REAL NOT NULL DEFAULT 0,
+          protocol_kind TEXT NOT NULL DEFAULT 'xray',
           config_json TEXT NOT NULL DEFAULT '{}',
+          price_label TEXT NOT NULL DEFAULT '',
           active INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS backup_schedules (
+        CREATE INDEX IF NOT EXISTS idx_service_plans_active ON service_plans(active);
+        CREATE TABLE IF NOT EXISTS notification_events (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          backup_type TEXT NOT NULL DEFAULT 'quick',
-          interval_hours INTEGER NOT NULL DEFAULT 24,
-          keep_last INTEGER NOT NULL DEFAULT 7,
-          config_enc TEXT NOT NULL DEFAULT '',
-          enabled INTEGER NOT NULL DEFAULT 1,
-          next_run_at INTEGER NOT NULL DEFAULT 0,
-          last_run_at INTEGER NOT NULL DEFAULT 0,
-          last_status TEXT NOT NULL DEFAULT '',
-          last_message TEXT NOT NULL DEFAULT '',
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS backup_runs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          schedule_id INTEGER,
-          backup_name TEXT NOT NULL DEFAULT '',
-          backup_type TEXT NOT NULL DEFAULT '',
-          remote_type TEXT NOT NULL DEFAULT '',
-          remote_status TEXT NOT NULL DEFAULT '',
-          sha256 TEXT NOT NULL DEFAULT '',
-          size INTEGER NOT NULL DEFAULT 0,
-          status TEXT NOT NULL DEFAULT '',
-          message TEXT NOT NULL DEFAULT '',
-          created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_backup_runs_created_at ON backup_runs(created_at);
-        CREATE TABLE IF NOT EXISTS alert_events (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          kind TEXT NOT NULL,
-          severity TEXT NOT NULL DEFAULT 'info',
+          level TEXT NOT NULL DEFAULT 'info',
+          event_type TEXT NOT NULL,
           title TEXT NOT NULL,
-          message TEXT NOT NULL DEFAULT '',
+          detail TEXT NOT NULL DEFAULT '',
           delivered INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_alert_events_created_at ON alert_events(created_at);
+        CREATE INDEX IF NOT EXISTS idx_notification_events_created_at ON notification_events(created_at);
         ''')
         # Migration-safe columns for future profile growth.
         _add_column(con, "account_profiles", "plan TEXT NOT NULL DEFAULT ''")
@@ -237,14 +204,13 @@ def init_db():
         _add_column(con, "protocol_clients", "disabled_reason TEXT NOT NULL DEFAULT ''")
         _add_column(con, "admins", "totp_secret TEXT")
         _add_column(con, "admins", "totp_enabled INTEGER NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "public_ip TEXT")
         _add_column(con, "nodes", "region TEXT NOT NULL DEFAULT ''")
-        _add_column(con, "nodes", "public_url TEXT NOT NULL DEFAULT ''")
         _add_column(con, "nodes", "users INTEGER NOT NULL DEFAULT 0")
         _add_column(con, "nodes", "online_users INTEGER NOT NULL DEFAULT 0")
-        _add_column(con, "nodes", "rx INTEGER NOT NULL DEFAULT 0")
-        _add_column(con, "nodes", "tx INTEGER NOT NULL DEFAULT 0")
-        _add_column(con, "nodes", "latency_ms REAL NOT NULL DEFAULT 0")
+        _add_column(con, "nodes", "traffic_bytes INTEGER NOT NULL DEFAULT 0")
         _add_column(con, "nodes", "services_json TEXT NOT NULL DEFAULT '{}'")
+        _add_column(con, "nodes", "last_error TEXT NOT NULL DEFAULT ''")
 
         rows_missing_sub=con.execute("SELECT id FROM protocol_clients WHERE subscription_id IS NULL OR subscription_id=''").fetchall()
         for item in rows_missing_sub:
@@ -385,7 +351,9 @@ def create_node(name):
 
 def list_nodes():
     with connect() as con:
-        rows=con.execute("SELECT id,name,token_last4,active,created_at,last_seen_at,hostname,version,cpu,memory,disk,region,public_url,users,online_users,rx,tx,latency_ms,services_json FROM nodes ORDER BY id DESC").fetchall()
+        rows=con.execute(
+            "SELECT id,name,token_last4,active,created_at,last_seen_at,hostname,version,cpu,memory,disk,public_ip,region,users,online_users,traffic_bytes,services_json,last_error FROM nodes ORDER BY id DESC"
+        ).fetchall()
         return [dict(r) for r in rows]
 
 def revoke_node(node_id):
@@ -398,16 +366,87 @@ def node_by_token(token):
         row=con.execute("SELECT id,name,active FROM nodes WHERE token_hash=? AND active=1",(h,)).fetchone()
         return dict(row) if row else None
 
-def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk,region="",public_url="",users=0,online_users=0,rx=0,tx=0,latency_ms=0,services=None):
+def update_node_heartbeat(node_id,hostname,version,cpu,memory,disk,public_ip="",region="",users=0,online_users=0,traffic_bytes=0,services=None,last_error=""):
     with connect() as con:
         con.execute(
-            """UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=?,
-               region=?,public_url=?,users=?,online_users=?,rx=?,tx=?,latency_ms=?,services_json=? WHERE id=?""",
-            (now(),hostname,version,float(cpu),float(memory),float(disk),str(region or "")[:80],
-             str(public_url or "")[:255],max(0,int(users or 0)),max(0,int(online_users or 0)),
-             max(0,int(rx or 0)),max(0,int(tx or 0)),max(0,float(latency_ms or 0)),
-             json.dumps(services or {},ensure_ascii=False,separators=(",",":")),int(node_id))
+            """UPDATE nodes SET last_seen_at=?,hostname=?,version=?,cpu=?,memory=?,disk=?,public_ip=?,region=?,
+               users=?,online_users=?,traffic_bytes=?,services_json=?,last_error=? WHERE id=?""",
+            (
+                now(),hostname,version,float(cpu),float(memory),float(disk),str(public_ip or ""),
+                str(region or ""),max(0,int(users or 0)),max(0,int(online_users or 0)),
+                max(0,int(traffic_bytes or 0)),json.dumps(services or {},ensure_ascii=False,separators=(",",":")),
+                str(last_error or "")[:500],int(node_id)
+            )
         )
+
+
+def create_service_plan(name,protocol_kind,config,price_label="",active=True):
+    ts=now()
+    with connect() as con:
+        cur=con.execute(
+            """INSERT INTO service_plans(name,protocol_kind,config_json,price_label,active,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (str(name).strip(),str(protocol_kind).strip(),json.dumps(config or {},ensure_ascii=False,separators=(",",":")),
+             str(price_label or ""),1 if active else 0,ts,ts)
+        )
+        return cur.lastrowid
+
+def list_service_plans(active_only=False):
+    with connect() as con:
+        sql="SELECT * FROM service_plans"
+        args=()
+        if active_only:
+            sql+=" WHERE active=1"
+        sql+=" ORDER BY id DESC"
+        rows=con.execute(sql,args).fetchall()
+        out=[]
+        for row in rows:
+            item=dict(row)
+            try:item["config"]=json.loads(item.pop("config_json") or "{}")
+            except Exception:item["config"]={}
+            out.append(item)
+        return out
+
+def get_service_plan(plan_id):
+    with connect() as con:
+        row=con.execute("SELECT * FROM service_plans WHERE id=?",(int(plan_id),)).fetchone()
+        if not row:return None
+        item=dict(row)
+        try:item["config"]=json.loads(item.pop("config_json") or "{}")
+        except Exception:item["config"]={}
+        return item
+
+def update_service_plan(plan_id,name,protocol_kind,config,price_label="",active=True):
+    with connect() as con:
+        con.execute(
+            """UPDATE service_plans SET name=?,protocol_kind=?,config_json=?,price_label=?,active=?,updated_at=? WHERE id=?""",
+            (str(name).strip(),str(protocol_kind).strip(),json.dumps(config or {},ensure_ascii=False,separators=(",",":")),
+             str(price_label or ""),1 if active else 0,now(),int(plan_id))
+        )
+
+def delete_service_plan(plan_id):
+    with connect() as con:
+        con.execute("DELETE FROM service_plans WHERE id=?",(int(plan_id),))
+
+def add_notification_event(event_type,title,detail="",level="info",delivered=False):
+    with connect() as con:
+        cur=con.execute(
+            "INSERT INTO notification_events(level,event_type,title,detail,delivered,created_at) VALUES(?,?,?,?,?,?)",
+            (str(level or "info"),str(event_type),str(title),str(detail or ""),1 if delivered else 0,now())
+        )
+        return cur.lastrowid
+
+def list_notification_events(limit=100):
+    with connect() as con:
+        rows=con.execute(
+            "SELECT * FROM notification_events ORDER BY id DESC LIMIT ?",
+            (max(1,min(int(limit),500)),)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def mark_notification_delivered(event_id,delivered=True):
+    with connect() as con:
+        con.execute("UPDATE notification_events SET delivered=? WHERE id=?",(1 if delivered else 0,int(event_id)))
 
 
 def get_setting(key, default=None):
@@ -461,14 +500,6 @@ def protocol_client_by_subscription(subscription_id):
         ).fetchone()
         return dict(row) if row else None
 
-def replace_protocol_client_identity(client_id,inbound_tag,credential,share_link):
-    with connect() as con:
-        con.execute(
-            "UPDATE protocol_clients SET inbound_tag=?,credential=?,share_link=?,enabled=1,disabled_reason='',updated_at=? WHERE id=?",
-            (str(inbound_tag),str(credential),str(share_link),now(),int(client_id))
-        )
-
-
 def update_protocol_client_state(client_id,enabled=None,quota_bytes=None,expire_at=None,ip_limit=None,reset_days=None):
     fields=[]; values=[]
     if enabled is not None:
@@ -485,6 +516,16 @@ def update_protocol_client_state(client_id,enabled=None,quota_bytes=None,expire_
     fields.append("updated_at=?"); values.append(now()); values.append(int(client_id))
     with connect() as con:
         con.execute("UPDATE protocol_clients SET "+",".join(fields)+" WHERE id=?",values)
+
+def replace_protocol_client_identity(client_id,inbound_tag,credential,share_link):
+    with connect() as con:
+        con.execute(
+            """UPDATE protocol_clients
+               SET inbound_tag=?,credential=?,share_link=?,updated_at=?
+               WHERE id=?""",
+            (str(inbound_tag or ""),str(credential or ""),str(share_link or ""),now(),int(client_id))
+        )
+
 
 def delete_protocol_client(client_id):
     with connect() as con:
@@ -503,6 +544,14 @@ def add_protocol_traffic(client_id,uplink,downlink):
                WHERE id=?""",
             (up,down,now(),now(),int(client_id))
         )
+
+def set_protocol_traffic_totals(client_id,uplink,downlink):
+    with connect() as con:
+        con.execute(
+            "UPDATE protocol_clients SET used_up_bytes=?,used_down_bytes=?,last_traffic_at=?,updated_at=? WHERE id=?",
+            (max(0,int(uplink or 0)),max(0,int(downlink or 0)),now(),now(),int(client_id))
+        )
+
 
 def reset_protocol_traffic(client_id):
     with connect() as con:
@@ -697,107 +746,3 @@ def revoke_support_grant(grant_id):
     with connect() as con:
         con.execute("UPDATE support_grants SET revoked_at=? WHERE id=?",(now_ts,int(grant_id)))
     return {"ok":True,"id":int(grant_id)}
-
-
-def create_plan(name,kind,protocol="",duration_days=30,quota_mb=0,ip_limit=1,connection_limit=1,price=0,config=None,active=True):
-    ts=now()
-    with connect() as con:
-        cur=con.execute(
-            """INSERT INTO service_plans(name,kind,protocol,duration_days,quota_mb,ip_limit,connection_limit,price,config_json,active,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (str(name).strip(),str(kind).strip().lower(),str(protocol or "").strip().lower(),
-             max(0,int(duration_days or 0)),max(0,int(quota_mb or 0)),max(1,int(ip_limit or 1)),
-             max(1,int(connection_limit or 1)),max(0,float(price or 0)),
-             json.dumps(config or {},ensure_ascii=False,separators=(",",":")),1 if active else 0,ts,ts)
-        )
-        return int(cur.lastrowid)
-
-def update_plan(plan_id,**values):
-    allowed={"name","kind","protocol","duration_days","quota_mb","ip_limit","connection_limit","price","config_json","active"}
-    fields=[];params=[]
-    for key,val in values.items():
-        if key not in allowed: continue
-        if key=="config_json" and not isinstance(val,str):
-            val=json.dumps(val or {},ensure_ascii=False,separators=(",",":"))
-        if key=="active": val=1 if val else 0
-        fields.append(f"{key}=?");params.append(val)
-    if not fields:return
-    fields.append("updated_at=?");params.append(now());params.append(int(plan_id))
-    with connect() as con: con.execute("UPDATE service_plans SET "+",".join(fields)+" WHERE id=?",params)
-
-def list_plans(active_only=False):
-    with connect() as con:
-        sql="SELECT * FROM service_plans"+(" WHERE active=1" if active_only else "")+" ORDER BY id DESC"
-        rows=con.execute(sql).fetchall()
-        out=[]
-        for row in rows:
-            item=dict(row)
-            try:item["config"]=json.loads(item.pop("config_json") or "{}")
-            except Exception:item["config"]={}
-            out.append(item)
-        return out
-
-def delete_plan(plan_id):
-    with connect() as con: con.execute("DELETE FROM service_plans WHERE id=?",(int(plan_id),))
-
-def create_backup_schedule(name,backup_type,interval_hours,keep_last,config_enc,enabled=True,next_run_at=0):
-    ts=now()
-    with connect() as con:
-        cur=con.execute(
-            """INSERT INTO backup_schedules(name,backup_type,interval_hours,keep_last,config_enc,enabled,next_run_at,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?)""",
-            (str(name).strip(),str(backup_type),max(1,int(interval_hours)),max(1,min(int(keep_last),100)),
-             str(config_enc or ""),1 if enabled else 0,max(0,int(next_run_at)),ts,ts)
-        )
-        return int(cur.lastrowid)
-
-def list_backup_schedules():
-    with connect() as con:
-        return [dict(r) for r in con.execute("SELECT * FROM backup_schedules ORDER BY id DESC").fetchall()]
-
-def due_backup_schedules(now_ts):
-    with connect() as con:
-        return [dict(r) for r in con.execute(
-            "SELECT * FROM backup_schedules WHERE enabled=1 AND (next_run_at=0 OR next_run_at<=?) ORDER BY id ASC",
-            (int(now_ts),)
-        ).fetchall()]
-
-def update_backup_schedule_state(schedule_id,next_run_at,last_status,last_message,last_run_at=None):
-    with connect() as con:
-        con.execute(
-            "UPDATE backup_schedules SET next_run_at=?,last_run_at=?,last_status=?,last_message=?,updated_at=? WHERE id=?",
-            (int(next_run_at),int(last_run_at or 0),str(last_status or ""),str(last_message or "")[:1000],now(),int(schedule_id))
-        )
-
-def delete_backup_schedule(schedule_id):
-    with connect() as con: con.execute("DELETE FROM backup_schedules WHERE id=?",(int(schedule_id),))
-
-def add_backup_run(schedule_id,backup_name,backup_type,remote_type,remote_status,sha256,size,status,message):
-    with connect() as con:
-        cur=con.execute(
-            """INSERT INTO backup_runs(schedule_id,backup_name,backup_type,remote_type,remote_status,sha256,size,status,message,created_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            (schedule_id,str(backup_name or ""),str(backup_type or ""),str(remote_type or ""),str(remote_status or ""),
-             str(sha256 or ""),max(0,int(size or 0)),str(status or ""),str(message or "")[:1200],now())
-        )
-        return int(cur.lastrowid)
-
-def list_backup_runs(limit=50):
-    with connect() as con:
-        return [dict(r) for r in con.execute(
-            "SELECT * FROM backup_runs ORDER BY id DESC LIMIT ?",(max(1,min(int(limit),500)),)
-        ).fetchall()]
-
-def add_alert_event(kind,severity,title,message="",delivered=False):
-    with connect() as con:
-        cur=con.execute(
-            "INSERT INTO alert_events(kind,severity,title,message,delivered,created_at) VALUES(?,?,?,?,?,?)",
-            (str(kind),str(severity),str(title)[:160],str(message)[:2000],1 if delivered else 0,now())
-        )
-        return int(cur.lastrowid)
-
-def list_alert_events(limit=100):
-    with connect() as con:
-        return [dict(r) for r in con.execute(
-            "SELECT * FROM alert_events ORDER BY id DESC LIMIT ?",(max(1,min(int(limit),500)),)
-        ).fetchall()]

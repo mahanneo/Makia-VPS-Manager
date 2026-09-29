@@ -84,6 +84,7 @@ MANAGED_RESTORE_PATHS=[
     Path("/etc/default/stunnel4"),
     Path("/etc/nginx/sites-available/makia-vps-manager"),
     Path("/etc/nginx/sites-enabled/makia-vps-manager"),
+    Path("/opt/outline"),
     Path("/etc/sysctl.d/99-makia-wireguard.conf"),
     Path("/etc/sysctl.d/99-makia-openvpn.conf"),
     Path("/etc/sysctl.d/99-makia-recovery.conf"),
@@ -334,8 +335,8 @@ def restore_v2_system_payload(payload):
         ("payload/xray_alt.tar.gz","xray_alt",Path("/etc/xray")),
         ("payload/makia_etc.tar.gz","makia_etc",Path("/etc/makia-vps-manager")),
         ("payload/stunnel.tar.gz","stunnel",Path("/etc/stunnel")),
-        ("payload/outline.tar.gz","outline",Path("/opt/outline")),
         ("payload/ipsec_d.tar.gz","ipsec_d",Path("/etc/ipsec.d")),
+        ("payload/outline.tar.gz","outline",Path("/opt/outline")),
     ]
     for key,root,target in mappings:
         if key in payload:
@@ -359,7 +360,8 @@ def restore_v2_system_payload(payload):
     allowed_units={
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
         "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
-        "makia-migration-restore@.service",
+        "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
+        "makia-ops-monitor.service","makia-ops-monitor.timer",
     }
     for key,blob in payload.items():
         if not key.startswith("payload/systemd/"):
@@ -429,6 +431,19 @@ def normalize_destination_runtime(payload=None):
         protocol_ops._ufw_allow_if_active(500,"udp","IKEv2 restored")
         protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T restored")
 
+    if Path("/opt/outline/access.txt").exists():
+        if not shutil.which("docker"):
+            raise RuntimeError("Outline component is present in this backup. Install Outline/Docker on the destination with sudo makia-install-outline before Restore; the hardened restore job does not run APT.")
+        run(["systemctl","enable","--now","docker"],check=True)
+        os.chmod("/opt/outline",0o700)
+        os.chmod("/opt/outline/access.txt",0o600)
+        start_script=Path("/opt/outline/start_container.sh")
+        if start_script.is_file():
+            os.chmod(start_script,0o700)
+            result=run([str(start_script)],check=False)
+            if result.returncode!=0 and run(["docker","inspect","shadowbox"],check=False).returncode!=0:
+                raise RuntimeError("restored Outline container could not be started")
+
     if payload and "payload/makia-firewall.json" in payload and shutil.which("ufw"):
         try:
             for rule in json.loads(payload["payload/makia-firewall.json"].decode("utf-8")):
@@ -478,12 +493,14 @@ def restart_stack():
         run(["systemctl","enable","--now","makia-wstunnel"],check=False)
         run(["systemctl","restart","makia-wstunnel"],check=False)
 
-    outline_start=Path("/opt/outline/persisted-state/start_container.sh")
-    if Path("/opt/outline/access.txt").exists() and shutil.which("docker") and outline_start.is_file():
+    if Path("/opt/outline/access.txt").exists() and shutil.which("docker"):
         run(["systemctl","enable","--now","docker"],check=False)
-        run(["bash",str(outline_start)],check=False)
+        if run(["docker","inspect","shadowbox"],check=False).returncode!=0:
+            start_script=Path("/opt/outline/start_container.sh")
+            if start_script.is_file():
+                run([str(start_script)],check=False)
 
-    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","fail2ban"]:
+    for svc in ["makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic","makia-scheduled-backup.timer","makia-ops-monitor.timer","fail2ban"]:
         run(["systemctl","enable","--now",svc],check=False)
         run(["systemctl","restart",svc],check=False)
 
@@ -523,7 +540,7 @@ def validate_restored(panel_domain=""):
         checks.append(("wstunnel",run(["systemctl","is-active","makia-wstunnel"],check=False).returncode==0))
 
     if Path("/opt/outline/access.txt").exists():
-        checks.append(("outline",run(["docker","inspect","-f","{{.State.Running}}","shadowbox"],check=False).stdout.strip()=="true" if shutil.which("docker") else False))
+        checks.append(("outline",run(["docker","inspect","-f","{{.State.Running}}","shadowbox"],check=False).stdout.strip().lower()=="true"))
 
     if panel_domain and Path(f"/etc/letsencrypt/live/{panel_domain}/fullchain.pem").exists():
         p=run(["curl","-fsS","--max-time","8","--resolve",f"{panel_domain}:443:127.0.0.1",f"https://{panel_domain}/healthz"],check=False)
@@ -563,6 +580,12 @@ def main():
     bundle_version=str(manifest.get("app_version") or "").strip()
     if installed_version and bundle_version and installed_version!=bundle_version and not args.allow_version_mismatch:
         raise SystemExit(f"Version mismatch: destination={installed_version}, bundle={bundle_version}. Install the matching Makia version or use --allow-version-mismatch after compatibility review.")
+    if "payload/outline.tar.gz" in payload and not shutil.which("docker"):
+        raise SystemExit(
+            "This migration bundle contains Outline state, but Docker is not installed on the destination VPS. "
+            "Install the Outline host dependency before restore (for an installed Makia host: "
+            "sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade), then re-run validation/apply."
+        )
 
     BACKUP_ROOT.mkdir(parents=True,exist_ok=True)
     if shutil.which("makia-backup"):

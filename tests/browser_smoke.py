@@ -82,7 +82,8 @@ def main():
             assert portal.locator("#openvpn").count()==1
             assert portal.locator("#ssh").count()==1
             assert "اتصال روی موبایل و کامپیوتر" in portal.locator("body").inner_text()
-            assert portal.locator(".visual-steps").count()==4
+            assert portal.locator(".visual-steps").count()==5
+            assert portal.locator('#outline').count()==1
             assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
 
@@ -259,6 +260,7 @@ def main():
             page.locator(".provision-drawer").wait_for()
             page.screenshot(path='/tmp/makia-new-access.png',full_page=True)
             assert page.locator(".wizard-protocol").count()==5
+            assert page.locator('.wizard-protocol[data-kind="outline"]').count()==1
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
             page.locator("#wizEndpointMode").select_option("ip")
             page.locator("#wizEndpoint").fill("8.8.8.8")
@@ -411,7 +413,7 @@ def main():
             assert page.locator('[data-action="migration-restore-verify"]').count()==1
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            for view in ["dashboard","inbounds","access","outline","plans","expiry","automation","diagnostics","integrations","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
+            for view in ["dashboard","inbounds","access","outline","plans","expiry","operations","diagnostics","integrations","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
                 page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
@@ -421,6 +423,8 @@ def main():
             leave_sidebar(page)
             page.locator(".pro-directory").wait_for()
             assert page.locator("#accessSegments button").count()==6
+            assert page.locator('#accessSegments [data-filter-value="outline"]').count()==1
+            assert page.locator(".pro-user-row .pro-more").count() >= 1
             assert page.locator(".license-lock-panel").count()==0
             page.locator('.pro-sidebar button[data-view="services"]').click()
             leave_sidebar(page)

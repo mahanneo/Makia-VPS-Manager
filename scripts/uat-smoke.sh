@@ -57,6 +57,36 @@ for svc in makia-vps-manager makia-policy-enforcer makia-metrics-sampler makia-p
   if systemctl is-active --quiet "$svc"; then ok "Service $svc"; else bad "Service $svc"; fi
 done
 
+for timer in makia-scheduled-backup.timer makia-ops-monitor.timer; do
+  if systemctl is-enabled --quiet "$timer" && systemctl is-active --quiet "$timer"; then
+    ok "Timer $timer"
+  else
+    bad "Timer $timer is not enabled/active"
+  fi
+done
+
+if [[ -s /opt/outline/access.txt ]]; then
+  if command -v docker >/dev/null 2>&1 && docker inspect -f '{{.State.Running}}' shadowbox 2>/dev/null | grep -qx true; then
+    ok "Outline shadowbox container"
+  else
+    bad "Outline configured but shadowbox container is not running"
+  fi
+  if ( cd "$APP" && "$APP/.venv/bin/python" - <<'PY'
+from app import integration_ops
+state=integration_ops.outline_status()
+assert state.get("api_ok"), state.get("error") or state
+print(state.get("key_count",0))
+PY
+  ) >/tmp/makia-outline-health.txt 2>&1; then
+    ok "Outline Management API + certificate fingerprint"
+  else
+    bad "Outline Management API/fingerprint check"
+    sed -n '1,8p' /tmp/makia-outline-health.txt || true
+  fi
+else
+  ok "Outline not installed; live Outline gate skipped"
+fi
+
 if ( cd "$APP" && "$APP/.venv/bin/python" - <<'PY'
 from app import access_ops
 from app.db import connect

@@ -26,6 +26,61 @@ def _run(args: list[str], input_text: str | None = None, timeout: int = 15):
         break
     raise OperationError(last_error)
 
+def remote_backup_scp(local_path,host,user,remote_path,port=22,key_path=""):
+    path=Path(local_path)
+    if not path.is_file():
+        raise OperationError("backup file does not exist")
+    host=str(host or "").strip()
+    user=str(user or "").strip()
+    remote_path=str(remote_path or "").strip()
+    key_path=str(key_path or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,255}",host):
+        raise OperationError("invalid remote backup host")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}",user):
+        raise OperationError("invalid remote backup user")
+    if not remote_path.startswith("/") or ".." in Path(remote_path).parts or not re.fullmatch(r"[A-Za-z0-9_./+-]{1,240}",remote_path):
+        raise OperationError("remote backup path must be an absolute safe path")
+    port=int(port or 22)
+    if not 1<=port<=65535:
+        raise OperationError("invalid remote backup SSH port")
+    args=[
+        "scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=12",
+        "-o","StrictHostKeyChecking=yes","-P",str(port),
+    ]
+    if key_path:
+        kp=Path(key_path).expanduser()
+        if not kp.is_absolute() or not kp.is_file():
+            raise OperationError("remote backup SSH key must be an existing absolute path")
+        if kp.stat().st_mode & 0o077:
+            raise OperationError("remote backup SSH key permissions must be 0600/0400")
+        args+=["-o","IdentitiesOnly=yes","-i",str(kp)]
+    target_host=f"[{host}]" if ":" in host and not host.startswith("[") else host
+    target=f"{user}@{target_host}:{remote_path.rstrip('/')}/{path.name}"
+    args += [str(path),target]
+    _run(args,timeout=180)
+    return {"ok":True,"target":target}
+
+
+def prune_backup_files(directory,prefix,keep):
+    root=Path(directory)
+    keep=max(1,min(int(keep or 7),100))
+    if not root.exists():
+        return []
+    rows=sorted(
+        [p for p in root.iterdir() if p.is_file() and p.name.startswith(prefix)],
+        key=lambda p:p.stat().st_mtime,
+        reverse=True
+    )
+    removed=[]
+    for path in rows[keep:]:
+        try:
+            path.unlink()
+            removed.append(path.name)
+        except OSError:
+            pass
+    return removed
+
+
 def metrics():
     disk=psutil.disk_usage("/")
     mem=psutil.virtual_memory()
@@ -261,24 +316,13 @@ def _migration_versions_compatible(bundle_version,expected_version):
     destination=str(expected_version or "").strip()
     if not bundle or not destination or bundle==destination:
         return True
-    # Full Migration format v2 stayed compatible across the 0.26 RC line.
-    # Keep this directional and explicit: RC5 may restore earlier verified
-    # RC2/RC3/RC4 bundles, including the RC2 systemd-template name shim.
-    compatible_to_rc7={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6"}
-    if destination=="0.26.0-rc7" and bundle in compatible_to_rc7:
-        return True
-    compatible_to_rc6={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5"}
-    if destination=="0.26.0-rc6" and bundle in compatible_to_rc6:
-        return True
-    compatible_to_rc5={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4"}
-    if destination=="0.26.0-rc5" and bundle in compatible_to_rc5:
-        return True
-    if destination=="0.26.0-rc4" and bundle in {"0.26.0-rc2","0.26.0-rc3"}:
-        return True
-    if destination=="0.26.0-rc3" and bundle=="0.26.0-rc2":
-        return True
+    # Full Migration format v2 remains compatible across the verified 0.26 RC line.
+    # Compatibility is directional: an older destination never claims a newer bundle.
+    rc_line=["0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6","0.26.0-rc7","0.26.0-rc8","0.26.0-rc9","0.26.0-rc10"]
+    if destination in rc_line:
+        destination_index=rc_line.index(destination)
+        return bundle in set(rc_line[:destination_index])
     return False
-
 
 def inspect_portable_migration_blob(blob,password,expected_version=""):
     if len(blob)<100:
@@ -486,11 +530,11 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "nginx_site":"/etc/nginx/sites-available/makia-vps-manager",
         "makia_etc":"/etc/makia-vps-manager",
         "stunnel":"/etc/stunnel",
-        "outline":"/opt/outline",
         "ipsec_d":"/etc/ipsec.d",
         "ipsec_conf":"/etc/ipsec.conf",
         "ipsec_secrets":"/etc/ipsec.secrets",
         "stunnel_defaults":"/etc/default/stunnel4",
+        "outline":"/opt/outline",
     }
     paths={**defaults,**(system_paths or {})}
     files={
@@ -499,7 +543,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     }
     components={}
 
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","outline","ipsec_d"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d","outline"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
@@ -520,7 +564,8 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     systemd_units=[
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
         "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
-        "makia-migration-restore@.service",
+        "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
+        "makia-ops-monitor.service","makia-ops-monitor.timer",
     ]
     systemd_count=0
     for unit in systemd_units:

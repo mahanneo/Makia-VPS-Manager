@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-import json, os, shutil, socket, time, urllib.request
+import json, os, shutil, socket, sqlite3, subprocess, time, urllib.request
 
 CONTROLLER=os.environ.get("MAKIA_CONTROLLER_URL","").rstrip("/")
 TOKEN=os.environ.get("MAKIA_NODE_TOKEN","")
 INTERVAL=max(15,int(os.environ.get("MAKIA_NODE_INTERVAL","30")))
-REGION=os.environ.get("MAKIA_NODE_REGION","")
-PUBLIC_URL=os.environ.get("MAKIA_NODE_PUBLIC_URL","")
+REGION=os.environ.get("MAKIA_NODE_REGION","").strip()[:80]
 
 def cpu_times():
     with open("/proc/stat","r",encoding="utf-8") as f:
@@ -32,43 +31,6 @@ def disk_percent():
     d=shutil.disk_usage("/")
     return round(d.used/d.total*100,1) if d.total else 0.0
 
-def network_bytes():
-    rx=tx=0
-    try:
-        with open("/proc/net/dev","r",encoding="utf-8") as f:
-            for line in f:
-                if ":" not in line:continue
-                name,data=line.split(":",1)
-                if name.strip()=="lo":continue
-                p=data.split()
-                rx+=int(p[0]);tx+=int(p[8])
-    except Exception:pass
-    return rx,tx
-
-def service_state(name):
-    try:
-        import subprocess
-        p=subprocess.run(["systemctl","is-active",name],text=True,capture_output=True,timeout=3,check=False)
-        return (p.stdout or "").strip()=="active"
-    except Exception:return False
-
-def managed_counts():
-    users=online=0
-    try:
-        import sqlite3
-        db="/opt/makia-vps-manager/data/makia.db"
-        if os.path.isfile(db):
-            con=sqlite3.connect(db)
-            users=int(con.execute("SELECT COUNT(*) FROM protocol_clients WHERE enabled=1").fetchone()[0])
-            con.close()
-    except Exception:pass
-    try:
-        import subprocess
-        p=subprocess.run(["who"],text=True,capture_output=True,timeout=3,check=False)
-        online=len({line.split()[0] for line in (p.stdout or "").splitlines() if line.split()})
-    except Exception:pass
-    return users,online
-
 def version():
     for p in ("/opt/makia-vps-manager/VERSION","/etc/makia-node-version"):
         try:
@@ -76,28 +38,81 @@ def version():
         except OSError: pass
     return "node-agent"
 
+def public_ip():
+    try:
+        values=socket.gethostbyname_ex(socket.gethostname())[2]
+        for value in values:
+            if not value.startswith(("127.","10.","192.168.")) and not value.startswith("172."):
+                return value
+    except OSError: pass
+    try:
+        out=subprocess.run(["hostname","-I"],text=True,capture_output=True,timeout=3,check=False).stdout
+        for value in out.split():
+            if "." in value and not value.startswith(("127.","10.","192.168.")):
+                return value
+    except Exception: pass
+    return ""
+
+def traffic_bytes():
+    total=0
+    try:
+        with open("/proc/net/dev","r",encoding="utf-8") as f:
+            for line in f.readlines()[2:]:
+                if ":" not in line:continue
+                iface,raw=line.split(":",1)
+                if iface.strip()=="lo":continue
+                p=raw.split()
+                if len(p)>=9:total+=int(p[0])+int(p[8])
+    except OSError:pass
+    return total
+
+def db_counts():
+    db="/opt/makia-vps-manager/data/makia.db"
+    if not os.path.isfile(db):return 0,0
+    try:
+        con=sqlite3.connect(f"file:{db}?mode=ro",uri=True)
+        users=int(con.execute("SELECT COUNT(*) FROM protocol_clients").fetchone()[0])
+        recent=0
+        cutoff=time.time()-120
+        for (raw,) in con.execute("SELECT last_traffic_at FROM protocol_clients WHERE last_traffic_at IS NOT NULL AND last_traffic_at!=''"):
+            try:
+                stamp=time.mktime(time.strptime(str(raw).split(".")[0],"%Y-%m-%dT%H:%M:%S"))
+                if stamp>=cutoff:recent+=1
+            except Exception:pass
+        con.close()
+        return users,recent
+    except Exception:return 0,0
+
+def service_state(unit):
+    try:
+        p=subprocess.run(["systemctl","is-active",unit],text=True,capture_output=True,timeout=4,check=False)
+        return p.returncode==0
+    except Exception:return False
+
+def services():
+    return {
+        "makia":service_state("makia-vps-manager"),
+        "xray":service_state("xray"),
+        "wireguard":service_state("wg-quick@wg0"),
+        "openvpn":service_state("openvpn-server@server"),
+        "outline":service_state("docker") and os.path.isfile("/opt/outline/access.txt"),
+    }
+
 def heartbeat():
-    rx,tx=network_bytes();users,online=managed_counts()
-    started=time.time()
+    users,online=db_counts()
     payload=json.dumps({
         "hostname":socket.gethostname(),
         "version":version(),
         "cpu":cpu_percent(),
         "memory":mem_percent(),
         "disk":disk_percent(),
+        "public_ip":public_ip(),
         "region":REGION,
-        "public_url":PUBLIC_URL,
         "users":users,
         "online_users":online,
-        "rx":rx,
-        "tx":tx,
-        "latency_ms":round(max(0,(time.time()-started)*1000),1),
-        "services":{
-            "makia":service_state("makia-vps-manager"),
-            "xray":service_state("xray"),
-            "wireguard":service_state("wg-quick@wg0"),
-            "nginx":service_state("nginx"),
-        },
+        "traffic_bytes":traffic_bytes(),
+        "services":services(),
+        "last_error":"",
     }).encode()
     req=urllib.request.Request(
         CONTROLLER+"/api/node/heartbeat",
@@ -105,8 +120,8 @@ def heartbeat():
         headers={"Content-Type":"application/json","Authorization":"Bearer "+TOKEN},
         method="POST",
     )
-    with urllib.request.urlopen(req,timeout=12) as r:
-        r.read()
+    with urllib.request.urlopen(req,timeout=12) as response:
+        response.read()
 
 def main():
     if not CONTROLLER.startswith(("http://","https://")) or not TOKEN:

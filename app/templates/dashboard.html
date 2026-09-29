@@ -27,6 +27,8 @@
       <p>{{'اصلی' if fa else 'Main'}}</p>
       <button data-view="dashboard" class="active"><span class="pro-nav-icon">⌂</span><b>{{'داشبورد' if fa else 'Dashboard'}}</b></button>
       <button data-view="access"><span class="pro-nav-icon">♙</span><b>{{'کاربران' if fa else 'Clients'}}</b><em>{{'همه دسترسی‌ها' if fa else 'All access'}}</em></button>
+      <button data-view="plans"><span class="pro-nav-icon">◇</span><b>{{'پلن‌ها' if fa else 'Plans'}}</b></button>
+      <button data-view="expiry"><span class="pro-nav-icon">◷</span><b>{{'مرکز تمدید' if fa else 'Expiry Center'}}</b></button>
 
       <p>{{'پروتکل‌ها' if fa else 'Protocols'}}</p>
       <div class="pro-nav-group open" data-group-root="protocols">
@@ -50,18 +52,8 @@
           <button data-view="sessions"><span>•</span><b>{{'اتصال‌های زنده' if fa else 'Live Sessions'}}</b></button>
           <button data-view="nodes"><span>•</span><b>{{'نودها' if fa else 'Nodes'}}</b></button>
           <button data-view="connectivity"><span>•</span><b>Connectivity Lab</b></button>
-        </div>
-      </div>
-
-      <p>{{'عملیات' if fa else 'Operations'}}</p>
-      <div class="pro-nav-group" data-group-root="operations">
-        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="operations"><span class="pro-nav-icon">⚡</span><b>{{'اتوماسیون و فروش' if fa else 'Automation & Sales'}}</b><i>⌄</i></button>
-        <div class="pro-submenu" data-group-panel="operations">
-          <button data-view="plans"><span>•</span><b>{{'پلن‌ها' if fa else 'Plans'}}</b></button>
-          <button data-view="expiry"><span>•</span><b>{{'انقضا و تمدید' if fa else 'Expiry & Renewals'}}</b></button>
-          <button data-view="automation"><span>•</span><b>{{'اتوماسیون بکاپ' if fa else 'Backup Automation'}}</b></button>
           <button data-view="diagnostics"><span>•</span><b>{{'مرکز عیب‌یابی' if fa else 'Diagnostics Center'}}</b></button>
-          <button data-view="integrations"><span>•</span><b>{{'اتصال‌ها' if fa else 'Integrations'}}</b></button>
+          <button data-view="operations"><span>•</span><b>{{'عملیات و انتقال' if fa else 'Operations / DR'}}</b></button>
         </div>
       </div>
 
