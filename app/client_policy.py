@@ -129,21 +129,28 @@ def _ssh_disconnect_limits(account,username,sessions):
 
 
 def enforce_host_artifacts(now_ts=None):
-    """Enforce host-safe Client policies for bound SSH and WireGuard artifacts.
+    """Enforce host-safe Client policies for bound SSH/WireGuard/OpenVPN artifacts.
 
-    WireGuard contributes persistent traffic deltas to the account quota.
-    SSH contributes time/device/session enforcement; byte quota accounting is
-    intentionally not claimed for SSH. OpenVPN remains delivery-only until its
-    non-destructive authorization hook is explicitly installed.
+    WireGuard and policy-enabled OpenVPN contribute persistent traffic deltas
+    to the account quota. SSH contributes time/device/session enforcement;
+    byte quota accounting is intentionally not claimed for SSH. Existing
+    OpenVPN servers are never restarted or modified from this polling cycle:
+    OpenVPN hard enforcement is used only when its explicit Makia policy
+    runtime has already been configured by an administrator.
     """
     now_ts=int(now_ts or time.time())
     accounts={int(a["id"]):a for a in client_store.list_accounts()}
     sessions=system_ops.online_sessions()
     wg_runtime={str(p.get("name") or ""):p for p in protocol_ops._wireguard_peer_runtime()}
     wg_config={str(p.get("name") or ""):p for p in protocol_ops.list_wireguard_peers()}
+    try:
+        ovpn_runtime=protocol_ops.openvpn_management_status()
+    except Exception as exc:
+        ovpn_runtime={"available":False,"clients":{},"error":str(exc)[:300]}
+    ovpn_clients=ovpn_runtime.get("clients") or {}
     result={"checked":0,"samples":0,"suspended":0,"restored":0,"disconnected":0,"errors":0}
 
-    # Sample WireGuard transfer counters before evaluating aggregate quota.
+    # Sample WireGuard/OpenVPN transfer counters before evaluating aggregate quota.
     for account_id,account in accounts.items():
         for binding in client_store.list_artifact_bindings(account_id):
             if str(binding.get("kind") or "").lower()!="wireguard":
@@ -162,13 +169,31 @@ def enforce_host_artifacts(now_ts=None):
                 result["errors"]+=1
                 audit("system","client_policy_wireguard_sample_failed",name,str(exc)[:300])
 
-    # Re-read accounts because quota usage may have changed after WG sampling.
+    if ovpn_runtime.get("available"):
+        for account_id,account in accounts.items():
+            for binding in client_store.list_artifact_bindings(account_id):
+                if str(binding.get("kind") or "").lower()!="openvpn":
+                    continue
+                name=str(binding.get("external_key") or "")
+                runtime=ovpn_clients.get(name)
+                if not runtime:
+                    continue
+                try:
+                    client_store.add_artifact_counter_sample(
+                        account_id,binding["artifact_id"],int(runtime.get("total") or 0)
+                    )
+                    result["samples"]+=1
+                except Exception as exc:
+                    result["errors"]+=1
+                    audit("system","client_policy_openvpn_sample_failed",name,str(exc)[:300])
+
+    # Re-read accounts because quota usage may have changed after runtime sampling.
     accounts={int(a["id"]):a for a in client_store.list_accounts()}
     for account_id,account in accounts.items():
         reason=_reason(account,now_ts)
         for binding in client_store.list_artifact_bindings(account_id):
             kind=str(binding.get("kind") or "").lower()
-            if kind not in {"wireguard","ssh"}:
+            if kind not in {"wireguard","ssh","openvpn"}:
                 continue
             result["checked"]+=1
             artifact_id=int(binding["artifact_id"])
@@ -225,6 +250,35 @@ def enforce_host_artifacts(now_ts=None):
                         if removed:
                             result["disconnected"]+=removed
                             audit("system","client_policy_ssh_session_limit",name,f"account={account['username']}; disconnected={removed}")
+
+                elif kind=="openvpn":
+                    policy_status=protocol_ops.openvpn_policy_status()
+                    # Never bootstrap/restart OpenVPN from the recurring policy
+                    # loop. Existing servers require explicit administrator
+                    # activation; newly bootstrapped servers may already be ready.
+                    if not policy_status.get("configured"):
+                        continue
+                    if reason:
+                        if not managed:
+                            changed=protocol_ops.set_openvpn_client_policy_enabled(name,False)
+                            client_store.set_artifact_policy_state(
+                                account_id,artifact_id,_managed_reason(reason)
+                            )
+                            audit(
+                                "system","client_policy_openvpn_suspend",name,
+                                f"account={account['username']}; reason={reason}"
+                            )
+                            result["suspended"]+=1
+                            if changed.get("disconnected"):
+                                result["disconnected"]+=1
+                    elif managed.startswith(CLIENT_REASON_PREFIX):
+                        protocol_ops.set_openvpn_client_policy_enabled(name,True)
+                        client_store.set_artifact_policy_state(account_id,artifact_id,"")
+                        audit(
+                            "system","client_policy_openvpn_restore",name,
+                            f"account={account['username']}"
+                        )
+                        result["restored"]+=1
             except Exception as exc:
                 result["errors"]+=1
                 audit("system","client_policy_artifact_error",name,f"account={account['username']}; kind={kind}; {str(exc)[:300]}")
