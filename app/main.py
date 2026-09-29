@@ -31,6 +31,7 @@ async def security_headers(request:Request,call_next):
         request.url.path.startswith("/client/") or
         request.url.path.startswith("/client-app") or
         request.url.path.startswith("/access/") or
+        request.url.path.startswith("/api/client-agent/") or
         request.url.path=="/integrations/telegram/webhook" or
         request.url.path=="/api/node/heartbeat"
     )
