@@ -2552,10 +2552,13 @@ def outline_install(payload:OutlineInstallPayload,request:Request):
     if status.get("api_ok"):
         return {"ok":True,"already_ready":True,"status":status,"command":""}
     audit(actor,"outline_install_command","outline",f"keys_port={payload.keys_port}",ip(request))
+    docker_ready=bool(status.get("docker"))
     return {
         "ok":False,"already_ready":False,"requires_root":True,
+        "requires_dependency":not docker_ready,
+        "dependency_command":"sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade" if not docker_ready else "",
         "command":command,
-        "note":"Run this command in the VPS root shell. Makia intentionally does not run APT/Docker installers inside the hardened web service.",
+        "note":"Run the host preparation command first when Docker is missing, then run the pinned Outline installer command. Makia intentionally does not run APT/Docker installers inside the hardened web service.",
         "status":status,
     }
 
