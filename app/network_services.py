@@ -326,9 +326,9 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
     # AUTO (0) keeps an already-running Makia port, otherwise selects a free
     # managed high port. 443 is deliberately not preferred because the panel's
     # HTTPS listener commonly owns it.
-    if requested==0 and current_port and _active(MTPROXY_SERVICE):
+    if requested==0 and current_port and (_active(MTPROXY_SERVICE) or not _port_busy(current_port,"tcp")):
         selected=current_port
-    elif requested and requested==current_port and _active(MTPROXY_SERVICE):
+    elif requested and requested==current_port and (_active(MTPROXY_SERVICE) or not _port_busy(current_port,"tcp")):
         selected=current_port
     else:
         selected=_free_port(
