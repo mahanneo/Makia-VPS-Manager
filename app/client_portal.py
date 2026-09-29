@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import client_store
 from .config import APP_NAME, VERSION
-from .db import audit, clear_login_failures, login_rate_state, record_login_failure
+from .db import audit, clear_login_failures, login_rate_state, record_login_failure, get_setting
 
 BASE=Path(__file__).resolve().parent
 templates=Jinja2Templates(directory=BASE/"templates")
@@ -23,7 +23,12 @@ CLIENT_DEVICE_TTL=365*24*60*60
 
 
 def enabled():
-    return str(os.getenv("MAKIA_CLIENT_PORTAL_ENABLED","0")).strip().lower() in {"1","true","yes","on"}
+    raw=str(os.getenv("MAKIA_CLIENT_PORTAL_ENABLED","auto")).strip().lower()
+    if raw in {"1","true","yes","on"}:
+        return True
+    if raw in {"0","false","no","off"}:
+        return False
+    return str(get_setting("client_portal_enabled","0")).strip().lower() in {"1","true","yes","on"}
 
 
 def _require_enabled():
@@ -89,10 +94,10 @@ def client_root(request:Request):
 def client_login_page(request:Request):
     _require_enabled()
     if _session(request):
-        return RedirectResponse("/client/app",302)
+        return _no_store(RedirectResponse("/client/app",302))
     response=templates.TemplateResponse(
         "client_login.html",
-        {"request":request,"app_name":APP_NAME,"version":VERSION,"error":None},
+        {"request":request,"app_name":APP_NAME,"version":VERSION,"error":None,"default_username":str(request.query_params.get("u") or "")[:64]},
     )
     return _no_store(response)
 
