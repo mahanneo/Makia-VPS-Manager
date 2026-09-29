@@ -25,7 +25,7 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# Intentionally omitted: MemoryDenyWriteExecute can break some Go runtimes/architectures.
 LimitNOFILE=1048576
 
 [Install]
