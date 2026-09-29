@@ -2536,8 +2536,9 @@ async function dnsCenter(renderToken=window.__viewRenderToken){
         '<div><span>Installed</span><b>'+networkState(Boolean(r.installed),'YES','NO')+'</b></div>',
         '<div><span>Service</span><b>'+networkState(Boolean(r.service_active),'ACTIVE','DOWN')+'</b></div>',
         '<div><span>Mode</span><strong>'+htmlEsc(String(r.mode||'private').toUpperCase())+'</strong></div>',
-        '<div><span>Resolver query</span><strong>'+((r.query_ms===null||r.query_ms===undefined)?'—':Number(r.query_ms)+' ms')+'</strong></div>',
+        '<div><span>Resolver query</span><strong>'+(r.query_ok===false?'<span class="state-bad">FAILED</span>':((r.query_ms===null||r.query_ms===undefined)?'—':Number(r.query_ms)+' ms'))+'</strong></div>',
       '</section>',
+      (r.service_active&&r.query_ok===false?'<div class="notice">'+htmlEsc(tr('Unbound فعال است اما Query محلی جواب نمی‌دهد. Makia در Repair بعدی تنظیم DoT و CA bundle را بازسازی می‌کند.','Unbound is active but the localhost query is failing. Makia repair will rebuild the DoT/CA-bundle configuration.'))+(r.runtime_error?'<div class="network-delivery-note" dir="ltr">'+htmlEsc(r.runtime_error)+'</div>':'')+'</div>':''),
       install,
       (r.installed?[
         '<section class="network-tool-card">',
