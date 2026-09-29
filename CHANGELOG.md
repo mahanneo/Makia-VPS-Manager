@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.1] - 2026-09-29
+
+### Update persistence
+- Added SHA256 invariants for existing MTProxy and DNS state/config files before and after upgrades.
+- Updates now abort and roll back if a previously configured Telegram Proxy or DNS policy is deleted or modified unexpectedly.
+- A previously active `makia-mtproxy` or `unbound` service becoming inactive during tooling refresh is treated as an update failure.
+- Rollback now explicitly restarts configured MTProxy and Unbound after restoring the runtime snapshot.
+
+### Release contract
+- Bumped application/cache release metadata to 1.2.1.
+- Added regression coverage and a dedicated host UAT for preserving Telegram/DNS state across update and rollback.
+
+
 ## [1.1.0] - 2026-09-29
 
 ### Xray Inbound Presets
