@@ -252,6 +252,36 @@ else
   bad "WStunnel tooling missing"
 fi
 
+if [[ -f /etc/makia-vps-manager/mtproxy.env ]]; then
+  if [[ -x /opt/makia-mtproxy/mtg ]] && systemctl is-active --quiet makia-mtproxy; then
+    MTPORT="$(awk -F= '$1=="MTPROXY_PORT"{print $2;exit}' /etc/makia-vps-manager/mtproxy.env)"
+    if [[ -n "$MTPORT" ]] && ss -H -ltn 2>/dev/null | grep -Eq ":${MTPORT}([[:space:]]|$)"; then
+      ok "Telegram MTProxy runtime + listener"
+    else
+      bad "Telegram MTProxy listener missing"
+    fi
+  else
+    bad "Telegram MTProxy configured but runtime missing/inactive"
+  fi
+else
+  ok "Telegram MTProxy optional gate skipped"
+fi
+
+if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then
+  if command -v unbound-checkconf >/dev/null 2>&1 && unbound-checkconf >/tmp/makia-unbound-check.log 2>&1 && systemctl is-active --quiet unbound; then
+    ok "Makia DNS config + runtime"
+  else
+    bad "Makia DNS config/runtime unhealthy"
+  fi
+  if command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com +short +time=2 +tries=1 | grep -q .; then
+    ok "Makia DNS query"
+  else
+    bad "Makia DNS localhost query failed"
+  fi
+else
+  ok "Makia DNS optional gate skipped"
+fi
+
 if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then
   OVPN_TCP_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/makia-tcp.conf 2>/dev/null || true)"
   if systemctl is-active --quiet openvpn-server@makia-tcp; then
