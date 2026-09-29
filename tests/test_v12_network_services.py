@@ -551,3 +551,31 @@ def test_source_shell_preflight_happens_before_runtime_mutation():
     assert preflight < armed
     assert '"$SRC/scripts/uat-smoke.sh"' in update[preflight:armed]
     assert '"$SRC/scripts/update.sh"' in update[preflight:armed]
+
+
+def test_updater_pins_github_branch_to_immutable_commit_archive():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "resolve_github_commit(){" in update
+    assert 'https://api.github.com/repos/${REPO}/commits/${ref}' in update
+    assert 'https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}' in update
+    assert 'SOURCE_COMMIT="$(resolve_github_commit "$REF")"' in update
+    assert "pinned immutable source commit" in update
+    force=update.split('if [[ "$FORCE_MAIN" == "1" ]]',1)[1].split("elif",1)[0]
+    assert "archive/refs/heads/main.tar.gz" not in force
+
+
+def test_updater_validates_immutable_archive_identity_before_preflight():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'EXPECTED_PREFIX="Makia-VPS-Manager-${SOURCE_COMMIT}"' in update
+    assert "Immutable archive root mismatch" in update
+    assert '[[ -s "$SRC/VERSION" ]]' in update
+    assert "Downloaded immutable Makia release" in update
+    identity=update.index("Immutable archive root mismatch")
+    preflight=update.index("Preflighting critical release shell scripts")
+    assert identity < preflight
+
+
+def test_updater_validates_tarball_before_extracting_release():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'tar -tzf "$TMP/source.tar.gz" >/dev/null' in update
+    assert update.index('tar -tzf "$TMP/source.tar.gz" >/dev/null') < update.index('tar -xzf "$TMP/source.tar.gz" -C "$TMP"')
