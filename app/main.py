@@ -940,7 +940,9 @@ def _qr_data_uri(text_value):
 
 class MTProxyConfigure(BaseModel):
     host:str=Field(min_length=1,max_length=253)
-    port:int=Field(default=443,ge=1,le=65535)
+    # 0 = AUTO. Makia chooses a free managed/high TCP port and preserves the
+    # currently configured port on safe retries.
+    port:int=Field(default=0,ge=0,le=65535)
     rotate_secret:bool=False
 
 
