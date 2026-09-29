@@ -179,7 +179,7 @@ def main():
             assert "Browser OpenVPN" in drawer_text
             assert page.locator('[data-action="client-binding-add"]').count()==1
             page.screenshot(path='/tmp/makia-client-platform-admin.png',full_page=True)
-            page.locator('.cp-manage-drawer [data-action="modal-close"]').click()
+            page.locator('.cp-manage-drawer header [data-action="modal-close"]').click()
 
             # v1.2 regression: protocol cards must never render the missing x[4]
             # value as literal "undefined" or overlap the copy area.
