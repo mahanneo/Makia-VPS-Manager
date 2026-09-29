@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
@@ -928,6 +928,78 @@ def protocols(request:Request):
 def protocol_modes_get(request:Request):
     require_user(request)
     return protocol_ops.protocol_modes()
+
+
+def _qr_data_uri(text_value):
+    if not text_value:
+        return ""
+    qr=qrcode.make(text_value,image_factory=qrcode.image.svg.SvgPathImage)
+    buf=io.BytesIO();qr.save(buf)
+    return "data:image/svg+xml;base64,"+base64.b64encode(buf.getvalue()).decode()
+
+
+class MTProxyConfigure(BaseModel):
+    host:str=Field(min_length=1,max_length=253)
+    port:int=Field(default=443,ge=1,le=65535)
+    rotate_secret:bool=False
+
+
+@app.get("/api/network/mtproxy")
+def mtproxy_get(request:Request):
+    require_user(request)
+    result=network_services.mtproxy_status(public_host(request))
+    result["qr"]=_qr_data_uri(result.get("https_link") or result.get("tg_link") or "")
+    return result
+
+
+@app.post("/api/network/mtproxy/configure")
+def mtproxy_configure(payload:MTProxyConfigure,request:Request):
+    actor=require_mutation(request)
+    require_local_admin(request)
+    try:
+        result=network_services.configure_mtproxy(payload.host,payload.port,payload.rotate_secret)
+    except network_services.NetworkServiceError as exc:
+        audit(actor,"mtproxy_configure_failed","mtproxy",str(exc)[:500],ip=ip(request))
+        raise HTTPException(400,str(exc))
+    result["qr"]=_qr_data_uri(result.get("https_link") or result.get("tg_link") or "")
+    audit(
+        actor,"mtproxy_configure","mtproxy",
+        f"host={result.get('host')}; port={result.get('port')}; requested={payload.port}; rotate={payload.rotate_secret}",
+        ip=ip(request)
+    )
+    return result
+
+
+class DNSConfigure(BaseModel):
+    mode:str="private"
+    upstream:str="cloudflare"
+    allowed_cidrs:list[str]=Field(default_factory=list)
+    public_address:str=Field(default="",max_length=64)
+
+
+@app.get("/api/network/dns")
+def dns_get(request:Request):
+    require_user(request)
+    return network_services.dns_status()
+
+
+@app.post("/api/network/dns/configure")
+def dns_configure(payload:DNSConfigure,request:Request):
+    actor=require_mutation(request)
+    require_local_admin(request)
+    try:
+        result=network_services.configure_dns(
+            payload.mode,payload.upstream,payload.allowed_cidrs,payload.public_address
+        )
+    except network_services.NetworkServiceError as exc:
+        audit(actor,"dns_configure_failed","dns",str(exc)[:500],ip=ip(request))
+        raise HTTPException(400,str(exc))
+    audit(
+        actor,"dns_configure","dns",
+        f"mode={result.get('mode')}; upstream={result.get('upstream')}; allowed={len(result.get('allowed_cidrs') or [])}",
+        ip=ip(request)
+    )
+    return result
 
 class IKEv2Bootstrap(BaseModel):
     domain:str=Field(min_length=3,max_length=253)
