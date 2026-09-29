@@ -12,7 +12,7 @@
   <strong>نسخه ۱.۱.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
-**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه v1](docs/UAT-1.0.0.md)**
+**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه v1](docs/UAT-1.1.0.md)**
 
 ---
 
@@ -180,7 +180,7 @@ CI نسخه ۱ شامل Python compile/import، Pytest، DB/Migration، JavaScri
 
 موارد وابسته به محیط مانند Firewall/NAT، DNS propagation، Docker/Shadowbox واقعی، اتصال Client واقعی و SCP واقعی باید روی Host مقصد تست شوند.
 
-جزئیات در **[docs/UAT-1.0.0.md](docs/UAT-1.0.0.md)** ثبت شده است.
+جزئیات در **[docs/UAT-1.1.0.md](docs/UAT-1.1.0.md)** ثبت شده است.
 
 ## مجوز
 
