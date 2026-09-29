@@ -178,7 +178,7 @@ def test_protected_backup_payload_verifies_before_restore():
     password="RC8-strong-backup-password"
     files={"manifest.json":json.dumps({"format":"makia-portable-migration","format_version":2}).encode(),"payload/test.txt":b"state"}
     blob=access_ops.protected_zip(files,password)
-    assert access_ops.verify_protected_zip(blob,password,"manifest.json") is True
+    assert access_ops.verify_protected_zip(blob,password,"manifest.json")["ok"] is True
     with pytest.raises(access_ops.AccessPackageError):
         access_ops.verify_protected_zip(blob,"wrong-password","manifest.json")
 
