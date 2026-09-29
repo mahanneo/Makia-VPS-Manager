@@ -1380,18 +1380,23 @@ function renderXrayInboundPresets(){
     if(p.requires_domain)req.push('TLS domain');
     if(p.requires_udp)req.push('UDP');
     const meta=[String(p.protocol||'').toUpperCase(),String(p.transport||'').toUpperCase(),String(p.security||'').toUpperCase()].filter(Boolean).join(' · ');
+    const portInfo=p.suggested_port
+      ? ('Port '+Number(p.suggested_port)+' ready')
+      : ((p.port_state||[]).length?'Preset ports busy':'Port checked on create');
     return '<button type="button" class="xray-preset-card tier-'+htmlEsc(p.tier||'alternative')+'" data-action="xray-inbound-preset" data-preset="'+dataEnc(p.id)+'">'+
       '<span class="preset-tier">'+htmlEsc(xbPresetTierLabel(p.tier))+'</span>'+
       '<b>'+htmlEsc(p.label||p.id)+'</b><small>'+htmlEsc(meta)+'</small>'+
       '<p>'+htmlEsc(p.summary||'')+'</p>'+
+      '<span class="preset-port">'+htmlEsc(portInfo)+'</span>'+
       (req.length?'<em>'+htmlEsc(req.join(' · '))+'</em>':'')+
       '</button>';
   }).join('');
 }
 function xrayPresetPort(preset){
+  if(Number(preset?.suggested_port||0)>0)return Number(preset.suggested_port);
   const used=window.__xrayBuilderUsedPorts instanceof Set?window.__xrayBuilderUsedPorts:new Set();
   for(const raw of (preset.ports||[])){const port=Number(raw);if(port>0&&!used.has(port))return port}
-  return Number((preset.ports||[])[0]||xbValue('xbPort','2087'));
+  return Number(xbValue('xbPort','2087'));
 }
 function applyXrayInboundPreset(presetId){
   const preset=(xrayBuilderCaps?.presets||[]).find(x=>x.id===presetId);
