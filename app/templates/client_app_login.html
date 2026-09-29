@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1628">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <link rel="manifest" href="/client-app/manifest.webmanifest">
+  <link rel="icon" href="/static/client-app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/client-app.css">
+  <title>Makia Client</title>
+</head>
+<body class="client-shell client-login-shell">
+  <main class="client-auth-wrap">
+    <section class="client-auth-card" aria-labelledby="client-login-title">
+      <div class="client-brand-mark">M</div>
+      <div class="client-brand-copy">
+        <span>MAKIA CLIENT</span>
+        <small>Secure access portal</small>
+      </div>
+      <div class="client-auth-heading">
+        <p class="client-eyebrow">ورود کاربر</p>
+        <h1 id="client-login-title">دسترسی شخصی شما</h1>
+        <p>با حساب اختصاصی خود وارد شوید. پروفایل‌ها و دستگاه‌های مجاز فقط برای همین حساب نمایش داده می‌شوند.</p>
+      </div>
+      {% if error %}
+      <div class="client-alert client-alert-danger" role="alert">{{ error }}</div>
+      {% endif %}
+      <form action="/client-app/login" method="post" class="client-login-form" autocomplete="on">
+        <label>
+          <span>نام کاربری</span>
+          <input name="username" autocomplete="username" required minlength="3" maxlength="64" dir="ltr">
+        </label>
+        <label>
+          <span>رمز عبور</span>
+          <input name="password" type="password" autocomplete="current-password" required minlength="12" maxlength="256" dir="ltr">
+        </label>
+        <button class="client-primary" type="submit">ورود امن</button>
+      </form>
+      <div class="client-security-note">
+        <strong>Device-aware session</strong>
+        <span>این نسخه پایه، ورود و سقف دستگاه/نشست را مدیریت می‌کند. Tunnel مستقیم در Phase بعد با Makia Agent فعال می‌شود.</span>
+      </div>
+    </section>
+  </main>
+  <script src="/static/client-app.js" defer></script>
+</body>
+</html>

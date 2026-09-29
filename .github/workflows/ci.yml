@@ -43,6 +43,26 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check app/static/app.js
+          node --check app/static/client-app.js
+          node --check app/static/client-app-sw.js
+
+      - name: Client Control Plane Phase A safety gate
+        run: |
+          pytest -q tests/test_v13_client_control_plane.py
+          grep -q 'MAKIA_CLIENT_APP_ENABLED=0' .env.example
+          grep -q 'app.include_router(client_portal.router)' app/main.py
+          grep -q 'client_accounts' app/db.py
+          grep -q 'client_devices' app/db.py
+          grep -q 'client_sessions' app/db.py
+          grep -q 'client_access_bindings' app/db.py
+          test -f app/templates/client_app_login.html
+          test -f app/templates/client_app.html
+          test -f app/static/client-app.css
+          test -f app/static/client-app.js
+          test -f app/static/client-app-sw.js
+          ! grep -q 'protocol_ops' app/client_portal.py
+          ! grep -q 'network_services' app/client_portal.py
+          ! grep -q 'subprocess' app/client_portal.py
 
       - name: v1.2 network services and Iran inbound preset gate
         run: |
@@ -354,6 +374,7 @@ jobs:
       MAKIA_DATA_DIR: /tmp/makia-browser
       MAKIA_BACKUP_DIR: /tmp/makia-browser-backups
       MAKIA_INITIAL_ADMIN_PASSWORD: BrowserTestPass!123
+      MAKIA_CLIENT_APP_ENABLED: 1
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

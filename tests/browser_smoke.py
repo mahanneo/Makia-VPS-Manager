@@ -14,12 +14,15 @@ from playwright.sync_api import sync_playwright
 DATA=Path(os.environ["MAKIA_DATA_DIR"])
 BASE_URL="http://127.0.0.1:8787"
 PASSWORD=os.environ["MAKIA_INITIAL_ADMIN_PASSWORD"]
+CLIENT_USERNAME="client-browser"
+CLIENT_PASSWORD="ClientBrowserPass!123"
 
 
 def seed():
     shutil.rmtree(DATA,ignore_errors=True)
     DATA.mkdir(parents=True,exist_ok=True)
-    from app.db import init_db, create_protocol_client, upsert_access_artifact, get_protocol_client
+    from app.db import init_db, create_protocol_client, upsert_access_artifact, get_protocol_client, upsert_profile, connect, now
+    from app.security import hash_password
     from app import access_ops
 
     init_db()
@@ -38,6 +41,28 @@ def seed():
         "xray",str(client_id),"browser-client","vless",payload["native_filename"],
         access_ops.seal_payload(payload),"{}",
     )
+    upsert_profile(
+        CLIENT_USERNAME,
+        plan="Browser Pro",
+        expire_date="2099-12-31",
+        connection_limit=1,
+        device_limit=1,
+        quota_mb=10240,
+        enabled=1,
+    )
+    ts=now()
+    with connect() as con:
+        account_id=con.execute(
+            """INSERT INTO client_accounts
+               (username,password_hash,display_name,profile_username,active,created_at,updated_at)
+               VALUES(?,?,?,?,1,?,?)""",
+            (CLIENT_USERNAME,hash_password(CLIENT_PASSWORD),"Browser Client",CLIENT_USERNAME,ts,ts),
+        ).lastrowid
+        con.execute(
+            """INSERT INTO client_access_bindings(account_id,kind,external_key,active,created_at)
+               VALUES(?,?,?,1,?)""",
+            (account_id,"xray",str(client_id),ts),
+        )
     return client_id,get_protocol_client(client_id)["subscription_id"]
 
 
@@ -86,6 +111,31 @@ def main():
             assert portal.locator('#outline').count()==1
             assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
+
+            client_page=browser.new_page(viewport={"width":390,"height":844})
+            client_page.goto(BASE_URL+"/client-app/login",wait_until="networkidle")
+            assert "MAKIA CLIENT" in client_page.locator("body").inner_text()
+            assert client_page.locator('link[rel="manifest"]').count()==1
+            client_page.locator('input[name="username"]').fill(CLIENT_USERNAME)
+            client_page.locator('input[name="password"]').fill(CLIENT_PASSWORD)
+            client_page.locator('button[type="submit"]').click()
+            client_page.wait_for_url(BASE_URL+"/client-app/")
+            client_text=client_page.locator("body").inner_text()
+            assert "Browser Client" in client_text
+            assert "Browser Pro" in client_text
+            assert "Xray".lower() in client_text.lower()
+            assert client_page.locator(".client-access-card").count()==1
+            assert client_page.locator(".client-connect[disabled]").count()==1
+            assert client_page.locator(".client-device-row").count()==1
+            assert client_page.locator(".client-bottom-nav").count()==1
+            client_page.screenshot(path='/tmp/makia-client-app-mobile.png',full_page=True)
+            me=client_page.context.request.get(BASE_URL+"/client-app/api/me")
+            assert me.status==200
+            me_json=me.json()
+            assert me_json["account"]["username"]==CLIENT_USERNAME
+            assert me_json["policy"]["device_limit"]==1
+            assert len(me_json["access"])==1
+            client_page.close()
 
             page=browser.new_page(accept_downloads=True)
             page_errors=[]
