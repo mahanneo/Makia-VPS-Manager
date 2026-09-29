@@ -9,11 +9,13 @@ STATE_FILE="/etc/makia-vps-manager/mtproxy.env"
 CONFIG_FILE="/etc/makia-vps-manager/mtproxy.toml"
 HOST=""
 PORT=0
+INSTALL_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="${2:-}"; shift 2 ;;
     --port) PORT="${2:-0}"; shift 2 ;;
+    --install-only) INSTALL_ONLY=1; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -68,7 +70,7 @@ install -d -m 0700 /etc/makia-vps-manager
 if ! id makia-mtproxy >/dev/null 2>&1; then
   useradd --system --no-create-home --home /nonexistent --shell /usr/sbin/nologin makia-mtproxy
 fi
-if [[ ! -s "$CONFIG_FILE" || ! -s "$STATE_FILE" ]]; then
+if [[ "$INSTALL_ONLY" -eq 0 ]] && { [[ ! -s "$CONFIG_FILE" ]] || [[ ! -s "$STATE_FILE" ]]; }; then
   if [[ -z "$HOST" ]]; then
     HOST="$(hostname -f 2>/dev/null || true)"
     [[ "$HOST" == *.* ]] || HOST=""
@@ -124,6 +126,23 @@ elif [[ -f /opt/makia-vps-manager/systemd/makia-mtproxy.service ]]; then
   install -m 0644 /opt/makia-vps-manager/systemd/makia-mtproxy.service /etc/systemd/system/makia-mtproxy.service
 else
   echo "Makia MTProxy service unit not found. Run sudo makia-upgrade first." >&2; exit 8
+fi
+
+if [[ "$INSTALL_ONLY" -eq 1 ]]; then
+  systemctl daemon-reload
+  if [[ -s "$CONFIG_FILE" && -s "$STATE_FILE" ]]; then
+    systemctl enable --now makia-mtproxy
+    systemctl restart makia-mtproxy
+    systemctl is-active --quiet makia-mtproxy || {
+      systemctl status makia-mtproxy --no-pager --lines=30
+      exit 9
+    }
+    echo "Telegram MTProxy tooling refreshed and existing runtime is active."
+  else
+    systemctl disable --now makia-mtproxy >/dev/null 2>&1 || true
+    echo "Telegram MTProxy tooling installed. Configure the FakeTLS hostname and port from the Makia panel."
+  fi
+  exit 0
 fi
 
 systemctl daemon-reload
