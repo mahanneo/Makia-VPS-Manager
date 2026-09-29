@@ -109,8 +109,9 @@ def test_client_platform_is_disabled_by_default_and_separate_from_admin_auth():
     env=(ROOT/".env.example").read_text(encoding="utf-8")
     portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
     main=(ROOT/"app/main.py").read_text(encoding="utf-8")
-    assert "MAKIA_CLIENT_PORTAL_ENABLED=0" in env
-    assert 'MAKIA_CLIENT_PORTAL_ENABLED","0"' in portal
+    assert "MAKIA_CLIENT_PORTAL_ENABLED=auto" in env
+    assert 'MAKIA_CLIENT_PORTAL_ENABLED","auto"' in portal
+    assert 'get_setting("client_portal_enabled","0")' in portal
     assert 'CLIENT_SESSION_COOKIE="makia_client_session"' in portal
     assert 'CLIENT_DEVICE_COOKIE="makia_client_device"' in portal
     assert "makia_session" not in portal
@@ -194,3 +195,62 @@ def test_artifact_identity_cannot_be_shared_across_client_accounts(client_db):
     client_store.bind_access_artifact(a1,artifact_id)
     with pytest.raises(ValueError,match="already bound"):
         client_store.bind_access_artifact(a2,artifact_id)
+
+
+def test_client_delete_is_metadata_only_and_runtime_untouched(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("client08","client-pass-888")
+    protocol_id=db.create_protocol_client(
+        "keep-runtime","xray","vless","keep-inbound","keep-cred","vless://keep-runtime"
+    )
+    payload=access_ops.openvpn_payload("keep-ovpn","client\nremote keep.example 1194\n")
+    artifact_id=db.upsert_access_artifact(
+        "openvpn","keep-ovpn","keep-ovpn","openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_protocol_client(account_id,protocol_id)
+    client_store.bind_access_artifact(account_id,artifact_id)
+    client_store.delete_account(account_id)
+    assert client_store.get_account(account_id) is None
+    assert db.get_protocol_client(protocol_id)["name"]=="keep-runtime"
+    assert db.get_access_artifact(artifact_id)["external_key"]=="keep-ovpn"
+
+
+def test_artifact_delivery_includes_native_download_and_qr(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("client09","client-pass-999")
+    payload=access_ops.wireguard_payload(
+        "phone","[Interface]\nPrivateKey = secret\n[Peer]\nEndpoint = wg.example:51820\n"
+    )
+    artifact_id=db.upsert_access_artifact(
+        "wireguard","phone","phone","wireguard",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    delivery=client_store.artifact_delivery(account_id,artifact_id)
+    assert delivery["native_filename"].endswith(".conf")
+    assert delivery["native_base64"]
+    assert delivery["qr"].startswith("data:image/svg+xml;base64,")
+
+
+def test_client_admin_ui_contract_is_present():
+    dashboard=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    admin=(ROOT/"app/client_admin.py").read_text(encoding="utf-8")
+    assert 'data-view="clientplatform"' in dashboard
+    assert "clientPlatformCenter" in js
+    assert "client-account-new" in js
+    assert "client-binding-add" in js
+    assert "client-platform/settings" in admin
+    assert "runtime_untouched=true" in admin
+
+
+def test_client_pwa_delivery_supports_qr_file_and_install_prompt():
+    html=(ROOT/"app/templates/client_app.html").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/client.js").read_text(encoding="utf-8")
+    assert 'id="deliveryQr"' in html
+    assert 'id="downloadDelivery"' in html
+    assert 'id="installClient"' in html
+    assert "beforeinstallprompt" in js
+    assert "native_base64" in js
+    assert "canDeepOpen" in js
