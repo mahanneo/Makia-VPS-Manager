@@ -108,6 +108,8 @@ def test_dns_private_config_is_acl_restricted_and_dot(tmp_path,monkeypatch):
     monkeypatch.setattr(network_services,"_interface_ipv4",lambda name:"10.66.66.1" if name=="wg0" else "")
     monkeypatch.setattr(network_services,"_run",lambda *a,**k:"")
     monkeypatch.setattr(network_services,"_active",lambda service:True)
+    firewall=[]
+    monkeypatch.setattr(network_services,"_ufw_reconcile_dns",lambda networks:firewall.extend(networks) or {"active":True})
     monkeypatch.setattr(network_services,"dns_status",lambda:{
         "configured":True,"service_active":True,"mode":"private","upstream":"cloudflare"
     })
@@ -119,6 +121,7 @@ def test_dns_private_config_is_acl_restricted_and_dot(tmp_path,monkeypatch):
     assert "forward-tls-upstream: yes" in text
     assert "1.1.1.1@853#cloudflare-dns.com" in text
     assert "interface: 0.0.0.0" not in text
+    assert firewall==["10.66.66.0/24"]
     assert result["service_active"] is True
 
 
@@ -174,3 +177,10 @@ def test_network_views_and_actions_are_wired():
         assert view in js
     for action in ("mtproxy-configure","mtproxy-rotate","dns-configure"):
         assert action in js
+
+
+def test_dns_ufw_is_source_scoped():
+    source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
+    assert '"ufw","allow","from",network,"to","any","port","53"' in source
+    assert '_ufw_allow(53,"udp"' not in source
+    assert '_ufw_allow(53,"tcp"' not in source
