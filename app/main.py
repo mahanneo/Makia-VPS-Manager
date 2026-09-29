@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
-from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_plan, update_plan, list_plans, delete_plan, create_backup_schedule, list_backup_schedules, delete_backup_schedule, list_backup_runs, list_alert_events
+from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_plan, update_plan, list_plans, delete_plan, create_backup_schedule, list_backup_schedules, delete_backup_schedule, list_backup_runs, list_alert_events
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
 from . import system_ops, protocol_ops, panel_ops, access_ops, automation_ops, outline_ops
 
@@ -1271,13 +1271,18 @@ def protocol_client_update(client_id:int,payload:ProtocolClientPolicy,request:Re
     expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days is not None and payload.expire_days>0 else (0 if payload.expire_days==0 else None)
 
     if row.get("engine")=="outline":
-        outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
         target_quota=quota_bytes if quota_bytes is not None else int(row.get("quota_bytes") or 0)
-        target_enabled=bool(row.get("enabled")) if payload.enabled is None else bool(payload.enabled)
-        try:
-            outline_ops.set_data_limit(outline_id,target_quota if target_enabled else 0)
-        except outline_ops.OutlineError as e:
-            raise HTTPException(400,str(e))
+        current_enabled=bool(row.get("enabled"))
+        target_enabled=current_enabled if payload.enabled is None else bool(payload.enabled)
+        if target_enabled:
+            if current_enabled:
+                outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
+                try:outline_ops.set_data_limit(outline_id,target_quota)
+                except outline_ops.OutlineError as e:raise HTTPException(400,str(e))
+            else:
+                _outline_reissue_managed_client(row,target_quota)
+        elif current_enabled:
+            _outline_disable_managed_client(row,"manual")
     elif payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
         if row.get("engine")=="xray" and row.get("protocol") in {"vless","vmess","trojan","hysteria2","http","socks"}:
             try:
@@ -2599,6 +2604,59 @@ class AccessRenewPayload(BaseModel):
     days:int=Field(default=0,ge=0,le=3650)
     add_gb:float=Field(default=0,ge=0,le=100000)
 
+
+def _outline_delivery_payload(name,access_url):
+    filename=f"{access_ops.safe_filename(name)}-outline.txt"
+    return {
+        "native_filename":filename,
+        "files":{
+            filename:str(access_url).encode("utf-8"),
+            "connection-guide-fa.txt":access_ops.client_guide_text("outline","outline").encode("utf-8"),
+        },
+        "primary_text":str(access_url),"share_text":str(access_url),"share_type":"outline",
+        "summary":{"name":name,"protocol":"outline"},
+    }
+
+def _outline_reissue_managed_client(row,quota_bytes=None):
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    quota=int(row.get("quota_bytes") or 0) if quota_bytes is None else max(0,int(quota_bytes))
+    try:
+        key=outline_ops.create_key(row["name"],quota)
+    except outline_ops.OutlineError as exc:
+        raise HTTPException(400,str(exc))
+    outline_id=str(key.get("id") or "")
+    access_url=str(key.get("accessUrl") or "")
+    if not outline_id or not access_url.startswith("ss://"):
+        if outline_id:
+            try:outline_ops.delete_key(outline_id)
+            except Exception:pass
+        raise HTTPException(502,"Outline did not return a valid replacement access key")
+    try:
+        replace_protocol_client_identity(row["id"],f"outline:{outline_id}",outline_id,access_url)
+        artifact_save(
+            "outline",str(row["id"]),row["name"],"outline",
+            _outline_delivery_payload(row["name"],access_url),
+            {"client_id":row["id"],"outline_id":outline_id,"quota_bytes":quota}
+        )
+    except Exception:
+        try:outline_ops.delete_key(outline_id)
+        except Exception:pass
+        raise
+    return {"outline_id":outline_id,"access_url":access_url,"quota_bytes":quota}
+
+def _outline_disable_managed_client(row,reason="manual"):
+    if not row or row.get("engine")!="outline":
+        raise HTTPException(404,"Outline client not found")
+    outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
+    if outline_id:
+        try:outline_ops.delete_key(outline_id)
+        except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
+    from .db import set_protocol_client_enabled
+    set_protocol_client_enabled(row["id"],False,reason)
+    return {"disabled":True,"outline_id":outline_id}
+
+
 def _renew_access(kind,key,days,add_gb):
     kind=str(kind).lower()
     now_ts=int(time.time())
@@ -2629,12 +2687,14 @@ def _renew_access(kind,key,days,add_gb):
             expire=base+int(days)*86400
         quota=max(0,int(row.get("quota_bytes") or 0)+int(float(add_gb)*1024*1024*1024))
         if kind=="outline":
-            outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-            try:
-                outline_ops.set_data_limit(outline_id,quota)
-            except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
+            if bool(row.get("enabled")):
+                outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
+                try:outline_ops.set_data_limit(outline_id,quota)
+                except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
+            else:
+                _outline_reissue_managed_client(row,quota)
         update_protocol_client_state(int(key),True,quota,expire,None,None)
-        return {"kind":kind,"key":key,"expire_at":expire,"quota_bytes":quota}
+        return {"kind":kind,"key":key,"expire_at":expire,"quota_bytes":quota,"reissued":bool(kind=="outline" and not row.get("enabled"))}
     raise HTTPException(400,"renew is supported for SSH, Xray and Outline managed clients")
 
 @app.post("/api/access/{kind}/{key}/renew")
@@ -2677,9 +2737,11 @@ def _set_access_enabled(kind,key,enabled):
                 else:protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
             except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
         else:
-            outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-            try:outline_ops.set_data_limit(outline_id,int(row.get("quota_bytes") or 0) if enabled else 0)
-            except outline_ops.OutlineError as exc:raise HTTPException(400,str(exc))
+            if enabled:
+                if not bool(row.get("enabled")):_outline_reissue_managed_client(row)
+            else:
+                _outline_disable_managed_client(row,"manual")
+                return
         update_protocol_client_state(int(key),enabled,None,None,None,None)
         return
     raise HTTPException(400,"enable/disable not supported for this access type")
