@@ -211,6 +211,7 @@ install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/syste
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
 install -m 0644 "$SRC/systemd/makia-ops-monitor.service" /etc/systemd/system/makia-ops-monitor.service
 install -m 0644 "$SRC/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
+install -m 0644 "$SRC/systemd/makia-mtproxy.service" /etc/systemd/system/makia-mtproxy.service
 if [[ ! -f /etc/nginx/sites-available/makia-vps-manager ]]; then
   install -m 0644 "$SRC/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 else
@@ -232,6 +233,9 @@ install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-co
 install -m 0755 "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
 install -m 0755 "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/scripts/install-outline.sh" /usr/local/sbin/makia-install-outline
+install -m 0755 "$SRC/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
+install -m 0755 "$SRC/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
+install -m 0755 "$SRC/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
