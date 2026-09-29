@@ -512,3 +512,19 @@ def test_update_contract_preserves_client_data_tree_and_takes_consistent_sqlite_
     assert 'source.backup(target)' in update
     assert 'tar -C "$BACKUP_TMP" -czf "$BACKUP" data' in update
     assert 'rm -rf "$APP/data"' not in update
+
+
+
+def test_host_uat_smoke_checks_client_schema_without_mutating_runtime():
+    smoke=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    for table in (
+        "client_accounts","client_devices","client_sessions",
+        "client_protocol_bindings","client_artifact_bindings",
+        "client_usage_baselines","client_artifact_usage","client_artifact_policy_state",
+    ):
+        assert table in smoke
+    assert 'get_setting("client_portal_enabled","0")' in smoke
+    assert "Client Portal rollout switch remains disabled" in smoke
+    client_block=smoke.split("Client Platform schema + persistent policy state",1)[0].rsplit("if ( cd",1)[-1]
+    for forbidden in ("systemctl restart","systemctl stop","systemctl start","UPDATE client_","DELETE FROM client_","INSERT INTO client_"):
+        assert forbidden not in client_block
