@@ -136,13 +136,18 @@ def test_client_admin_api_never_calls_protocol_runtime_mutators():
 def test_pwa_shell_uses_no_store_for_private_api_and_separate_service_worker():
     js=(ROOT/"app/static/client.js").read_text(encoding="utf-8")
     sw=(ROOT/"app/static/client-sw.js").read_text(encoding="utf-8")
-    manifest=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
     assert 'cache:"no-store"' in js
     assert 'u.pathname.startsWith("/client/")' in sw
-    assert 'cache:"no-store"' in sw
+    assert 'fetch(event.request,{cache:"no-store"})' in sw
     assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-icon.svg"]' in sw
-    assert '"/client/sw.js"' in manifest
-    assert '"display":"standalone"' in manifest
+    assert '"/client/"' not in sw.split("const SHELL=",1)[1].split(";",1)[0]
+    assert '@router.post("/client/logout")' in portal
+    assert "client_store.revoke_session(token)" in portal
+    assert "response.delete_cookie(CLIENT_SESSION_COOKIE,path=\"/client\")" in portal
+    assert 'response.headers["Cache-Control"]="no-store"' in portal
+    assert '"/client/sw.js"' in portal
+    assert '"display":"standalone"' in portal
 
 
 def test_protocol_identity_cannot_be_shared_across_client_accounts(client_db):
