@@ -416,3 +416,32 @@ def test_restore_repairs_shared_config_permissions_before_mtproxy_start():
     assert "os.chmod(root,0o710)" in restore
     assert "os.chmod(config,0o640)" in restore
     assert "repair_shared_config_permissions()" in restore
+
+
+def test_update_accepts_intentional_mtproxy_repair_state():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'MTPROXY_ENV_ACCEPTED_SHA="$MTPROXY_ENV_PRE_SHA"' in update
+    assert 'MTPROXY_CONFIG_ACCEPTED_SHA="$MTPROXY_CONFIG_PRE_SHA"' in update
+    assert 'MTPROXY_WAS_ACTIVE" -eq 0' in update
+    assert 'MTPROXY_ENV_ACCEPTED_SHA="$(file_sha256 "$MTPROXY_ENV_PATH")"' in update
+    assert 'MTPROXY_CONFIG_ACCEPTED_SHA="$(file_sha256 "$MTPROXY_CONFIG_PATH")"' in update
+    assert "Accepted repaired MTProxy state for the remainder of this update transaction." in update
+    final=update.split("Re-checking persistent network-service state before final acceptance...",1)[1]
+    assert 'assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_ACCEPTED_SHA"' in final
+    assert 'assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_ACCEPTED_SHA"' in final
+
+
+def test_update_checks_original_state_before_any_mtproxy_repair():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    pre=update.index("Verifying optional installers did not mutate persistent network state")
+    repair=update.index("Repairing existing Telegram MTProxy with the new runtime contract")
+    assert pre < repair
+    section=update[pre:repair]
+    assert 'assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA"' in section
+    assert 'assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA"' in section
+
+
+def test_failed_mtproxy_repair_must_restore_original_hashes():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'MTProxy state after failed repair' in update
+    assert 'MTProxy config after failed repair' in update
