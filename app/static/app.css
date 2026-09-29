@@ -1949,3 +1949,25 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 
 /* Makia v1 official brand asset */
 .pro-login-logo img{object-fit:cover;border-radius:18px}
+
+
+/* Xray inbound preset library */
+.xray-preset-section{border-color:#31577e;background:linear-gradient(180deg,rgba(25,55,91,.32),rgba(13,28,46,.42))}
+.xray-preset-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.xray-preset-card{
+  position:relative;min-height:154px;padding:14px;text-align:right;border:1px solid var(--pro-line);
+  border-radius:11px;background:#0b1726;color:var(--pro-text);display:flex;flex-direction:column;align-items:flex-start;gap:5px
+}
+.xray-preset-card:hover{border-color:#4c7caf;background:#102139;transform:translateY(-1px)}
+.xray-preset-card.selected{border-color:#4fd7b4;box-shadow:0 0 0 1px rgba(79,215,180,.18),0 10px 28px rgba(0,0,0,.18)}
+.xray-preset-card .preset-tier{font-size:8px;letter-spacing:.6px;text-transform:uppercase;border:1px solid #31516f;border-radius:999px;padding:2px 7px;color:#a9c5df}
+.xray-preset-card b{font-size:11px;line-height:1.45}
+.xray-preset-card small{font-size:8px;color:#77a8d3}
+.xray-preset-card p{margin:4px 0 0;font-size:9px;line-height:1.65;color:var(--pro-muted)}
+.xray-preset-card em{margin-top:auto;font-style:normal;font-size:8px;color:#e9c46a}
+.xray-preset-card.tier-recommended .preset-tier{border-color:#267c65;color:#66e2bf;background:rgba(45,212,159,.08)}
+.xray-preset-card.tier-experimental{border-color:#725d2b}
+.xray-preset-card.tier-experimental .preset-tier{border-color:#806a31;color:#f2cf6b;background:rgba(245,196,81,.08)}
+.xray-preset-card.tier-compatibility .preset-tier{border-color:#65558b;color:#c4adff;background:rgba(139,92,246,.08)}
+@media(max-width:1180px){.xray-preset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:680px){.xray-preset-grid{grid-template-columns:1fr}.xray-preset-card{min-height:auto}}
