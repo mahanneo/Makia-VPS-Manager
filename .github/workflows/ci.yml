@@ -21,7 +21,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest httpx
       - name: Python compile
         run: python -m compileall -q app tests scripts/restore-portable.py scripts/configure-owner.py
       - name: Import application smoke test
@@ -49,6 +49,7 @@ jobs:
       - name: Client Control Plane Phase A safety gate
         run: |
           pytest -q tests/test_v13_client_control_plane.py
+          pytest -q tests/test_v13_client_agent_grants.py
           grep -q 'MAKIA_CLIENT_APP_ENABLED=0' .env.example
           grep -q 'app.include_router(client_portal.router)' app/main.py
           grep -q 'client_accounts' app/db.py
@@ -396,6 +397,29 @@ jobs:
           path: /tmp/makia-*.png
           if-no-files-found: ignore
           retention-days: 7
+
+  client-agent-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: client-agent/go.mod
+          cache-dependency-path: client-agent/go.mod
+      - name: Client Agent unit tests
+        working-directory: client-agent
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Windows amd64 cross-build
+        working-directory: client-agent
+        run: |
+          GOOS=windows GOARCH=amd64 go build -trimpath -o /tmp/makia-client-agent.exe .
+          test -s /tmp/makia-client-agent.exe
+      - name: Agent source boundary
+        run: |
+          test -f client-agent/README.md
+          ! grep -R --line-number -E 'systemctl|/etc/makia|/opt/makia' client-agent --include='*.go'
 
   xray-core-smoke:
     runs-on: ubuntu-24.04
