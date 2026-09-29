@@ -183,6 +183,28 @@ def capture_makia_ufw_rules():
     return rules
 
 
+def repair_shared_config_permissions():
+    root=Path("/etc/makia-vps-manager")
+    root.mkdir(parents=True,exist_ok=True)
+    try:
+        gid=__import__("grp").getgrnam("makia-mtproxy").gr_gid
+    except KeyError:
+        os.chown(root,0,0)
+        os.chmod(root,0o700)
+        return
+    os.chown(root,0,gid)
+    os.chmod(root,0o710)
+    for name in ("makia.env","dns.json","mtproxy.env"):
+        path=root/name
+        if path.exists():
+            os.chown(path,0,0)
+            os.chmod(path,0o600)
+    config=root/"mtproxy.toml"
+    if config.exists():
+        os.chown(config,0,gid)
+        os.chmod(config,0o640)
+
+
 def restore_makia_ufw_rules(previous):
     if not shutil.which("ufw"):
         return
@@ -237,6 +259,7 @@ def rollback_restore(root,records,users,ufw_rules):
         try: _restore_user_state(row)
         except Exception: pass
     restore_makia_ufw_rules(ufw_rules)
+    repair_shared_config_permissions()
     run(["systemctl","daemon-reload"],check=False)
     restart_stack()
 
@@ -435,6 +458,7 @@ def normalize_destination_runtime(payload=None):
         protocol_ops._ufw_allow_if_active(500,"udp","IKEv2 restored")
         protocol_ops._ufw_allow_if_active(4500,"udp","IKEv2 NAT-T restored")
 
+    repair_shared_config_permissions()
     if Path("/etc/makia-vps-manager/mtproxy.env").exists() or Path("/opt/makia-mtproxy/mtg").exists():
         if not Path("/opt/makia-mtproxy/mtg").exists():
             raise RuntimeError("Telegram MTProxy state is present but mtg is missing; run sudo makia-install-mtproxy on the destination before Restore")
