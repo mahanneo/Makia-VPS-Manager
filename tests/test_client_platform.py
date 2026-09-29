@@ -254,3 +254,118 @@ def test_client_pwa_delivery_supports_qr_file_and_install_prompt():
     assert "beforeinstallprompt" in js
     assert "native_base64" in js
     assert "canDeepOpen" in js
+
+
+def test_client_quota_baseline_counts_only_usage_after_binding(client_db):
+    account_id=client_store.create_account("baseline01","baseline-pass-001",quota_bytes=1000)
+    protocol_id=db.create_protocol_client(
+        "baseline-xray","xray","vless","baseline-in","cred","vless://baseline"
+    )
+    with db.connect() as con:
+        con.execute("UPDATE protocol_clients SET used_up_bytes=80,used_down_bytes=20 WHERE id=?",(protocol_id,))
+    client_store.bind_protocol_client(account_id,protocol_id)
+    assert client_store.account_usage_bytes(account_id)==0
+    with db.connect() as con:
+        con.execute("UPDATE protocol_clients SET used_up_bytes=130,used_down_bytes=40 WHERE id=?",(protocol_id,))
+    assert client_store.account_usage_bytes(account_id)==70
+    client_store.reset_account_usage(account_id)
+    assert client_store.account_usage_bytes(account_id)==0
+
+
+def test_wireguard_artifact_counter_is_persistent_delta_not_prebind_history(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("wgusage01","wgusage-pass-001",quota_bytes=5000)
+    payload=access_ops.wireguard_payload("wgusage","[Interface]\nPrivateKey = x\n")
+    artifact_id=db.upsert_access_artifact(
+        "wireguard","wgusage","wgusage","wireguard",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    assert client_store.add_artifact_counter_sample(account_id,artifact_id,1000)==0
+    assert client_store.add_artifact_counter_sample(account_id,artifact_id,1600)==600
+    # wg counters can reset after interface/service restart; the new counter is
+    # treated as additional usage, not as a negative delta.
+    assert client_store.add_artifact_counter_sample(account_id,artifact_id,200)==800
+    assert client_store.account_usage_bytes(account_id)==800
+
+
+def test_client_xray_policy_suspends_and_restores_only_its_own_reason(client_db,monkeypatch):
+    from app import client_policy, protocol_ops
+    account_id=client_store.create_account("policyx01","policy-pass-001",quota_bytes=100)
+    protocol_id=db.create_protocol_client(
+        "policy-xray","xray","vless","policy-in","policy-cred","vless://policy"
+    )
+    client_store.bind_protocol_client(account_id,protocol_id)
+    with db.connect() as con:
+        con.execute("UPDATE protocol_clients SET used_up_bytes=100 WHERE id=?",(protocol_id,))
+    calls=[]
+    monkeypatch.setattr(protocol_ops,"disable_xray_client",lambda tag,name:(calls.append(("disable",tag,name)) or {"disabled":True}))
+    monkeypatch.setattr(protocol_ops,"enable_xray_client",lambda tag,name,protocol,credential:(calls.append(("enable",tag,name)) or {"enabled":True}))
+    result=client_policy.enforce_managed_protocols()
+    assert result["suspended"]==1
+    row=db.get_protocol_client(protocol_id)
+    assert row["enabled"]==0
+    assert row["disabled_reason"]=="client_account_quota"
+    client_store.update_account(account_id,quota_bytes=1000)
+    result=client_policy.enforce_managed_protocols()
+    assert result["restored"]==1
+    assert db.get_protocol_client(protocol_id)["enabled"]==1
+    assert calls[0][0]=="disable" and calls[-1][0]=="enable"
+
+
+def test_client_policy_does_not_restore_preexisting_manual_xray_disable(client_db,monkeypatch):
+    from app import client_policy, protocol_ops
+    account_id=client_store.create_account("policyx02","policy-pass-002")
+    protocol_id=db.create_protocol_client(
+        "manual-xray","xray","vless","manual-in","manual-cred","vless://manual"
+    )
+    client_store.bind_protocol_client(account_id,protocol_id)
+    db.set_protocol_client_enabled(protocol_id,False,"manual")
+    monkeypatch.setattr(protocol_ops,"enable_xray_client",lambda *args: (_ for _ in ()).throw(AssertionError("must not enable")))
+    result=client_policy.enforce_managed_protocols()
+    assert result["restored"]==0
+    assert db.get_protocol_client(protocol_id)["disabled_reason"]=="manual"
+
+
+def test_wireguard_expiry_policy_round_trip_is_non_destructive(client_db,monkeypatch):
+    from app import access_ops, client_policy, protocol_ops
+    account_id=client_store.create_account(
+        "policywg01","policywg-pass-001",expire_at=int(time.time())-1
+    )
+    payload=access_ops.wireguard_payload("policy-wg","[Interface]\nPrivateKey = x\n")
+    artifact_id=db.upsert_access_artifact(
+        "wireguard","policy-wg","policy-wg","wireguard",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    state={"enabled":True}
+    monkeypatch.setattr(protocol_ops,"_wireguard_peer_runtime",lambda:[{"name":"policy-wg","rx":10,"tx":20}])
+    monkeypatch.setattr(protocol_ops,"list_wireguard_peers",lambda:[{"name":"policy-wg","enabled":state["enabled"],"public_key":"k","allowed_ips":"10.0.0.2/32"}])
+    def set_state(name,enabled):
+        state["enabled"]=bool(enabled)
+        return {"name":name,"enabled":bool(enabled)}
+    monkeypatch.setattr(protocol_ops,"set_wireguard_peer_enabled",set_state)
+    monkeypatch.setattr(client_policy.system_ops,"online_sessions",lambda:[])
+    result=client_policy.enforce_host_artifacts()
+    assert result["suspended"]==1 and state["enabled"] is False
+    assert client_store.get_artifact_policy_state(account_id,artifact_id)["suspended_reason"]=="client_account_expiry"
+    client_store.update_account(account_id,expire_at=int(time.time())+3600)
+    result=client_policy.enforce_host_artifacts()
+    assert result["restored"]==1 and state["enabled"] is True
+    assert client_store.get_artifact_policy_state(account_id,artifact_id)["suspended_reason"]==""
+
+
+def test_policy_suspended_binding_cannot_be_deleted_until_restored(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("holds01","holds-pass-001")
+    protocol_id=db.create_protocol_client("held","xray","vless","held-in","cred","vless://held")
+    client_store.bind_protocol_client(account_id,protocol_id)
+    db.set_protocol_client_enabled(protocol_id,False,"client_account_expiry")
+    with pytest.raises(PermissionError,match="restore"):
+        client_store.unbind_protocol_client(account_id,protocol_id)
+    with pytest.raises(PermissionError,match="restore"):
+        client_store.delete_account(account_id)
+    db.set_protocol_client_enabled(protocol_id,True)
+    client_store.unbind_protocol_client(account_id,protocol_id)
+    client_store.delete_account(account_id)
+    assert client_store.get_account(account_id) is None
