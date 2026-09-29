@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root."; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
+FORCE_MAIN="${MAKIA_FORCE_MAIN:-0}"
 
 ENV_FILE=/etc/makia-vps-manager/makia.env
 if [[ -r "$ENV_FILE" ]]; then
@@ -195,7 +196,13 @@ tar -C / -czf "$RELEASE_BACKUP" "${SNAPSHOT[@]}"
 chmod 0600 "$RELEASE_BACKUP"
 echo "Runtime rollback point: $RELEASE_BACKUP"
 
-ARCHIVE_URL="${MAKIA_RELEASE_ARCHIVE_URL:-https://github.com/${REPO}/archive/refs/heads/${REF}.tar.gz}"
+if [[ "$FORCE_MAIN" == "1" ]]; then
+  REF="main"
+  ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"
+  echo "Force-main update enabled; ignoring any pinned release archive override."
+else
+  ARCHIVE_URL="${MAKIA_RELEASE_ARCHIVE_URL:-https://github.com/${REPO}/archive/refs/heads/${REF}.tar.gz}"
+fi
 CURL_AUTH=()
 if [[ -n "${MAKIA_RELEASE_BEARER_TOKEN:-}" ]]; then
   CURL_AUTH=(-H "Authorization: Bearer ${MAKIA_RELEASE_BEARER_TOKEN}")
@@ -307,6 +314,28 @@ fi
 if [[ -f /etc/makia-vps-manager/mtproxy.toml ]] && getent group makia-mtproxy >/dev/null 2>&1; then
   chown root:makia-mtproxy /etc/makia-vps-manager/mtproxy.toml
   chmod 0640 /etc/makia-vps-manager/mtproxy.toml
+fi
+
+# A broken optional MTProxy from an older release must not prevent the release
+# containing its repair from being installed. Try the new runtime repair now.
+if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
+  echo "Repairing existing Telegram MTProxy with the new runtime contract..."
+  if ! (
+    cd "$APP"
+    MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import network_services
+state=network_services.mtproxy_status()
+host=str(state.get("host") or "").strip()
+if not host:
+    raise SystemExit("MTProxy state exists but public host is missing")
+result=network_services.configure_mtproxy(host,0,False)
+print("Telegram MTProxy repair:", result.get("host"), result.get("port"), "active="+str(result.get("service_active")), "listener="+str(result.get("listener")))
+if not result.get("service_active") or not result.get("listener"):
+    raise SystemExit("MTProxy repair did not produce an active listener")
+PY
+  ); then
+    echo "WARNING: pre-existing Telegram MTProxy remains unhealthy; core update will continue so the repaired panel/runtime code is retained."
+  fi
 fi
 
 echo "Verifying persistent Telegram/DNS configuration was preserved..."
@@ -460,6 +489,14 @@ if [[ "$healthy" -ne 1 ]]; then
   exit 3
 fi
 
+EXPECTED_VERSION="$(tr -d '[:space:]' < "$APP/VERSION")"
+RUNNING_VERSION="$(curl -fsS --max-time 3 http://127.0.0.1:8787/healthz | "$APP/.venv/bin/python" -c 'import json,sys; print(json.load(sys.stdin).get("version",""))')"
+if [[ -z "$EXPECTED_VERSION" || "$RUNNING_VERSION" != "$EXPECTED_VERSION" ]]; then
+  echo "Running backend version mismatch after update: expected=$EXPECTED_VERSION running=$RUNNING_VERSION" >&2
+  exit 3
+fi
+echo "Running backend version verified: $RUNNING_VERSION"
+
 echo
 echo "Re-checking persistent network-service state before final acceptance..."
 assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
@@ -468,7 +505,12 @@ assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_PRE_SHA" "DNS state" || exit
 assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_PRE_SHA" "DNS config" || exit 8
 
 echo "Running post-update Makia host smoke gate..."
-if ! /usr/local/sbin/makia-uat-smoke; then
+if [[ "$MTPROXY_WAS_ACTIVE" -eq 0 ]]; then
+  UAT_CMD=(env MAKIA_UAT_OPTIONAL_NETWORK_SOFTFAIL=1 /usr/local/sbin/makia-uat-smoke)
+else
+  UAT_CMD=(/usr/local/sbin/makia-uat-smoke)
+fi
+if ! "${UAT_CMD[@]}"; then
   echo "Post-update host smoke failed."
   echo "The updater will restore the previous runtime automatically."
   exit 4
