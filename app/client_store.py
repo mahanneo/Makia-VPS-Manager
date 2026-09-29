@@ -87,6 +87,7 @@ def init_client_db():
               enabled INTEGER NOT NULL DEFAULT 1,
               created_at TEXT NOT NULL,
               UNIQUE(account_id,protocol_client_id),
+              UNIQUE(protocol_client_id),
               FOREIGN KEY(account_id) REFERENCES client_accounts(id),
               FOREIGN KEY(protocol_client_id) REFERENCES protocol_clients(id)
             );
@@ -374,6 +375,12 @@ def bind_protocol_client(account_id,protocol_client_id,label="",priority=100,ena
         exists=con.execute("SELECT id FROM protocol_clients WHERE id=?",(int(protocol_client_id),)).fetchone()
         if not exists:
             raise ValueError("protocol client not found")
+        bound=con.execute(
+            "SELECT account_id FROM client_protocol_bindings WHERE protocol_client_id=?",
+            (int(protocol_client_id),),
+        ).fetchone()
+        if bound and int(bound["account_id"])!=int(account_id):
+            raise ValueError("protocol client is already bound to another client account")
         con.execute(
             """INSERT INTO client_protocol_bindings(account_id,protocol_client_id,label,priority,enabled,created_at)
                VALUES(?,?,?,?,?,?)
