@@ -157,7 +157,8 @@ def test_support_and_security_are_progressively_disclosed():
 
 def test_visual_guide_has_protocol_step_illustrations():
     guide=(ROOT/"app/templates/client_guide.html").read_text(encoding="utf-8")
-    assert guide.count('class="visual-steps"')==4
+    assert guide.count('class="visual-steps"')==5
+    assert 'id="outline"' in guide
     assert guide.count("<svg")>=12
 
 
