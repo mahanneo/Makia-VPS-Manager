@@ -91,6 +91,10 @@ def test_ui_static_api_calls_have_backend_routes():
     import re
     js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
     main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    registered_modules=[
+        (ROOT/"app/client_admin.py").read_text(encoding="utf-8")
+    ]
+    route_source=main+"\n"+"\n".join(registered_modules)
     calls=sorted(set(
         m.group(2).split("?")[0]
         for m in re.finditer(r"api\(([\'\"\x60])([^\'\"\x60]+)\1",js)
@@ -98,7 +102,7 @@ def test_ui_static_api_calls_have_backend_routes():
     ))
     routes=[
         (m.group(1).upper(),m.group(2))
-        for m in re.finditer(r'@app\.(get|post|put|delete|patch)\(["\']([^"\']+)["\']',main)
+        for m in re.finditer(r'@app\.(get|post|put|delete|patch)\(["\']([^"\']+)["\']',route_source)
     ]
     missing=[]
     for call in calls:
