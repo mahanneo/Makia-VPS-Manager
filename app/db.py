@@ -461,6 +461,14 @@ def protocol_client_by_subscription(subscription_id):
         ).fetchone()
         return dict(row) if row else None
 
+def replace_protocol_client_identity(client_id,inbound_tag,credential,share_link):
+    with connect() as con:
+        con.execute(
+            "UPDATE protocol_clients SET inbound_tag=?,credential=?,share_link=?,enabled=1,disabled_reason='',updated_at=? WHERE id=?",
+            (str(inbound_tag),str(credential),str(share_link),now(),int(client_id))
+        )
+
+
 def update_protocol_client_state(client_id,enabled=None,quota_bytes=None,expire_at=None,ip_limit=None,reset_days=None):
     fields=[]; values=[]
     if enabled is not None:
