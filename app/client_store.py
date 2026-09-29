@@ -551,13 +551,22 @@ def protocol_delivery(account_id,protocol_client_id):
         if int(item["protocol_client_id"])==int(protocol_client_id):
             if not item.get("available"):
                 raise PermissionError("protocol access is not available")
+            share=item.get("share_link") or ""
+            qr_svg=""
+            if share:
+                try:
+                    qr_svg="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share)).decode("ascii")
+                except Exception:
+                    qr_svg=""
             return {
                 "id":item["protocol_client_id"],
                 "name":item.get("label") or item.get("name") or "",
                 "engine":item.get("engine") or "",
                 "protocol":item.get("protocol") or "",
-                "share_link":item.get("share_link") or "",
+                "share_link":share,
                 "subscription_id":item.get("subscription_id") or "",
+                "qr":qr_svg,
+                "source":"protocol",
             }
     raise ValueError("protocol binding not found")
 
