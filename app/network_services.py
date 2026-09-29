@@ -439,20 +439,42 @@ def dns_install_command():
     return "sudo /usr/local/sbin/makia-install-dns --install-only"
 
 
+def _dns_query_probe():
+    if not shutil.which("dig"):
+        return {"ok":False,"query_ms":None,"error":"dig is not installed"}
+    try:
+        proc=subprocess.run(
+            ["dig","@127.0.0.1","example.com","A","+short","+stats","+time=3","+tries=1"],
+            text=True,capture_output=True,timeout=5,check=False,
+        )
+    except Exception as exc:
+        return {"ok":False,"query_ms":None,"error":str(exc)[:800]}
+    output=(proc.stdout or "")
+    match=re.search(r"Query time:\s*(\d+)\s*msec",output)
+    answers=[line.strip() for line in output.splitlines() if re.fullmatch(r"\d+\.\d+\.\d+\.\d+",line.strip())]
+    ok=proc.returncode==0 and bool(answers)
+    error=""
+    if not ok:
+        detail=(proc.stderr or output or "local DNS query failed").strip()
+        error=" | ".join(line.strip() for line in detail.splitlines() if line.strip())[-1200:]
+        try:
+            journal=subprocess.run(
+                ["journalctl","-u",DNS_SERVICE,"-n","24","--no-pager","-o","cat"],
+                text=True,capture_output=True,timeout=6,check=False,
+            )
+            j=(journal.stdout or journal.stderr or "").strip()
+            if j:
+                error=(error+" | "+" | ".join(x.strip() for x in j.splitlines()[-8:] if x.strip()))[-1800:]
+        except Exception:
+            pass
+    return {"ok":ok,"query_ms":int(match.group(1)) if match else None,"error":error}
+
+
 def dns_status():
     state=_dns_state()
     bind=list(state.get("bind_addresses") or [])
     active=_active(DNS_SERVICE)
-    query_ms=None
-    if active and shutil.which("dig"):
-        try:
-            proc=subprocess.run(
-                ["dig","@127.0.0.1","example.com","+stats","+time=2","+tries=1"],
-                text=True,capture_output=True,timeout=4,check=False,
-            )
-            match=re.search(r"Query time:\s*(\d+)\s*msec",proc.stdout or "")
-            if proc.returncode==0 and match:query_ms=int(match.group(1))
-        except Exception:pass
+    probe=_dns_query_probe() if active else {"ok":False,"query_ms":None,"error":""}
     return {
         "installed":bool(shutil.which("unbound")) and bool(shutil.which("unbound-checkconf")),
         "configured":DNS_CONF.exists(),
@@ -464,7 +486,9 @@ def dns_status():
         "allowed_cidrs":list(state.get("allowed_cidrs") or []),
         "public_address":state.get("public_address") or "",
         "wireguard_address":state.get("wireguard_address") or _interface_ipv4("wg0"),
-        "query_ms":query_ms,
+        "query_ms":probe.get("query_ms"),
+        "query_ok":bool(probe.get("ok")),
+        "runtime_error":probe.get("error") or "",
         "install_command":dns_install_command(),
         "upstreams":[{"id":key,"label":value["label"]} for key,value in DNS_UPSTREAMS.items()],
         "warning":"DNS resolver latency is not the same as game-server ping and DNS alone cannot guarantee geo-restriction bypass.",
@@ -519,6 +543,7 @@ def configure_dns(mode="private",upstream="cloudflare",allowed_cidrs=None,public
         "    do-ip6: no",
         "    do-udp: yes",
         "    do-tcp: yes",
+        '    tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"',
         "    hide-identity: yes",
         "    hide-version: yes",
         "    qname-minimisation: yes",
@@ -558,6 +583,9 @@ def configure_dns(mode="private",upstream="cloudflare",allowed_cidrs=None,public
         _run(["systemctl","restart",DNS_SERVICE],timeout=30)
         if not _active(DNS_SERVICE):
             raise NetworkServiceError("Unbound did not become active")
+        probe=_dns_query_probe()
+        if not probe.get("ok"):
+            raise NetworkServiceError("Unbound is active but the local DNS query failed: "+str(probe.get("error") or "no answer")[:1000])
         # Mirror Unbound ACLs at the firewall. Loopback needs no UFW rule;
         # WireGuard/public clients receive source-scoped rules only.
         firewall_sources=[network for network in access if network!="127.0.0.0/8"]
