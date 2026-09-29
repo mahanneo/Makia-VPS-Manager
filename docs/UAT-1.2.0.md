@@ -35,10 +35,12 @@ v1.2.0 hardens creation workflows and adds two optional network services without
 - Re-saving an active proxy preserves its current port.
 - A genuinely occupied requested port receives a collision-free fallback.
 - Rotating the secret intentionally invalidates old customer links.
-- Initial/root install remains an explicit host command: `sudo makia-install-mtproxy --host <hostname>`.
+- Install/update prepares the pinned MTG tooling with `--install-only`; hostname/port/secret configuration remains an explicit panel action.
+- If tooling preparation failed on the host, the panel exposes the root-only repair command without guessing a hostname.
 
 ### DNS
 - Optional resolver uses Unbound with DNS-over-TLS upstreams.
+- Install/update prepares Unbound tooling with `--install-only`; resolver policy remains panel-managed.
 - Presets: Cloudflare, Quad9, Google.
 - Private mode listens on localhost and, when present, WireGuard address.
 - Public mode requires explicit source IP/CIDR allowlist.
