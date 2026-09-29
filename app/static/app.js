@@ -2228,6 +2228,9 @@ async function handleMakiaAction(btn){
   const action=btn.dataset.action;if(!action)return;
   if(action==='nav'){closeModal();switchView(btn.dataset.view);return}
   if(action==='nav-settings'){closeModal();window.__settingsTab=btn.dataset.tab||'general';switchView('settings');return}
+  if(action==='mtproxy-configure'){await configureTelegramProxy(false);return}
+  if(action==='mtproxy-rotate'){await configureTelegramProxy(true);return}
+  if(action==='dns-configure'){await configureDnsCenter();return}
   if(action==='xray-inbound-builder'){await openXrayInboundBuilder();return}
   if(action==='xray-inbound-client'){openXrayInboundClient(dataDec(btn.dataset.tag),btn.dataset.protocol||'');return}
   if(action==='xray-inbound-client-create'){await createXrayInboundClient(dataDec(btn.dataset.tag));return}
@@ -2424,6 +2427,139 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
       '<div class="lab-self-summary"><span>Self-Test</span><b class="'+(self.ok?'ok-text':'bad-text')+'">'+htmlEsc(self.summary||'Unavailable')+'</b><small>'+(self.error?htmlEsc(self.error):Number(self.critical||0)+' critical · '+Number(self.warnings||0)+' warning')+'</small></div>',
     '</div>'
   ].join('');
+}
+
+
+function networkState(ok,labelOk,labelBad){
+  return '<span class="status-chip '+(ok?'ok':'bad')+'">'+htmlEsc(ok?labelOk:labelBad)+'</span>';
+}
+
+async function telegramProxyCenter(renderToken=window.__viewRenderToken){
+  title.textContent=tr('پروکسی تلگرام','Telegram Proxy');setPageContext('TELEGRAM MTPROXY');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال بررسی MTProxy…','Checking MTProxy…'))+'</b></div>';
+  const r=await api('/api/network/mtproxy');
+  if(renderToken!==window.__viewRenderToken||activeView!=='telegramproxy')return;
+  const health=Boolean(r.installed&&r.configured&&r.service_active&&r.listener);
+  const install=r.installed?'':[
+    '<section class="network-tool-card install-card">',
+      '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب MTProxy رسمی تلگرام','Install official Telegram MTProxy'))+'</h3>',
+      '<p>'+htmlEsc(tr('نصب از داخل Web Service انجام نمی‌شود. دستور زیر Installer پین‌شده Makia را اجرا می‌کند.','Host installation is intentionally outside the web service. Run the pinned Makia installer below.'))+'</p></div>',
+      '<textarea id="mtInstallCommand" readonly>'+htmlEsc(r.install_command||'sudo makia-install-mtproxy')+'</textarea>',
+      '<button class="primary" data-action="copy-target" data-target="mtInstallCommand">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button>',
+    '</section>'
+  ].join('');
+  const delivery=(r.configured?[
+    '<section class="network-tool-card delivery-card">',
+      '<div class="tool-card-head"><div><span class="pro-kicker">USER DELIVERY</span><h3>'+htmlEsc(tr('لینک آماده Telegram','Telegram connection link'))+'</h3></div>'+networkState(health,tr('آماده','READY'),tr('نیازمند بررسی','CHECK'))+'</div>',
+      '<div class="network-delivery-grid">',
+        (r.qr?'<div class="network-qr"><img src="'+htmlEsc(r.qr)+'" alt="Telegram Proxy QR"></div>':''),
+        '<div class="network-link-stack">',
+          '<label>t.me link<textarea id="mtHttpsLink" readonly>'+htmlEsc(r.https_link||'')+'</textarea></label>',
+          '<label>tg:// link<textarea id="mtTgLink" readonly>'+htmlEsc(r.tg_link||'')+'</textarea></label>',
+          '<div class="toolbar"><button class="primary" data-action="copy-target" data-target="mtHttpsLink">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><button class="ghost" data-action="copy-target" data-target="mtTgLink">tg://</button></div>',
+        '</div>',
+      '</div>',
+      '<div class="notice">'+htmlEsc(tr('Secret تحویلی با prefix استاندارد dd برای Random Padding ساخته می‌شود. اپراتور Proxy به محتوای چت‌های Telegram دسترسی ندارد.','The delivered secret uses Telegram random-padding prefix dd. A proxy operator cannot read Telegram chat contents.'))+'</div>',
+    '</section>'
+  ].join(''):'');
+  content.innerHTML=[
+    '<div class="pro-page network-tools-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">TELEGRAM MTPROXY</span><h1>'+htmlEsc(tr('پروکسی اختصاصی Telegram','Private Telegram Proxy'))+'</h1><p>'+htmlEsc(tr('MTProto Proxy واقعی با Secret، لینک مستقیم، QR و Port collision detection.','Real MTProto proxy with secret, direct links, QR and port collision detection.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="refresh">'+htmlEsc(tr('بروزرسانی','Refresh'))+'</button></div></section>',
+      '<section class="network-health-grid">',
+        '<div><span>Installed</span><b>'+networkState(Boolean(r.installed),'YES','NO')+'</b></div>',
+        '<div><span>Configured</span><b>'+networkState(Boolean(r.configured),'YES','NO')+'</b></div>',
+        '<div><span>Service</span><b>'+networkState(Boolean(r.service_active),'ACTIVE','DOWN')+'</b></div>',
+        '<div><span>Listener</span><b>'+networkState(Boolean(r.listener),'TCP/'+htmlEsc(String(r.port||'')),'OFFLINE')+'</b></div>',
+      '</section>',
+      install,
+      (r.installed?[
+        '<section class="network-tool-card">',
+          '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('اگر Port اشغال باشد Makia خودکار Port آزاد انتخاب می‌کند.','If the requested port is busy, Makia automatically selects a free managed port.'))+'</small></div>',
+          '<div class="wizard-form two">',
+            '<label>'+htmlEsc(tr('Domain / IP تحویلی','Public host / IP'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.host||window.PANEL_DOMAIN||location.hostname)+'"></label>',
+            '<label>'+htmlEsc(tr('Port ترجیحی','Preferred port'))+'<input id="mtPort" type="number" min="1" max="65535" value="'+Number(r.port||443)+'"></label>',
+          '</div>',
+          '<div class="toolbar"><button class="primary" data-action="mtproxy-configure">'+htmlEsc(tr('ذخیره و راه‌اندازی','Save & start'))+'</button><button class="danger" data-action="mtproxy-rotate">'+htmlEsc(tr('تعویض Secret','Rotate secret'))+'</button></div>',
+          '<div class="notice">'+htmlEsc(tr('تعویض Secret لینک قبلی کاربران را باطل می‌کند.','Rotating the secret invalidates previously issued proxy links.'))+'</div>',
+        '</section>'
+      ].join(''):''),
+      delivery,
+    '</div>'
+  ].join('');
+}
+
+async function configureTelegramProxy(rotate=false){
+  const host=(document.getElementById('mtHost')?.value||'').trim();
+  const port=Number(document.getElementById('mtPort')?.value||443);
+  if(!host){alert(tr('Domain/IP را وارد کن.','Enter a public host/IP.'));return}
+  if(rotate&&!confirm(tr('Secret قبلی باطل شود؟','Invalidate the previous secret?')))return;
+  try{
+    const r=await api('/api/network/mtproxy/configure',{method:'POST',body:JSON.stringify({host,port,rotate_secret:Boolean(rotate)})});
+    toast(r.port_adjusted?tr('Proxy ساخته شد؛ Port آزاد جایگزین شد.','Proxy saved; a free port was selected.'):tr('Proxy آماده است.','Proxy is ready.'));
+    await telegramProxyCenter();
+  }catch(e){alert('MTProxy: '+e.message)}
+}
+
+async function dnsCenter(renderToken=window.__viewRenderToken){
+  title.textContent=tr('مرکز DNS','DNS Center');setPageContext('PRIVATE DNS');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال بررسی Resolver…','Checking resolver…'))+'</b></div>';
+  const r=await api('/api/network/dns');
+  if(renderToken!==window.__viewRenderToken||activeView!=='dnscenter')return;
+  const install=r.installed?'':[
+    '<section class="network-tool-card install-card">',
+      '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب Unbound Resolver','Install Unbound resolver'))+'</h3>',
+      '<p>'+htmlEsc(tr('نصب اولیه Local-only است و Open Resolver ساخته نمی‌شود.','The initial install is local-only and never creates an open resolver.'))+'</p></div>',
+      '<textarea id="dnsInstallCommand" readonly>'+htmlEsc(r.install_command||'sudo makia-install-dns')+'</textarea>',
+      '<button class="primary" data-action="copy-target" data-target="dnsInstallCommand">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button>',
+    '</section>'
+  ].join('');
+  const addresses=(r.bind_addresses||[]).map(x=>'<span class="dns-address">'+htmlEsc(x)+'</span>').join('');
+  const upstreamOptions=(r.upstreams||[]).map(x=>'<option value="'+htmlEsc(x.id)+'" '+(x.id===r.upstream?'selected':'')+'>'+htmlEsc(x.label)+'</option>').join('');
+  content.innerHTML=[
+    '<div class="pro-page network-tools-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">SECURE RESOLVER</span><h1>'+htmlEsc(tr('DNS خصوصی / کم‌تاخیر','Private / low-latency DNS'))+'</h1><p>'+htmlEsc(tr('Unbound cache + DNS-over-TLS upstream، بدون ساخت Open Resolver عمومی.','Unbound cache with DNS-over-TLS upstreams, without exposing an open resolver.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="refresh">'+htmlEsc(tr('بروزرسانی','Refresh'))+'</button></div></section>',
+      '<div class="iran-boundary"><b>'+htmlEsc(tr('واقعیت فنی:','Technical note:'))+'</b><span>'+htmlEsc(r.warning||'DNS does not equal game ping.')+'</span></div>',
+      '<section class="network-health-grid">',
+        '<div><span>Installed</span><b>'+networkState(Boolean(r.installed),'YES','NO')+'</b></div>',
+        '<div><span>Service</span><b>'+networkState(Boolean(r.service_active),'ACTIVE','DOWN')+'</b></div>',
+        '<div><span>Mode</span><strong>'+htmlEsc(String(r.mode||'private').toUpperCase())+'</strong></div>',
+        '<div><span>Resolver query</span><strong>'+((r.query_ms===null||r.query_ms===undefined)?'—':Number(r.query_ms)+' ms')+'</strong></div>',
+      '</section>',
+      install,
+      (r.installed?[
+        '<section class="network-tool-card">',
+          '<div class="tool-card-head"><div><span class="pro-kicker">RESOLVER POLICY</span><h3>'+htmlEsc(tr('تنظیم DNS','DNS configuration'))+'</h3></div></div>',
+          '<div class="wizard-form two">',
+            '<label>'+htmlEsc(tr('حالت دسترسی','Access mode'))+'<select id="dnsMode"><option value="private" '+(r.mode!=='public'?'selected':'')+'>'+htmlEsc(tr('Private / VPN only','Private / VPN only'))+'</option><option value="public" '+(r.mode==='public'?'selected':'')+'>'+htmlEsc(tr('Public + IP allowlist','Public + IP allowlist'))+'</option></select></label>',
+            '<label>Upstream<select id="dnsUpstream">'+upstreamOptions+'</select></label>',
+            '<label>'+htmlEsc(tr('Public IPv4 همین VPS','This VPS public IPv4'))+'<input id="dnsPublic" dir="ltr" value="'+htmlEsc(r.public_address||'')+'" placeholder="203.0.113.10"></label>',
+            '<label>'+htmlEsc(tr('IP/CIDR مجاز کاربران','Allowed client IP/CIDR'))+'<textarea id="dnsAllowed" dir="ltr" placeholder="198.51.100.25/32">'+htmlEsc((r.allowed_cidrs||[]).join('\n'))+'</textarea></label>',
+          '</div>',
+          '<div class="notice">'+htmlEsc(tr('حالت Public بدون Allowlist عمداً Block می‌شود تا سرور شما Open Resolver و ابزار DDoS نشود.','Public mode is blocked without an allowlist so the VPS cannot become an open DNS resolver or amplification source.'))+'</div>',
+          '<div class="toolbar"><button class="primary" data-action="dns-configure">'+htmlEsc(tr('Validate & Apply','Validate & Apply'))+'</button></div>',
+        '</section>',
+        '<section class="network-tool-card">',
+          '<div class="tool-card-head"><div><span class="pro-kicker">CLIENT DELIVERY</span><h3>'+htmlEsc(tr('آدرس‌های قابل استفاده','Usable resolver addresses'))+'</h3></div></div>',
+          '<div class="dns-address-list">'+(addresses||'<span class="muted">—</span>')+'</div>',
+          (r.wireguard_address?'<div class="quick-card"><b>WireGuard DNS</b><span dir="ltr">'+htmlEsc(r.wireguard_address)+'</span></div>':''),
+          (r.public_address?'<div class="quick-card"><b>Public DNS</b><span dir="ltr">'+htmlEsc(r.public_address)+'</span></div>':''),
+          '<p class="muted">'+htmlEsc(tr('این Resolver می‌تواند زمان Lookup و Cache را بهتر کند؛ Ping سرور بازی یا رفع محدودیت جغرافیایی را تضمین نمی‌کند. برای Smart-DNS واقعی باید Upstream مخصوص آن سرویس جداگانه داشته باشی.','This resolver can improve lookup/cache behavior; it does not guarantee lower game-server RTT or geo-unblocking. True Smart DNS requires a specialized upstream service.'))+'</p>',
+        '</section>'
+      ].join(''):''),
+    '</div>'
+  ].join('');
+}
+
+async function configureDnsCenter(){
+  const mode=document.getElementById('dnsMode')?.value||'private';
+  const upstream=document.getElementById('dnsUpstream')?.value||'cloudflare';
+  const public_address=(document.getElementById('dnsPublic')?.value||'').trim();
+  const allowed_cidrs=(document.getElementById('dnsAllowed')?.value||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean);
+  try{
+    await api('/api/network/dns/configure',{method:'POST',body:JSON.stringify({mode,upstream,public_address,allowed_cidrs})});
+    toast(tr('DNS اعمال شد.','DNS applied.'));
+    await dnsCenter();
+  }catch(e){alert('DNS: '+e.message)}
 }
 
 function applyLanguageShell(){
