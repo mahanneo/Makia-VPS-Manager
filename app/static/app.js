@@ -1301,12 +1301,14 @@ async function openXrayInboundBuilder(){
     const endpoint=window.PANEL_DOMAIN||location.hostname;
     const endpointMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(endpoint)?'ip':'domain';
     const used=new Set((stack?.xray?.inbounds||[]).map(x=>Number(x.port)));
+    window.__xrayBuilderUsedPorts=used;
     let port=Number(defaults.xray_port||2087);
     while(used.has(port)&&port<65535)port++;
     modalRoot.innerHTML=[
       '<div class="modal-backdrop"><div class="modal xray-builder-modal">',
         '<div class="wizard-head"><div><div class="eyebrow">XRAY INBOUND CENTER</div><h3>ساخت Inbound حرفه‌ای</h3><p>ساختار Inbound → Client → Transport → Security → Sniffing → Sockopt</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
         '<div class="xray-builder-grid">',
+          '<section class="xray-builder-section xray-preset-section"><div class="section-title"><b>Iran Network Presets</b><span>Recommended · Alternative · Compatibility · Experimental</span></div><div class="wizard-note"><b>Preset = شروع سریع، نه تضمین اتصال</b><span>شرایط فیلترینگ، ISP، دیتاسنتر و Client تغییر می‌کند. هر Preset فقط ترکیب معتبر Core را اعمال می‌کند و قبل از Commit با Xray validate می‌شود.</span></div><div id="xbPresetGrid" class="xray-preset-grid"></div></section>',
           '<section class="xray-builder-section"><div class="section-title"><b>1. Inbound</b><span>مشخصات سرویس</span></div><div class="form-grid two">',
             '<label>Remark / نام Inbound<input id="xbRemark" maxlength="80" value="Makia-'+port+'"></label>',
             '<label>Protocol<select id="xbProtocol"></select></label>',
@@ -1356,6 +1358,7 @@ async function openXrayInboundBuilder(){
     const preferred=String(defaults.xray_protocol||'vless').toLowerCase();
     if(caps.protocols?.[preferred])p.value=preferred;
     document.getElementById('xbSsMethod').innerHTML=(caps.shadowsocks_methods||[]).map(x=>'<option value="'+htmlEsc(x)+'">'+htmlEsc(x)+'</option>').join('');
+    renderXrayInboundPresets();
     p.addEventListener('change',syncXrayInboundBuilder);
     document.getElementById('xbTransport').addEventListener('change',syncXrayInboundBuilder);
     document.getElementById('xbSecurity').addEventListener('change',syncXrayInboundBuilder);
@@ -1365,6 +1368,66 @@ async function openXrayInboundBuilder(){
 
 function xbValue(id,fallback=''){const el=document.getElementById(id);return el?el.value:fallback}
 function xbChecked(id){const el=document.getElementById(id);return !!(el&&el.checked)}
+function xbSet(id,value){const el=document.getElementById(id);if(el&&value!==undefined&&value!==null)el.value=String(value)}
+function xbPresetTierLabel(tier){
+  return ({recommended:'Recommended',alternative:'Alternative',compatibility:'Compatibility',experimental:'Experimental'})[tier]||String(tier||'Preset');
+}
+function renderXrayInboundPresets(){
+  const root=document.getElementById('xbPresetGrid');if(!root||!xrayBuilderCaps)return;
+  const presets=xrayBuilderCaps.presets||[];
+  root.innerHTML=presets.map(p=>{
+    const req=[];
+    if(p.requires_domain)req.push('TLS domain');
+    if(p.requires_udp)req.push('UDP');
+    const meta=[String(p.protocol||'').toUpperCase(),String(p.transport||'').toUpperCase(),String(p.security||'').toUpperCase()].filter(Boolean).join(' · ');
+    return '<button type="button" class="xray-preset-card tier-'+htmlEsc(p.tier||'alternative')+'" data-action="xray-inbound-preset" data-preset="'+dataEnc(p.id)+'">'+
+      '<span class="preset-tier">'+htmlEsc(xbPresetTierLabel(p.tier))+'</span>'+
+      '<b>'+htmlEsc(p.label||p.id)+'</b><small>'+htmlEsc(meta)+'</small>'+
+      '<p>'+htmlEsc(p.summary||'')+'</p>'+
+      (req.length?'<em>'+htmlEsc(req.join(' · '))+'</em>':'')+
+      '</button>';
+  }).join('');
+}
+function xrayPresetPort(preset){
+  const used=window.__xrayBuilderUsedPorts instanceof Set?window.__xrayBuilderUsedPorts:new Set();
+  for(const raw of (preset.ports||[])){const port=Number(raw);if(port>0&&!used.has(port))return port}
+  return Number((preset.ports||[])[0]||xbValue('xbPort','2087'));
+}
+function applyXrayInboundPreset(presetId){
+  const preset=(xrayBuilderCaps?.presets||[]).find(x=>x.id===presetId);
+  if(!preset){alert('Preset پیدا نشد.');return}
+  const protocol=document.getElementById('xbProtocol');
+  if(!protocol||!xrayBuilderCaps?.protocols?.[preset.protocol]){alert('این Preset با Core فعلی سازگار نیست.');return}
+  protocol.value=preset.protocol;
+  syncXrayInboundBuilder();
+  const transport=document.getElementById('xbTransport'),security=document.getElementById('xbSecurity');
+  if(transport&&(xrayBuilderCaps.protocols[preset.protocol].transports||[]).includes(preset.transport))transport.value=preset.transport;
+  if(security&&(xrayBuilderCaps.protocols[preset.protocol].security||[]).includes(preset.security))security.value=preset.security;
+  syncXrayInboundBuilder();
+
+  const endpoint=xbValue('xbEndpoint','').trim();
+  const endpointIsIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(endpoint)||endpoint.includes(':');
+  const sni=preset.sni==='$endpoint'?endpoint:preset.sni;
+  xbSet('xbPort',xrayPresetPort(preset));
+  xbSet('xbRemark','IR-'+String(preset.id||'preset').replace(/^ir-/,'').replace(/[^a-z0-9]+/gi,'-').slice(0,54)+'-'+xbValue('xbPort',''));
+  xbSet('xbFlow',preset.flow||'');
+  xbSet('xbPath',preset.path||'/');
+  xbSet('xbServiceName',String(preset.path||'makia').replace(/^\//,''));
+  xbSet('xbHost',endpointIsIp?'':endpoint);
+  xbSet('xbSni',sni||'');
+  xbSet('xbRealityDest',preset.reality_dest||'');
+  xbSet('xbXhttpMode',preset.xhttp_mode||'auto');
+  if(preset.protocol==='hysteria2')xbSet('xbHyIdle','60');
+
+  const cards=document.querySelectorAll('.xray-preset-card');
+  cards.forEach(el=>el.classList.toggle('selected',dataDec(el.dataset.preset||'')===preset.id));
+  const note=document.getElementById('xbCompatNote');
+  if(note){
+    let warning=preset.note||'';
+    if(preset.requires_domain&&endpointIsIp)warning='این Preset TLS domain می‌خواهد؛ Endpoint فعلی IP است. ابتدا دامنه و Certificate معتبر تنظیم کن. '+warning;
+    note.innerHTML='<b>'+htmlEsc(xbPresetTierLabel(preset.tier))+' · '+htmlEsc(preset.label)+'</b><span>'+htmlEsc(warning)+'</span>';
+  }
+}
 
 function syncXrayInboundBuilder(){
   if(!xrayBuilderCaps)return;
@@ -2197,6 +2260,7 @@ async function handleMakiaAction(btn){
   if(action==='client-portal-rotate'){await rotateClientPortal(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='qr-download'){await downloadAccessQr(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
   if(action==='subscription-qr-download'){await downloadSubscriptionQr(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='xray-inbound-preset'){applyXrayInboundPreset(dataDec(btn.dataset.preset));return}
   if(action==='outline-quota'){await setOutlineQuota(dataDec(btn.dataset.key),dataDec(btn.dataset.name),Number(btn.dataset.quota||0));return}
   if(action==='outline-renew'){await bulkManaged([{kind:'outline',key:dataDec(btn.dataset.key)}],'renew',30,0);return}
   if(action==='outline-reissue'){await reissueOutlineClient(dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
