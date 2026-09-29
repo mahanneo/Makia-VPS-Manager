@@ -493,6 +493,20 @@ def client_service_worker():
     return response
 
 
+class AgentPairRequest(BaseModel):
+    pairing_token: str = Field(min_length=24, max_length=256)
+    public_key: str = Field(min_length=40, max_length=128)
+    agent_version: str = Field(default="", max_length=64)
+    platform: str = Field(default="windows", max_length=64)
+
+
+class AgentRedeemRequest(BaseModel):
+    grant: str = Field(min_length=24, max_length=256)
+    nonce: str = Field(min_length=12, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
+    timestamp: int
+    signature: str = Field(min_length=40, max_length=256)
+
+
 class ClientAccountCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
     password: str = Field(min_length=12, max_length=256)
@@ -507,6 +521,266 @@ class ClientAccountPassword(BaseModel):
 class ClientBindingCreate(BaseModel):
     kind: str = Field(min_length=2, max_length=24)
     external_key: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/client-app/api/agent/pairing-grant")
+def client_agent_pairing_grant(request: Request):
+    session = _require_client(request)
+    account = _account_by_id(session["account_id"])
+    if not account:
+        raise HTTPException(404, "client account not found")
+    token = "mkp_" + secrets.token_urlsafe(36)
+    now_ts = int(time.time())
+    expires_at = now_ts + 300
+    with connect() as con:
+        con.execute(
+            "DELETE FROM client_agent_pairing_grants WHERE used_at>0 OR expires_at<?",
+            (now_ts - 300,),
+        )
+        con.execute(
+            """INSERT INTO client_agent_pairing_grants
+               (account_id,device_id,token_hash,expires_at,used_at,created_at)
+               VALUES(?,?,?,?,0,?)""",
+            (session["account_id"], session["device_id"], _token_hash(token), expires_at, now()),
+        )
+    origin = _request_origin(request)
+    deep_link = (
+        "makia://pair?server="
+        + urllib.parse.quote(origin, safe="")
+        + "&token="
+        + urllib.parse.quote(token, safe="")
+    )
+    audit(CLIENT_ACTOR_PREFIX + account["username"], "client_agent_pairing_grant", f"device={session['device_id']}", ip=_client_ip(request))
+    return {"deep_link": deep_link, "expires_in": 300, "paired": bool(session.get("public_key"))}
+
+
+@router.post("/api/client-agent/pair")
+def client_agent_pair(payload: AgentPairRequest, request: Request):
+    _require_enabled()
+    now_ts = int(time.time())
+    try:
+        public_raw = _b64url_decode(payload.public_key)
+        if len(public_raw) != 32:
+            raise ValueError("invalid public key length")
+        Ed25519PublicKey.from_public_bytes(public_raw)
+    except Exception as exc:
+        raise HTTPException(400, "invalid Ed25519 public key") from exc
+
+    token_hash = _token_hash(payload.pairing_token)
+    with connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            """SELECT g.id,g.account_id,g.device_id,g.expires_at,g.used_at,
+                      a.username,a.profile_username,a.active AS account_active,
+                      d.active AS device_active
+               FROM client_agent_pairing_grants g
+               JOIN client_accounts a ON a.id=g.account_id
+               JOIN client_devices d ON d.id=g.device_id
+               WHERE g.token_hash=?""",
+            (token_hash,),
+        ).fetchone()
+        if not row or int(row["used_at"] or 0) or int(row["expires_at"] or 0) < now_ts:
+            raise HTTPException(410, "pairing grant is invalid or expired")
+        account = {
+            "id": row["account_id"],
+            "username": row["username"],
+            "profile_username": row["profile_username"],
+            "active": row["account_active"],
+        }
+        policy = _effective_policy(account)
+        if not row["device_active"] or not policy["enabled"] or policy["expired"]:
+            raise HTTPException(403, "client device or subscription is inactive")
+        normalized = _b64url_encode(public_raw)
+        con.execute(
+            """UPDATE client_devices
+               SET public_key=?,agent_paired_at=?,agent_version=?,agent_platform=?,last_seen_at=?,last_ip=?
+               WHERE id=? AND account_id=?""",
+            (
+                normalized,
+                now(),
+                payload.agent_version.strip(),
+                payload.platform.strip(),
+                now(),
+                _client_ip(request),
+                row["device_id"],
+                row["account_id"],
+            ),
+        )
+        con.execute(
+            "UPDATE client_agent_pairing_grants SET used_at=? WHERE id=? AND used_at=0",
+            (now_ts, row["id"]),
+        )
+    audit(CLIENT_ACTOR_PREFIX + row["username"], "client_agent_paired", f"device={row['device_id']}", ip=_client_ip(request))
+    return {
+        "ok": True,
+        "device_id": row["device_id"],
+        "account": row["username"],
+        "key_type": "ed25519",
+    }
+
+
+@router.post("/client-app/api/access/{binding_id}/grant")
+def client_agent_action_grant(binding_id: int, request: Request):
+    session = _require_client(request)
+    if not session.get("public_key"):
+        raise HTTPException(409, "Makia Agent is not paired with this device")
+    with connect() as con:
+        binding = con.execute(
+            """SELECT b.id,b.account_id,b.kind,b.external_key,a.display_name,a.protocol
+               FROM client_access_bindings b
+               JOIN access_artifacts a ON a.kind=b.kind AND a.external_key=b.external_key
+               WHERE b.id=? AND b.account_id=? AND b.active=1""",
+            (int(binding_id), int(session["account_id"])),
+        ).fetchone()
+        if not binding:
+            raise HTTPException(404, "assigned access not found")
+        token = "mkg_" + secrets.token_urlsafe(36)
+        now_ts = int(time.time())
+        expires_at = now_ts + 60
+        con.execute(
+            "DELETE FROM client_agent_action_grants WHERE redeemed_at>0 OR expires_at<?",
+            (now_ts - 300,),
+        )
+        con.execute(
+            """INSERT INTO client_agent_action_grants
+               (account_id,device_id,binding_id,action,token_hash,expires_at,redeemed_at,created_at)
+               VALUES(?,?,?,?,?,?,0,?)""",
+            (
+                session["account_id"],
+                session["device_id"],
+                int(binding_id),
+                "connect",
+                _token_hash(token),
+                expires_at,
+                now(),
+            ),
+        )
+    origin = _request_origin(request)
+    deep_link = (
+        "makia://connect?server="
+        + urllib.parse.quote(origin, safe="")
+        + "&grant="
+        + urllib.parse.quote(token, safe="")
+    )
+    audit(
+        CLIENT_ACTOR_PREFIX + session["username"],
+        "client_agent_connect_grant",
+        f"{binding['kind']}:{binding['external_key']}",
+        f"device={session['device_id']}",
+        ip=_client_ip(request),
+    )
+    return {
+        "deep_link": deep_link,
+        "expires_in": 60,
+        "access": {
+            "binding_id": int(binding["id"]),
+            "kind": binding["kind"],
+            "protocol": binding["protocol"],
+            "name": binding["display_name"],
+        },
+    }
+
+
+@router.post("/api/client-agent/redeem")
+def client_agent_redeem(payload: AgentRedeemRequest, request: Request):
+    _require_enabled()
+    now_ts = int(time.time())
+    if abs(now_ts - int(payload.timestamp)) > 90:
+        raise HTTPException(400, "agent signature timestamp is outside the allowed window")
+    try:
+        signature = _b64url_decode(payload.signature)
+        if len(signature) != 64:
+            raise ValueError("invalid signature length")
+    except Exception as exc:
+        raise HTTPException(400, "invalid agent signature encoding") from exc
+
+    token_hash = _token_hash(payload.grant)
+    with connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute(
+            """SELECT g.id AS grant_id,g.account_id,g.device_id,g.binding_id,g.action,g.expires_at,g.redeemed_at,
+                      d.public_key,d.active AS device_active,
+                      b.kind,b.external_key,b.active AS binding_active,
+                      ar.display_name,ar.protocol,ar.native_filename,ar.payload_enc,
+                      a.username,a.profile_username,a.active AS account_active
+               FROM client_agent_action_grants g
+               JOIN client_devices d ON d.id=g.device_id AND d.account_id=g.account_id
+               JOIN client_access_bindings b ON b.id=g.binding_id AND b.account_id=g.account_id
+               JOIN access_artifacts ar ON ar.kind=b.kind AND ar.external_key=b.external_key
+               JOIN client_accounts a ON a.id=g.account_id
+               WHERE g.token_hash=?""",
+            (token_hash,),
+        ).fetchone()
+        if not row or int(row["redeemed_at"] or 0) or int(row["expires_at"] or 0) < now_ts:
+            raise HTTPException(410, "agent grant is invalid, expired, or already used")
+        if not row["device_active"] or not row["binding_active"] or not row["public_key"]:
+            raise HTTPException(403, "agent device or assigned access is inactive")
+        account = {
+            "id": row["account_id"],
+            "username": row["username"],
+            "profile_username": row["profile_username"],
+            "active": row["account_active"],
+        }
+        policy = _effective_policy(account)
+        if not policy["enabled"] or policy["expired"]:
+            raise HTTPException(403, "subscription is inactive")
+
+        try:
+            public_raw = _b64url_decode(row["public_key"])
+            public_key = Ed25519PublicKey.from_public_bytes(public_raw)
+            public_key.verify(
+                signature,
+                _agent_signature_message(payload.grant, payload.nonce, payload.timestamp),
+            )
+        except (ValueError, InvalidSignature) as exc:
+            raise HTTPException(403, "agent signature verification failed") from exc
+
+        changed = con.execute(
+            "UPDATE client_agent_action_grants SET redeemed_at=? WHERE id=? AND redeemed_at=0",
+            (now_ts, row["grant_id"]),
+        ).rowcount
+        if changed != 1:
+            raise HTTPException(409, "agent grant was already redeemed")
+        artifact = dict(row)
+
+    try:
+        opened = access_ops.open_payload(artifact["payload_enc"])
+    except access_ops.AccessPackageError as exc:
+        raise HTTPException(500, "assigned access payload is unavailable") from exc
+
+    files = opened.get("files") or {}
+    native_name = str(opened.get("native_filename") or artifact.get("native_filename") or "")
+    native_data = files.get(native_name) if native_name else None
+    if isinstance(native_data, str):
+        native_data = native_data.encode("utf-8")
+    native_b64 = base64.b64encode(bytes(native_data)).decode("ascii") if native_data is not None else ""
+
+    audit(
+        CLIENT_ACTOR_PREFIX + artifact["username"],
+        "client_agent_grant_redeemed",
+        f"{artifact['kind']}:{artifact['external_key']}",
+        f"device={artifact['device_id']}",
+        ip=_client_ip(request),
+    )
+    return {
+        "ok": True,
+        "action": artifact["action"],
+        "access": {
+            "kind": artifact["kind"],
+            "protocol": artifact["protocol"],
+            "name": artifact["display_name"],
+            "native_filename": native_name,
+            "native_content_b64": native_b64,
+            "primary_text": str(opened.get("primary_text") or ""),
+            "share_text": str(opened.get("share_text") or ""),
+            "share_type": str(opened.get("share_type") or ""),
+            "summary": opened.get("summary") or {},
+        },
+        "grant": {
+            "redeemed_at": now_ts,
+            "one_time": True,
+        },
+    }
 
 
 @router.get("/api/client-app/admin/accounts")
