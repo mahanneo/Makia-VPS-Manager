@@ -238,7 +238,10 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         actor=require_mutation(request)
         if not client_store.get_account(account_id):
             raise HTTPException(404,"client account not found")
-        client_store.unbind_access_artifact(account_id,artifact_id)
+        try:
+            client_store.unbind_access_artifact(account_id,artifact_id)
+        except PermissionError as exc:
+            raise HTTPException(409,str(exc))
         audit_func(
             actor,"client_artifact_unbind",str(account_id),
             f"artifact_id={artifact_id}",ip_func(request),
@@ -267,7 +270,10 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         actor=require_mutation(request)
         if not client_store.get_account(account_id):
             raise HTTPException(404,"client account not found")
-        client_store.unbind_protocol_client(account_id,protocol_client_id)
+        try:
+            client_store.unbind_protocol_client(account_id,protocol_client_id)
+        except PermissionError as exc:
+            raise HTTPException(409,str(exc))
         audit_func(
             actor,"client_protocol_unbind",str(account_id),
             f"protocol_client_id={protocol_client_id}",ip_func(request),
@@ -317,6 +323,9 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         if not account:
             raise HTTPException(404,"client account not found")
         username=account.get("username") or str(account_id)
-        client_store.delete_account(account_id)
+        try:
+            client_store.delete_account(account_id)
+        except PermissionError as exc:
+            raise HTTPException(409,str(exc))
         audit_func(actor,"client_account_delete",str(account_id),f"username={username}; runtime_untouched=true",ip_func(request))
         return {"ok":True,"runtime_untouched":True}
