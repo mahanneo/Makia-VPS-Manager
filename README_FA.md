@@ -1,3 +1,9 @@
+## نسخه ۰.۲۶.۰-rc9 — سخت‌سازی Disaster Recovery و مسیرهای Secret
+
+RC9 قابلیت‌های RC8 را حفظ می‌کند و سه شکاف Production را می‌بندد: Restore بکاپ دارای Outline قبل از هر تغییر، وجود Docker را بررسی می‌کند و مسیر Root برای آماده‌سازی آن با `MAKIA_ENABLE_OUTLINE=1` وجود دارد؛ شکست Remote SCP دیگر زمان اجرای موفق بکاپ را جلو نمی‌برد و در چک ساعتی بعدی دوباره تلاش می‌شود؛ و خطاهای شبکه URLهای دارای Secret را Redact می‌کنند تا Bot Token تلگرام یا Secret مسیر Management API Outline وارد UI/Log نشود.
+
+سازگاری Full Migration تا RC9 نیز به‌صورت صریح Gate شده است. این نسخه هنوز **Release Candidate** است و Stable شدن به UAT واقعی VPS جایگزین، Outline زنده، Remote SCP، Cloudflare، Telegram و Clientهای واقعی وابسته است. جزئیات: [UAT RC9](docs/UAT-0.26.0-RC9.md).
+
 ## نسخه ۰.۲۶.۰-rc8 — Operations Suite + Outline
 
 در RC8، پنل مدیریت عملیات کامل‌تر شده است: **پلن/قالب، تمدید گروهی، مرکز انقضا، بکاپ زمان‌بندی‌شده و Remote SCP، Disaster Recovery، Cloudflare DNS Cutover، Telegram، اعلان‌ها، Diagnostics و داشبورد Multi-VPS** به مسیرهای واقعی Backend متصل‌اند.
