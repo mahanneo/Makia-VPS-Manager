@@ -217,10 +217,10 @@ async function access(renderToken=window.__viewRenderToken){
   const online=rows.reduce((n,x)=>n+Number(x.online||0),0);
   content.innerHTML=[
     '<div class="pro-page">',
-      '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
+      '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="bulk-access-open">'+htmlEsc(tr('عملیات گروهی','Bulk actions'))+'</button><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
       '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
       '<section class="pro-directory">',
-        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
+        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="outline">Outline</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
         '<div id="accessRows" class="pro-user-list"></div>',
       '</section>',
@@ -247,7 +247,7 @@ function renderAccessRows(){
 }
 
 function accessUsageText(a){
-  if(a.kind==='xray'){
+  if(a.kind==='xray'||a.kind==='outline'){
     const used=fmtBytes(a.used_bytes||0),quota=a.quota_bytes?fmtBytes(a.quota_bytes):'∞';
     return used+' / '+quota;
   }
@@ -257,7 +257,7 @@ function accessUsageText(a){
 }
 function accessExpiryText(a){
   if(a.kind==='ssh')return a.expire_date||'بدون انقضا';
-  if(a.kind==='xray')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
+  if(a.kind==='xray'||a.kind==='outline')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
   if(a.kind==='wireguard')return a.address||'Peer';
   return 'Certificate';
 }
@@ -319,8 +319,8 @@ async function openAccessDetail(id){
   const kind=htmlEsc(a.kind),key=dataEnc(a.key),name=dataEnc(a.name);
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
-  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
-  const manage=(a.kind==='ssh'||a.kind==='xray')
+  const shareLabel=a.kind==='ssh'?'NPV / QR':(a.kind==='xray'||a.kind==='outline')?'QR / Share':a.kind==='wireguard'?'QR / Share':'';
+  const manage=(a.kind==='ssh'||a.kind==='xray'||a.kind==='outline')
     ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
     : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
   const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
@@ -336,7 +336,7 @@ async function openAccessDetail(id){
       '<header><div><span class="pro-kicker">ACCESS PROFILE</span><h3>'+htmlEsc(a.name)+'</h3><p>'+htmlEsc(String(a.protocol||a.kind).toUpperCase())+'</p></div><button class="close-btn" data-action="modal-close">×</button></header>',
       '<div class="access-detail-body">',
         '<section class="access-detail-summary"><div><span>وضعیت</span><b>'+htmlEsc(a.status||'unknown')+'</b></div><div><span>Endpoint</span><b>'+htmlEsc(a.endpoint||'—')+'</b></div><div><span>مصرف</span><b>'+htmlEsc(accessUsageText(a))+'</b></div><div><span>انقضا / نوع</span><b>'+htmlEsc(accessExpiryText(a))+'</b></div></section>',
-        '<section class="detail-section"><div class="detail-section-head"><div><h4>مدیریت</h4><p>تنظیمات عملیاتی این دسترسی</p></div></div><div class="detail-actions">'+manage+'</div></section>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>مدیریت</h4><p>تنظیمات عملیاتی این دسترسی</p></div></div><div class="detail-actions">'+manage+((['ssh','xray','outline'].includes(a.kind))?'<button class="ghost" data-action="quick-renew" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('تمدید سریع','Quick renew'))+'</button>':'')+'</div></section>',
         '<section class="detail-section"><div class="detail-section-head"><div><h4>تحویل به کاربر</h4><p>فقط در زمان ارسال کانفیگ از این ابزارها استفاده کن.</p></div></div><div class="detail-actions">'+deliveryButtons+'</div></section>',
       '</div>',
       '<footer><button class="danger" data-action="revoke-access" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">لغو دسترسی</button><button class="ghost" data-action="modal-close">بستن</button></footer>',
@@ -389,6 +389,7 @@ function protocolGlyph(kind){
     xray:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/></svg>',
     wireguard:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.7 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.8 7.5-9.5V6L12 3Z"/><path d="m9 13 2-4 1 3h3l-3 4"/></svg>',
     openvpn:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5"/><path d="M9 13v7h6v-7M12 14v3"/></svg>',
+    outline:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>',
     ikev2:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.3 5.7"/><path d="M4 17v-5h5"/><path d="M10 12h8M14 8v8"/></svg>',
     stealth:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/><path d="M5 19 19 5"/></svg>',
     wstunnel:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h5l2-4 4 8 2-4h5"/><path d="M5 5h14v14H5z"/></svg>',
@@ -403,6 +404,7 @@ function wizardProtocolReady(kind){
   if(kind==='xray')return Boolean(s.xray?.installed);
   if(kind==='wireguard')return Boolean(s.wireguard?.installed&&s.wireguard?.config);
   if(kind==='openvpn')return Boolean(s.openvpn?.installed&&s.openvpn?.config);
+  if(kind==='outline')return true;
   return false;
 }
 
@@ -415,7 +417,8 @@ function renderProvisionWizard(){
       ['ssh','SSH','دسترسی سریع و سبک','Password / Session policy'],
       ['xray','Xray / V2Ray','پروفایل‌های چندگانه و مدیریت پیشرفته','VLESS · VMess · Trojan · Hysteria2'],
       ['wireguard','WireGuard','تونل Native سریع','Peer · QR · Handshake · Traffic'],
-      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP']
+      ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP'],
+      ['outline','Outline','Access Key ساده و سریع','Official Shadowbox · ss://']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
@@ -924,11 +927,29 @@ async function sessions(renderToken=window.__viewRenderToken){
 async function disconnectSession(tty,user){if(!confirm('قطع اتصال '+user+' ؟'))return;try{await api('/api/sessions/disconnect',{method:'POST',body:JSON.stringify({tty,username:user})});await sessions()}catch(e){alert(e.message)}}
 function relativeSeen(v){if(!v)return'Never';const t=Date.parse(v);if(Number.isNaN(t))return v;const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
 async function nodes(renderToken=window.__viewRenderToken){
-  title.textContent='Nodes';setPageContext('FLEET CONTROL');
+  title.textContent=tr('نودها','Nodes');setPageContext('FLEET CONTROL');
   const rows=await api('/api/nodes');if(renderToken!==window.__viewRenderToken||activeView!=='nodes')return;
-  content.innerHTML=viewIntro('MULTI-NODE','مدیریت نودها','VPSهای متصل را با Token مستقل، Heartbeat و Telemetry مرکزی مدیریت کن.','<button class="primary action-lg" data-action="node-create">＋ Add Node</button>')+
-  '<div class="panel modern-list"><div class="notice">برای Nodeهای خارج از شبکه محلی، Controller را فقط با HTTPS در دسترس قرار بده.</div><div class="table">'+(rows.length?rows.map(n=>'<div class="row"><div><b>'+htmlEsc(n.name)+'</b><div class="muted">'+htmlEsc(n.hostname||'Waiting for heartbeat')+'</div></div><div><span class="status-chip '+(n.last_seen_at?'ok':'warn')+'">'+htmlEsc(relativeSeen(n.last_seen_at))+'</span><div class="muted">token …'+htmlEsc(n.token_last4)+'</div></div><div><b>'+htmlEsc(n.cpu??'-')+'% / '+htmlEsc(n.memory??'-')+'%</b><div class="muted">CPU / RAM · Disk '+htmlEsc(n.disk??'-')+'%</div></div><div class="toolbar"><span class="status-chip">'+htmlEsc(n.version||'-')+'</span><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">Revoke</button></div></div>').join(''):'<div class="empty">هنوز Nodeای ثبت نشده است.</div>')+'</div></div>';
+  const activeRows=rows.filter(n=>n.active);
+  const scored=activeRows.map(n=>{
+    const seen=n.last_seen_at?Date.parse(n.last_seen_at):0,age=seen?Date.now()-seen:Infinity;
+    const healthy=age<120000;
+    const load=Math.max(Number(n.cpu||0),Number(n.memory||0),Number(n.disk||0));
+    const capacity=healthy?Math.max(0,100-load):0;
+    return {...n,healthy,load,capacity};
+  }).sort((a,b)=>b.capacity-a.capacity);
+  const best=scored[0];
+  const totalUsers=rows.reduce((n,x)=>n+Number(x.users||0),0),totalOnline=rows.reduce((n,x)=>n+Number(x.online_users||0),0);
+  content.innerHTML=viewIntro('MULTI-VPS FLEET',tr('داشبورد چند سرور','Multi-VPS Dashboard'),tr('سلامت، ظرفیت، کاربر و ترافیک همه VPSها را در یک نما ببین.','See health, capacity, clients and traffic across all enrolled VPS nodes.'),'<button class="primary action-lg" data-action="node-create">＋ '+htmlEsc(tr('افزودن نود','Add Node'))+'</button>')+
+  '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('نودها','Nodes'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('سالم','Healthy'))+'</span><b>'+scored.filter(x=>x.healthy).length+'</b></div><div><span>'+htmlEsc(tr('کاربران','Clients'))+'</span><b>'+totalUsers+'</b></div><div><span>'+htmlEsc(tr('آنلاین','Online'))+'</span><b>'+totalOnline+'</b></div></section>'+
+  (best?'<div class="wizard-note"><b>'+htmlEsc(tr('ظرفیت پیشنهادی','Capacity suggestion'))+'</b><span>'+htmlEsc(best.name)+' · '+Math.round(best.capacity)+'% '+htmlEsc(tr('ظرفیت تقریبی آزاد بر اساس CPU/RAM/Disk','estimated headroom from CPU/RAM/Disk'))+'</span></div>':'')+
+  '<section class="fleet-grid">'+(rows.length?rows.map(n=>{
+    let services={};try{services=JSON.parse(n.services_json||'{}')}catch{}
+    const seen=n.last_seen_at?Date.parse(n.last_seen_at):0,healthy=seen&&Date.now()-seen<120000;
+    const svc=Object.entries(services).map(([k,v])=>'<span class="status-chip '+(v?'ok':'bad')+'">'+htmlEsc(k)+'</span>').join('');
+    return '<article class="fleet-card"><div class="fleet-head"><div><b>'+htmlEsc(n.name)+'</b><small>'+htmlEsc(n.region||n.hostname||'—')+'</small></div><span class="status-chip '+(healthy?'ok':'bad')+'">'+(healthy?'LIVE':htmlEsc(relativeSeen(n.last_seen_at)))+'</span></div><div class="fleet-metrics"><div><span>CPU</span><b>'+Number(n.cpu||0).toFixed(1)+'%</b></div><div><span>RAM</span><b>'+Number(n.memory||0).toFixed(1)+'%</b></div><div><span>Disk</span><b>'+Number(n.disk||0).toFixed(1)+'%</b></div><div><span>Users</span><b>'+Number(n.users||0)+' / '+Number(n.online_users||0)+'</b></div></div><div class="chips">'+svc+'</div><div class="muted">'+htmlEsc(n.public_url||n.hostname||'')+' · ↓ '+fmtBytes(n.rx||0)+' ↑ '+fmtBytes(n.tx||0)+'</div><div class="toolbar"><span class="status-chip">'+htmlEsc(n.version||'-')+'</span><button class="danger" data-action="node-revoke" data-id="'+Number(n.id)+'">'+htmlEsc(tr('لغو','Revoke'))+'</button></div></article>';
+  }).join(''):'<div class="empty">'+htmlEsc(tr('هنوز نودی ثبت نشده است.','No nodes enrolled yet.'))+'</div>')+'</section>';
 }
+
 async function createNode(){
   const name=prompt('نام Node:','node-01');if(!name)return;
   try{
@@ -2082,7 +2103,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
+const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Outline','outline'],['Plans','plans'],['Expiry','expiry'],['Backup Automation','automation'],['Diagnostics','diagnostics'],['Integrations','integrations'],['Connectivity Lab','connectivity'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -2102,6 +2123,11 @@ async function selectWizardProtocol(kind){
   if(kind==='xray'){
     closeModal();
     await openXrayInboundBuilder();
+    return;
+  }
+  if(kind==='outline'){
+    closeModal();
+    await switchView('outline');
     return;
   }
   provisionState.protocol=kind;provisionState.step=2;
@@ -2231,6 +2257,28 @@ async function handleMakiaAction(btn){
   if(action==='settings-2fa-disable'){await disable2FA();return}
   if(action==='settings-api-new'){createApiToken();return}
   if(action==='settings-api-revoke'){await revokeApiToken(Number(btn.dataset.id));return}
+  if(action==='quick-renew'){openQuickRenew(btn.dataset.kind,dataDec(btn.dataset.key),dataDec(btn.dataset.name));return}
+  if(action==='quick-renew-apply'){await applyQuickRenew(btn.dataset.kind,dataDec(btn.dataset.key));return}
+  if(action==='bulk-access-open'){await openBulkAccess();return}
+  if(action==='bulk-access-apply'){await applyBulkAccess();return}
+  if(action==='plan-new'){openPlanEditor();return}
+  if(action==='plan-edit'){openPlanEditor((window.__planRows||[]).find(x=>Number(x.id)===Number(btn.dataset.id)));return}
+  if(action==='plan-save'){await savePlan(Number(btn.dataset.id||0));return}
+  if(action==='plan-use'){await usePlan(Number(btn.dataset.id));return}
+  if(action==='plan-delete'){if(confirm(tr('پلن حذف شود؟','Delete this plan?'))){await api('/api/plans/'+Number(btn.dataset.id),{method:'DELETE'});await currentView()}return}
+  if(action==='backup-schedule-new'){openBackupSchedule();return}
+  if(action==='backup-schedule-save'){await saveBackupSchedule();return}
+  if(action==='backup-schedule-run'){await api('/api/automation/backups/'+Number(btn.dataset.id)+'/run',{method:'POST'});toast(tr('بکاپ اجرا شد','Backup completed'));await currentView();return}
+  if(action==='backup-schedule-delete'){if(confirm(tr('زمان‌بندی حذف شود؟','Delete schedule?'))){await api('/api/automation/backups/'+Number(btn.dataset.id),{method:'DELETE'});await currentView()}return}
+  if(action==='integrations-save'){await saveIntegrations();return}
+  if(action==='cloudflare-test'){try{await api('/api/integrations/cloudflare/test',{method:'POST'});toast('Cloudflare PASS')}catch(e){alert(e.message)}return}
+  if(action==='cloudflare-cutover'){await cloudflareCutover();return}
+  if(action==='telegram-test'){try{await api('/api/integrations/telegram/test',{method:'POST'});toast('Telegram PASS')}catch(e){alert(e.message)}return}
+  if(action==='disaster-readiness'){await disasterView();return}
+  if(action==='outline-setup'){openOutlineSetup();return}
+  if(action==='outline-setup-run'){try{await api('/api/protocols/outline/setup',{method:'POST',body:JSON.stringify({hostname:document.getElementById('outlineHost').value.trim(),keys_port:Number(document.getElementById('outlinePort').value||0)})});closeModal();await currentView()}catch(e){alert(e.message)}return}
+  if(action==='outline-client-new'){openOutlineClient();return}
+  if(action==='outline-client-create'){await createOutlineClient();return}
   if(action==='refresh'){await currentView();return}
 }
 
@@ -2279,6 +2327,136 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}if(e.key==='Escape')closeModal()});
 
+
+function openQuickRenew(kind,key,name){
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">'+htmlEsc(tr('تمدید سریع','QUICK RENEW'))+'</div><h3>'+htmlEsc(name||key)+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>'+htmlEsc(tr('روز اضافه','Add days'))+'<input id="renewDays" type="number" min="0" max="3650" value="30"></label><label>'+htmlEsc(tr('حجم اضافه GB','Add traffic GB'))+'<input id="renewGb" type="number" min="0" max="100000" step="1" value="0"></label></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">'+htmlEsc(tr('انصراف','Cancel'))+'</button><button class="primary" data-action="quick-renew-apply" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'">'+htmlEsc(tr('اعمال تمدید','Apply renewal'))+'</button></div></div></div>';
+}
+async function applyQuickRenew(kind,key){
+  const days=Number(document.getElementById('renewDays')?.value||0),add_gb=Number(document.getElementById('renewGb')?.value||0);
+  if(days<1&&add_gb<=0){alert(tr('روز یا حجم اضافه را وارد کنید.','Enter days or additional traffic.'));return}
+  try{await api('/api/access/'+encodeURIComponent(kind)+'/'+encodeURIComponent(key)+'/renew',{method:'POST',body:JSON.stringify({days,add_gb})});closeModal();toast(tr('تمدید انجام شد','Renewal applied'));await currentView()}catch(e){alert(e.message)}
+}
+async function openBulkAccess(){
+  const rows=await api('/api/access');
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal bulk-access-modal"><div class="wizard-head"><div><div class="eyebrow">'+htmlEsc(tr('عملیات گروهی','BULK OPERATIONS'))+'</div><h3>'+htmlEsc(tr('مدیریت چند کاربر','Manage multiple clients'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="bulk-select-list">'+rows.filter(x=>['ssh','xray','outline','wireguard'].includes(x.kind)).map(x=>'<label class="bulk-select-row"><input type="checkbox" class="bulkAccessItem" data-kind="'+htmlEsc(x.kind)+'" data-key="'+dataEnc(x.key)+'"><span><b>'+htmlEsc(x.name)+'</b><small>'+htmlEsc(String(x.protocol||x.kind).toUpperCase())+' · '+htmlEsc(x.status||'')+'</small></span></label>').join('')+'</div><div class="form-grid two"><label>'+htmlEsc(tr('عملیات','Action'))+'<select id="bulkAction"><option value="renew">'+htmlEsc(tr('تمدید','Renew'))+'</option><option value="add_quota">'+htmlEsc(tr('افزایش حجم','Add traffic'))+'</option><option value="enable">'+htmlEsc(tr('فعال‌سازی','Enable'))+'</option><option value="disable">'+htmlEsc(tr('غیرفعال‌سازی','Disable'))+'</option></select></label><label>'+htmlEsc(tr('روز','Days'))+'<input id="bulkDays" type="number" min="0" value="30"></label><label>'+htmlEsc(tr('حجم GB','Traffic GB'))+'<input id="bulkGb" type="number" min="0" value="0"></label></div><div class="wizard-footer"><button class="primary" data-action="bulk-access-apply">'+htmlEsc(tr('اجرا','Run'))+'</button></div></div></div>';
+}
+async function applyBulkAccess(){
+  const items=[...document.querySelectorAll('.bulkAccessItem:checked')].map(x=>({kind:x.dataset.kind,key:dataDec(x.dataset.key)}));
+  if(!items.length){alert(tr('حداقل یک کاربر انتخاب کنید.','Select at least one client.'));return}
+  const payload={items,action:document.getElementById('bulkAction').value,days:Number(document.getElementById('bulkDays').value||0),add_gb:Number(document.getElementById('bulkGb').value||0)};
+  try{const r=await api('/api/access/bulk',{method:'POST',body:JSON.stringify(payload)});closeModal();toast(r.failed?.length?tr('برخی عملیات ناموفق بود','Some operations failed'):tr('عملیات گروهی انجام شد','Bulk operation completed'));await currentView()}catch(e){alert(e.message)}
+}
+
+async function plansView(renderToken=window.__viewRenderToken){
+  title.textContent=tr('پلن‌ها','Plans');setPageContext('PLANS');
+  const rows=await api('/api/plans');if(renderToken!==window.__viewRenderToken||activeView!=='plans')return;
+  content.innerHTML=viewIntro('SERVICE PLANS',tr('پلن‌ها و قالب‌ها','Plans & Templates'),tr('پلن‌های دارای مدت/حجم فقط برای SSH، Xray و Outline نمایش داده می‌شوند؛ WireGuard/OpenVPN تا زمان Policy enforcement واقعی، محدودیت صوری نمی‌گیرند.','Duration/quota plans are limited to SSH, Xray and Outline; WireGuard/OpenVPN do not receive fake limits until real policy enforcement exists.'),'<button class="primary" data-action="plan-new">＋ '+htmlEsc(tr('پلن جدید','New plan'))+'</button>')+
+  '<section class="plan-grid">'+(rows.length?rows.map(p=>'<article class="plan-card"><div class="plan-card-head"><div><b>'+htmlEsc(p.name)+'</b><span>'+htmlEsc(String(p.kind).toUpperCase())+(p.protocol?' · '+htmlEsc(String(p.protocol).toUpperCase()):'')+'</span></div><span class="status-chip '+(p.active?'ok':'warn')+'">'+(p.active?'ACTIVE':'OFF')+'</span></div><div class="plan-metrics"><div><span>'+htmlEsc(tr('مدت','Duration'))+'</span><b>'+Number(p.duration_days||0)+'d</b></div><div><span>'+htmlEsc(tr('حجم','Traffic'))+'</span><b>'+(p.quota_mb?Math.round(Number(p.quota_mb)/1024)+'GB':'∞')+'</b></div><div><span>'+htmlEsc(tr('IP','IP limit'))+'</span><b>'+Number(p.ip_limit||1)+'</b></div><div><span>'+htmlEsc(tr('قیمت','Price'))+'</span><b>'+Number(p.price||0).toLocaleString()+'</b></div></div><div class="toolbar"><button class="primary" data-action="plan-use" data-id="'+Number(p.id)+'">'+htmlEsc(tr('استفاده','Use plan'))+'</button><button class="ghost" data-action="plan-edit" data-id="'+Number(p.id)+'">'+htmlEsc(tr('ویرایش','Edit'))+'</button><button class="danger" data-action="plan-delete" data-id="'+Number(p.id)+'">'+htmlEsc(tr('حذف','Delete'))+'</button></div></article>').join(''):'<div class="empty">'+htmlEsc(tr('هنوز پلنی ساخته نشده است.','No plans created yet.'))+'</div>')+'</section>';
+  window.__planRows=rows;
+}
+function openPlanEditor(p=null){
+  p=p||{name:'',kind:'xray',protocol:'vless',duration_days:30,quota_mb:51200,ip_limit:1,connection_limit:1,price:0,config:{},active:true};
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">PLAN TEMPLATE</div><h3>'+htmlEsc(p.id?tr('ویرایش پلن','Edit plan'):tr('پلن جدید','New plan'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>'+htmlEsc(tr('نام پلن','Plan name'))+'<input id="planName" value="'+htmlEsc(p.name||'')+'"></label><label>'+htmlEsc(tr('نوع','Kind'))+'<select id="planKind">'+['ssh','xray','outline'].map(x=>'<option value="'+x+'" '+(p.kind===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')+'</select></label><label>Protocol<input id="planProtocol" value="'+htmlEsc(p.protocol||'')+'"></label><label>'+htmlEsc(tr('مدت روز','Duration days'))+'<input id="planDays" type="number" min="0" value="'+Number(p.duration_days||0)+'"></label><label>'+htmlEsc(tr('حجم GB','Traffic GB'))+'<input id="planQuota" type="number" min="0" value="'+(Number(p.quota_mb||0)/1024)+'"></label><label>IP limit<input id="planIp" type="number" min="1" value="'+Number(p.ip_limit||1)+'"></label><label>'+htmlEsc(tr('محدودیت اتصال','Connection limit'))+'<input id="planConn" type="number" min="1" value="'+Number(p.connection_limit||1)+'"></label><label>'+htmlEsc(tr('قیمت','Price'))+'<input id="planPrice" type="number" min="0" value="'+Number(p.price||0)+'"></label></div><label>Advanced JSON<textarea id="planConfig" class="config-output small">'+htmlEsc(JSON.stringify(p.config||{},null,2))+'</textarea></label><div class="wizard-footer"><button class="primary" data-action="plan-save" data-id="'+Number(p.id||0)+'">'+htmlEsc(tr('ذخیره','Save'))+'</button></div></div></div>';
+}
+async function savePlan(id){
+  let config={};try{config=JSON.parse(document.getElementById('planConfig').value||'{}')}catch(e){alert(e.message);return}
+  const payload={name:document.getElementById('planName').value.trim(),kind:document.getElementById('planKind').value,protocol:document.getElementById('planProtocol').value.trim(),duration_days:Number(document.getElementById('planDays').value||0),quota_gb:Number(document.getElementById('planQuota').value||0),ip_limit:Number(document.getElementById('planIp').value||1),connection_limit:Number(document.getElementById('planConn').value||1),price:Number(document.getElementById('planPrice').value||0),config,active:true};
+  try{await api(id?'/api/plans/'+id:'/api/plans',{method:id?'PUT':'POST',body:JSON.stringify(payload)});closeModal();await currentView()}catch(e){alert(e.message)}
+}
+async function usePlan(id){
+  const p=(window.__planRows||[]).find(x=>Number(x.id)===Number(id));if(!p)return;
+  if(p.kind==='outline'){switchView('outline');setTimeout(()=>openOutlineClient(p),150);return}
+  if(p.kind==='xray'){
+    await openXrayInboundBuilder();
+    const protocol=String(p.protocol||'vless').toLowerCase(),cfg=p.config||{};
+    const proto=document.getElementById('xbProtocol');if(proto&&[...proto.options].some(o=>o.value===protocol)){proto.value=protocol;syncXrayInboundBuilder()}
+    if(document.getElementById('xbQuota'))document.getElementById('xbQuota').value=Number(p.quota_mb||0)/1024;
+    if(document.getElementById('xbDays'))document.getElementById('xbDays').value=Number(p.duration_days||0);
+    if(document.getElementById('xbIpLimit'))document.getElementById('xbIpLimit').value=Number(p.ip_limit||1);
+    if(cfg.transport&&document.getElementById('xbTransport')&&[...document.getElementById('xbTransport').options].some(o=>o.value===cfg.transport)){document.getElementById('xbTransport').value=cfg.transport;syncXrayInboundBuilder()}
+    if(cfg.security&&document.getElementById('xbSecurity')&&[...document.getElementById('xbSecurity').options].some(o=>o.value===cfg.security)){document.getElementById('xbSecurity').value=cfg.security;syncXrayInboundBuilder()}
+    return;
+  }
+  await openProvisionWizard(p.kind);
+  if(!provisionState)return;
+  provisionState.plan=p.name;provisionState.expireDays=Number(p.duration_days||0);provisionState.quota=Number(p.quota_mb||0)/1024;provisionState.sessions=Number(p.connection_limit||1);provisionState.devices=Number(p.ip_limit||1);
+  if(p.kind==='ssh')provisionState.expireDate=p.duration_days?dateAfterDays(p.duration_days):'';
+  renderProvisionWizard();
+}
+
+async function expiryView(renderToken=window.__viewRenderToken){
+  title.textContent=tr('انقضا و تمدید','Expiry & Renewals');setPageContext('EXPIRY');
+  const r=await api('/api/operations/expiry?days=30');if(renderToken!==window.__viewRenderToken||activeView!=='expiry')return;
+  content.innerHTML=viewIntro('EXPIRY CENTER',tr('مرکز انقضا و تمدید','Expiry & Renewal Center'),tr('کاربرهای منقضی و نزدیک انقضا را یکجا ببین و تمدید کن.','See expired and expiring clients in one place.'),'<div class="view-intro-stat"><b>'+r.items.length+'</b><span>30 DAYS</span></div>')+
+  '<section class="panel modern-list"><div class="table">'+(r.items.length?r.items.map(x=>'<div class="row"><div><b>'+htmlEsc(x.name)+'</b><div class="muted">'+htmlEsc(String(x.protocol||x.kind).toUpperCase())+'</div></div><div><span class="status-chip '+(x.expired?'bad':x.days_left<=3?'warn':'ok')+'">'+(x.expired?htmlEsc(tr('منقضی','Expired')):Number(x.days_left)+'d')+'</span></div><div>'+htmlEsc(x.expire_date|| (x.expire_at?new Date(x.expire_at*1000).toLocaleDateString():'—'))+'</div><div><button class="primary" data-action="quick-renew" data-kind="'+htmlEsc(x.kind)+'" data-key="'+dataEnc(x.key)+'" data-name="'+dataEnc(x.name)+'">'+htmlEsc(tr('تمدید','Renew'))+'</button></div></div>').join(''):'<div class="empty">'+htmlEsc(tr('موردی در ۳۰ روز آینده نیست.','No expirations in the next 30 days.'))+'</div>')+'</div></section>';
+}
+
+async function automationView(renderToken=window.__viewRenderToken){
+  title.textContent=tr('اتوماسیون بکاپ','Backup Automation');setPageContext('AUTOMATION');
+  const r=await api('/api/automation/backups');if(renderToken!==window.__viewRenderToken||activeView!=='automation')return;
+  content.innerHTML=viewIntro('SCHEDULED RECOVERY',tr('بکاپ زمان‌بندی‌شده و خارج سرور','Scheduled & Remote Backup'),tr('بکاپ Quick یا Full Migration را دوره‌ای بساز و در S3/R2/B2 یا SFTP نگه‌دار.','Create recurring Quick or Full Migration backups and copy them to S3/R2/B2 or SFTP.'),'<button class="primary" data-action="backup-schedule-new">＋ '+htmlEsc(tr('زمان‌بندی جدید','New schedule'))+'</button>')+
+  '<section class="panel modern-list"><div class="table">'+(r.schedules.length?r.schedules.map(x=>'<div class="row"><div><b>'+htmlEsc(x.name)+'</b><div class="muted">'+htmlEsc(x.backup_type)+' · '+htmlEsc(x.remote_type||'none')+'</div></div><div><b>'+Number(x.interval_hours)+'h</b><div class="muted">keep '+Number(x.keep_last)+'</div></div><div><span class="status-chip '+(x.last_status==='failed'?'bad':x.last_status==='success'?'ok':'warn')+'">'+htmlEsc(x.last_status||'PENDING')+'</span><div class="muted">'+htmlEsc(x.last_message||'')+'</div></div><div class="toolbar"><button class="ghost" data-action="backup-schedule-run" data-id="'+Number(x.id)+'">'+htmlEsc(tr('اجرای الان','Run now'))+'</button><button class="danger" data-action="backup-schedule-delete" data-id="'+Number(x.id)+'">'+htmlEsc(tr('حذف','Delete'))+'</button></div></div>').join(''):'<div class="empty">'+htmlEsc(tr('زمان‌بندی تعریف نشده است.','No backup schedules configured.'))+'</div>')+'</div></section>'+
+  '<section class="panel"><div class="panel-head"><h3>'+htmlEsc(tr('آخرین اجراها','Recent runs'))+'</h3></div><div class="table">'+(r.runs.length?r.runs.slice(0,15).map(x=>'<div class="row"><div><b>'+htmlEsc(x.backup_name||'—')+'</b><div class="muted">'+htmlEsc(x.backup_type||'')+'</div></div><div>'+htmlEsc(x.remote_type||'none')+' · '+htmlEsc(x.remote_status||'')+'</div><div><span class="status-chip '+(x.status==='success'?'ok':'bad')+'">'+htmlEsc(x.status||'')+'</span></div><div class="muted">'+htmlEsc(x.message||'')+'</div></div>').join(''):'<div class="empty">—</div>')+'</div></section>';
+}
+function openBackupSchedule(){
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">BACKUP AUTOMATION</div><h3>'+htmlEsc(tr('زمان‌بندی جدید','New schedule'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>Name<input id="bsName" value="daily-full"></label><label>Type<select id="bsType"><option value="quick">Quick</option><option value="full_migration">Full Migration</option></select></label><label>Interval hours<input id="bsHours" type="number" min="1" value="24"></label><label>Keep last<input id="bsKeep" type="number" min="1" value="7"></label><label>Migration password<input id="bsPassword" type="password" autocomplete="new-password"></label><label>Remote<select id="bsRemote"><option value="none">None</option><option value="s3">S3 / R2 / B2</option><option value="sftp">SFTP / SCP</option></select></label><label>Endpoint URL<input id="bsEndpoint" placeholder="https://..."></label><label>Bucket<input id="bsBucket"></label><label>Access key<input id="bsAccess"></label><label>Secret key<input id="bsSecret" type="password"></label><label>SFTP Host<input id="bsHost"></label><label>SFTP User<input id="bsUser"></label><label>SFTP Path<input id="bsPath" value="/backups"></label><label>Identity file<input id="bsIdentity" value="/root/.ssh/id_ed25519"></label></div><div class="wizard-footer"><button class="primary" data-action="backup-schedule-save">'+htmlEsc(tr('ذخیره','Save'))+'</button></div></div></div>';
+}
+async function saveBackupSchedule(){
+  const type=document.getElementById('bsRemote').value;
+  const remote=type==='s3'?{type,endpoint_url:document.getElementById('bsEndpoint').value.trim(),bucket:document.getElementById('bsBucket').value.trim(),access_key:document.getElementById('bsAccess').value.trim(),secret_key:document.getElementById('bsSecret').value,prefix:'makia'}:type==='sftp'?{type,host:document.getElementById('bsHost').value.trim(),user:document.getElementById('bsUser').value.trim(),path:document.getElementById('bsPath').value.trim(),identity_file:document.getElementById('bsIdentity').value.trim()}: {type:'none'};
+  const payload={name:document.getElementById('bsName').value.trim(),backup_type:document.getElementById('bsType').value,interval_hours:Number(document.getElementById('bsHours').value||24),keep_last:Number(document.getElementById('bsKeep').value||7),password:document.getElementById('bsPassword').value,remote,enabled:true};
+  try{await api('/api/automation/backups',{method:'POST',body:JSON.stringify(payload)});closeModal();await currentView()}catch(e){alert(e.message)}
+}
+
+async function integrationsView(renderToken=window.__viewRenderToken){
+  title.textContent=tr('اتصال‌ها','Integrations');setPageContext('INTEGRATIONS');
+  const s=await api('/api/integrations');if(renderToken!==window.__viewRenderToken||activeView!=='integrations')return;
+  content.innerHTML=viewIntro('CLOUDFLARE · TELEGRAM',tr('اتصال سرویس‌ها','Integrations'),tr('DNS مهاجرت و هشدارهای مدیریتی را از همین پنل کنترل کن.','Manage migration DNS and admin alerts from Makia.'),'')+
+  '<div class="two-col"><section class="panel"><div class="panel-head"><div><h3>Cloudflare DNS</h3><span>'+(s.cloudflare.configured?'CONFIGURED':'NOT CONFIGURED')+'</span></div></div><div class="form-grid two"><label>Zone<input id="cfZone" value="'+htmlEsc(s.cloudflare.zone||'')+'"></label><label>Record<input id="cfRecord" value="'+htmlEsc(s.cloudflare.record||'')+'"></label><label>API Token<input id="cfToken" type="password" placeholder="'+(s.cloudflare.configured?'••••••••':'Cloudflare API token')+'"></label><label>TTL<input id="cfTtl" type="number" min="60" value="'+Number(s.cloudflare.ttl||60)+'"></label></div><label class="check-row"><input id="cfEnabled" type="checkbox" '+(s.cloudflare.enabled?'checked':'')+'> Enable</label><div class="wizard-note"><b>Raw VPN traffic</b><span>برای VPN/SSH رکورد باید DNS only باشد؛ Proxy نارنجی برای WireGuard/OpenVPN/SSH مناسب نیست.</span></div><div class="toolbar"><button class="primary" data-action="integrations-save">Save</button><button class="ghost" data-action="cloudflare-test">Test</button><button class="ghost" data-action="cloudflare-cutover">DNS Cutover</button></div></section>'+
+  '<section class="panel"><div class="panel-head"><div><h3>Telegram Admin Bot</h3><span>'+(s.telegram.configured?'CONFIGURED':'NOT CONFIGURED')+'</span></div></div><div class="form-grid"><label>Bot Token<input id="tgToken" type="password" placeholder="'+(s.telegram.configured?'••••••••':'123456:ABC...')+'"></label><label>Chat ID<input id="tgChat" value=""></label></div><label class="check-row"><input id="tgEnabled" type="checkbox" '+(s.telegram.enabled?'checked':'')+'> Enable alerts and /status commands</label><div class="wizard-note"><b>Commands</b><span>/status · /expiry · /backups · /help — فقط Chat ID ثبت‌شده پاسخ می‌گیرد.</span></div><div class="toolbar"><button class="primary" data-action="integrations-save">Save</button><button class="ghost" data-action="telegram-test">Send test</button></div></section></div>';
+}
+async function saveIntegrations(){
+  const current=await api('/api/integrations');
+  const cf={enabled:!!document.getElementById('cfEnabled')?.checked,api_token:document.getElementById('cfToken')?.value||'',zone:document.getElementById('cfZone')?.value.trim()||'',record:document.getElementById('cfRecord')?.value.trim()||'',ttl:Number(document.getElementById('cfTtl')?.value||60),proxied:false};
+  const tg={enabled:!!document.getElementById('tgEnabled')?.checked,bot_token:document.getElementById('tgToken')?.value||'',chat_id:document.getElementById('tgChat')?.value.trim()||'',commands:true};
+  try{await api('/api/integrations',{method:'POST',body:JSON.stringify({cloudflare:cf,telegram:tg})});toast(tr('ذخیره شد','Saved'));await currentView()}catch(e){alert(e.message)}
+}
+async function cloudflareCutover(){
+  const s=await api('/api/integrations');const ip=prompt('NEW VPS IPv4:');if(!ip)return;const record=s.cloudflare.record||'';if(!confirm('Update '+record+' → '+ip+' ?'))return;
+  try{await api('/api/integrations/cloudflare/cutover',{method:'POST',body:JSON.stringify({ipv4:ip,confirm_record:record})});toast('DNS updated')}catch(e){alert(e.message)}
+}
+
+async function diagnosticsView(renderToken=window.__viewRenderToken){
+  title.textContent=tr('مرکز عیب‌یابی','Diagnostics Center');setPageContext('DIAGNOSTICS');
+  const r=await api('/api/operations/diagnostics');if(renderToken!==window.__viewRenderToken||activeView!=='diagnostics')return;
+  content.innerHTML=viewIntro('ROOT-CAUSE CHECKS',tr('مرکز عیب‌یابی','Diagnostics Center'),tr('سرویس، DNS، HTTPS، Backup، Outline و Fleet را یکجا بررسی کن.','Check services, DNS, HTTPS, backup, Outline and fleet readiness in one place.'),'<span class="status-chip '+(r.ok?'ok':'bad')+'">'+(r.ok?'PASS':'ATTENTION')+'</span>')+
+  '<section class="diagnostic-grid">'+r.checks.map(x=>'<article class="diagnostic-card '+(x.ok?'ok':'bad')+'"><i>'+(x.ok?'✓':'!')+'</i><div><b>'+htmlEsc(x.name)+'</b><span>'+htmlEsc(x.detail||'')+'</span></div>'+(x.action?'<button class="ghost" data-action="nav" data-view="'+htmlEsc(x.action)+'">'+htmlEsc(tr('باز کردن','Open'))+'</button>':'')+'</article>').join('')+'</section>';
+}
+
+async function disasterView(){
+  const r=await api('/api/operations/disaster-readiness');
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal disaster-modal"><div class="wizard-head"><div><div class="eyebrow">DISASTER RECOVERY</div><h3>'+htmlEsc(tr('آمادگی مهاجرت','Migration readiness'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="disaster-steps">'+r.steps.map((x,i)=>'<div class="'+(x.ok?'ok':'warn')+'"><b>'+(i+1)+'</b><span>'+htmlEsc(x.label)+'</span><i>'+(x.ok?'✓':'!')+'</i></div>').join('')+'</div><div class="wizard-note"><b>'+htmlEsc(tr('دامنه','Domain'))+'</b><span>'+htmlEsc(r.panel_domain||'Not configured')+'</span></div><div class="wizard-footer"><button class="ghost" data-action="nav" data-view="backups">Backup Center</button><button class="ghost" data-action="nav" data-view="integrations">Cloudflare</button></div></div></div>';
+}
+
+async function outlineView(renderToken=window.__viewRenderToken){
+  title.textContent='Outline';setPageContext('OUTLINE');
+  const [s,access]=await Promise.all([api('/api/protocols/outline'),api('/api/access')]);if(renderToken!==window.__viewRenderToken||activeView!=='outline')return;
+  const clients=access.filter(x=>x.kind==='outline');
+  content.innerHTML=viewIntro('OFFICIAL OUTLINE SERVER','Outline',tr('مدیریت Access Keyهای Outline با API رسمی Shadowbox و بررسی Fingerprint گواهی مدیریت.','Manage Outline access keys through the official Shadowbox API with management-certificate fingerprint pinning.'),s.installed?'<button class="primary" data-action="outline-client-new">＋ '+htmlEsc(tr('Access Key جدید','New access key'))+'</button>':'<button class="primary" data-action="outline-setup">'+htmlEsc(tr('راه‌اندازی Outline','Setup Outline'))+'</button>')+
+  '<section class="pro-stat-strip"><div><span>Docker</span><b>'+(s.docker_ready?'READY':'NOT READY')+'</b></div><div><span>Shadowbox</span><b>'+(s.container_active?'RUNNING':'STOPPED')+'</b></div><div><span>Management API</span><b>'+(s.api_reachable?'PASS':'WAIT')+'</b></div><div><span>Keys</span><b>'+Number(s.keys||0)+'</b></div></section>'+
+  (!s.docker_ready?'<div class="wizard-note danger-note"><b>Host dependency</b><span>Run: sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade</span></div>':'')+
+  '<section class="panel modern-list"><div class="table">'+(clients.length?clients.map(x=>'<div class="row"><div><b>'+htmlEsc(x.name)+'</b><div class="muted">Outline / Shadowsocks</div></div><div>'+htmlEsc(accessUsageText(x))+'</div><div>'+htmlEsc(accessExpiryText(x))+'</div><div class="toolbar"><button class="ghost" data-action="client-portal" data-kind="outline" data-key="'+dataEnc(x.key)+'" data-name="'+dataEnc(x.name)+'">Portal</button><button class="danger" data-action="revoke-access" data-kind="outline" data-key="'+dataEnc(x.key)+'" data-name="'+dataEnc(x.name)+'">'+htmlEsc(tr('حذف','Revoke'))+'</button></div></div>').join(''):'<div class="empty">'+htmlEsc(tr('Access Key مدیریت‌شده‌ای وجود ندارد.','No managed Outline keys.'))+'</div>')+'</div></section>';
+}
+function openOutlineSetup(){
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">OUTLINE SERVER</div><h3>Setup</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>Hostname / IP<input id="outlineHost" value="'+htmlEsc(window.PANEL_DOMAIN||location.hostname)+'"></label><label>Keys Port (0 = automatic)<input id="outlinePort" type="number" min="0" max="65535" value="0"></label></div><div class="wizard-note"><b>Official installer</b><span>Makia uses the pinned official Outline Server installer and stores /opt/outline in Full Migration backups.</span></div><div class="wizard-footer"><button class="primary" data-action="outline-setup-run">Install / Configure</button></div></div></div>';
+}
+function openOutlineClient(plan=null){
+  modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">OUTLINE ACCESS KEY</div><h3>'+htmlEsc(tr('کاربر جدید','New client'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>Name<input id="outlineName" value="outline-user"></label><label>Quota GB<input id="outlineQuota" type="number" min="0" value="'+(plan?Number(plan.quota_mb||0)/1024:50)+'"></label><label>Expiry days<input id="outlineDays" type="number" min="0" value="'+(plan?Number(plan.duration_days||0):30)+'"></label></div><div class="wizard-footer"><button class="primary" data-action="outline-client-create">Create Access Key</button></div></div></div>';
+}
+async function createOutlineClient(){
+  const payload={name:document.getElementById('outlineName').value.trim(),quota_gb:Number(document.getElementById('outlineQuota').value||0),expire_days:Number(document.getElementById('outlineDays').value||0)};
+  try{const r=await api('/api/protocols/outline/clients',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Outline Access Key created');await currentView()}catch(e){alert(e.message)}
+}
 async function connectivityLab(renderToken=window.__viewRenderToken){
   title.textContent='Connectivity Lab';setPageContext('CONNECTIVITY READINESS');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Runtime و Endpointها…</b></div>';
@@ -2311,14 +2489,14 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
 }
 
 function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline',plans:'پلن‌ها',expiry:'انقضا و تمدید',automation:'اتوماسیون بکاپ',diagnostics:'مرکز عیب‌یابی',integrations:'اتصال‌ها',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',ssh:'SSH / NPV',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline',plans:'Plans',expiry:'Expiry & Renewals',automation:'Backup Automation',diagnostics:'Diagnostics Center',integrations:'Integrations',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;
   document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
   document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
   document.querySelectorAll('nav.pro-nav button[data-view]').forEach(b=>{const label=dict[b.dataset.view];const t=b.querySelector('b');if(label&&t)t.textContent=label});
 }
-const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,ssh:accounts,xray:xrayWorkspace,wireguard,openvpn:openvpnWorkspace,outline:outlineView,plans:plansView,expiry:expiryView,automation:automationView,diagnostics:diagnosticsView,integrations:integrationsView,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
@@ -2327,7 +2505,7 @@ function switchView(v){
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='operations'&&['plans','expiry','automation','diagnostics','integrations'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');

@@ -192,6 +192,14 @@ def client_guide_text(kind,protocol=""):
             "4) UUID/Password/SNI/Public Key/Short ID/Port را بدون هماهنگی تغییر ندهید.\n"
             "5) اگر وصل نشد، Wi-Fi و Mobile Data را جداگانه تست و متن خطا را برای مدیر ارسال کنید.\n"
         )
+    if kind=="outline":
+        return common+(
+            "Outline / Shadowsocks\n"
+            "1) Outline Client را روی Android، iPhone/iPad، Windows، macOS یا Linux نصب کنید.\n"
+            "2) Access Key با ss:// شروع می‌شود؛ آن را Copy و در Outline Client با Add Server / Paste Access Key وارد کنید.\n"
+            "3) لینک را عمومی نکنید؛ هر کسی Access Key را داشته باشد می‌تواند از سرویس استفاده کند.\n"
+            "4) اگر مدیر حجم یا دسترسی را تغییر داد، همان Access Key معتبر می‌ماند مگر اینکه صریحاً Revoke شود.\n"
+        )
     if kind=="wireguard":
         return common+(
             "WireGuard\n"

@@ -107,6 +107,15 @@ jobs:
           test -f docs/UAT-0.26.0-RC4.md
           test -f docs/UAT-0.26.0-RC5.md
           test -f docs/UAT-0.26.0-RC6.md
+          test -f docs/UAT-0.26.0-RC7.md
+          test -f scripts/install-outline.sh
+          grep -q 'makia-install-outline' scripts/install.sh
+          grep -q 'makia-install-outline' scripts/update.sh
+          grep -q 'OUTLINE_VERSION="server-v1.12.0"' scripts/install-outline.sh
+          grep -q 'OUTLINE_GIT_BLOB_SHA="39ba2b0d4ed6cb60ef94bc6015fcc619f092633b"' scripts/install-outline.sh
+          grep -q 'Remote backups must use encrypted Full Migration format' app/main.py
+          grep -q 'StrictHostKeyChecking=yes' app/automation_ops.py
+          grep -q 'Outline API certificate fingerprint mismatch' app/outline_ops.py
           grep -q 'CREDENTIAL_FILE=/root/makia-install-credentials.txt' scripts/install.sh
           grep -q 'MAKIA VPS MANAGER - INSTALL READY' scripts/install.sh
           test -f docs/UAT-PROTOCOL-MODES.md
@@ -203,8 +212,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "0.26.0-rc6"' app/config.py
-          grep -Fxq '0.26.0-rc6' VERSION
+          grep -q 'VERSION = "0.26.0-rc7"' app/config.py
+          grep -Fxq '0.26.0-rc7' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -228,7 +237,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v0260rc6' app/static/sw.js
+          grep -q 'makia-shell-v0260rc7' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
@@ -270,7 +279,7 @@ jobs:
           grep -q 'security-posture-grid' app/static/app.js
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
-          grep -q 'makia-shell-v0260rc6' app/static/sw.js
+          grep -q 'makia-shell-v0260rc7' app/static/sw.js
 
       - name: Connection modes contract
         run: |

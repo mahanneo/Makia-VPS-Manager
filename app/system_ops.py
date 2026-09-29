@@ -264,6 +264,9 @@ def _migration_versions_compatible(bundle_version,expected_version):
     # Full Migration format v2 stayed compatible across the 0.26 RC line.
     # Keep this directional and explicit: RC5 may restore earlier verified
     # RC2/RC3/RC4 bundles, including the RC2 systemd-template name shim.
+    compatible_to_rc7={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5","0.26.0-rc6"}
+    if destination=="0.26.0-rc7" and bundle in compatible_to_rc7:
+        return True
     compatible_to_rc6={"0.26.0-rc2","0.26.0-rc3","0.26.0-rc4","0.26.0-rc5"}
     if destination=="0.26.0-rc6" and bundle in compatible_to_rc6:
         return True
@@ -483,6 +486,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "nginx_site":"/etc/nginx/sites-available/makia-vps-manager",
         "makia_etc":"/etc/makia-vps-manager",
         "stunnel":"/etc/stunnel",
+        "outline":"/opt/outline",
         "ipsec_d":"/etc/ipsec.d",
         "ipsec_conf":"/etc/ipsec.conf",
         "ipsec_secrets":"/etc/ipsec.secrets",
@@ -495,7 +499,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     }
     components={}
 
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","outline","ipsec_d"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
