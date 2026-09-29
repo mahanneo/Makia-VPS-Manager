@@ -2475,10 +2475,10 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
       install,
       (r.installed?[
         '<section class="network-tool-card">',
-          '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('اگر Port اشغال باشد Makia خودکار Port آزاد انتخاب می‌کند.','If the requested port is busy, Makia automatically selects a free managed port.'))+'</small></div>',
+          '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('Port از ابتدا خودکار انتخاب می‌شود و در Retry فقط وقتی لازم باشد تغییر می‌کند.','The port is automatic from the start and changes on retry only when required.'))+'</small></div>',
           '<div class="wizard-form two">',
             '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.configured?r.host:'')+'" placeholder="proxy.example.com"></label>',
-            '<label>'+htmlEsc(tr('Port ترجیحی','Preferred port'))+'<input id="mtPort" type="number" min="1" max="65535" value="'+Number(r.port||443)+'"></label>',
+            '<label>'+htmlEsc(tr('Port پروکسی','Proxy port'))+'<input id="mtPortDisplay" type="text" dir="ltr" readonly value="'+htmlEsc(r.port?String(r.port):'AUTO')+'"><span class="muted">'+htmlEsc(tr('انتخاب Port کاملاً خودکار است؛ Makia از Portهای آزاد High-TCP استفاده می‌کند و 443 را پیش‌فرض نمی‌گیرد.','Port selection is fully automatic. Makia uses a free high TCP port and does not prefer 443.'))+'</span></label>',
           '</div>',
           '<div class="toolbar"><button class="primary" data-action="mtproxy-configure">'+htmlEsc(tr('ذخیره و راه‌اندازی','Save & start'))+'</button><button class="danger" data-action="mtproxy-rotate">'+htmlEsc(tr('تعویض Secret','Rotate secret'))+'</button></div>',
           '<div class="notice">'+htmlEsc(tr('تعویض Secret لینک قبلی کاربران را باطل می‌کند.','Rotating the secret invalidates previously issued proxy links.'))+'</div>',
@@ -2491,7 +2491,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
 
 async function configureTelegramProxy(rotate=false){
   const host=(document.getElementById('mtHost')?.value||'').trim();
-  const port=Number(document.getElementById('mtPort')?.value||443);
+  const port=0;
   if(!host){alert(tr('دامنه DNS پروکسی را وارد کن.','Enter the proxy DNS hostname.'));return}
   if(/^\[?[0-9a-f:.]+\]?$/i.test(host)){alert(tr('برای FakeTLS باید دامنه DNS وارد شود؛ IP خام قابل قبول نیست.','FakeTLS requires a DNS hostname; a raw IP is not accepted.'));return}
   if(rotate&&!confirm(tr('Secret قبلی باطل شود؟','Invalidate the previous secret?')))return;
