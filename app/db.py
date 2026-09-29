@@ -227,6 +227,33 @@ def init_db():
           FOREIGN KEY(account_id) REFERENCES client_accounts(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_client_access_bindings_account ON client_access_bindings(account_id,active);
+        CREATE TABLE IF NOT EXISTS client_agent_pairing_grants (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          device_id INTEGER NOT NULL,
+          token_hash TEXT UNIQUE NOT NULL,
+          expires_at INTEGER NOT NULL,
+          used_at INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(account_id) REFERENCES client_accounts(id) ON DELETE CASCADE,
+          FOREIGN KEY(device_id) REFERENCES client_devices(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_agent_pairing_grants_expiry ON client_agent_pairing_grants(expires_at,used_at);
+        CREATE TABLE IF NOT EXISTS client_agent_action_grants (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          device_id INTEGER NOT NULL,
+          binding_id INTEGER NOT NULL,
+          action TEXT NOT NULL,
+          token_hash TEXT UNIQUE NOT NULL,
+          expires_at INTEGER NOT NULL,
+          redeemed_at INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(account_id) REFERENCES client_accounts(id) ON DELETE CASCADE,
+          FOREIGN KEY(device_id) REFERENCES client_devices(id) ON DELETE CASCADE,
+          FOREIGN KEY(binding_id) REFERENCES client_access_bindings(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_agent_action_grants_expiry ON client_agent_action_grants(expires_at,redeemed_at);
 
         CREATE TABLE IF NOT EXISTS notification_events (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -240,6 +267,11 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_notification_events_created_at ON notification_events(created_at);
         ''')
         # Migration-safe columns for future profile growth.
+        _add_column(con, "client_devices", "public_key TEXT NOT NULL DEFAULT ''")
+        _add_column(con, "client_devices", "agent_paired_at TEXT")
+        _add_column(con, "client_devices", "agent_version TEXT NOT NULL DEFAULT ''")
+        _add_column(con, "client_devices", "agent_platform TEXT NOT NULL DEFAULT ''")
+
         _add_column(con, "account_profiles", "plan TEXT NOT NULL DEFAULT ''")
         _add_column(con, "account_profiles", "note TEXT NOT NULL DEFAULT ''")
         _add_column(con, "account_profiles", "expire_date TEXT")
