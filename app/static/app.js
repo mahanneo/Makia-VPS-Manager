@@ -2439,7 +2439,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال بررسی MTProxy…','Checking MTProxy…'))+'</b></div>';
   const r=await api('/api/network/mtproxy');
   if(renderToken!==window.__viewRenderToken||activeView!=='telegramproxy')return;
-  const health=Boolean(r.installed&&r.configured&&r.service_active&&r.listener);
+  const health=Boolean(r.installed&&r.configured&&r.service_active&&r.listener&&(!r.firewall_active||r.firewall_allowed));
   const install=r.installed?'':[
     '<section class="network-tool-card install-card">',
       '<div><span class="pro-kicker">ROOT INSTALL REQUIRED</span><h3>'+htmlEsc(tr('نصب MTProxy مدرن (mtg)','Install maintained Telegram MTProxy (mtg)'))+'</h3>',
@@ -2471,6 +2471,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
         '<div><span>Service</span><b>'+networkState(Boolean(r.service_active),'ACTIVE','DOWN')+'</b></div>',
         '<div><span>Listener</span><b>'+networkState(Boolean(r.listener),'TCP/'+htmlEsc(String(r.port||'')),'OFFLINE')+'</b></div>',
       '</section>',
+      (r.configured&&r.firewall_active&&!r.firewall_allowed?'<div class="notice">'+htmlEsc(tr('Proxy ذخیره و فعال است، اما UFW اجازه Port فعلی را نشان نمی‌دهد. تنظیم Proxy حذف نشده؛ Firewall را بررسی کن.','Proxy configuration is preserved and the service is active, but UFW does not show an allow rule for the current port. The proxy was not deleted; check the firewall rule.'))+'</div>':''),
       install,
       (r.installed?[
         '<section class="network-tool-card">',
@@ -2496,7 +2497,11 @@ async function configureTelegramProxy(rotate=false){
   if(rotate&&!confirm(tr('Secret قبلی باطل شود؟','Invalidate the previous secret?')))return;
   try{
     const r=await api('/api/network/mtproxy/configure',{method:'POST',body:JSON.stringify({host,port,rotate_secret:Boolean(rotate)})});
-    toast(r.port_adjusted?tr('Proxy ساخته شد؛ Port آزاد جایگزین شد.','Proxy saved; a free port was selected.'):tr('Proxy آماده است.','Proxy is ready.'));
+    if(r.firewall_warning){
+      alert(tr('Proxy ذخیره و سرویس فعال شد، اما Rule فایروال اعمال نشد:\n','Proxy was saved and the service is active, but the firewall rule could not be applied:\n')+r.firewall_warning);
+    }else{
+      toast(r.port_adjusted?tr('Proxy ساخته شد؛ Port آزاد جایگزین شد.','Proxy saved; a free port was selected.'):tr('Proxy آماده است.','Proxy is ready.'));
+    }
     await telegramProxyCenter();
   }catch(e){alert('MTProxy: '+e.message)}
 }
