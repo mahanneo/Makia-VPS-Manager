@@ -66,10 +66,13 @@ install -d -m 0755 "$ROOT"
 install -m 0755 "$bin" "$ROOT/mtg"
 "$ROOT/mtg" --version | grep -F "2.2.8" >/dev/null
 
-install -d -m 0700 /etc/makia-vps-manager
 if ! id makia-mtproxy >/dev/null 2>&1; then
   useradd --system --no-create-home --home /nonexistent --shell /usr/sbin/nologin makia-mtproxy
 fi
+# The service must be able to traverse the parent directory to read only its
+# root:makia-mtproxy 0640 config. 0710 grants group execute/traverse but not
+# directory listing/read access to other root-only Makia secrets.
+install -d -o root -g makia-mtproxy -m 0710 /etc/makia-vps-manager
 if [[ "$INSTALL_ONLY" -eq 0 ]] && { [[ ! -s "$CONFIG_FILE" ]] || [[ ! -s "$STATE_FILE" ]]; }; then
   if [[ -z "$HOST" ]]; then
     HOST="$(hostname -f 2>/dev/null || true)"
@@ -84,7 +87,7 @@ if [[ "$INSTALL_ONLY" -eq 0 ]] && { [[ ! -s "$CONFIG_FILE" ]] || [[ ! -s "$STATE
   selected="$(python3 - "$PORT" <<'PY'
 import socket,sys
 requested=int(sys.argv[1] or 0)
-candidates=[requested,443,8443,9443,10443,11443,12443,2053,2087,13010]
+candidates=[requested,8443,9443,10443,11443,12443,13010,18080,24443,30443,40443,50443]
 seen=[]
 for p in candidates:
     if not p or p in seen: continue
@@ -93,7 +96,16 @@ for p in candidates:
     try:s.bind(("0.0.0.0",p))
     except OSError:s.close();continue
     s.close();print(p);raise SystemExit
-raise SystemExit("No free TCP Telegram proxy port found")
+# Last resort: let the kernel select a free high TCP port.
+s=socket.socket()
+try:
+    s.bind(("0.0.0.0",0))
+    p=s.getsockname()[1]
+finally:
+    s.close()
+if p < 1024:
+    raise SystemExit("No free TCP Telegram proxy port found")
+print(p)
 PY
 )"
   secret="$("$ROOT/mtg" generate-secret --hex "$HOST")"
