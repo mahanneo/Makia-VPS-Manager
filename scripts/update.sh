@@ -223,6 +223,54 @@ tar -xzf "$TMP/source.tar.gz" -C "$TMP"
 SRC="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d -name 'Makia-VPS-Manager-*' | head -n1)"
 [[ -n "$SRC" ]] || { echo "Unable to locate extracted source."; exit 1; }
 
+install_verified_shell(){
+  local src="$1" dest="$2" mode="${3:-0755}" tmp src_sha tmp_sha dest_sha
+  [[ -f "$src" ]] || { echo "Missing shell source: $src" >&2; return 1; }
+  bash -n "$src" || { echo "Source shell syntax failed: $src" >&2; return 1; }
+  mkdir -p "$(dirname "$dest")"
+  tmp="$(mktemp "$(dirname "$dest")/.makia-script.XXXXXX")"
+  if ! install -m "$mode" "$src" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! bash -n "$tmp"; then
+    echo "Staged shell syntax failed: $src" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  src_sha="$(sha256sum "$src" | awk '{print $1}')"
+  tmp_sha="$(sha256sum "$tmp" | awk '{print $1}')"
+  if [[ "$src_sha" != "$tmp_sha" ]]; then
+    echo "Staged shell hash mismatch: $src -> $dest" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  chown root:root "$tmp"
+  chmod "$mode" "$tmp"
+  mv -f "$tmp" "$dest"
+  bash -n "$dest" || { echo "Installed shell syntax failed: $dest" >&2; return 1; }
+  dest_sha="$(sha256sum "$dest" | awk '{print $1}')"
+  [[ "$dest_sha" == "$src_sha" ]] || { echo "Installed shell hash mismatch: $dest" >&2; return 1; }
+}
+
+ensure_installed_shell_integrity(){
+  local src="$1" dest="$2" src_sha dest_sha
+  src_sha="$(sha256sum "$src" | awk '{print $1}')"
+  dest_sha="$(sha256sum "$dest" 2>/dev/null | awk '{print $1}')"
+  if ! bash -n "$dest" >/dev/null 2>&1 || [[ "$dest_sha" != "$src_sha" ]]; then
+    echo "Repairing installed shell artifact: $dest"
+    install_verified_shell "$src" "$dest"
+  fi
+  bash -n "$dest"
+  dest_sha="$(sha256sum "$dest" | awk '{print $1}')"
+  [[ "$dest_sha" == "$src_sha" ]] || { echo "Critical shell artifact still differs from source: $dest" >&2; return 1; }
+}
+
+echo "Preflighting critical release shell scripts..."
+for script in   "$SRC/scripts/update.sh"   "$SRC/scripts/doctor.sh"   "$SRC/scripts/uat-smoke.sh"   "$SRC/scripts/backup.sh"   "$SRC/scripts/install-mtproxy.sh"   "$SRC/scripts/install-dns.sh"   "$SRC/upgrade.sh"; do
+  bash -n "$script"
+done
+
 # Package managers must run from this root updater, before the hardened
 # makia-vps-manager service is stopped. Running APT from the web service is
 # incompatible with RestrictSUIDSGID/NoNewPrivileges because APT drops to
@@ -285,24 +333,24 @@ else
   echo "Preserving active Makia Nginx/Certbot configuration."
 fi
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
-install -m 0755 "$SRC/scripts/update.sh" /usr/local/sbin/makia-update
-install -m 0755 "$SRC/scripts/backup.sh" /usr/local/sbin/makia-backup
-install -m 0755 "$SRC/scripts/uninstall.sh" /usr/local/sbin/makia-uninstall
-install -m 0755 "$SRC/scripts/doctor.sh" /usr/local/sbin/makia-doctor
-install -m 0755 "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
+install_verified_shell "$SRC/scripts/update.sh" /usr/local/sbin/makia-update
+install_verified_shell "$SRC/scripts/backup.sh" /usr/local/sbin/makia-backup
+install_verified_shell "$SRC/scripts/uninstall.sh" /usr/local/sbin/makia-uninstall
+install_verified_shell "$SRC/scripts/doctor.sh" /usr/local/sbin/makia-doctor
+install_verified_shell "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 install -m 0755 "$SRC/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
 install -m 0755 "$SRC/scripts/run-migration-restore.py" /usr/local/sbin/makia-run-migration-restore
 install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
-install -m 0755 "$SRC/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
-install -m 0755 "$SRC/scripts/makia-vpn-tls-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
+install_verified_shell "$SRC/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync
+install_verified_shell "$SRC/scripts/makia-vpn-tls-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
 install -m 0755 "$SRC/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
-install -m 0755 "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
-install -m 0755 "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
-install -m 0755 "$SRC/scripts/install-outline.sh" /usr/local/sbin/makia-install-outline
-install -m 0755 "$SRC/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
-install -m 0755 "$SRC/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
-install -m 0755 "$SRC/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
+install_verified_shell "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
+install_verified_shell "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
+install_verified_shell "$SRC/scripts/install-outline.sh" /usr/local/sbin/makia-install-outline
+install_verified_shell "$SRC/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
+install_verified_shell "$SRC/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
+install_verified_shell "$SRC/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
 echo "Preparing optional Telegram/DNS tooling for panel-managed configuration..."
 if ! /usr/local/sbin/makia-install-mtproxy --install-only; then
   echo "WARNING: MTProxy tooling preparation failed; panel will show the root repair/install command."
@@ -410,7 +458,7 @@ if [[ "$DNS_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet unbound; then
 fi
 
 /usr/local/sbin/makia-install-wstunnel
-install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
+install_verified_shell "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
 
@@ -560,6 +608,11 @@ assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_ACCEPTED_SHA" "MTProxy a
 assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_ACCEPTED_SHA" "MTProxy accepted config" || exit 8
 assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_ACCEPTED_SHA" "DNS accepted state" || exit 8
 assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_ACCEPTED_SHA" "DNS accepted config" || exit 8
+
+echo "Verifying installed critical shell artifacts before host smoke..."
+ensure_installed_shell_integrity "$SRC/scripts/update.sh" /usr/local/sbin/makia-update
+ensure_installed_shell_integrity "$SRC/scripts/doctor.sh" /usr/local/sbin/makia-doctor
+ensure_installed_shell_integrity "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 
 echo "Running post-update Makia host smoke gate..."
 UAT_ENV=(env)

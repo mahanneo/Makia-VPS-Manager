@@ -517,3 +517,37 @@ def test_update_dns_precheck_is_complete_bash_block():
     assert 'DNS_PRECHECK="$(dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null || true)"' in update
     assert 'if [[ -n "$DNS_PRECHECK" ]]; then' in update
     assert "DNS_WAS_QUERY_OK=1" in update
+
+
+def test_updater_atomically_verifies_critical_shell_artifacts():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "def install_verified_shell" not in update
+    assert "install_verified_shell(){" in update
+    assert "ensure_installed_shell_integrity(){" in update
+    assert 'bash -n "$src"' in update
+    assert 'bash -n "$tmp"' in update
+    assert 'sha256sum "$src"' in update
+    assert 'sha256sum "$dest"' in update
+    assert 'mv -f "$tmp" "$dest"' in update
+    assert 'install_verified_shell "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke' in update
+    assert 'ensure_installed_shell_integrity "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke' in update
+
+
+def test_host_smoke_runs_only_after_runtime_script_integrity_gate():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    verify=update.index("Verifying installed critical shell artifacts before host smoke")
+    smoke=update.index("Running post-update Makia host smoke gate")
+    assert verify < smoke
+    section=update[verify:smoke]
+    assert "/usr/local/sbin/makia-update" in section
+    assert "/usr/local/sbin/makia-doctor" in section
+    assert "/usr/local/sbin/makia-uat-smoke" in section
+
+
+def test_source_shell_preflight_happens_before_runtime_mutation():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    preflight=update.index("Preflighting critical release shell scripts")
+    armed=update.index("ROLLBACK_ARMED=1")
+    assert preflight < armed
+    assert '"$SRC/scripts/uat-smoke.sh"' in update[preflight:armed]
+    assert '"$SRC/scripts/update.sh"' in update[preflight:armed]
