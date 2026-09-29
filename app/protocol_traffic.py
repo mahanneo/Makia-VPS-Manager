@@ -1,6 +1,6 @@
 import time
 from .db import list_protocol_clients, add_protocol_traffic, reset_protocol_traffic, advance_protocol_reset, set_protocol_client_enabled, set_protocol_traffic_totals, audit
-from . import protocol_ops, integration_ops
+from . import protocol_ops, integration_ops, client_policy
 
 POLL_SECONDS=30
 
@@ -98,6 +98,11 @@ def collect_once():
                 audit("system","protocol_client_auto_disable",client["name"],reason+"; "+str(result)[:180])
             except Exception as exc:
                 audit("system","protocol_client_auto_disable_failed",client["name"],str(exc)[:240])
+
+    try:
+        client_policy.enforce_managed_protocols(now)
+    except Exception as exc:
+        audit("system","client_policy_protocol_cycle_failed",detail=str(exc)[:300])
 
 def main():
     while True:
