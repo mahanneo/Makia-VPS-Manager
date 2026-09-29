@@ -129,7 +129,7 @@ def main():
             assert client_page.locator(".client-device-row").count()==1
             assert client_page.locator(".client-bottom-nav").count()==1
             client_page.screenshot(path='/tmp/makia-client-app-mobile.png',full_page=True)
-            me=client_page.request.get(BASE_URL+"/client-app/api/me")
+            me=client_page.context.request.get(BASE_URL+"/client-app/api/me")
             assert me.status==200
             me_json=me.json()
             assert me_json["account"]["username"]==CLIENT_USERNAME
