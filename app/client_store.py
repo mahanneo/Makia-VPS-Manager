@@ -3,8 +3,9 @@ import secrets
 import time
 from datetime import datetime, timezone
 
-from .db import connect
+from .db import connect, get_access_artifact
 from .security import hash_password, verify_password
+from . import access_ops
 
 
 def now_iso():
@@ -91,6 +92,20 @@ def init_client_db():
             );
             CREATE INDEX IF NOT EXISTS idx_client_protocol_bindings_account
               ON client_protocol_bindings(account_id,enabled,priority);
+
+            CREATE TABLE IF NOT EXISTS client_artifact_bindings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              account_id INTEGER NOT NULL,
+              artifact_id INTEGER NOT NULL UNIQUE,
+              label TEXT NOT NULL DEFAULT '',
+              priority INTEGER NOT NULL DEFAULT 100,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_client_artifact_bindings_account
+              ON client_artifact_bindings(account_id,enabled,priority);
             """
         )
 
@@ -404,6 +419,109 @@ def list_protocols(account_id, include_secrets=False):
         return out
 
 
+def bind_access_artifact(account_id,artifact_id,label="",priority=100,enabled=True):
+    ts=now_iso()
+    with connect() as con:
+        artifact=con.execute(
+            "SELECT id,kind,external_key,display_name,protocol FROM access_artifacts WHERE id=?",
+            (int(artifact_id),),
+        ).fetchone()
+        if not artifact:
+            raise ValueError("access artifact not found")
+        existing=con.execute(
+            "SELECT account_id FROM client_artifact_bindings WHERE artifact_id=?",
+            (int(artifact_id),),
+        ).fetchone()
+        if existing and int(existing["account_id"])!=int(account_id):
+            raise ValueError("access artifact is already bound to another client account")
+        con.execute(
+            """INSERT INTO client_artifact_bindings(account_id,artifact_id,label,priority,enabled,created_at)
+               VALUES(?,?,?,?,?,?)
+               ON CONFLICT(artifact_id) DO UPDATE SET
+                 label=excluded.label,priority=excluded.priority,enabled=excluded.enabled""",
+            (
+                int(account_id),int(artifact_id),str(label or "")[:120],
+                int(priority or 100),1 if enabled else 0,ts,
+            ),
+        )
+
+
+def list_artifact_bindings(account_id):
+    with connect() as con:
+        rows=con.execute(
+            """SELECT b.id AS binding_id,b.label,b.priority,b.enabled AS binding_enabled,
+                      a.id AS artifact_id,a.kind,a.external_key,a.display_name,a.protocol,a.native_filename
+               FROM client_artifact_bindings b
+               JOIN access_artifacts a ON a.id=b.artifact_id
+               WHERE b.account_id=? AND b.enabled=1
+               ORDER BY b.priority ASC,b.id ASC""",
+            (int(account_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def unbind_access_artifact(account_id,artifact_id):
+    with connect() as con:
+        con.execute(
+            "DELETE FROM client_artifact_bindings WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        )
+
+
+def artifact_delivery(account_id,artifact_id):
+    allowed=None
+    for item in list_artifact_bindings(account_id):
+        if int(item["artifact_id"])==int(artifact_id):
+            allowed=item
+            break
+    if not allowed:
+        raise ValueError("artifact binding not found")
+    artifact=get_access_artifact(artifact_id)
+    if not artifact:
+        raise ValueError("access artifact not found")
+    payload=access_ops.open_payload(artifact["payload_enc"])
+    primary=str(payload.get("share_text") or payload.get("primary_text") or "")
+    if not primary:
+        raise ValueError("artifact has no client-deliverable payload")
+    return {
+        "id":int(artifact_id),
+        "name":allowed.get("label") or artifact.get("display_name") or "",
+        "engine":artifact.get("kind") or "",
+        "protocol":artifact.get("protocol") or artifact.get("kind") or "",
+        "share_link":primary,
+        "native_filename":artifact.get("native_filename") or payload.get("native_filename") or "",
+        "source":"artifact",
+    }
+
+
+def client_access_list(account_id):
+    items=[]
+    for item in list_protocols(account_id,include_secrets=False):
+        item=dict(item)
+        item["source"]="protocol"
+        item["delivery_id"]=int(item["protocol_client_id"])
+        item["delivery_kind"]="protocol"
+        item["accounting_supported"]=True
+        items.append(item)
+    for item in list_artifact_bindings(account_id):
+        items.append({
+            "binding_id":item["binding_id"],
+            "label":item.get("label") or item.get("display_name") or "",
+            "name":item.get("display_name") or "",
+            "engine":item.get("kind") or "",
+            "protocol":item.get("protocol") or item.get("kind") or "",
+            "available":True,
+            "source":"artifact",
+            "delivery_id":int(item["artifact_id"]),
+            "delivery_kind":"artifact",
+            "native_filename":item.get("native_filename") or "",
+            "used_bytes":0,
+            "quota_bytes":0,
+            "accounting_supported":False,
+        })
+    return sorted(items,key=lambda x:(int(x.get("priority") or 100),str(x.get("label") or x.get("name") or "")))
+
+
 def protocol_delivery(account_id,protocol_client_id):
     rows=list_protocols(account_id,include_secrets=True)
     for item in rows:
@@ -434,7 +552,7 @@ def account_snapshot(account_id):
     account["available"]=ok
     account["status_reason"]=reason
     account["devices"]=list_devices(account_id)
-    account["protocols"]=list_protocols(account_id,include_secrets=False)
+    account["protocols"]=client_access_list(account_id)
     return account
 
 
@@ -558,4 +676,5 @@ def account_admin_snapshot(account_id):
     if not account:
         return None
     account["bindings_detail"]=list_bindings(account_id)
+    account["artifact_bindings_detail"]=list_artifact_bindings(account_id)
     return account
