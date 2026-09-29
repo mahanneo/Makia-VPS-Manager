@@ -50,6 +50,7 @@ def main():
     try:
         validate_guided_matrix(binary,root,cert_path,key_path)
         validate_inbound_builder_profiles(binary,root,cert_path,key_path)
+        validate_iran_preset_profiles(binary,root,cert_path,key_path)
         data=protocol_ops._ensure_xray_stats(
             protocol_ops._xray_default_config(Path("/tmp/makia-xray-config.json"))
         )
@@ -189,6 +190,59 @@ def main():
         protocol_ops._xray_materialize_tls=original_tls
 
 
+
+
+def validate_iran_preset_profiles(binary,root,cert_path,key_path):
+    """Core-validate every selectable Iran-network preset on the pinned Xray build."""
+    presets=protocol_ops.xray_inbound_builder_capabilities().get("presets") or []
+    checked=[]
+    for idx,preset in enumerate(presets):
+        protocol=preset["protocol"]
+        transport,security=protocol_ops._xray_builder_validate_combo(
+            protocol,preset["transport"],preset["security"]
+        )
+        sni=preset.get("sni") or ""
+        if sni=="$endpoint":
+            sni="test.example.com"
+        options={
+            "path":preset.get("path") or "/",
+            "service_name":str(preset.get("path") or "makia").lstrip("/"),
+            "server_name":sni,
+            "reality_dest":preset.get("reality_dest") or "",
+            "xhttp_mode":preset.get("xhttp_mode") or "auto",
+            "udp_idle_timeout":60,
+        }
+        stream,meta=protocol_ops._xray_builder_stream(
+            binary,protocol,transport,security,options
+        )
+        credential=protocol_ops._xray_builder_credential(protocol)
+        settings,_=protocol_ops._xray_builder_client(
+            protocol,f"preset-{idx}",credential,preset.get("flow") or "","aes-128-gcm"
+        )
+        inbound={
+            "tag":f"preset-{idx}",
+            "listen":"127.0.0.1",
+            "port":25000+idx,
+            "protocol":"hysteria" if protocol=="hysteria2" else protocol,
+            "settings":settings,
+            "streamSettings":stream,
+        }
+        data=protocol_ops._xray_default_config(root/f"preset-{idx}.json")
+        data["inbounds"]=[inbound]
+        target=protocol_ops._xray_temp_json_path(root/f"preset-{idx}.json","iran-preset")
+        target.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+        try:
+            protocol_ops._xray_test_config(binary,target)
+        except Exception as exc:
+            raise AssertionError(
+                f"Xray 26.3.27 rejected preset {preset['id']}: {exc}"
+            ) from exc
+        finally:
+            target.unlink(missing_ok=True)
+        if security=="reality":
+            assert meta.get("public_key") and meta.get("short_id")
+        checked.append(preset["id"])
+    print("Iran-network preset Core validation PASS: "+", ".join(checked))
 
 def validate_inbound_builder_profiles(binary,root,cert_path,key_path):
     """Validate the structured RC5 form fields against the pinned Xray Core."""
