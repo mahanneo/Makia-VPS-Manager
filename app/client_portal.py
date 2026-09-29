@@ -1,13 +1,17 @@
+import base64
 import hashlib
 import os
 import secrets
 import time
+import urllib.parse
 from datetime import date, datetime
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .config import BASE_DIR, COOKIE_NAME
 from .db import (
@@ -20,6 +24,7 @@ from .db import (
     record_login_failure,
 )
 from .security import hash_password, read_session, verify_password
+from . import access_ops
 
 router = APIRouter()
 templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
@@ -50,6 +55,27 @@ def _secure_cookie(request: Request) -> bool:
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _b64url_decode(value: str) -> bytes:
+    raw = str(value or "").strip()
+    return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+
+
+def _b64url_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _request_origin(request: Request) -> str:
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "https").split(",", 1)[0].strip()
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc).split(",", 1)[0].strip()
+    if proto not in {"http", "https"} or not host:
+        raise HTTPException(400, "unable to determine control-plane origin")
+    return f"{proto}://{host}"
+
+
+def _agent_signature_message(grant: str, nonce: str, timestamp: int) -> bytes:
+    return f"makia-agent-v1\n{grant}\n{nonce}\n{int(timestamp)}".encode("utf-8")
 
 
 def _session_ttl_seconds() -> int:
@@ -146,7 +172,8 @@ def _client_session(request: Request, touch: bool = True):
     with connect() as con:
         row = con.execute(
             """SELECT s.*,a.username,a.display_name,a.profile_username,a.active AS account_active,
-                      d.device_hash,d.label AS device_label,d.platform,d.active AS device_active
+                      d.device_hash,d.label AS device_label,d.platform,d.active AS device_active,
+                      d.public_key,d.agent_paired_at,d.agent_version,d.agent_platform
                FROM client_sessions s
                JOIN client_accounts a ON a.id=s.account_id
                JOIN client_devices d ON d.id=s.device_id
