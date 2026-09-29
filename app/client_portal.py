@@ -634,6 +634,10 @@ def client_agent_action_grant(binding_id: int, request: Request):
         ).fetchone()
         if not binding:
             raise HTTPException(404, "assigned access not found")
+        # Phase B enables only the Windows WireGuard adapter. Other protocols
+        # stay metadata-only until their native adapters pass independent UAT.
+        if str(binding["kind"] or "").lower() != "wireguard":
+            raise HTTPException(409, "native adapter for this access is not enabled yet")
         token = "mkg_" + secrets.token_urlsafe(36)
         now_ts = int(time.time())
         expires_at = now_ts + 60
