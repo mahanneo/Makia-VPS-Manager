@@ -372,3 +372,85 @@ def test_policy_suspended_binding_cannot_be_deleted_until_restored(client_db):
     client_store.unbind_protocol_client(account_id,protocol_id)
     client_store.delete_account(account_id)
     assert client_store.get_account(account_id) is None
+
+
+def test_openvpn_policy_ready_profile_tracks_usage_and_round_trips_expiry(client_db,monkeypatch):
+    from app import access_ops, client_policy, protocol_ops
+    account_id=client_store.create_account(
+        "ovpnpolicy01","ovpnpolicy-pass-001",expire_at=int(time.time())+3600,quota_bytes=5000
+    )
+    payload=access_ops.openvpn_payload("ovpn-one","client\nremote vpn.example 1194 udp\n")
+    artifact_id=db.upsert_access_artifact(
+        "openvpn","ovpn-one","ovpn-one","openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+
+    runtime={"total":1000}
+    state={"enabled":True}
+    monkeypatch.setattr(client_policy.system_ops,"online_sessions",lambda:[])
+    monkeypatch.setattr(protocol_ops,"_wireguard_peer_runtime",lambda:[])
+    monkeypatch.setattr(protocol_ops,"list_wireguard_peers",lambda:[])
+    monkeypatch.setattr(protocol_ops,"openvpn_management_status",lambda:{
+        "available":True,"clients":{"ovpn-one":{"name":"ovpn-one","total":runtime["total"],"real_addresses":["1.2.3.4"],"client_ids":["1"]}},"error":""
+    })
+    monkeypatch.setattr(protocol_ops,"openvpn_policy_status",lambda:{
+        "installed":True,"configured":True,"ready":True,"conflict":""
+    })
+    def set_enabled(name,enabled):
+        state["enabled"]=bool(enabled)
+        return {"name":name,"enabled":bool(enabled),"disconnected":not enabled}
+    monkeypatch.setattr(protocol_ops,"set_openvpn_client_policy_enabled",set_enabled)
+
+    # First sample establishes the post-bind baseline.
+    client_policy.enforce_host_artifacts()
+    assert client_store.account_usage_bytes(account_id)==0
+    runtime["total"]=1600
+    client_policy.enforce_host_artifacts()
+    assert client_store.account_usage_bytes(account_id)==600
+
+    client_store.update_account(account_id,expire_at=int(time.time())-1)
+    result=client_policy.enforce_host_artifacts()
+    assert result["suspended"]==1 and state["enabled"] is False
+    assert client_store.get_artifact_policy_state(account_id,artifact_id)["suspended_reason"]=="client_account_expiry"
+
+    client_store.update_account(account_id,expire_at=int(time.time())+3600)
+    result=client_policy.enforce_host_artifacts()
+    assert result["restored"]==1 and state["enabled"] is True
+    assert client_store.get_artifact_policy_state(account_id,artifact_id)["suspended_reason"]==""
+
+
+def test_openvpn_existing_server_is_never_bootstrapped_from_policy_poll(client_db,monkeypatch):
+    from app import access_ops, client_policy, protocol_ops
+    account_id=client_store.create_account(
+        "ovpnpolicy02","ovpnpolicy-pass-002",expire_at=int(time.time())-1
+    )
+    payload=access_ops.openvpn_payload("ovpn-two","client\nremote vpn.example 1194 udp\n")
+    artifact_id=db.upsert_access_artifact(
+        "openvpn","ovpn-two","ovpn-two","openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    monkeypatch.setattr(client_policy.system_ops,"online_sessions",lambda:[])
+    monkeypatch.setattr(protocol_ops,"_wireguard_peer_runtime",lambda:[])
+    monkeypatch.setattr(protocol_ops,"list_wireguard_peers",lambda:[])
+    monkeypatch.setattr(protocol_ops,"openvpn_management_status",lambda:{"available":False,"clients":{},"error":"not configured"})
+    monkeypatch.setattr(protocol_ops,"openvpn_policy_status",lambda:{
+        "installed":True,"configured":False,"ready":False,"conflict":""
+    })
+    monkeypatch.setattr(protocol_ops,"set_openvpn_client_policy_enabled",lambda *args:(_ for _ in ()).throw(AssertionError("must not mutate unconfigured OpenVPN")))
+    result=client_policy.enforce_host_artifacts()
+    assert result["suspended"]==0
+    assert client_store.get_artifact_policy_state(account_id,artifact_id)["suspended_reason"]==""
+
+
+def test_openvpn_policy_setup_requires_local_admin_contract():
+    admin=(ROOT/"app/client_admin.py").read_text(encoding="utf-8")
+    main=(ROOT/"app/main.py").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert '"/api/client-platform/openvpn-policy/enable"' in admin
+    assert "require_local_admin(request)" in admin
+    assert "enable_openvpn_policy_runtime()" in admin
+    assert "register_client_admin(app,require_user,require_mutation,require_local_admin" in main
+    assert "client-openvpn-policy-enable" in js
+    assert "Restart" in js
