@@ -5,6 +5,11 @@ const pageContext=document.querySelector('#pageContext');
 function htmlEsc(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function dataEnc(v){return encodeURIComponent(String(v??''))}
 function dataDec(v){try{return decodeURIComponent(String(v??''))}catch{return String(v??'')}}
+function formEl(id){const el=document.getElementById(id);if(!el)throw new Error('Form control '+id+' is not available');return el}
+function formValue(id,fallback=''){const el=document.getElementById(id);return el?el.value:fallback}
+function formChecked(id){const el=document.getElementById(id);return Boolean(el&&el.checked)}
+function setFieldValue(id,value){const el=document.getElementById(id);if(el)el.value=value}
+
 function isFa(){return String(window.MAKIA_LANG||'fa').toLowerCase()!=='en'}
 function tr(fa,en){return isFa()?fa:en}
 const MAKIA_UI_TEXT={
@@ -862,8 +867,8 @@ async function accounts(renderToken=window.__viewRenderToken){
   renderAccountRows();
 }
 function toggleSecret(id){const el=document.getElementById(id);if(el)el.type=el.type==='password'?'text':'password'}
-async function suggestUsername(){try{const d=await api('/api/accounts/new-defaults');cUser.value=d.username||''}catch(e){alert(e.message)}}
-function clearAccountForm(){if(document.getElementById('cUser'))cUser.value='';if(document.getElementById('cPass'))cPass.value='';if(document.getElementById('cPlan'))cPlan.value='';if(document.getElementById('cNote'))cNote.value='';if(document.getElementById('cLimit'))cLimit.value=1;if(document.getElementById('cDevice'))cDevice.value=1;setExpiryPreset('cExpire',30)}
+async function suggestUsername(){try{const d=await api('/api/accounts/new-defaults');setFieldValue('cUser',d.username||'')}catch(e){alert(e.message)}}
+function clearAccountForm(){setFieldValue('cUser','');setFieldValue('cPass','');setFieldValue('cPlan','');setFieldValue('cNote','');setFieldValue('cLimit',1);setFieldValue('cDevice',1);setExpiryPreset('cExpire',30)}
 function renderAccountRows(){
   const root=document.getElementById('accountRows');if(!root)return;
   const q=(document.getElementById('accountSearch')?.value||'').trim().toLowerCase();
@@ -888,7 +893,7 @@ async function bulkExtendPreset(days){const usernames=selectedAccounts();if(!use
 async function bulkAccounts(action){const usernames=selectedAccounts();if(!usernames.length){alert('حداقل یک کاربر را انتخاب کنید.');return}if(action==='disconnect'&&!confirm('اتصال کاربران انتخاب‌شده قطع شود؟'))return;try{const r=await api('/api/accounts/bulk',{method:'POST',body:JSON.stringify({usernames,action,days:0})});if(r.failed?.length)alert('برخی عملیات ناموفق بود: '+r.failed.length);await accounts()}catch(e){alert(e.message)}}
 async function bulkExtend(){const usernames=selectedAccounts();if(!usernames.length){alert('حداقل یک کاربر را انتخاب کنید.');return}const days=Number(prompt('چند روز به تاریخ فعلی اضافه شود؟','30'));if(!days||days<1)return;try{const r=await api('/api/accounts/bulk',{method:'POST',body:JSON.stringify({usernames,action:'extend',days})});if(r.failed?.length)alert('برخی عملیات ناموفق بود: '+r.failed.length);await accounts()}catch(e){alert(e.message)}}
 async function createAccount(){
-  const p={username:cUser.value.trim(),password:cPass.value||null,password_mode:'manual',expire_date:cExpire.value||null,plan:cPlan.value,note:cNote.value,connection_limit:Number(cLimit.value||1),device_limit:Number(cDevice.value||1),quota_mb:0,renewal_days:0};
+  const p={username:formValue('cUser','').trim(),password:formValue('cPass','')||null,password_mode:'manual',expire_date:formValue('cExpire','')||null,plan:formValue('cPlan',''),note:formValue('cNote',''),connection_limit:Number(formValue('cLimit','1')||1),device_limit:Number(formValue('cDevice','1')||1),quota_mb:0,renewal_days:0};
   if(!p.username){alert('نام کاربری را وارد کنید.');return}
   if(!p.password||p.password.length<4){alert('PIN/Password حداقل ۴ کاراکتر باشد.');return}
   try{const r=await api('/api/accounts',{method:'POST',body:JSON.stringify(p)});credentialModal({...p,password:r.password||p.password});accountCache=await api('/api/accounts')}catch(e){alert(e.message)}
@@ -927,7 +932,7 @@ function credentialModal(p){
   ].join('');
 }
 function closeModal(){modalRoot.innerHTML=''}
-async function saveAccount(u){try{const p={password:ePass.value||null,expire_date:eExpire.value||null,clear_expire:!eExpire.value,plan:ePlan.value,note:eNote.value,connection_limit:Number(eLimit.value||1),device_limit:Number(eDevice.value||1),quota_mb:0,renewal_days:0,enabled:eEnabled.value==='1'};await api('/api/accounts/'+encodeURIComponent(u),{method:'PUT',body:JSON.stringify(p)});const secret=p.password;closeModal();if(secret)toast('رمز کاربر تغییر کرد؛ Artifact تحویل هم بروزرسانی شد.');await currentView()}catch(e){alert(e.message)}}
+async function saveAccount(u){try{const expire=formValue('eExpire','');const p={password:formValue('ePass','')||null,expire_date:expire||null,clear_expire:!expire,plan:formValue('ePlan',''),note:formValue('eNote',''),connection_limit:Number(formValue('eLimit','1')||1),device_limit:Number(formValue('eDevice','1')||1),quota_mb:0,renewal_days:0,enabled:formValue('eEnabled','1')==='1'};await api('/api/accounts/'+encodeURIComponent(u),{method:'PUT',body:JSON.stringify(p)});const secret=p.password;closeModal();if(secret)toast('رمز کاربر تغییر کرد؛ Artifact تحویل هم بروزرسانی شد.');await currentView()}catch(e){alert(e.message)}}
 async function accountAction(u,a){if(a==='delete'&&!confirm('حذف کامل '+u+' ؟'))return;try{await api('/api/accounts/'+encodeURIComponent(u)+'/'+a,{method:'POST'});closeModal();await currentView()}catch(e){alert(e.message)}}
 function selectedAccounts(){return [...document.querySelectorAll('.account-check:checked')].map(x=>x.value)}
 function toggleAllAccounts(){const all=[...document.querySelectorAll('.account-check')],should=all.some(x=>!x.checked);all.forEach(x=>x.checked=should)}
@@ -1126,7 +1131,7 @@ async function protocols(renderToken=window.__viewRenderToken){
   ].join('');
 }
 function createXrayTunnel(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY TUNNEL</div><h3>Port Forward / Dokodemo</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Name<input id="tnName" value="tunnel01"></label><label>Listen port<input id="tnListen" type="number" min="1" max="65535" value="8443"></label><label>Target host<input id="tnHost" placeholder="10.0.0.2 or example.com"></label><label>Target port<input id="tnPort" type="number" min="1" max="65535" value="443"></label><label>Network<select id="tnNetwork"><option value="tcp,udp">TCP + UDP</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label></div><div class="notice">Config قبل از Apply توسط Xray validate می‌شود و در خطا Rollback انجام می‌شود.</div><div class="toolbar"><button class="primary" onclick="submitXrayTunnel()">Create Tunnel</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`}
-async function submitXrayTunnel(){const payload={name:tnName.value.trim(),listen_port:Number(tnListen.value),target_host:tnHost.value.trim(),target_port:Number(tnPort.value),network:tnNetwork.value};if(!payload.name||!payload.target_host||!payload.listen_port||!payload.target_port){alert('فیلدهای اصلی را کامل کنید.');return}try{const r=await api('/api/protocols/xray/tunnels',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Tunnel '+r.listen_port+' → '+r.target_host+':'+r.target_port+' created');await protocols()}catch(e){alert(e.message)}}
+async function submitXrayTunnel(){const payload={name:formValue('tnName','').trim(),listen_port:Number(formValue('tnListen','0')),target_host:formValue('tnHost','').trim(),target_port:Number(formValue('tnPort','0')),network:formValue('tnNetwork','tcp')};if(!payload.name||!payload.target_host||!payload.listen_port||!payload.target_port){alert('فیلدهای اصلی را کامل کنید.');return}try{const r=await api('/api/protocols/xray/tunnels',{method:'POST',body:JSON.stringify(payload)});closeModal();toast('Tunnel '+r.listen_port+' → '+r.target_host+':'+r.target_port+' created');await protocols()}catch(e){alert(e.message)}}
 
 
 function protocolModeDescription(id){
@@ -1239,19 +1244,22 @@ async function installProtocol(component){if(!confirm('Install '+component+' and
 function showXrayInbounds(){document.querySelector('.protocol-grid')?.nextElementSibling?.scrollIntoView({behavior:'smooth'})}
 function createXrayInbound(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY CLIENT + INBOUND</div><h3>ساخت دسترسی Xray</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid"><label>Protocol<select id="xiProtocol" onchange="syncXrayForm()"><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks</option><option value="hysteria2">Hysteria2</option><option value="http">HTTP Proxy</option><option value="socks">SOCKS5</option></select></label><label>Transport<select id="xiTransport" onchange="syncXrayForm()"><option value="tcp">RAW / TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option><option value="httpupgrade">HTTPUpgrade</option><option value="xhttp">XHTTP</option><option value="kcp">mKCP</option></select></label><label>Security<select id="xiSecurity" onchange="syncXrayForm()"><option value="none">None</option><option value="tls">TLS</option><option value="reality">REALITY</option></select></label><label>Port<input id="xiPort" type="number" min="1" max="65535" value="2087"></label><label>Client name<input id="xiName" value="client01"></label><label>Public domain / IP<input id="xiEndpoint" value="${window.PANEL_DOMAIN||location.hostname}"></label><label id="xiPathWrap">Path / Service<input id="xiPath" value="/makia"></label><label id="xiSniWrap">Domain / SNI<input id="xiSni" value="${window.PANEL_DOMAIN||''}" placeholder="vpn.example.com"></label><label id="xiRealityWrap">REALITY target<input id="xiRealityDest" value="www.cloudflare.com:443" placeholder="www.example.com:443"></label><label>Traffic quota (GB)<input id="xiQuota" type="number" min="0" step="1" value="50"><div class="password-tools quota-tools"><button class="soft" onclick="xiQuota.value=0">∞</button><button class="soft" onclick="xiQuota.value=10">10</button><button class="soft" onclick="xiQuota.value=20">20</button><button class="soft recommended" onclick="xiQuota.value=50">50</button><button class="soft" onclick="xiQuota.value=100">100</button><button class="soft" onclick="xiQuota.value=200">200</button><button class="soft" onclick="xiQuota.value=500">500</button></div><span class="muted">0 = Unlimited</span></label><label>Expiry days<input id="xiDays" type="number" min="0" max="3650" value="30"><div class="password-tools duration-tools"><button class="soft" onclick="xiDays.value=1">1D</button><button class="soft" onclick="xiDays.value=3">3D</button><button class="soft" onclick="xiDays.value=7">7D</button><button class="soft" onclick="xiDays.value=15">15D</button><button class="soft recommended" onclick="xiDays.value=30">30D</button><button class="soft" onclick="xiDays.value=60">60D</button><button class="soft" onclick="xiDays.value=90">90D</button><button class="soft" onclick="xiDays.value=0">∞</button></div></label><label>Traffic reset cycle<input id="xiResetDays" type="number" min="0" max="3650" value="30"><div class="password-tools"><button class="soft" onclick="xiResetDays.value=0">Never</button><button class="soft" onclick="xiResetDays.value=7">7D</button><button class="soft recommended" onclick="xiResetDays.value=30">30D</button><button class="soft" onclick="xiResetDays.value=60">60D</button><button class="soft" onclick="xiResetDays.value=90">90D</button></div><span class="muted">حجم مصرفی در شروع هر دوره صفر می‌شود.</span></label><label>IP / Device limit<input id="xiIpLimit" type="number" min="1" max="50" value="1"><div class="password-tools"><button class="soft recommended" onclick="xiIpLimit.value=1">1</button><button class="soft" onclick="xiIpLimit.value=2">2</button><button class="soft" onclick="xiIpLimit.value=3">3</button><button class="soft" onclick="xiIpLimit.value=5">5</button><button class="soft" onclick="xiIpLimit.value=10">10</button></div><span class="muted">با Online-IP API هسته Xray مانیتور و توسط Policy Worker enforce می‌شود؛ روی Coreهای فاقد این API فقط وضعیت Unavailable نشان داده می‌شود.</span></label></div><div id="xiCompatNote" class="notice"></div><div class="toolbar"><button class="primary" onclick="submitXrayInbound()">Create, Validate & Restart</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`;syncXrayForm()}
 function syncXrayForm(){
-  const p=xiProtocol.value;
-  if(p==='hysteria2'){xiTransport.value='tcp';xiSecurity.value='tls';xiTransport.disabled=true;xiSecurity.disabled=true}
-  else if(['http','socks'].includes(p)){xiTransport.value='tcp';xiSecurity.value='none';xiTransport.disabled=true;xiSecurity.disabled=true}
-  else{xiTransport.disabled=false;xiSecurity.disabled=false}
-  const t=p==='hysteria2'?'hysteria':xiTransport.value,s=p==='hysteria2'?'tls':xiSecurity.value;
+  const protocolEl=formEl('xiProtocol'),transportEl=formEl('xiTransport'),securityEl=formEl('xiSecurity');
+  const pathWrap=formEl('xiPathWrap'),sniWrap=formEl('xiSniWrap'),realityWrap=formEl('xiRealityWrap');
+  const quotaEl=formEl('xiQuota'),resetEl=formEl('xiResetDays'),noteEl=formEl('xiCompatNote');
+  const p=protocolEl.value;
+  if(p==='hysteria2'){transportEl.value='tcp';securityEl.value='tls';transportEl.disabled=true;securityEl.disabled=true}
+  else if(['http','socks'].includes(p)){transportEl.value='tcp';securityEl.value='none';transportEl.disabled=true;securityEl.disabled=true}
+  else{transportEl.disabled=false;securityEl.disabled=false}
+  const t=p==='hysteria2'?'hysteria':transportEl.value,s=p==='hysteria2'?'tls':securityEl.value;
   const pathNeeded=['ws','grpc','httpupgrade','xhttp'].includes(t)&&!['http','socks'].includes(p);
-  xiPathWrap.style.display=pathNeeded?'block':'none';
-  xiSniWrap.style.display=(s==='tls'||s==='reality')&&!['http','socks'].includes(p)?'block':'none';
-  xiRealityWrap.style.display=s==='reality'?'block':'none';
+  pathWrap.style.display=pathNeeded?'block':'none';
+  sniWrap.style.display=(s==='tls'||s==='reality')&&!['http','socks'].includes(p)?'block':'none';
+  realityWrap.style.display=s==='reality'?'block':'none';
   const accountingLimited=['shadowsocks','http','socks'].includes(p);
-  xiQuota.disabled=accountingLimited;
-  xiResetDays.disabled=accountingLimited;
-  if(accountingLimited){xiQuota.value=0;xiResetDays.value=0}
+  quotaEl.disabled=accountingLimited;
+  resetEl.disabled=accountingLimited;
+  if(accountingLimited){quotaEl.value=0;resetEl.value=0}
   let note='';
   if(p==='hysteria2') note='Hysteria2 با TLS اجرا می‌شود و Certificate دامنه باید از Domain & TLS صادر شده باشد.';
   else if(p==='http') note='HTTP Proxy با Username/Password واقعی ساخته می‌شود. Per-client Xray traffic counter برای این نوع در این نسخه قابل اتکا نیست، بنابراین Quota غیرفعال است.';
@@ -1264,9 +1272,9 @@ function syncXrayForm(){
   else if(s==='tls') note='TLS نیاز به Certificate معتبر همان SNI در Settings → Domain & TLS دارد.';
   else if(s==='reality') note='Makia کلید X25519 و Short ID را سمت سرور تولید می‌کند.';
   else note='Config قبل از Apply توسط خود Xray validate می‌شود و در Failure نسخه قبلی Rollback می‌شود.';
-  xiCompatNote.textContent=note;
+  noteEl.textContent=note;
 }
-async function submitXrayInbound(){const payload={protocol:xiProtocol.value,transport:xiTransport.value,security:xiSecurity.value,port:Number(xiPort.value),name:xiName.value.trim(),endpoint:xiEndpoint.value.trim(),path_value:xiPath.value||'/',server_name:xiSni.value.trim(),reality_dest:xiRealityDest.value.trim(),quota_gb:Number(xiQuota.value||0),expire_days:Number(xiDays.value||0),ip_limit:Number(xiIpLimit.value||1),reset_days:Number(xiResetDays.value||0)};if(!payload.name||!payload.endpoint||!payload.port){alert('فیلدهای اصلی را کامل کنید.');return}try{const r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify(payload)});xrayCredentialModal(r)}catch(e){alert(e.message)}}
+async function submitXrayInbound(){const payload={protocol:formValue('xiProtocol','vless'),transport:formValue('xiTransport','tcp'),security:formValue('xiSecurity','none'),port:Number(formValue('xiPort','0')),name:formValue('xiName','').trim(),endpoint:formValue('xiEndpoint','').trim(),path_value:formValue('xiPath','/')||'/',server_name:formValue('xiSni','').trim(),reality_dest:formValue('xiRealityDest','').trim(),quota_gb:Number(formValue('xiQuota','0')||0),expire_days:Number(formValue('xiDays','0')||0),ip_limit:Number(formValue('xiIpLimit','1')||1),reset_days:Number(formValue('xiResetDays','0')||0)};if(!payload.name||!payload.endpoint||!payload.port){alert('فیلدهای اصلی را کامل کنید.');return}try{const r=await api('/api/protocols/xray/quick-inbound',{method:'POST',body:JSON.stringify(payload)});xrayCredentialModal(r)}catch(e){alert(e.message)}}
 function xrayCredentialModal(r){
   window.__lastXrayShare=r.share_link||'';
   modalRoot.innerHTML=[
@@ -1557,8 +1565,8 @@ function editProtocolClient(id){
 }
 async function saveProtocolClient(id){try{await api('/api/protocol-clients/'+id,{method:'PUT',body:JSON.stringify({quota_gb:Number(pcQuota.value||0),expire_days:Number(pcDays.value||0),ip_limit:Number(pcIp.value||1),reset_days:Number(pcReset.value||0),enabled:pcEnabled.value==='1'})});closeModal();toast('Policy updated');await currentView()}catch(e){alert(e.message)}}
 async function resetProtocolTraffic(id){if(!confirm('Traffic counter این Client صفر شود؟'))return;try{await api('/api/protocol-clients/'+id+'/reset-traffic',{method:'POST'});toast('Traffic reset');await currentView()}catch(e){alert(e.message)}}
-async function openXrayAdvanced(){try{const r=await api('/api/protocols/xray/config');modalRoot.innerHTML=`<div class="modal-backdrop"><div class="modal config-modal"><div class="modal-head"><div><div class="eyebrow">ADVANCED XRAY</div><h3>Validated JSON Configuration</h3><div class="muted">${r.path}</div></div><button class="close-btn" onclick="closeModal()">×</button></div><textarea id="xrayAdvancedText" class="config-output" spellcheck="false"></textarea><div class="notice">برای Routing، Outbounds، Fallbacks، TUN، HTTP/SOCKS و تنظیمات پیشرفته. قبل از Apply با خود Xray تست می‌شود، Backup گرفته می‌شود و در Failure رول‌بک انجام می‌شود.</div><div class="toolbar"><button class="ghost" onclick="validateXrayAdvanced()">Validate</button><button class="primary" onclick="applyXrayAdvanced()">Validate & Apply</button><button class="ghost" onclick="downloadText('xray-config.json',xrayAdvancedText.value)">Export JSON</button></div></div></div>`;xrayAdvancedText.value=JSON.stringify(r.config,null,2)}catch(e){alert(e.message)}}
-function parseAdvancedXray(){try{return JSON.parse(xrayAdvancedText.value)}catch(e){throw new Error('JSON نامعتبر: '+e.message)}}
+async function openXrayAdvanced(){try{const r=await api('/api/protocols/xray/config');modalRoot.innerHTML=`<div class="modal-backdrop"><div class="modal config-modal"><div class="modal-head"><div><div class="eyebrow">ADVANCED XRAY</div><h3>Validated JSON Configuration</h3><div class="muted">${r.path}</div></div><button class="close-btn" onclick="closeModal()">×</button></div><textarea id="xrayAdvancedText" class="config-output" spellcheck="false"></textarea><div class="notice">برای Routing، Outbounds، Fallbacks، TUN، HTTP/SOCKS و تنظیمات پیشرفته. قبل از Apply با خود Xray تست می‌شود، Backup گرفته می‌شود و در Failure رول‌بک انجام می‌شود.</div><div class="toolbar"><button class="ghost" onclick="validateXrayAdvanced()">Validate</button><button class="primary" onclick="applyXrayAdvanced()">Validate & Apply</button><button class="ghost" onclick="downloadText('xray-config.json',formValue('xrayAdvancedText',''))">Export JSON</button></div></div></div>`;setFieldValue('xrayAdvancedText',JSON.stringify(r.config,null,2))}catch(e){alert(e.message)}}
+function parseAdvancedXray(){try{return JSON.parse(formValue('xrayAdvancedText',''))}catch(e){throw new Error('JSON نامعتبر: '+e.message)}}
 async function validateXrayAdvanced(){try{const config=parseAdvancedXray();await api('/api/protocols/xray/config/validate',{method:'POST',body:JSON.stringify({config})});toast('Xray config valid ✓')}catch(e){alert(e.message)}}
 async function applyXrayAdvanced(){if(!confirm('Config اعتبارسنجی، Backup و سپس روی Xray اعمال شود؟'))return;try{const config=parseAdvancedXray();const r=await api('/api/protocols/xray/config',{method:'PUT',body:JSON.stringify({config})});toast('Xray config applied');closeModal();await protocols()}catch(e){alert(e.message)}}
 async function openXrayDiagnostics(){
@@ -2035,7 +2043,7 @@ async function settings(renderToken=window.__viewRenderToken){
   content.innerHTML='<div class="sx-page"><section class="sx-page-head"><div><h1>تنظیمات</h1><p>تنظیمات پنل، امنیت، پروتکل‌ها و Recovery</p></div><div class="sx-head-actions"><span class="sx-state-pill"><i></i>v'+htmlEsc(window.MAKIA_VERSION||'')+'</span></div></section><div class="settings-tabs-sx">'+nav+'</div><div class="settings-content-v2">'+body+'</div></div>';
 }
 
-async function saveGeneral(){try{const r=await api('/api/settings/general',{method:'PUT',body:JSON.stringify({language:generalLang.value,panel_domain:generalDomain.value.trim(),theme:generalTheme.value,density:generalDensity.value})});window.PANEL_DOMAIN=r.panel_domain||'';toast('Settings saved');if(r.language!==window.MAKIA_LANG||r.theme!==window.MAKIA_THEME||r.density!==window.MAKIA_DENSITY){setTimeout(()=>location.reload(),450);return}await settings()}catch(e){alert(e.message)}}
+async function saveGeneral(){try{const r=await api('/api/settings/general',{method:'PUT',body:JSON.stringify({language:formValue('generalLang','fa'),panel_domain:formValue('generalDomain','').trim(),theme:formValue('generalTheme','dark'),density:formValue('generalDensity','comfortable')})});window.PANEL_DOMAIN=r.panel_domain||'';toast('Settings saved');if(r.language!==window.MAKIA_LANG||r.theme!==window.MAKIA_THEME||r.density!==window.MAKIA_DENSITY){setTimeout(()=>location.reload(),450);return}await settings()}catch(e){alert(e.message)}}
 function readSettingValue(id,fallback){
   const el=document.getElementById(id);if(!el)return fallback;
   if(el.type==='number')return Number(el.value);
@@ -2093,8 +2101,8 @@ async function issueSettingsCertificate(){
   if(!confirm('برای '+domain+' گواهی Let\'s Encrypt صادر شود؟'))return;
   try{const r=await api('/api/settings/domain/certificate',{method:'POST',body:JSON.stringify({domain,email})});toast(r.certificate?'HTTPS enabled':'Certificate command completed');setTimeout(()=>location.href='https://'+domain,900)}catch(e){alert(e.message)}
 }
-async function applyDomain(){const domain=generalDomain.value.trim();if(!domain){alert('دامنه را وارد کنید.');return}if(!confirm('Nginx server_name روی '+domain+' تنظیم شود؟'))return;try{await api('/api/settings/domain/apply',{method:'POST',body:JSON.stringify({domain})});window.PANEL_DOMAIN=domain;toast('Domain applied to Nginx');await settings()}catch(e){alert(e.message)}}
-async function issueCertificate(){const domain=generalDomain.value.trim(),email=tlsEmail.value.trim();if(!domain||!email){alert('دامنه و ایمیل لازم است.');return}if(!confirm('برای '+domain+' گواهی Let\'s Encrypt صادر شود؟'))return;try{const r=await api('/api/settings/domain/certificate',{method:'POST',body:JSON.stringify({domain,email})});toast(r.certificate?'HTTPS enabled':'Certificate command completed');setTimeout(()=>location.href='https://'+domain,1000)}catch(e){alert(e.message)}}
+async function applyDomain(){const domain=formValue('generalDomain','').trim();if(!domain){alert('دامنه را وارد کنید.');return}if(!confirm('Nginx server_name روی '+domain+' تنظیم شود؟'))return;try{await api('/api/settings/domain/apply',{method:'POST',body:JSON.stringify({domain})});window.PANEL_DOMAIN=domain;toast('Domain applied to Nginx');await settings()}catch(e){alert(e.message)}}
+async function issueCertificate(){const domain=formValue('generalDomain','').trim(),email=formValue('tlsEmail','').trim();if(!domain||!email){alert('دامنه و ایمیل لازم است.');return}if(!confirm('برای '+domain+' گواهی Let\'s Encrypt صادر شود؟'))return;try{const r=await api('/api/settings/domain/certificate',{method:'POST',body:JSON.stringify({domain,email})});toast(r.certificate?'HTTPS enabled':'Certificate command completed');setTimeout(()=>location.href='https://'+domain,1000)}catch(e){alert(e.message)}}
 function createApiToken(){modalRoot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><div><div class="eyebrow">SCOPED AUTOMATION ACCESS</div><h3>New API Token</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="form-grid two"><label>Token name<input id="apiTokenName" value="automation" maxlength="80"></label></div><div class="scope-grid"><label><input type="checkbox" class="api-scope" value="status:read" checked> <span><b>Status</b><small>Server health and metrics</small></span></label><label><input type="checkbox" class="api-scope" value="accounts:read"> <span><b>Accounts</b><small>SSH account read access</small></span></label><label><input type="checkbox" class="api-scope" value="protocols:read"> <span><b>Protocol Clients</b><small>Quota, expiry and protocol status</small></span></label><label><input type="checkbox" class="api-scope" value="nodes:read"> <span><b>Nodes</b><small>Multi-node status read access</small></span></label></div><div class="notice">حداقل یک Scope لازم است. Token را فقط روی HTTPS استفاده کن؛ مقدار کامل فقط یک‌بار نمایش داده می‌شود.</div><div class="toolbar"><button class="primary" onclick="submitApiToken()">Create Token</button><button class="ghost" onclick="closeModal()">Cancel</button></div></div></div>`}
 async function submitApiToken(){
   const name=document.getElementById('apiTokenName').value.trim(),scopes=[...document.querySelectorAll('.api-scope:checked')].map(x=>x.value);
@@ -2107,9 +2115,9 @@ async function submitApiToken(){
 }
 async function revokeApiToken(id){if(!confirm('این API Token لغو شود؟'))return;try{await api('/api/admin/tokens/'+id+'/revoke',{method:'POST'});await settings()}catch(e){alert(e.message)}}
 async function setup2FA(){try{const r=await api('/api/admin/2fa/setup',{method:'POST'});modalRoot.innerHTML=`<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h3>Enable 2FA</h3><button class="close-btn" onclick="closeModal()">×</button></div><div style="text-align:center"><img src="${r.qr}" alt="2FA QR" style="width:220px;max-width:80%;background:white;padding:10px;border-radius:16px"></div><div class="notice">QR را با Google Authenticator / Microsoft Authenticator / 1Password اسکن کنید. اگر اسکن نشد، Secret را دستی وارد کنید.</div><div class="quick-card"><b style="word-break:break-all">${r.secret}</b><span>Manual secret</span></div><div class="form-grid two" style="margin-top:12px"><label>کد ۶ رقمی<input id="twoCode" inputmode="numeric" maxlength="6"></label></div><div class="toolbar" style="margin-top:14px"><button class="primary" onclick="enable2FA()">Verify & Enable</button><button class="ghost" onclick="copyText('${r.secret}')">Copy secret</button></div></div></div>`}catch(e){alert(e.message)}}
-async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',body:JSON.stringify({code:twoCode.value})});closeModal();alert('2FA فعال شد.');await settings()}catch(e){alert(e.message)}}
+async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',body:JSON.stringify({code:formValue('twoCode','')})});closeModal();alert('2FA فعال شد.');await settings()}catch(e){alert(e.message)}}
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
-async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:oldP.value,new_password:newP.value})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
+async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:formValue('oldP',''),new_password:formValue('newP','')})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
 const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
@@ -2404,14 +2412,14 @@ function syncPlanPolicyFields(){
   document.querySelectorAll('[data-plan-policy]').forEach(el=>{el.style.display=visible[el.dataset.planPolicy]?'':'none'});
 }
 async function saveServicePlan(id){
-  let extra={};try{extra=JSON.parse(document.getElementById('plExtra').value||'{}')}catch(e){alert('JSON: '+e.message);return}
-  const kind=document.getElementById('plKind').value;
+  let extra={};try{extra=JSON.parse(formValue('plExtra','{}')||'{}')}catch(e){alert('JSON: '+e.message);return}
+  const kind=formValue('plKind','');
   const config={...extra};
-  if(!['wireguard','openvpn'].includes(kind))config.expire_days=Number(plDays.value||0);
-  if(['xray','outline'].includes(kind))config.quota_gb=Number(plQuota.value||0)
-  if(kind==='ssh')config.device_limit=Number(plLimit.value||1);
-  if(kind==='xray'){config.ip_limit=Number(plLimit.value||1);config.reset_days=Number(plReset.value||0)}
-  const payload={name:plName.value.trim(),protocol_kind:kind,config,price_label:plPrice.value.trim(),active:plActive.checked};
+  if(!['wireguard','openvpn'].includes(kind))config.expire_days=Number(formValue('plDays','0')||0);
+  if(['xray','outline'].includes(kind))config.quota_gb=Number(formValue('plQuota','0')||0);
+  if(kind==='ssh')config.device_limit=Number(formValue('plLimit','1')||1);
+  if(kind==='xray'){config.ip_limit=Number(formValue('plLimit','1')||1);config.reset_days=Number(formValue('plReset','0')||0)}
+  const payload={name:formValue('plName','').trim(),protocol_kind:kind,config,price_label:formValue('plPrice','').trim(),active:formChecked('plActive')};
   if(!payload.name){alert(tr('نام پلن لازم است','Plan name is required'));return}
   try{
     await api('/api/plans'+(id?'/'+id:''),{method:id?'PUT':'POST',body:JSON.stringify(payload)});
@@ -2434,12 +2442,12 @@ async function useServicePlan(id){
 }
 async function createFromPlan(id){
   const p=planCache.find(x=>Number(x.id)===Number(id));if(!p)return;
-  const cfg=p.config||{},name=qpName.value.trim(),endpoint=qpEndpoint.value.trim(),port=Number(qpPort.value||cfg.port||0),kind=p.protocol_kind;
+  const cfg=p.config||{},name=formValue('qpName','').trim(),endpoint=formValue('qpEndpoint','').trim(),port=Number(formValue('qpPort',String(cfg.port||0))||cfg.port||0),kind=p.protocol_kind;
   if(!name||!endpoint){alert(tr('نام و Endpoint لازم است','Name and endpoint are required'));return}
   try{
     let result=null,key=name;
     if(kind==='ssh'){
-      const secret=qpPassword.value||(await api('/api/accounts/generate-secret?mode=pin6')).secret;
+      const secret=formValue('qpPassword','')||(await api('/api/accounts/generate-secret?mode=pin6')).secret;
       const exp=Number(cfg.expire_days||0)?new Date(Date.now()+Number(cfg.expire_days)*86400000).toISOString().slice(0,10):null;
       result=await api('/api/accounts',{method:'POST',body:JSON.stringify({username:name,endpoint,endpoint_mode:'auto',password:secret,password_mode:'manual',expire_date:exp,plan:p.name,note:'',connection_limit:Number(cfg.connection_limit||1),device_limit:Number(cfg.device_limit||1),quota_mb:Number(cfg.quota_gb||0)*1024,renewal_days:Number(cfg.expire_days||0)})});
       result.password=result.password||secret;
@@ -2620,16 +2628,22 @@ function configureBackupSchedule(){
   }).catch(e=>alert(e.message))
 }
 async function saveBackupSchedule(){
-  const payload={enabled:bsEnabled.checked,frequency_hours:Number(bsFreq.value||24),keep_local:Number(bsKeep.value||7),password:bsPass.value,remote_enabled:bsRemote.checked,remote_host:bsHost.value.trim(),remote_user:bsUser.value.trim(),remote_path:bsPath.value.trim(),remote_port:Number(bsPort.value||22),remote_key_path:bsKey.value.trim()};
+  const payload={
+    enabled:formChecked('bsEnabled'),frequency_hours:Number(formValue('bsFreq','24')||24),
+    keep_local:Number(formValue('bsKeep','7')||7),password:formValue('bsPass',''),
+    remote_enabled:formChecked('bsRemote'),remote_host:formValue('bsHost','').trim(),
+    remote_user:formValue('bsUser','').trim(),remote_path:formValue('bsPath','').trim(),
+    remote_port:Number(formValue('bsPort','22')||22),remote_key_path:formValue('bsKey','').trim()
+  };
   try{await api('/api/backups/schedule',{method:'PUT',body:JSON.stringify(payload)});closeModal();await operationsCenter()}catch(e){alert(e.message)}
 }
 async function runScheduledBackupNow(){if(!confirm(tr('Full Migration Backup رمزدار الان ساخته شود؟','Create an encrypted Full Migration Backup now?')))return;try{const r=await api('/api/backups/schedule/run',{method:'POST'});toast('Backup: '+r.name);await operationsCenter()}catch(e){alert(e.message)}}
 function configureCloudflare(){api('/api/integrations/cloudflare').then(s=>{modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">CLOUDFLARE DNS</div><h3>'+htmlEsc(tr('اتصال Cloudflare','Cloudflare integration'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>API Token<input id="cfToken" type="password" placeholder="'+(s.configured?tr('خالی = بدون تغییر','blank = unchanged'):'')+'"></label><label>Zone ID<input id="cfZone" dir="ltr" value="'+htmlEsc(s.zone_id||'')+'"></label><label>A Record<input id="cfName" dir="ltr" value="'+htmlEsc(s.record_name||window.PANEL_DOMAIN||'')+'"></label><label>TTL<input id="cfTtl" type="number" min="60" value="'+Number(s.ttl||60)+'"></label></div><div class="wizard-note"><b>DNS only</b><span>'+htmlEsc(tr('Makia برای Endpointهای VPN/SSH رکورد را عمداً Proxy نمی‌کند.','Makia intentionally keeps VPN/SSH endpoints DNS-only, not proxied.'))+'</span></div><div class="wizard-footer"><button class="primary" onclick="saveCloudflare()">'+htmlEsc(tr('ذخیره','Save'))+'</button></div></div></div>'}).catch(e=>alert(e.message))}
-async function saveCloudflare(){try{await api('/api/integrations/cloudflare',{method:'PUT',body:JSON.stringify({api_token:cfToken.value,zone_id:cfZone.value,record_name:cfName.value,ttl:Number(cfTtl.value||60)})});closeModal();await operationsCenter()}catch(e){alert(e.message)}}
+async function saveCloudflare(){try{await api('/api/integrations/cloudflare',{method:'PUT',body:JSON.stringify({api_token:formValue('cfToken',''),zone_id:formValue('cfZone',''),record_name:formValue('cfName',''),ttl:Number(formValue('cfTtl','60')||60)})});closeModal();await operationsCenter()}catch(e){alert(e.message)}}
 async function testCloudflare(){try{const r=await api('/api/integrations/cloudflare/test',{method:'POST'});alert(JSON.stringify(r,null,2))}catch(e){alert(e.message)}}
 async function cloudflareCutover(){const ip=prompt(tr('IP جدید VPS','New VPS IPv4'),'');if(!ip)return;if(!confirm(tr('A Record به IP جدید تغییر کند؟','Change A record to the new IP?')))return;try{const r=await api('/api/integrations/cloudflare/cutover',{method:'POST',body:JSON.stringify({ipv4:ip})});alert((r.propagated?'DNS propagated':'DNS updated; propagation pending')+'\n'+JSON.stringify(r.record,null,2))}catch(e){alert(e.message)}}
 function configureTelegram(){api('/api/integrations/telegram').then(s=>{modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">TELEGRAM ADMIN</div><h3>'+htmlEsc(tr('Telegram Bot و هشدارها','Telegram bot & alerts'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>Bot Token<input id="tgToken" type="password" placeholder="'+(s.configured?tr('خالی = بدون تغییر','blank = unchanged'):'')+'"></label><label>Chat ID<input id="tgChat" dir="ltr" value="'+htmlEsc(s.chat_id||'')+'"></label><label class="check-row"><input id="tgWebhook" type="checkbox" '+(s.webhook_enabled?'checked':'')+'> '+htmlEsc(tr('فعال‌سازی webhook /status /expiry /backup (فقط وضعیت)','Enable webhook commands /status /expiry /backup (status only)'))+'</label></div><div class="wizard-footer"><button class="primary" onclick="saveTelegram()">'+htmlEsc(tr('ذخیره','Save'))+'</button></div></div></div>'}).catch(e=>alert(e.message))}
-async function saveTelegram(){try{await api('/api/integrations/telegram',{method:'PUT',body:JSON.stringify({bot_token:tgToken.value,chat_id:tgChat.value,enable_webhook:tgWebhook.checked})});closeModal();await operationsCenter()}catch(e){alert(e.message)}}
+async function saveTelegram(){try{await api('/api/integrations/telegram',{method:'PUT',body:JSON.stringify({bot_token:formValue('tgToken',''),chat_id:formValue('tgChat',''),enable_webhook:formChecked('tgWebhook')})});closeModal();await operationsCenter()}catch(e){alert(e.message)}}
 async function testTelegram(){try{await api('/api/integrations/telegram/test',{method:'POST'});toast(tr('پیام تست ارسال شد','Test message sent'))}catch(e){alert(e.message)}}
 async function openDRWizard(){
   try{
