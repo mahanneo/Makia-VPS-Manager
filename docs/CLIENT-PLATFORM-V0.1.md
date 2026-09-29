@@ -48,8 +48,9 @@ A client account cannot authenticate to admin routes.
 - `client_devices`
 - `client_sessions`
 - `client_protocol_bindings`
+- `client_artifact_bindings`
 
-Existing protocol data remains authoritative. Client bindings reference an existing `protocol_clients.id`; creating a client account never creates or changes a protocol runtime.
+Existing protocol data remains authoritative. Xray/Outline bindings can reference an existing `protocol_clients.id`; SSH/WireGuard/OpenVPN (and other exportable access types) can reference an existing encrypted `access_artifacts.id`. Creating a client account or binding never creates, rotates, restarts or changes a protocol runtime. A concrete credential/artifact may belong to only one Client account.
 
 ## Enforced controls
 
@@ -62,7 +63,8 @@ v0.1 enforces:
 - concurrently active device limit;
 - revocation of sessions on password rotation;
 - per-device revocation;
-- protocol delivery only for explicitly bound protocol identities;
+- protocol delivery only for explicitly bound protocol identities/artifacts;
+- exclusive credential ownership across Client accounts;
 - no protocol secret in ordinary protocol-list responses;
 - same-origin mutation header for delivery/revoke actions;
 - rate limiting on end-user login.
@@ -79,6 +81,7 @@ Web/PWA device binding uses an opaque random device secret stored in an HttpOnly
 - `/client/api/me`
 - `/client/api/protocols`
 - `/client/api/protocols/{id}/delivery`
+- `/client/api/artifacts/{id}/delivery`
 - `/client/api/devices`
 
 Private API and app responses are no-store.
@@ -90,7 +93,9 @@ Private API and app responses are no-store.
 - `GET/PUT /api/client-platform/accounts/{id}`
 - `POST /api/client-platform/accounts/{id}/password`
 - `GET /api/client-platform/protocols`
+- `GET /api/client-platform/artifacts`
 - `POST /api/client-platform/accounts/{id}/bindings`
+- `POST /api/client-platform/accounts/{id}/artifact-bindings`
 - `DELETE /api/client-platform/accounts/{id}/bindings/{protocol_client_id}`
 - `POST /api/client-platform/accounts/{id}/devices/{device_id}/revoke`
 
@@ -104,13 +109,14 @@ All mutations use the existing Makia admin authentication + CSRF/same-origin gua
 - PWA login and dashboard;
 - subscription/usage/device display;
 - explicit binding to existing protocol client identities;
-- controlled access delivery;
+- non-mutating delivery adapters for existing SSH, WireGuard and OpenVPN artifacts;
+- controlled secret delivery only after authenticated POST;
 - admin API foundation;
 - disabled-by-default rollout.
 
-### Phase B — protocol adapters
+### Phase B — native enforcement adapters
 
-Expand binding/delivery adapters to first-class SSH, WireGuard and OpenVPN artifacts in addition to protocol_clients-backed Xray/Outline access. Add per-protocol enforcement adapters without changing existing credential identities.
+Add per-protocol enforcement/telemetry adapters for SSH, WireGuard and OpenVPN without changing existing credential identities. PWA v0.1 can securely deliver their existing profiles, but strong device-lock and connection enforcement for those tunnel credentials arrives with native/host enforcement adapters.
 
 ### Phase C — Windows Agent
 
