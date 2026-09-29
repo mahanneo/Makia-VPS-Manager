@@ -114,7 +114,8 @@ def main():
             client_page.locator('input[name="device_label"]').fill("Browser CI")
             client_page.locator('button[type="submit"]').click()
             client_page.wait_for_url(BASE_URL+"/client/app")
-            client_page.locator("#protocolList .mc-protocol").wait_for()
+            client_page.locator("#protocolList .mc-protocol").first.wait_for()
+            assert client_page.locator("#protocolList .mc-protocol").count()==2
             assert "Browser Client" in client_page.locator("body").inner_text()
             assert "Fast Access" in client_page.locator("#protocolList").inner_text()
             assert "Browser OpenVPN" in client_page.locator("#protocolList").inner_text()
