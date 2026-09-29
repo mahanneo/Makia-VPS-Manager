@@ -38,20 +38,27 @@ def remote_backup_scp(local_path,host,user,remote_path,port=22,key_path=""):
         raise OperationError("invalid remote backup host")
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}",user):
         raise OperationError("invalid remote backup user")
-    if not re.fullmatch(r"[A-Za-z0-9_./~+-]{1,240}",remote_path):
-        raise OperationError("invalid remote backup path")
+    if not remote_path.startswith("/") or ".." in Path(remote_path).parts or not re.fullmatch(r"[A-Za-z0-9_./+-]{1,240}",remote_path):
+        raise OperationError("remote backup path must be an absolute safe path")
     port=int(port or 22)
     if not 1<=port<=65535:
         raise OperationError("invalid remote backup SSH port")
-    args=["scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=12","-P",str(port)]
+    args=[
+        "scp","-q","-o","BatchMode=yes","-o","ConnectTimeout=12",
+        "-o","StrictHostKeyChecking=yes","-P",str(port),
+    ]
     if key_path:
-        kp=Path(key_path)
-        if not kp.is_file():
-            raise OperationError("remote backup SSH key file does not exist")
-        args+=["-i",str(kp)]
-    args += [str(path),f"{user}@{host}:{remote_path.rstrip('/')}/{path.name}"]
+        kp=Path(key_path).expanduser()
+        if not kp.is_absolute() or not kp.is_file():
+            raise OperationError("remote backup SSH key must be an existing absolute path")
+        if kp.stat().st_mode & 0o077:
+            raise OperationError("remote backup SSH key permissions must be 0600/0400")
+        args+=["-o","IdentitiesOnly=yes","-i",str(kp)]
+    target_host=f"[{host}]" if ":" in host and not host.startswith("[") else host
+    target=f"{user}@{target_host}:{remote_path.rstrip('/')}/{path.name}"
+    args += [str(path),target]
     _run(args,timeout=180)
-    return {"ok":True,"target":f"{user}@{host}:{remote_path.rstrip('/')}/{path.name}"}
+    return {"ok":True,"target":target}
 
 
 def prune_backup_files(directory,prefix,keep):

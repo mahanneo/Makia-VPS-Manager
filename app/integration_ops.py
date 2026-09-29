@@ -129,6 +129,20 @@ def telegram_set_webhook(bot_token,url,secret_token):
     return result
 
 
+def telegram_delete_webhook(bot_token):
+    token=str(bot_token or "").strip()
+    if not re.fullmatch(r"\d{6,15}:[A-Za-z0-9_-]{20,}",token):
+        raise IntegrationError("invalid Telegram bot token")
+    result=_json_request(
+        f"https://api.telegram.org/bot{token}/deleteWebhook",
+        method="POST",
+        body={"drop_pending_updates":False},
+    )
+    if not result.get("ok"):
+        raise IntegrationError("Telegram deleteWebhook failed")
+    return result
+
+
 def _outline_access_file(path="/opt/outline/access.txt"):
     p=Path(path)
     if not p.is_file():

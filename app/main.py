@@ -3008,7 +3008,10 @@ def telegram_put(payload:TelegramIntegrationPayload,request:Request):
     chat=payload.chat_id.strip()
     if not re.fullmatch(r"-?\d{5,30}",chat):raise HTTPException(400,"invalid Telegram chat id")
     if payload.bot_token:
-        set_setting("telegram_secret",integration_ops.seal_secret({"bot_token":payload.bot_token.strip()}))
+        token=payload.bot_token.strip()
+        if not re.fullmatch(r"\d{6,15}:[A-Za-z0-9_-]{20,}",token):
+            raise HTTPException(400,"invalid Telegram bot token")
+        set_setting("telegram_secret",integration_ops.seal_secret({"bot_token":token}))
     elif not get_setting("telegram_secret",""):
         raise HTTPException(400,"Telegram bot token is required")
     set_setting("telegram_chat_id",chat)
@@ -3020,6 +3023,10 @@ def telegram_put(payload:TelegramIntegrationPayload,request:Request):
         try:integration_ops.telegram_set_webhook(_telegram_token(),f"https://{domain}/integrations/telegram/webhook",secret)
         except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
         set_setting("telegram_webhook_enabled","1")
+    elif _setting_bool("telegram_webhook_enabled",False):
+        try:integration_ops.telegram_delete_webhook(_telegram_token())
+        except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+        set_setting("telegram_webhook_enabled","0")
     audit(actor,"telegram_settings_update","telegram",f"webhook={payload.enable_webhook}",ip(request))
     return _telegram_snapshot()
 
@@ -3052,11 +3059,17 @@ async def telegram_webhook(request:Request):
         expiry=_expiry_snapshot(7)
         response=f"Expiring/expired in 7 days: {expiry['count']}\nExpired: {expiry['expired']}"
     elif text=="/backup":
-        try:
-            from . import scheduled_backup
-            result=scheduled_backup.run_once(True)
-            response=f"✅ Backup: {result.get('name')}\n{str(result.get('sha256') or '')[:16]}…"
-        except Exception as exc:response="❌ Backup failed: "+str(exc)[:400]
+        rows=system_ops.backup_list()
+        latest=rows[0] if rows else None
+        schedule=_backup_schedule_snapshot()
+        if latest:
+            response=(
+                f"Latest backup: {latest.get('name')}\n"
+                f"Type: {latest.get('type')} · Encrypted: {'yes' if latest.get('encrypted') else 'no'}\n"
+                f"Scheduled backup: {'ON' if schedule.get('enabled') else 'OFF'}"
+            )
+        else:
+            response=f"No backups found.\nScheduled backup: {'ON' if schedule.get('enabled') else 'OFF'}"
     else:
         response="Commands: /status /expiry /backup"
     try:integration_ops.telegram_send(_telegram_token(),configured,response)
