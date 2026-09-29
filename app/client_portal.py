@@ -216,6 +216,7 @@ def _require_client(request: Request):
 
 
 def _require_admin(request: Request):
+    _require_enabled()
     actor = read_session(request.cookies.get(COOKIE_NAME))
     if not actor or str(actor).startswith("support:"):
         raise HTTPException(401, "admin session required")
