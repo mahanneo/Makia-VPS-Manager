@@ -15,7 +15,7 @@ The first delivery is a mobile/desktop PWA foundation. Native tunnel execution r
 The client platform is additive and disabled by default:
 
 ```env
-MAKIA_CLIENT_PORTAL_ENABLED=0
+MAKIA_CLIENT_PORTAL_ENABLED=auto
 ```
 
 Until explicitly enabled:
@@ -114,11 +114,17 @@ All mutations use the existing Makia admin authentication + CSRF/same-origin gua
 - admin API foundation;
 - disabled-by-default rollout.
 
-### Phase B — native enforcement adapters
+### Phase B — host enforcement adapters
 
-Add per-protocol enforcement/telemetry adapters for SSH, WireGuard and OpenVPN without changing existing credential identities. PWA v0.1 can securely deliver their existing profiles, but strong device-lock and connection enforcement for those tunnel credentials arrives with native/host enforcement adapters.
+Implemented on this branch without rotating existing credentials:
+- Xray/Outline account expiry/quota enforcement through existing Makia protocol accounting;
+- WireGuard expiry/quota enforcement with persistent post-binding transfer deltas;
+- SSH expiry plus concurrent-session/source-IP limits (byte quota is not claimed for SSH);
+- OpenVPN expiry/quota enforcement when the Makia local CCD + Unix management policy runtime is configured.
 
-### Phase C — Windows Agent
+Existing OpenVPN servers are never restarted from the recurring policy loop. Policy runtime activation is an explicit local-admin action and performs a controlled OpenVPN restart with rollback on failure. New OpenVPN bootstraps include the local policy controls automatically.
+
+### Phase C — Windows Agent (next product phase)
 
 Native local agent:
 - device key pair;
@@ -151,3 +157,18 @@ This branch must not be merged to production until:
 6. with flag enabled on staging, login/device/concurrent/quota/expiry/binding tests pass;
 7. no active protocol identity is rotated during enable/disable cycles.
 
+
+
+## Production-ready web/PWA operating model
+
+The web/PWA client is usable without the native agent:
+
+1. Administrator creates a Client account from **اپ کاربران / Client Platform**.
+2. Administrator sets expiry, quota, device count and concurrent device count.
+3. Existing Xray/Outline protocol identities or SSH/WireGuard/OpenVPN encrypted access artifacts are bound to that Client account.
+4. The Client Portal is enabled explicitly from the Admin UI.
+5. The user opens `/client/`, logs in and may install the PWA on mobile/desktop.
+6. The user receives only their bound profiles, with QR/file/deep-link delivery where supported.
+7. Account expiry/quota enforcement runs server-side where the enforcement matrix reports **Hard policy**.
+
+The PWA device registration is a soft browser-device control. It does not claim hardware identity. For WireGuard/OpenVPN/Xray native one-click tunnel control and hardware-backed device binding, use the later native-agent/mobile phase.
