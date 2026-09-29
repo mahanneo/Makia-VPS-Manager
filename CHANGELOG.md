@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.9] - 2026-09-29
+
+### Verified runtime shell artifacts
+- Added syntax and SHA256 verification for critical release shell scripts before runtime mutation.
+- Critical shell commands are now installed through an atomic staged copy that must pass `bash -n` and match the source hash before replacing the live command.
+- `makia-update`, `makia-doctor`, and `makia-uat-smoke` are re-verified immediately before Host Smoke and automatically repaired from the current release source if local drift/corruption is detected.
+- Host Smoke cannot execute until the installed runtime scripts pass syntax and hash integrity checks.
+- Retains v1.2.8 clean updater rebuild, v1.2.7 DNS repair, and v1.2.6 MTProxy update transaction safeguards.
+- Rotated the service-worker cache to `makia-shell-v129`.
+
+
 ## [1.2.8] - 2026-09-29
 
 ### Updater syntax recovery
