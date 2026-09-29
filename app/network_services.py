@@ -19,9 +19,8 @@ class NetworkServiceError(RuntimeError):
 
 MTPROXY_ROOT=Path("/opt/makia-mtproxy")
 MTPROXY_BIN=MTPROXY_ROOT/"mtg"
-MTPROXY_CONFIG_DIR=Path("/etc/makia-vps-manager")
-MTPROXY_ENV=MTPROXY_CONFIG_DIR/"mtproxy.env"
-MTPROXY_CONFIG=MTPROXY_CONFIG_DIR/"mtproxy.toml"
+MTPROXY_ENV=Path("/etc/makia-vps-manager/mtproxy.env")
+MTPROXY_CONFIG=Path("/etc/makia-vps-manager/mtproxy.toml")
 MTPROXY_SERVICE="makia-mtproxy"
 
 DNS_STATE=Path("/etc/makia-vps-manager/dns.json")
@@ -181,10 +180,11 @@ def _ensure_mtproxy_config_access():
         raise NetworkServiceError(
             "makia-mtproxy system user/group is missing; run sudo makia-upgrade"
         ) from exc
-    MTPROXY_CONFIG_DIR.mkdir(parents=True,exist_ok=True)
+    config_dir=MTPROXY_CONFIG.parent
+    config_dir.mkdir(parents=True,exist_ok=True)
     # root owns the directory. Group gets traverse only, not directory listing.
-    os.chown(MTPROXY_CONFIG_DIR,0,gid)
-    os.chmod(MTPROXY_CONFIG_DIR,0o710)
+    os.chown(config_dir,0,gid)
+    os.chmod(config_dir,0o710)
     return gid
 
 
