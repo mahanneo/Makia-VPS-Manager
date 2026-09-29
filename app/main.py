@@ -181,7 +181,7 @@ def public_host(request:Request):
     return (get_setting("panel_domain","") or request.url.hostname or "server").strip()
 
 
-client_admin.register_client_admin(app,require_user,require_mutation,audit,ip)
+client_admin.register_client_admin(app,require_user,require_mutation,require_local_admin,audit,ip)
 
 
 def _setting_int(key,default,minimum=None,maximum=None):
