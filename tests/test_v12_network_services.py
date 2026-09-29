@@ -500,3 +500,20 @@ def test_dns_ui_does_not_show_zero_ms_for_failed_query():
     assert "r.query_ok===false" in js
     assert "FAILED" in js
     assert "runtime_error" in js
+
+
+def test_update_script_has_single_clean_terminator():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    terminal="/usr/local/sbin/makia-doctor || true"
+    assert update.count(terminal)==1
+    assert update.rstrip().endswith(terminal)
+    assert "\n; then\n" not in update
+    assert update.count("assert_preserved_file(){")==1
+    assert update.count("on_exit(){")==1
+
+
+def test_update_dns_precheck_is_complete_bash_block():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'DNS_PRECHECK="$(dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null || true)"' in update
+    assert 'if [[ -n "$DNS_PRECHECK" ]]; then' in update
+    assert "DNS_WAS_QUERY_OK=1" in update
