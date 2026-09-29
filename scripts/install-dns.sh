@@ -2,12 +2,33 @@
 set -Eeuo pipefail
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root." >&2; exit 1; }
 
+INSTALL_ONLY=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-only) INSTALL_ONLY=1; shift ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y unbound dnsutils ca-certificates
 
 install -d -m 0755 /etc/unbound/unbound.conf.d
 install -d -m 0700 /etc/makia-vps-manager
+
+if [[ "$INSTALL_ONLY" -eq 1 ]]; then
+  if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then
+    unbound-checkconf
+    systemctl enable --now unbound
+    systemctl restart unbound
+    systemctl is-active --quiet unbound
+    echo "Makia DNS tooling refreshed and existing resolver is active."
+  else
+    echo "Makia DNS tooling installed. Configure resolver policy from the Makia panel."
+  fi
+  exit 0
+fi
 
 cat >/etc/unbound/unbound.conf.d/makia.conf <<'EOF'
 server:
