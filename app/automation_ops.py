@@ -313,9 +313,9 @@ def enforce_outline_expiry():
         expire=int(row.get("expire_at") or 0)
         if expire and expire<=now_ts:
             outline_id=str(row.get("inbound_tag") or "").replace("outline:","")
-            try:outline_ops.set_data_limit(outline_id,0)
+            try:outline_ops.delete_key(outline_id)
             except Exception:continue
-            set_protocol_client_enabled(row["id"],False,"expired")
+            set_protocol_client_enabled(row["id"],False,"expiry")
 
 
 def health_alerts():
