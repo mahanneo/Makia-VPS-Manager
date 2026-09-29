@@ -47,10 +47,10 @@ jobs:
       - name: v1.2 network services and Iran inbound preset gate
         run: |
           pytest -q tests/test_rc8_operations.py tests/test_rc9_hardening.py tests/test_rc11_outline_runtime.py tests/test_v1_release_gate.py tests/test_xray_iran_presets.py
-          grep -Fxq '1.2.4' VERSION
-          grep -q 'VERSION = "1.2.4"' app/config.py
-          grep -q 'makia-shell-v124' app/static/sw.js
-          test -f docs/UAT-1.2.4.md
+          grep -Fxq '1.2.5' VERSION
+          grep -q 'VERSION = "1.2.5"' app/config.py
+          grep -q 'makia-shell-v125' app/static/sw.js
+          test -f docs/UAT-1.2.5.md
           test -f app/static/makia-brand.png
           test -f docs/assets/makia-brand.png
           test -f systemd/makia-scheduled-backup.service
@@ -218,7 +218,7 @@ jobs:
           grep -q 'body\[data-theme="glass"\]' app/static/app.css
           grep -q 'glass-status-hero' app/static/app.js
           grep -q 'Glass Aurora' app/static/app.js
-          grep -q "const CACHE='makia-shell-v124'" app/static/sw.js
+          grep -q "const CACHE='makia-shell-v125'" app/static/sw.js
           grep -q '/api/protocols/openvpn/diagnostics' app/main.py
           grep -q '/api/protocols/openvpn/repair' app/main.py
           grep -q 'openvpn_endpoint_diagnostics' app/protocol_ops.py
@@ -232,8 +232,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "1.2.4"' app/config.py
-          grep -Fxq '1.2.4' VERSION
+          grep -q 'VERSION = "1.2.5"' app/config.py
+          grep -Fxq '1.2.5' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -257,7 +257,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v124' app/static/sw.js
+          grep -q 'makia-shell-v125' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
@@ -299,7 +299,7 @@ jobs:
           grep -q 'security-posture-grid' app/static/app.js
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
-          grep -q 'makia-shell-v124' app/static/sw.js
+          grep -q 'makia-shell-v125' app/static/sw.js
 
       - name: Connection modes contract
         run: |
