@@ -1,3 +1,15 @@
+## نسخه ۰.۲۶.۰-rc11 — رفع خطای ساخت Outline و جداسازی کامل Xray/Outline
+
+در RC11 خطای واقعی `olName is not defined` که هنگام ساخت کاربر/Access Key در بعضی مرورگرها دیده می‌شد از ریشه اصلاح شده است. فرم Outline دیگر به رفتار قدیمی مرورگر برای تبدیل `id` عناصر HTML به متغیر JavaScript وابسته نیست.
+
+همچنین Clientهای Outline دیگر وارد Workspace مربوط به Xray/V2Ray نمی‌شوند. Xray اکنون صریحاً فقط `engine=xray` را دریافت می‌کند؛ بنابراین کلیدهای Outline داخل لیست Xray نمایش داده نمی‌شوند و دکمه `•••` آن‌ها دیگر به Detail اشتباه Xray نمی‌رود.
+
+ساخت کلید Outline نیز به Workflow پایدار Management API تغییر کرده است: ابتدا Credential واقعی ساخته می‌شود، سپس Name و Data Limit اعمال می‌شوند و اگر بخشی از Policy شکست بخورد، Key تازه‌ساخته‌شده حذف می‌شود تا Credential نیمه‌کاره باقی نماند. Makia فقط Access Key معتبر با قالب `ss://` را ذخیره و تحویل می‌دهد.
+
+همین کلاس باگ DOM-global در فرم‌های مدیریتی مهم شامل SSH، Plans، Quick Provision، Backup Scheduler، Cloudflare، Telegram، Settings، 2FA و فرم‌های Xray نیز حذف شده است.
+
+این نسخه همچنان **Release Candidate** است. اتصال واقعی Outline Client روی موبایل/کامپیوتر و Host UAT واقعی قبل از Stable الزامی است. جزئیات: [UAT RC11](docs/UAT-0.26.0-RC11.md).
+
 ## نسخه ۰.۲۶.۰-rc10 — اصلاح Outline و یکپارچه‌سازی مدیریت کاربران
 
 در RC10 مسیر واقعی Setup مربوط به Outline اصلاح شده است. اگر Docker روی VPS آماده نباشد، پنل دیگر فقط خطای Browser Alert نمایش نمی‌دهد؛ یک Workflow مشخص دو مرحله‌ای نشان می‌دهد: ابتدا `sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade` برای آماده‌سازی Host از مسیر Root، سپس دستور نصب Pin‌شده Outline.

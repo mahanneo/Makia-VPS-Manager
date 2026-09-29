@@ -127,7 +127,34 @@ def main():
             page.locator('.pro-sidebar button[data-view="xray"]').click()
             leave_sidebar(page)
             page.locator(".protocol-client-list").wait_for()
+            assert "OUTLINE" not in page.locator(".protocol-client-list").inner_text()
             page.screenshot(path='/tmp/makia-xray.png',full_page=True)
+
+            # Regression: Outline creation must not depend on DOM ids becoming JS globals.
+            def outline_key_route(route):
+                if route.request.method=="POST":
+                    route.fulfill(status=200,content_type="application/json",body=json.dumps({
+                        "id":"77","client_id":77,
+                        "access_url":"ss://YWVzLTI1Ni1nY206c2VjcmV0@example.test:443/?outline=1",
+                    }))
+                else:
+                    route.continue_()
+            page.route("**/api/protocols/outline/keys",outline_key_route)
+            page.route("**/api/access/outline/77/portal",lambda route:route.fulfill(
+                status=200,content_type="application/json",
+                body=json.dumps({"url":"https://portal.example.test/access/mock-outline","token":"mock-outline","language":"fa"})
+            ))
+            page.evaluate("openOutlineKeyCreate()")
+            page.locator("#olName").fill("phone-browser")
+            page.locator("#olQuota").fill("5")
+            page.locator("#olDays").fill("30")
+            page.locator(".modal button.primary",has_text="ساخت").click()
+            page.locator("#clientPortalUrl").wait_for()
+            assert page.locator("#clientPortalUrl").input_value()=="https://portal.example.test/access/mock-outline"
+            assert not any("olName is not defined" in err for err in page_errors)
+            page.locator('.close-btn[data-action="modal-close"]').click()
+            page.unroute("**/api/protocols/outline/keys")
+            page.unroute("**/api/access/outline/77/portal")
             page.evaluate("openXrayInboundBuilder()")
             page.locator(".xray-builder-modal").wait_for()
             assert "XRAY INBOUND CENTER" in page.locator(".xray-builder-modal").inner_text()
