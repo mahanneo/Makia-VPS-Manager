@@ -149,6 +149,36 @@ def _ufw_allow(port,proto,label):
     return {"active":True,"rule":f"{int(port)}/{proto}"}
 
 
+def _ufw_reconcile_dns(allowed_networks):
+    """Expose DNS only to explicit source networks; never add a global port-53 rule."""
+    if not shutil.which("ufw"):
+        return {"active":False,"rules":[]}
+    proc=subprocess.run(["ufw","status","numbered"],text=True,capture_output=True,timeout=8,check=False)
+    if proc.returncode!=0 or "status: active" not in (proc.stdout or "").lower():
+        return {"active":False,"rules":[]}
+    numbers=[]
+    for line in (proc.stdout or "").splitlines():
+        if "makia dns" not in line.lower():
+            continue
+        match=re.match(r"^\s*\[\s*(\d+)\]",line)
+        if match:numbers.append(int(match.group(1)))
+    for number in sorted(numbers,reverse=True):
+        deleted=subprocess.run(["ufw","--force","delete",str(number)],text=True,capture_output=True,timeout=15,check=False)
+        if deleted.returncode!=0:
+            raise NetworkServiceError((deleted.stderr or deleted.stdout or "unable to remove old Makia DNS UFW rule").strip()[:600])
+    created=[]
+    for network in dict.fromkeys(str(x) for x in allowed_networks if str(x)):
+        for proto in ("udp","tcp"):
+            run=subprocess.run(
+                ["ufw","allow","from",network,"to","any","port","53","proto",proto,"comment","Makia DNS"],
+                text=True,capture_output=True,timeout=15,check=False,
+            )
+            if run.returncode!=0:
+                raise NetworkServiceError((run.stderr or run.stdout or "unable to add Makia DNS UFW rule").strip()[:600])
+            created.append({"source":network,"port":53,"proto":proto})
+    return {"active":True,"rules":created}
+
+
 def mtproxy_install_command(host="",port=0):
     args=["sudo","/usr/local/sbin/makia-install-mtproxy"]
     if host:
@@ -397,9 +427,10 @@ def configure_dns(mode="private",upstream="cloudflare",allowed_cidrs=None,public
         _run(["systemctl","restart",DNS_SERVICE],timeout=30)
         if not _active(DNS_SERVICE):
             raise NetworkServiceError("Unbound did not become active")
-        if public:
-            _ufw_allow(53,"udp","Private DNS")
-            _ufw_allow(53,"tcp","Private DNS")
+        # Mirror Unbound ACLs at the firewall. Loopback needs no UFW rule;
+        # WireGuard/public clients receive source-scoped rules only.
+        firewall_sources=[network for network in access if network!="127.0.0.0/8"]
+        _ufw_reconcile_dns(firewall_sources)
     except Exception:
         if os.path.exists(tmp):os.unlink(tmp)
         if old_conf is None:DNS_CONF.unlink(missing_ok=True)
