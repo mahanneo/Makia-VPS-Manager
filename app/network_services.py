@@ -172,14 +172,26 @@ def _write_mtproxy_config(secret,port):
 
 def _ufw_allow(port,proto,label):
     if not shutil.which("ufw"):
-        return {"active":False}
+        return {"active":False,"allowed":True}
     proc=subprocess.run(["ufw","status"],text=True,capture_output=True,timeout=8,check=False)
     if proc.returncode!=0 or "status: active" not in (proc.stdout or "").lower():
-        return {"active":False}
+        return {"active":False,"allowed":True}
     run=subprocess.run(["ufw","allow",f"{int(port)}/{proto}","comment",f"Makia {label}"],text=True,capture_output=True,timeout=15,check=False)
     if run.returncode!=0:
         raise NetworkServiceError((run.stderr or run.stdout or "unable to update UFW").strip()[:600])
-    return {"active":True,"rule":f"{int(port)}/{proto}"}
+    return {"active":True,"allowed":True,"rule":f"{int(port)}/{proto}"}
+
+
+def _ufw_port_status(port,proto="tcp"):
+    if not port or not shutil.which("ufw"):
+        return {"active":False,"allowed":True}
+    proc=subprocess.run(["ufw","status"],text=True,capture_output=True,timeout=8,check=False)
+    text=(proc.stdout or "")
+    if proc.returncode!=0 or "status: active" not in text.lower():
+        return {"active":False,"allowed":True}
+    needle=f"{int(port)}/{str(proto).lower()}"
+    allowed=any(needle in line.lower() and "allow" in line.lower() for line in text.splitlines())
+    return {"active":True,"allowed":allowed}
 
 
 def _ufw_reconcile_dns(allowed_networks):
@@ -232,6 +244,7 @@ def mtproxy_status(host_hint=""):
     configured=bool(host and port and re.fullmatch(r"ee[0-9a-fA-F]+",secret))
     active=_active(MTPROXY_SERVICE)
     listener=bool(port and _port_busy(port,"tcp"))
+    firewall=_ufw_port_status(port,"tcp")
     client_secret=secret.lower() if secret else ""
     query=urllib.parse.urlencode({"server":host,"port":port,"secret":client_secret}) if configured else ""
     return {
@@ -239,6 +252,8 @@ def mtproxy_status(host_hint=""):
         "configured":configured,
         "service_active":active,
         "listener":listener,
+        "firewall_active":bool(firewall.get("active")),
+        "firewall_allowed":bool(firewall.get("allowed")),
         "host":host,
         "port":port,
         "front_domain":front_domain,
@@ -291,7 +306,6 @@ def configure_mtproxy(host,port=443,rotate_secret=False):
             time.sleep(.25)
         if not _active(MTPROXY_SERVICE) or not _port_busy(selected,"tcp"):
             raise NetworkServiceError("MTProxy did not reach an active TCP listener")
-        _ufw_allow(selected,"tcp","Telegram MTProxy")
     except Exception:
         if previous_state is None:
             MTPROXY_ENV.unlink(missing_ok=True)
@@ -307,7 +321,15 @@ def configure_mtproxy(host,port=443,rotate_secret=False):
         try:_run(["systemctl","restart",MTPROXY_SERVICE],timeout=20)
         except Exception:pass
         raise
+    firewall_warning=""
+    try:
+        _ufw_allow(selected,"tcp","Telegram MTProxy")
+    except Exception as exc:
+        # Firewall integration is fail-closed. Do not destroy an otherwise
+        # valid MTProxy identity/runtime just because the UFW helper failed.
+        firewall_warning=str(exc)[:600]
     result=mtproxy_status(host)
+    result["firewall_warning"]=firewall_warning
     result["requested_port"]=requested
     result["port_adjusted"]=selected!=requested
     result["secret_rotated"]=bool(rotate_secret)
