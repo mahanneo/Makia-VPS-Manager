@@ -259,3 +259,47 @@ def test_phase_b_grants_store_hashes_not_raw_tokens(tmp_path, monkeypatch):
     assert action["token_hash"] == client_portal._token_hash(grant)
     assert pairing["token_hash"] != pairing_token
     assert action["token_hash"] != grant
+
+
+def test_connect_grant_requires_paired_device(tmp_path, monkeypatch):
+    client, _, _, binding_id = _setup(tmp_path, monkeypatch)
+    response = client.post(f"/client-app/api/access/{binding_id}/grant")
+    assert response.status_code == 409
+    assert "not paired" in response.json()["detail"].lower()
+
+
+def test_phase_b_refuses_non_wireguard_native_grants(tmp_path, monkeypatch):
+    client, account_id, _, _ = _setup(tmp_path, monkeypatch)
+    private = Ed25519PrivateKey.generate()
+    _pair_agent(client, private)
+    ts = db.now()
+    with db.connect() as con:
+        payload = access_ops.xray_payload(
+            "alice-xray",
+            "vless",
+            "vless://example-credential@example.test:443?type=tcp&security=none#alice-xray",
+        )
+        con.execute(
+            """INSERT INTO access_artifacts
+               (kind,external_key,display_name,protocol,native_filename,payload_enc,metadata_json,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                "xray",
+                "xray-alice",
+                "Alice Xray",
+                "vless",
+                payload["native_filename"],
+                access_ops.seal_payload(payload),
+                "{}",
+                ts,
+                ts,
+            ),
+        )
+        binding_id = con.execute(
+            """INSERT INTO client_access_bindings(account_id,kind,external_key,active,created_at)
+               VALUES(?,?,?,1,?)""",
+            (account_id, "xray", "xray-alice", ts),
+        ).lastrowid
+    response = client.post(f"/client-app/api/access/{binding_id}/grant")
+    assert response.status_code == 409
+    assert "adapter" in response.json()["detail"].lower()
