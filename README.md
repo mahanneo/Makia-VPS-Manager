@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.0.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.1.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
 **[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1 UAT](docs/UAT-1.0.0.md)**
@@ -21,6 +21,21 @@
 Makia VPS Manager is a self-hosted control panel for managing access services and operational recovery on Ubuntu VPS hosts. It keeps protocol-specific runtime operations separate while presenting users, delivery artifacts, expiry, diagnostics, backup and disaster-recovery workflows through one UI.
 
 Makia does **not** expose a generic root shell in the browser. Operations that require package installation or host-level privilege remain explicit root-shell steps.
+
+## Iran Network Inbound Presets
+
+The Xray Inbound Center includes selectable, Core-validated starting profiles for networks where censorship or path quality changes frequently:
+
+- **Recommended:** VLESS + REALITY + RAW/Vision
+- **Alternative:** VLESS + gRPC + REALITY
+- **Alternative:** VLESS + WebSocket + TLS
+- **Alternative:** VLESS + HTTPUpgrade + TLS
+- **Alternative:** Trojan + gRPC + TLS
+- **Alternative / UDP:** Hysteria2 + TLS
+- **Compatibility:** VMess + WebSocket + TLS
+- **Experimental:** VLESS + XHTTP + REALITY
+
+These are **starting presets, not a connectivity guarantee**. ISP filtering, mobile networks, datacenter policy, client implementation and protocol fingerprints change over time. Makia therefore keeps XHTTP experimental on the pinned 26.3.27 Core and validates every selectable preset with the actual Xray binary in CI.
 
 ## Protocol support
 
