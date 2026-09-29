@@ -2187,7 +2187,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:formValue('oldP',''),new_password:formValue('newP','')})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
+const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['Connectivity Lab','connectivity'],['Telegram Proxy','telegramproxy'],['DNS Center','dnscenter'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -2427,8 +2427,8 @@ async function connectivityLab(renderToken=window.__viewRenderToken){
 }
 
 function applyLanguageShell(){
-  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',plans:'پلن‌ها',expiry:'مرکز تمدید',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',diagnostics:'مرکز عیب‌یابی',operations:'عملیات و انتقال',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
-  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',plans:'Plans',expiry:'Expiry Center',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',diagnostics:'Diagnostics Center',operations:'Operations / DR',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
+  const fa={dashboard:'داشبورد',inbounds:'Inboundها',access:'کاربران',plans:'پلن‌ها',expiry:'مرکز تمدید',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'اتصال‌های زنده',services:'سرویس‌ها',protocols:'شبکه و پورت‌ها',nodes:'نودها',connectivity:'Connectivity Lab',telegramproxy:'پروکسی تلگرام',dnscenter:'مرکز DNS',diagnostics:'مرکز عیب‌یابی',operations:'عملیات و انتقال',backups:'بکاپ',audit:'لاگ‌ها',updates:'بروزرسانی',settings:'تنظیمات',support:'پشتیبانی'};
+  const en={dashboard:'Dashboard',inbounds:'Inbounds',access:'Clients',plans:'Plans',expiry:'Expiry Center',ssh:'SSH / NPV',xray:'Xray / V2Ray',outline:'Outline',wireguard:'WireGuard',openvpn:'OpenVPN',sessions:'Live Sessions',services:'Services',protocols:'Network / Ports',nodes:'Nodes',connectivity:'Connectivity Lab',telegramproxy:'Telegram Proxy',dnscenter:'DNS Center',diagnostics:'Diagnostics Center',operations:'Operations / DR',backups:'Backup',audit:'Logs',updates:'Update',settings:'Settings',support:'Support'};
   const dict=window.MAKIA_LANG==='en'?en:fa;
   document.documentElement.lang=window.MAKIA_LANG==='en'?'en':'fa';
   document.documentElement.dir=window.MAKIA_LANG==='en'?'ltr':'rtl';
@@ -2731,16 +2731,16 @@ async function openDRWizard(){
   }catch(e){alert(e.message)}
 }
 
-const views={dashboard,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
+const views={dashboard,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','outline','inbounds'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','telegramproxy','dnscenter','diagnostics','operations'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
