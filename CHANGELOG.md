@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.5] - 2026-09-29
+
+### Shared network-service permission contract
+- Fixed a cross-installer regression where the DNS installer reset `/etc/makia-vps-manager` to `0700` after MTProxy had prepared `0710 root:makia-mtproxy`.
+- Install, update and portable restore now re-assert the shared directory/file ownership and modes after network-service changes.
+- Root-only Makia state remains `0600 root:root`; only `mtproxy.toml` is `0640 root:makia-mtproxy`.
+
+### Update recovery
+- Updater now attempts to repair a pre-existing broken MTProxy using the new runtime code before final acceptance.
+- A previously inactive optional MTProxy no longer forces the whole panel update to roll back; direct host UAT remains strict.
+- Added `MAKIA_FORCE_MAIN=1` to bypass a pinned archive override during emergency recovery.
+- Updater verifies the running backend version matches the installed VERSION before declaring success.
+- Rotated the service-worker cache to `makia-shell-v125` so the AUTO-port Telegram Proxy UI is served immediately after upgrade.
+
+
 ## [1.2.4] - 2026-09-29
 
 ### MTProxy root-cause fix
