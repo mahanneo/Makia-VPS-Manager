@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/makia-brand.png" width="128" alt="لوگوی Makia VPS Manager"></p>
+
 ## نسخه ۰.۲۶.۰-rc11 — رفع خطای ساخت Outline و جداسازی کامل Xray/Outline
 
 در RC11 خطای واقعی `olName is not defined` که هنگام ساخت کاربر/Access Key در بعضی مرورگرها دیده می‌شد از ریشه اصلاح شده است. فرم Outline دیگر به رفتار قدیمی مرورگر برای تبدیل `id` عناصر HTML به متغیر JavaScript وابسته نیست.
