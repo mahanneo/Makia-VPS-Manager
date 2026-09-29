@@ -24,6 +24,41 @@ TMP="$(mktemp -d)"
 ROLLBACK_ARMED=0
 RELEASE_BACKUP=""
 
+MTPROXY_ENV_PATH=/etc/makia-vps-manager/mtproxy.env
+MTPROXY_CONFIG_PATH=/etc/makia-vps-manager/mtproxy.toml
+DNS_STATE_PATH=/etc/makia-vps-manager/dns.json
+DNS_CONFIG_PATH=/etc/unbound/unbound.conf.d/makia.conf
+
+file_sha256(){
+  local path="$1"
+  [[ -f "$path" ]] || return 0
+  sha256sum "$path" | awk '{print $1}'
+}
+
+MTPROXY_ENV_PRE_SHA="$(file_sha256 "$MTPROXY_ENV_PATH")"
+MTPROXY_CONFIG_PRE_SHA="$(file_sha256 "$MTPROXY_CONFIG_PATH")"
+DNS_STATE_PRE_SHA="$(file_sha256 "$DNS_STATE_PATH")"
+DNS_CONFIG_PRE_SHA="$(file_sha256 "$DNS_CONFIG_PATH")"
+MTPROXY_WAS_ACTIVE=0
+DNS_WAS_ACTIVE=0
+systemctl is-active --quiet makia-mtproxy 2>/dev/null && MTPROXY_WAS_ACTIVE=1 || true
+systemctl is-active --quiet unbound 2>/dev/null && DNS_WAS_ACTIVE=1 || true
+
+assert_preserved_file(){
+  local path="$1" before="$2" label="$3"
+  [[ -n "$before" ]] || return 0
+  if [[ ! -f "$path" ]]; then
+    echo "ERROR: $label disappeared during update: $path" >&2
+    return 1
+  fi
+  local after
+  after="$(file_sha256 "$path")"
+  if [[ "$after" != "$before" ]]; then
+    echo "ERROR: $label changed unexpectedly during update: $path" >&2
+    return 1
+  fi
+}
+
 on_exit(){
   local rc=$?
   trap - EXIT
@@ -43,6 +78,14 @@ on_exit(){
     systemctl restart makia-policy-enforcer 2>/dev/null
     systemctl restart makia-metrics-sampler 2>/dev/null
     systemctl restart makia-protocol-traffic 2>/dev/null
+    if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
+      systemctl enable --now makia-mtproxy 2>/dev/null
+      systemctl restart makia-mtproxy 2>/dev/null
+    fi
+    if [[ -s "$DNS_CONFIG_PATH" ]] && command -v unbound >/dev/null 2>&1; then
+      systemctl enable --now unbound 2>/dev/null
+      systemctl restart unbound 2>/dev/null
+    fi
     restored=0
     for _ in {1..12}; do
       if curl -fsS --max-time 3 http://127.0.0.1:8787/healthz >/dev/null 2>&1; then
@@ -249,6 +292,21 @@ fi
 if ! /usr/local/sbin/makia-install-dns --install-only; then
   echo "WARNING: DNS tooling preparation failed; panel will show the root repair/install command."
 fi
+
+echo "Verifying persistent Telegram/DNS configuration was preserved..."
+assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
+assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA" "MTProxy config" || exit 8
+assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_PRE_SHA" "DNS state" || exit 8
+assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_PRE_SHA" "DNS config" || exit 8
+if [[ "$MTPROXY_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-mtproxy; then
+  echo "ERROR: MTProxy was active before update but is not active after tooling refresh." >&2
+  exit 8
+fi
+if [[ "$DNS_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet unbound; then
+  echo "ERROR: DNS resolver was active before update but is not active after tooling refresh." >&2
+  exit 8
+fi
+
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
@@ -387,6 +445,12 @@ if [[ "$healthy" -ne 1 ]]; then
 fi
 
 echo
+echo "Re-checking persistent network-service state before final acceptance..."
+assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
+assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA" "MTProxy config" || exit 8
+assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_PRE_SHA" "DNS state" || exit 8
+assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_PRE_SHA" "DNS config" || exit 8
+
 echo "Running post-update Makia host smoke gate..."
 if ! /usr/local/sbin/makia-uat-smoke; then
   echo "Post-update host smoke failed."
