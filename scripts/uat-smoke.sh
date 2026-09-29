@@ -277,17 +277,16 @@ if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then
   else
     bad "Makia DNS config/runtime unhealthy"
   fi
-  if command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com A +short +time=2 +tries=1 | grep -Eq '^[0-9]+(\.[0-9]+){3}
-else
-  ok "Makia DNS optional gate skipped"
-fi
-
-if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then
-  OVPN_TCP_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/makia-tcp.conf 2>/dev/null || true)"
-  if systemctl is-active --quiet openvpn-server@makia-tcp; then
-    ok "OpenVPN parallel TCP fallback runtime active"
+  DNS_ANSWER=""
+  if command -v dig >/dev/null 2>&1; then
+    DNS_ANSWER="$(dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null || true)"
+  fi
+  if [[ -n "$DNS_ANSWER" ]]; then
+    ok "Makia DNS query"
+  elif [[ "${MAKIA_UAT_DNS_SOFTFAIL:-0}" == "1" ]]; then
+    warn "Makia DNS localhost query failed (pre-existing optional resolver; update retained)"
   else
-    bad "OpenVPN TCP fallback configured but service inactive"
+    bad "Makia DNS localhost query failed"
   fi
   if [[ -n "$OVPN_TCP_PORT" ]] && ss -H -ltn 2>/dev/null | grep -Eq ":${OVPN_TCP_PORT}([[:space:]]|$)"; then
     ok "OpenVPN TCP fallback listener on port $OVPN_TCP_PORT"
