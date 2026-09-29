@@ -116,6 +116,7 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.service" /etc/system
 install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.timer" /etc/systemd/system/makia-scheduled-backup.timer
 install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.service" /etc/systemd/system/makia-ops-monitor.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
+install -m 0644 "$SOURCE_DIR/systemd/makia-mtproxy.service" /etc/systemd/system/makia-mtproxy.service
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
@@ -135,6 +136,9 @@ install -m 0755 "$SOURCE_DIR/scripts/configure-owner.py" /usr/local/sbin/makia-o
 install -m 0755 "$SOURCE_DIR/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
 install -m 0755 "$SOURCE_DIR/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SOURCE_DIR/scripts/install-outline.sh" /usr/local/sbin/makia-install-outline
+install -m 0755 "$SOURCE_DIR/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
+install -m 0755 "$SOURCE_DIR/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
+install -m 0755 "$SOURCE_DIR/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
 /usr/local/sbin/makia-install-wstunnel
 install -m 0755 "$SOURCE_DIR/upgrade.sh" /usr/local/sbin/makia-upgrade
 ln -sfn /usr/local/sbin/makia-update /usr/local/sbin/dragon-update
