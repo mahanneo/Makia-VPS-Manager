@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
 
 from . import client_store
-from .db import list_protocol_clients, list_access_artifacts
+from .db import list_protocol_clients, list_access_artifacts, get_setting, set_setting
 
 
 class ClientAccountCreate(BaseModel):
@@ -48,8 +48,18 @@ class ClientArtifactBinding(BaseModel):
     enabled:bool=True
 
 
-def _feature_enabled():
-    return str(os.getenv("MAKIA_CLIENT_PORTAL_ENABLED","0")).strip().lower() in {"1","true","yes","on"}
+def _feature_state():
+    raw=str(os.getenv("MAKIA_CLIENT_PORTAL_ENABLED","auto")).strip().lower()
+    if raw in {"1","true","yes","on"}:
+        return True,"env_on"
+    if raw in {"0","false","no","off"}:
+        return False,"env_off"
+    enabled=str(get_setting("client_portal_enabled","0")).strip().lower() in {"1","true","yes","on"}
+    return enabled,"admin_setting"
+
+
+class ClientPlatformSettings(BaseModel):
+    enabled:bool
 
 
 def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
@@ -64,12 +74,31 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
     @app.get("/api/client-platform/status")
     def client_platform_status(request:Request):
         require_user(request)
+        enabled,source=_feature_state()
+        accounts=client_store.list_accounts()
         return {
-            "enabled":_feature_enabled(),
+            "enabled":enabled,
+            "enable_source":source,
             "mode":"pwa-control-plane",
             "native_agent":False,
-            "account_count":len(client_store.list_accounts()),
+            "account_count":len(accounts),
+            "active_accounts":sum(1 for a in accounts if a.get("enabled")),
+            "registered_devices":sum(int(a.get("active_devices") or 0) for a in accounts),
+            "bindings":sum(int(a.get("bindings") or 0) for a in accounts),
+            "portal_path":"/client/",
+            "admin_toggle_available":source=="admin_setting",
         }
+
+    @app.post("/api/client-platform/settings")
+    def client_platform_settings(payload:ClientPlatformSettings,request:Request):
+        actor=require_mutation(request)
+        _enabled,source=_feature_state()
+        if source in {"env_on","env_off"}:
+            raise HTTPException(409,"MAKIA_CLIENT_PORTAL_ENABLED environment override is active")
+        set_setting("client_portal_enabled","1" if payload.enabled else "0")
+        audit_func(actor,"client_platform_toggle","portal",f"enabled={payload.enabled}",ip_func(request))
+        enabled,source=_feature_state()
+        return {"ok":True,"enabled":enabled,"enable_source":source}
 
     @app.get("/api/client-platform/accounts")
     def client_platform_accounts(request:Request):
@@ -143,8 +172,10 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
     @app.get("/api/client-platform/protocols")
     def client_platform_protocols(request:Request):
         require_user(request)
+        owners=client_store.protocol_binding_owners()
         items=[]
         for row in list_protocol_clients():
+            owner=owners.get(int(row["id"]))
             items.append({
                 "id":row["id"],
                 "name":row["name"],
@@ -153,6 +184,9 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
                 "enabled":bool(row.get("enabled")),
                 "expire_at":int(row.get("expire_at") or 0),
                 "quota_bytes":int(row.get("quota_bytes") or 0),
+                "bound":bool(owner),
+                "bound_account_id":owner.get("account_id") if owner else None,
+                "bound_username":owner.get("username") if owner else "",
             })
         return {"items":items}
 
@@ -160,7 +194,20 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
     def client_platform_artifacts(request:Request):
         require_user(request)
         allowed={"ssh","wireguard","openvpn","xray","outline"}
-        return {"items":[item for item in list_access_artifacts() if str(item.get("kind") or "").lower() in allowed]}
+        owners=client_store.artifact_binding_owners()
+        items=[]
+        for item in list_access_artifacts():
+            if str(item.get("kind") or "").lower() not in allowed:
+                continue
+            owner=owners.get(int(item["id"]))
+            row=dict(item)
+            row.update({
+                "bound":bool(owner),
+                "bound_account_id":owner.get("account_id") if owner else None,
+                "bound_username":owner.get("username") if owner else "",
+            })
+            items.append(row)
+        return {"items":items}
 
     @app.post("/api/client-platform/accounts/{account_id}/artifact-bindings")
     def client_platform_artifact_binding_create(account_id:int,payload:ClientArtifactBinding,request:Request):
@@ -228,3 +275,32 @@ def register_client_admin(app,require_user,require_mutation,audit_func,ip_func):
         client_store.revoke_device(account_id,device_id)
         audit_func(actor,"client_device_admin_revoke",str(account_id),f"device_id={device_id}",ip_func(request))
         return {"ok":True}
+
+    @app.post("/api/client-platform/accounts/{account_id}/devices/revoke-all")
+    def client_platform_devices_revoke_all(account_id:int,request:Request):
+        actor=require_mutation(request)
+        if not client_store.get_account(account_id):
+            raise HTTPException(404,"client account not found")
+        client_store.revoke_all_devices(account_id)
+        audit_func(actor,"client_devices_revoke_all",str(account_id),"sessions_revoked=true",ip_func(request))
+        return {"ok":True}
+
+    @app.post("/api/client-platform/accounts/{account_id}/sessions/revoke-all")
+    def client_platform_sessions_revoke_all(account_id:int,request:Request):
+        actor=require_mutation(request)
+        if not client_store.get_account(account_id):
+            raise HTTPException(404,"client account not found")
+        client_store.revoke_all_sessions(account_id)
+        audit_func(actor,"client_sessions_revoke_all",str(account_id),"",ip_func(request))
+        return {"ok":True}
+
+    @app.delete("/api/client-platform/accounts/{account_id}")
+    def client_platform_account_delete(account_id:int,request:Request):
+        actor=require_mutation(request)
+        account=client_store.get_account(account_id)
+        if not account:
+            raise HTTPException(404,"client account not found")
+        username=account.get("username") or str(account_id)
+        client_store.delete_account(account_id)
+        audit_func(actor,"client_account_delete",str(account_id),f"username={username}; runtime_untouched=true",ip_func(request))
+        return {"ok":True,"runtime_untouched":True}
