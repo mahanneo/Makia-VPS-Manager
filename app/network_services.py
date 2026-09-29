@@ -212,8 +212,10 @@ def _ufw_reconcile_dns(allowed_networks):
     return {"active":True,"rules":created}
 
 
-def mtproxy_install_command(host="",port=0):
+def mtproxy_install_command(host="",port=0,install_only=False):
     args=["sudo","/usr/local/sbin/makia-install-mtproxy"]
+    if install_only:
+        args.append("--install-only")
     if host:
         args+=["--host",_validate_host(host)]
     if int(port or 0):
@@ -244,7 +246,7 @@ def mtproxy_status(host_hint=""):
         "secret_last4":secret[-4:] if secret else "",
         "tg_link":f"tg://proxy?{query}" if query else "",
         "https_link":f"https://t.me/proxy?{query}" if query else "",
-        "install_command":mtproxy_install_command(host_hint or host),
+        "install_command":mtproxy_install_command(install_only=True),
     }
 
 
@@ -346,7 +348,7 @@ def _dns_state():
 
 
 def dns_install_command():
-    return "sudo /usr/local/sbin/makia-install-dns"
+    return "sudo /usr/local/sbin/makia-install-dns --install-only"
 
 
 def dns_status():
