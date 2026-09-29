@@ -406,8 +406,11 @@ def test_update_can_land_fix_when_optional_mtproxy_was_already_broken():
 def test_force_main_update_bypasses_pinned_archive_and_verifies_running_version():
     update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
     assert 'FORCE_MAIN="${MAKIA_FORCE_MAIN:-0}"' in update
-    assert 'ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"' in update
-    assert "ignoring any pinned release archive override" in update
+    assert 'REF="main"' in update
+    assert 'SOURCE_COMMIT="$(resolve_github_commit "$REF")"' in update
+    assert 'ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"' in update
+    assert "pinned immutable source commit" in update
+    assert "archive/refs/heads/main.tar.gz" not in update
     assert "Running backend version verified" in update
     assert 'json.load(sys.stdin).get("version","")' in update
 
