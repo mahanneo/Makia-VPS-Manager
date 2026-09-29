@@ -79,15 +79,21 @@
             <strong>{{ item.display_name or item.external_key }}</strong>
             <small>{{ item.protocol or item.kind }}</small>
           </div>
-          <button class="client-connect" type="button" disabled title="Native Agent در فاز بعد فعال می‌شود">
+          {% if item.available and session.public_key %}
+          <button class="client-connect" type="button" data-agent-connect data-binding-id="{{ item.id }}">
             اتصال
           </button>
+          {% else %}
+          <button class="client-connect" type="button" disabled title="ابتدا Makia Agent را با این دستگاه Pair کنید">
+            اتصال
+          </button>
+          {% endif %}
         </article>
         {% endfor %}
       </div>
       <div class="client-phase-note">
-        <strong>مرحله بعد: Makia Agent</strong>
-        <p>این دکمه‌ها عمداً هنوز Tunnel واقعی را اجرا نمی‌کنند تا هیچ Runtime فعلی Production تغییر نکند. Agent ویندوز/موبایل در Phase B این لایه را به WireGuard/OpenVPN/Xray/SSH متصل می‌کند.</p>
+        <strong>اتصال امن از طریق Makia Agent</strong>
+        <p>Browser هیچ Secret دائمی دریافت نمی‌کند. برای هر اتصال یک Grant یک‌بارمصرف کوتاه‌عمر ساخته می‌شود و فقط Agent جفت‌شده با کلید همان دستگاه می‌تواند آن را Redeem کند.</p>
       </div>
       {% else %}
       <div class="client-empty">
@@ -95,6 +101,37 @@
         <span>مدیر می‌تواند Accessهای موجود Makia را بدون تغییر Credential فعلی به این حساب Bind کند.</span>
       </div>
       {% endif %}
+    </section>
+
+    <section class="client-section">
+      <div class="client-section-head">
+        <div>
+          <p class="client-eyebrow">MAKIA AGENT</p>
+          <h2>اتصال این دستگاه</h2>
+        </div>
+        <span class="client-state {% if session.public_key %}ok{% else %}bad{% endif %}">
+          <span class="client-state-dot"></span>
+          {% if session.public_key %}Pair شده{% else %}Pair نشده{% endif %}
+        </span>
+      </div>
+      {% if session.public_key %}
+      <div class="client-agent-panel paired">
+        <div>
+          <strong>{{ session.agent_platform or session.platform or 'Device' }}</strong>
+          <span>Agent {{ session.agent_version or 'registered' }} · کلید Ed25519 ثبت شده</span>
+        </div>
+        <span class="client-agent-check">✓</span>
+      </div>
+      {% else %}
+      <div class="client-agent-panel">
+        <div>
+          <strong>برای اتصال مستقیم، Agent را Pair کنید.</strong>
+          <span>Pairing پنج دقیقه اعتبار دارد و هیچ Config دائمی در مرورگر ذخیره نمی‌شود.</span>
+        </div>
+        <button class="client-primary client-agent-pair" type="button" data-agent-pair>Pair Agent</button>
+      </div>
+      {% endif %}
+      <div class="client-agent-message" data-agent-message hidden></div>
     </section>
 
     <section class="client-section">
@@ -130,7 +167,7 @@
         <div><strong>Session</strong><span>Opaque server-revocable token</span></div>
         <div><strong>Device</strong><span>Browser-bound identifier (Phase A)</span></div>
         <div><strong>Credentials</strong><span>Protocol secrets are not stored in the browser shell</span></div>
-        <div><strong>Next</strong><span>Device key pair + Native Agent attestation</span></div>
+        <div><strong>Agent identity</strong><span>{% if session.public_key %}Ed25519 device key paired{% else %}Awaiting device key pairing{% endif %}</span></div>
       </div>
     </section>
   </main>
