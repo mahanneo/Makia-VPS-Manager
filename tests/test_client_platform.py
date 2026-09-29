@@ -175,7 +175,10 @@ def test_artifact_bindings_deliver_wireguard_openvpn_and_ssh_without_runtime_mut
     kinds={item["engine"] for item in access}
     assert {"wireguard","openvpn","ssh"}.issubset(kinds)
     assert all(item.get("delivery_kind")=="artifact" for item in access)
-    assert all(item.get("accounting_supported") is False for item in access)
+    accounting={item["engine"]:item.get("accounting_supported") for item in access}
+    assert accounting["wireguard"] is True
+    assert accounting["openvpn"] is False
+    assert accounting["ssh"] is False
 
     delivered={kind:client_store.artifact_delivery(account_id,artifact_id) for kind,artifact_id in artifact_ids}
     assert "PrivateKey = secret" in delivered["wireguard"]["share_link"]
