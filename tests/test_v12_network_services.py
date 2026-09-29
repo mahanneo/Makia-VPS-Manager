@@ -34,15 +34,18 @@ def test_xray_allocator_checks_udp_for_hysteria(monkeypatch):
 
 def test_mtproxy_status_generates_real_telegram_links(tmp_path,monkeypatch):
     env=tmp_path/"mtproxy.env"
+    secret="ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d"
     env.write_text(
         "MTPROXY_PUBLIC_HOST=proxy.example.com\n"
         "MTPROXY_PORT=8443\n"
-        "MTPROXY_FRONT_DOMAIN=proxy.example.com\n"
-        "MTPROXY_SECRET=ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d\n",
+        "MTPROXY_FRONT_DOMAIN=proxy.example.com\n",
         encoding="utf-8",
     )
+    config=tmp_path/"mtproxy.toml"
+    config.write_text(f'secret = "{secret}"\nbind-to = "0.0.0.0:8443"\n',encoding="utf-8")
     binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
     monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
     monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
     monkeypatch.setattr(network_services,"_active",lambda service:True)
     monkeypatch.setattr(network_services,"_port_busy",lambda port,proto="tcp",address="0.0.0.0":True)
@@ -64,16 +67,19 @@ def test_mtproxy_reconfigure_keeps_its_own_live_port(tmp_path,monkeypatch):
     env.write_text(
         "MTPROXY_PUBLIC_HOST=proxy.example.com\n"
         "MTPROXY_PORT=443\n"
-        "MTPROXY_FRONT_DOMAIN=proxy.example.com\n"
-        f"MTPROXY_SECRET={secret}\n",
+        "MTPROXY_FRONT_DOMAIN=proxy.example.com\n",
         encoding="utf-8",
     )
+    config=tmp_path/"mtproxy.toml"
+    config.write_text(f'secret = "{secret}"\nbind-to = "0.0.0.0:443"\n',encoding="utf-8")
     binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
     monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
     monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
     monkeypatch.setattr(network_services,"_active",lambda service:True)
     monkeypatch.setattr(network_services,"_port_busy",lambda port,proto="tcp",address="0.0.0.0":int(port)==443)
     monkeypatch.setattr(network_services,"_run",lambda *a,**k:"")
+    monkeypatch.setattr(network_services,"_write_mtproxy_config",lambda value,port:config.write_text(f'secret = "{value}"\nbind-to = "0.0.0.0:{port}"\n',encoding="utf-8"))
     monkeypatch.setattr(network_services,"_ufw_allow",lambda *a,**k:{"active":False})
     def must_not_allocate(*a,**k):
         raise AssertionError("active owned port must be preserved")
@@ -82,12 +88,14 @@ def test_mtproxy_reconfigure_keeps_its_own_live_port(tmp_path,monkeypatch):
     assert state["port"]==443
     assert state["port_adjusted"] is False
     assert "MTPROXY_PORT=443" in env.read_text(encoding="utf-8")
+    assert secret in config.read_text(encoding="utf-8")
 
 
 def test_mtproxy_requires_domain_for_faketls(tmp_path,monkeypatch):
     binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
     monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
     monkeypatch.setattr(network_services,"MTPROXY_ENV",tmp_path/"missing.env")
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",tmp_path/"missing.toml")
     monkeypatch.setattr(network_services,"_free_port",lambda *a,**k:8443)
     with pytest.raises(network_services.NetworkServiceError,match="DNS hostname"):
         network_services.configure_mtproxy("203.0.113.10",443,False)
@@ -136,7 +144,9 @@ def test_mtproxy_installer_is_version_and_checksum_pinned():
 
 def test_mtproxy_systemd_is_unprivileged_and_hardened():
     text=(ROOT/"systemd/makia-mtproxy.service").read_text(encoding="utf-8")
-    assert "User=nobody" in text
+    assert "User=makia-mtproxy" in text
+    assert "ExecStart=/opt/makia-mtproxy/mtg run /etc/makia-vps-manager/mtproxy.toml" in text
+    assert "MTPROXY_SECRET" not in text
     assert "NoNewPrivileges=true" in text
     assert "ProtectSystem=strict" in text
     assert "MemoryDenyWriteExecute=true" in text
@@ -184,3 +194,14 @@ def test_dns_ufw_is_source_scoped():
     assert '"ufw","allow","from",network,"to","any","port","53"' in source
     assert '_ufw_allow(53,"udp"' not in source
     assert '_ufw_allow(53,"tcp"' not in source
+
+
+def test_mtproxy_secret_is_not_in_process_argv_or_state_file():
+    service=(ROOT/"systemd/makia-mtproxy.service").read_text(encoding="utf-8")
+    installer=(ROOT/"scripts/install-mtproxy.sh").read_text(encoding="utf-8")
+    assert "MTPROXY_SECRET" not in service
+    assert "ExecStart=/opt/makia-mtproxy/mtg run /etc/makia-vps-manager/mtproxy.toml" in service
+    state_block=installer.split('cat >"$STATE_FILE"',1)[1].split("EOF",1)[0]
+    assert "MTPROXY_SECRET" not in state_block
+    assert 'chown root:makia-mtproxy "$CONFIG_FILE"' in installer
+    assert 'chmod 0640 "$CONFIG_FILE"' in installer
