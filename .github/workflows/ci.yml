@@ -49,6 +49,7 @@ jobs:
       - name: Client Control Plane Phase A safety gate
         run: |
           pytest -q tests/test_v13_client_control_plane.py
+          pytest -q tests/test_v13_client_agent_grants.py
           grep -q 'MAKIA_CLIENT_APP_ENABLED=0' .env.example
           grep -q 'app.include_router(client_portal.router)' app/main.py
           grep -q 'client_accounts' app/db.py
