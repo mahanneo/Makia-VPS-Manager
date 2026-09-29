@@ -164,6 +164,23 @@ def main():
             assert page.locator("#xbTransport").count()==1
             assert page.locator("#xbSecurity").count()==1
             assert page.locator("#xbExtraStream").count()==1
+            assert page.locator(".xray-preset-card").count()>=7
+            page.locator(".xray-preset-card",has_text="VLESS · REALITY · RAW/Vision").click()
+            assert page.locator("#xbProtocol").input_value()=="vless"
+            assert page.locator("#xbTransport").input_value()=="tcp"
+            assert page.locator("#xbSecurity").input_value()=="reality"
+            assert page.locator("#xbFlow").input_value()=="xtls-rprx-vision"
+            assert "Recommended" in page.locator("#xbCompatNote").inner_text()
+            page.locator(".xray-preset-card",has_text="Hysteria2 · TLS · UDP").click()
+            assert page.locator("#xbProtocol").input_value()=="hysteria2"
+            assert page.locator("#xbTransport").input_value()=="hysteria"
+            assert page.locator("#xbSecurity").input_value()=="tls"
+            page.locator(".xray-preset-card",has_text="XHTTP · REALITY (Lab)").click()
+            assert page.locator("#xbProtocol").input_value()=="vless"
+            assert page.locator("#xbTransport").input_value()=="xhttp"
+            assert page.locator("#xbSecurity").input_value()=="reality"
+            assert page.locator("#xbXhttpMode").input_value()=="packet-up"
+            assert "Experimental" in page.locator("#xbCompatNote").inner_text()
             page.locator("#xbProtocol").select_option("vless")
             page.locator("#xbTransport").select_option("tcp")
             page.locator("#xbSecurity").select_option("none")

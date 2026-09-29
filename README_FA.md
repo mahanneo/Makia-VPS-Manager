@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>نسخه ۱.۰.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+  <strong>نسخه ۱.۱.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
-**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه v1](docs/UAT-1.0.0.md)**
+**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه v1](docs/UAT-1.1.0.md)**
 
 ---
 
@@ -21,6 +21,21 @@
 Makia یک پنل Self-hosted برای مدیریت دسترسی‌ها و عملیات VPS است. هر پروتکل Runtime مستقل خودش را دارد، اما ساخت کاربر، تحویل کانفیگ، تمدید، عیب‌یابی، بکاپ، بازیابی و Multi-VPS در یک رابط یکپارچه مدیریت می‌شوند.
 
 Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کند. نصب Packageها و عملیات حساس Host فقط از مسیرهای صریح و محدود Root انجام می‌شوند.
+
+## Presetهای شبکه ایران
+
+در **Xray Inbound Center** یک کتابخانه Preset آماده اضافه شده تا به‌جای تنظیم دستی ده‌ها فیلد، ساختار معتبر را انتخاب کنید:
+
+- **Recommended:** VLESS + REALITY + RAW/Vision
+- **Alternative:** VLESS + gRPC + REALITY
+- **Alternative:** VLESS + WebSocket + TLS
+- **Alternative:** VLESS + HTTPUpgrade + TLS
+- **Alternative:** Trojan + gRPC + TLS
+- **Alternative / UDP:** Hysteria2 + TLS
+- **Compatibility:** VMess + WebSocket + TLS
+- **Experimental:** VLESS + XHTTP + REALITY
+
+این Presetها **تضمین اتصال روی همه اپراتورها نیستند**. وضعیت فیلترینگ، ISP، دیتاسنتر و Client تغییر می‌کند. هر Preset فقط ترکیبی را اعمال می‌کند که Core فعلی Makia واقعاً پشتیبانی می‌کند و قبل از Commit توسط خود Xray Validate می‌شود. XHTTP روی Core فعلی به‌دلیل گزارش‌های جدید Compatibility/Resource در حالت Experimental باقی مانده است.
 
 ## پروتکل‌ها
 
@@ -165,7 +180,7 @@ CI نسخه ۱ شامل Python compile/import، Pytest، DB/Migration، JavaScri
 
 موارد وابسته به محیط مانند Firewall/NAT، DNS propagation، Docker/Shadowbox واقعی، اتصال Client واقعی و SCP واقعی باید روی Host مقصد تست شوند.
 
-جزئیات در **[docs/UAT-1.0.0.md](docs/UAT-1.0.0.md)** ثبت شده است.
+جزئیات در **[docs/UAT-1.1.0.md](docs/UAT-1.1.0.md)** ثبت شده است.
 
 ## مجوز
 

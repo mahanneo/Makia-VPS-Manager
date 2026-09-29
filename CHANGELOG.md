@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0] - 2026-09-29
+
+### Xray Inbound Presets
+- Added selectable Iran-network preset cards to the structured Xray Inbound Center.
+- Added VLESS REALITY RAW/Vision as the recommended starting profile.
+- Added gRPC/REALITY, WebSocket/TLS, HTTPUpgrade/TLS, Trojan gRPC/TLS and Hysteria2/TLS alternatives.
+- Added VMess WebSocket/TLS as a compatibility profile.
+- Added XHTTP/REALITY as an explicit Experimental/Lab profile rather than a default.
+- Presets populate the existing validated builder instead of bypassing validation/rollback.
+- Added domain/UDP prerequisites and non-guarantee messaging.
+
+### Verification
+- Every selectable preset is Core-validated against pinned Xray 26.3.27 in CI.
+- Added browser selection tests and preset catalog invariants.
+- Full Migration compatibility extended directionally through 1.1.0.
+
+
 ## [1.0.0] - 2026-09-29
 
 ### First public release
