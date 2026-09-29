@@ -412,7 +412,7 @@ def main():
             assert page.locator('[data-action="migration-restore-verify"]').count()==1
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            for view in ["dashboard","inbounds","access","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
+            for view in ["dashboard","inbounds","access","outline","plans","expiry","operations","diagnostics","integrations","sessions","protocols","guides","services","nodes","connectivity","backups","audit","updates","support"]:
                 page.evaluate(f"switchView('{view}')")
                 leave_sidebar(page)
                 page.wait_for_timeout(450)
@@ -421,7 +421,9 @@ def main():
             page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
             page.locator(".pro-directory").wait_for()
-            assert page.locator("#accessSegments button").count()==5
+            assert page.locator("#accessSegments button").count()==6
+            assert page.locator('#accessSegments [data-filter-value="outline"]').count()==1
+            assert page.locator(".pro-user-row .pro-more").count() >= 1
             assert page.locator(".license-lock-panel").count()==0
             page.locator('.pro-sidebar button[data-view="services"]').click()
             leave_sidebar(page)
