@@ -355,7 +355,10 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
     _atomic_write(MTPROXY_ENV,state,0o600)
     _write_mtproxy_config(secret,selected)
     try:
-        _run([str(MTPROXY_BIN),"doctor",str(MTPROXY_CONFIG)],timeout=20)
+        # Do not make mtg doctor a start gate: doctor also probes external
+        # Telegram/fronting connectivity. The generated TOML is deterministic;
+        # the critical host preflight is that the real service account can
+        # traverse/read it before systemd is started.
         _run(["runuser","-u","makia-mtproxy","--","test","-r",str(MTPROXY_CONFIG)],timeout=10)
         _run(["systemctl","daemon-reload"],timeout=15)
         _run(["systemctl","enable","--now",MTPROXY_SERVICE],timeout=30)
