@@ -139,3 +139,58 @@ def test_pwa_shell_uses_no_store_for_private_api_and_separate_service_worker():
     assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-icon.svg"]' in sw
     assert '"/client/sw.js"' in manifest
     assert '"display":"standalone"' in manifest
+
+
+def test_protocol_identity_cannot_be_shared_across_client_accounts(client_db):
+    a1=client_store.create_account("owner01","owner-pass-001")
+    a2=client_store.create_account("owner02","owner-pass-002")
+    protocol_id=db.create_protocol_client(
+        "exclusive-client","xray","vless","inbound-e","cred","vless://exclusive",
+    )
+    client_store.bind_protocol_client(a1,protocol_id)
+    with pytest.raises(ValueError,match="already bound"):
+        client_store.bind_protocol_client(a2,protocol_id)
+
+
+def test_artifact_bindings_deliver_wireguard_openvpn_and_ssh_without_runtime_mutation(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("client07","client-pass-777",device_limit=2)
+
+    payloads=[
+        ("wireguard","phone",access_ops.wireguard_payload("phone","[Interface]\nPrivateKey = secret\n[Peer]\nEndpoint = vpn.example:51820\n")),
+        ("openvpn","laptop",access_ops.openvpn_payload("laptop","client\nremote vpn.example 1194 udp\n")),
+        ("ssh","shell",access_ops.ssh_payload("vpn.example","shell","ssh-secret",22,{"enabled":False})),
+    ]
+    artifact_ids=[]
+    for kind,key,payload in payloads:
+        artifact_id=db.upsert_access_artifact(
+            kind,key,key,kind,payload["native_filename"],
+            access_ops.seal_payload(payload),"{}",
+        )
+        artifact_ids.append((kind,artifact_id))
+        client_store.bind_access_artifact(account_id,artifact_id,label=kind.upper())
+
+    access=client_store.client_access_list(account_id)
+    kinds={item["engine"] for item in access}
+    assert {"wireguard","openvpn","ssh"}.issubset(kinds)
+    assert all(item.get("delivery_kind")=="artifact" for item in access)
+    assert all(item.get("accounting_supported") is False for item in access)
+
+    delivered={kind:client_store.artifact_delivery(account_id,artifact_id) for kind,artifact_id in artifact_ids}
+    assert "PrivateKey = secret" in delivered["wireguard"]["share_link"]
+    assert "remote vpn.example 1194 udp" in delivered["openvpn"]["share_link"]
+    assert "Password: ssh-secret" in delivered["ssh"]["share_link"]
+
+
+def test_artifact_identity_cannot_be_shared_across_client_accounts(client_db):
+    from app import access_ops
+    a1=client_store.create_account("artifact01","artifact-pass-001")
+    a2=client_store.create_account("artifact02","artifact-pass-002")
+    payload=access_ops.openvpn_payload("one","client\nremote vpn.example 1194\n")
+    artifact_id=db.upsert_access_artifact(
+        "openvpn","one","one","openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),"{}",
+    )
+    client_store.bind_access_artifact(a1,artifact_id)
+    with pytest.raises(ValueError,match="already bound"):
+        client_store.bind_access_artifact(a2,artifact_id)
