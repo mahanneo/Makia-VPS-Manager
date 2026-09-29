@@ -222,3 +222,31 @@ def test_dns_client_delivery_never_presents_loopback_as_remote_address():
     assert "remoteAddresses=[...new Set([r.wireguard_address,r.public_address].filter(Boolean))]" in js
     assert "dnsUserDelivery" in js
     assert "127.0.0.1" not in js.split("const remoteAddresses=",1)[1].split("const upstreamOptions",1)[0]
+
+
+def test_network_tooling_is_prepared_by_install_and_update():
+    install=(ROOT/"scripts/install.sh").read_text(encoding="utf-8")
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    mt=(ROOT/"scripts/install-mtproxy.sh").read_text(encoding="utf-8")
+    dns=(ROOT/"scripts/install-dns.sh").read_text(encoding="utf-8")
+    for text in (install,update):
+        assert "makia-install-mtproxy --install-only" in text
+        assert "makia-install-dns --install-only" in text
+    assert "--install-only) INSTALL_ONLY=1" in mt
+    assert "--install-only) INSTALL_ONLY=1" in dns
+
+
+def test_panel_install_commands_prepare_only_then_configure_in_ui(tmp_path,monkeypatch):
+    env=tmp_path/"missing.env"
+    config=tmp_path/"missing.toml"
+    binary=tmp_path/"mtg"
+    binary.write_text("binary",encoding="utf-8")
+    monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
+    monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
+    monkeypatch.setattr(network_services,"_active",lambda service:False)
+    state=network_services.mtproxy_status("panel.example.com")
+    assert state["installed"] is True
+    assert state["configured"] is False
+    assert state["install_command"].endswith("makia-install-mtproxy --install-only")
+    assert network_services.dns_install_command().endswith("makia-install-dns --install-only")

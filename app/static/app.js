@@ -2476,7 +2476,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
         '<section class="network-tool-card">',
           '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('اگر Port اشغال باشد Makia خودکار Port آزاد انتخاب می‌کند.','If the requested port is busy, Makia automatically selects a free managed port.'))+'</small></div>',
           '<div class="wizard-form two">',
-            '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.host||'')+'" placeholder="proxy.example.com"></label>',
+            '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.configured?r.host:'')+'" placeholder="proxy.example.com"></label>',
             '<label>'+htmlEsc(tr('Port ترجیحی','Preferred port'))+'<input id="mtPort" type="number" min="1" max="65535" value="'+Number(r.port||443)+'"></label>',
           '</div>',
           '<div class="toolbar"><button class="primary" data-action="mtproxy-configure">'+htmlEsc(tr('ذخیره و راه‌اندازی','Save & start'))+'</button><button class="danger" data-action="mtproxy-rotate">'+htmlEsc(tr('تعویض Secret','Rotate secret'))+'</button></div>',
