@@ -20,6 +20,8 @@ ALLOWED_SERVICES = {
     "strongswan-starter": "IKEv2 / strongSwan",
     "makia-ikev2-network": "IKEv2 Network",
     "makia-wstunnel": "WStunnel",
+    "makia-mtproxy": "Telegram MTProxy",
+    "unbound": "DNS Resolver",
     "makia-policy-enforcer": "Policy Enforcer",
     "makia-metrics-sampler": "Metrics Sampler",
     "makia-protocol-traffic": "Protocol Traffic Collector",
