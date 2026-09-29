@@ -208,13 +208,17 @@ def main():
 
             # Optional network tools render real status/install workflows even
             # on CI hosts where the root components are intentionally absent.
-            page.evaluate("switchView('telegramproxy')")
+            telegram_nav=page.locator('.pro-sidebar [data-group-panel="protocols"] button[data-view="telegramproxy"]')
+            dns_nav=page.locator('.pro-sidebar [data-group-panel="protocols"] button[data-view="dnscenter"]')
+            assert telegram_nav.count()==1
+            assert dns_nav.count()==1
+            telegram_nav.click()
             leave_sidebar(page)
             page.locator(".network-tools-page").wait_for()
             assert "TELEGRAM MTPROXY" in page.locator("#content").inner_text()
             assert "undefined" not in page.locator("#content").inner_text().lower()
             page.screenshot(path='/tmp/makia-telegram-proxy.png',full_page=True)
-            page.evaluate("switchView('dnscenter')")
+            dns_nav.click()
             leave_sidebar(page)
             page.locator(".network-tools-page").wait_for()
             assert "SECURE RESOLVER" in page.locator("#content").inner_text()
