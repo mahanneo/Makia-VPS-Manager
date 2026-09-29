@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.7] - 2026-09-29
+
+### DNS-over-TLS repair
+- Added the system CA bundle to authenticated Unbound DoT upstreams so TLS certificates can be verified correctly.
+- DNS configuration now requires a successful localhost resolver query before commit.
+- DNS status now exposes query health, latency and bounded runtime diagnostics.
+
+### Update recovery
+- The updater records pre-update DNS query health and repairs a pre-existing broken resolver transactionally.
+- Successful DNS repair promotes repaired config/state hashes to the accepted update baseline.
+- Failed DNS repair restores original hashes and no longer forces the core panel release to roll back.
+- Post-update smoke soft-fails DNS only when that optional resolver was already broken before the update; direct UAT remains strict.
+- Retains v1.2.6 MTProxy transaction repair, v1.2.5 shared permission contract and force-main recovery.
+
+
 ## [1.2.6] - 2026-09-29
 
 ### Updater repair transaction

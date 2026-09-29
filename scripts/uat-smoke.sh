@@ -277,8 +277,59 @@ if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then
   else
     bad "Makia DNS config/runtime unhealthy"
   fi
-  if command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com +short +time=2 +tries=1 | grep -q .; then
+  if command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com A +short +time=2 +tries=1 | grep -Eq '^[0-9]+(\.[0-9]+){3}
+else
+  ok "Makia DNS optional gate skipped"
+fi
+
+if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then
+  OVPN_TCP_PORT="$(awk '$1=="port"{print $2; exit}' /etc/openvpn/server/makia-tcp.conf 2>/dev/null || true)"
+  if systemctl is-active --quiet openvpn-server@makia-tcp; then
+    ok "OpenVPN parallel TCP fallback runtime active"
+  else
+    bad "OpenVPN TCP fallback configured but service inactive"
+  fi
+  if [[ -n "$OVPN_TCP_PORT" ]] && ss -H -ltn 2>/dev/null | grep -Eq ":${OVPN_TCP_PORT}([[:space:]]|$)"; then
+    ok "OpenVPN TCP fallback listener on port $OVPN_TCP_PORT"
+  else
+    bad "OpenVPN TCP fallback listener missing"
+  fi
+else
+  ok "OpenVPN TCP fallback not configured"
+fi
+if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+  if systemctl is-active --quiet stunnel4; then
+    ok "Stealth TLS/Stunnel runtime active"
+  else
+    bad "Stealth configured but stunnel4 inactive"
+  fi
+else
+  ok "Stealth mode not configured"
+fi
+
+if command -v makia-restore-portable >/dev/null 2>&1; then
+  ok "Portable restore command"
+else
+  bad "Portable restore command missing"
+fi
+
+if command -v makia-doctor >/dev/null 2>&1; then
+  makia-doctor || true
+else
+  bad "makia-doctor command missing"
+fi
+
+printf '\n'
+if [[ "$FAIL" -eq 0 ]]; then
+  printf 'HOST SMOKE: PASS\n'
+else
+  printf 'HOST SMOKE: FAIL\n'
+fi
+exit "$FAIL"
+; then
     ok "Makia DNS query"
+  elif [[ "${MAKIA_UAT_DNS_SOFTFAIL:-0}" == "1" ]]; then
+    warn "Makia DNS localhost query failed (pre-existing optional resolver; update retained)"
   else
     bad "Makia DNS localhost query failed"
   fi

@@ -118,6 +118,7 @@ def test_dns_private_config_is_acl_restricted_and_dot(tmp_path,monkeypatch):
     monkeypatch.setattr(network_services,"_interface_ipv4",lambda name:"10.66.66.1" if name=="wg0" else "")
     monkeypatch.setattr(network_services,"_run",lambda *a,**k:"")
     monkeypatch.setattr(network_services,"_active",lambda service:True)
+    monkeypatch.setattr(network_services,"_dns_query_probe",lambda:{"ok":True,"query_ms":7,"error":""})
     firewall=[]
     monkeypatch.setattr(network_services,"_ufw_reconcile_dns",lambda networks:firewall.extend(networks) or {"active":True})
     monkeypatch.setattr(network_services,"dns_status",lambda:{
@@ -128,6 +129,7 @@ def test_dns_private_config_is_acl_restricted_and_dot(tmp_path,monkeypatch):
     assert "access-control: 0.0.0.0/0 refuse" in text
     assert "access-control: 127.0.0.0/8 allow" in text
     assert "access-control: 10.66.66.0/24 allow" in text
+    assert 'tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"' in text
     assert "forward-tls-upstream: yes" in text
     assert "1.1.1.1@853#cloudflare-dns.com" in text
     assert "interface: 0.0.0.0" not in text
@@ -445,3 +447,56 @@ def test_failed_mtproxy_repair_must_restore_original_hashes():
     update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
     assert 'MTProxy state after failed repair' in update
     assert 'MTProxy config after failed repair' in update
+
+
+def test_dns_dot_ca_bundle_is_present_in_installer_and_runtime_config():
+    installer=(ROOT/"scripts/install-dns.sh").read_text(encoding="utf-8")
+    source=(ROOT/"app/network_services.py").read_text(encoding="utf-8")
+    needle='tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"'
+    assert needle in installer
+    assert needle in source
+    assert "forward-tls-upstream: yes" in installer
+    assert "forward-tls-upstream: yes" in source
+
+
+def test_dns_configure_requires_working_local_query(tmp_path,monkeypatch):
+    conf=tmp_path/"makia.conf"; state=tmp_path/"dns.json"
+    monkeypatch.setattr(network_services,"DNS_CONF",conf)
+    monkeypatch.setattr(network_services,"DNS_STATE",state)
+    monkeypatch.setattr(network_services.shutil,"which",lambda name:f"/usr/bin/{name}")
+    monkeypatch.setattr(network_services,"_interface_ipv4",lambda name:"")
+    monkeypatch.setattr(network_services,"_run",lambda *a,**k:"")
+    monkeypatch.setattr(network_services,"_active",lambda service:True)
+    monkeypatch.setattr(network_services,"_ufw_reconcile_dns",lambda networks:{"active":False})
+    monkeypatch.setattr(network_services,"_dns_query_probe",lambda:{"ok":False,"query_ms":None,"error":"SERVFAIL"})
+    with pytest.raises(network_services.NetworkServiceError,match="local DNS query failed"):
+        network_services.configure_dns("private","cloudflare",[],"")
+
+
+def test_update_accepts_intentional_dns_repair_state():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'DNS_STATE_ACCEPTED_SHA="$DNS_STATE_PRE_SHA"' in update
+    assert 'DNS_CONFIG_ACCEPTED_SHA="$DNS_CONFIG_PRE_SHA"' in update
+    assert "DNS_WAS_QUERY_OK=0" in update
+    assert "Repairing existing Makia DNS resolver with the current DoT contract" in update
+    assert 'DNS_STATE_ACCEPTED_SHA="$(file_sha256 "$DNS_STATE_PATH")"' in update
+    assert 'DNS_CONFIG_ACCEPTED_SHA="$(file_sha256 "$DNS_CONFIG_PATH")"' in update
+    assert "Accepted repaired DNS state for the remainder of this update transaction." in update
+    final=update.split("Re-checking persistent network-service state before final acceptance...",1)[1]
+    assert 'assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_ACCEPTED_SHA"' in final
+    assert 'assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_ACCEPTED_SHA"' in final
+
+
+def test_updater_dns_softfail_is_scoped_to_preexisting_broken_query():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    uat=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    assert 'if [[ "$DNS_WAS_QUERY_OK" -eq 0 ]]; then' in update
+    assert "MAKIA_UAT_DNS_SOFTFAIL=1" in update
+    assert "pre-existing optional resolver; update retained" in uat
+
+
+def test_dns_ui_does_not_show_zero_ms_for_failed_query():
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert "r.query_ok===false" in js
+    assert "FAILED" in js
+    assert "runtime_error" in js
