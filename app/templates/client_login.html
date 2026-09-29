@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <title>Makia Client</title>
+  <link rel="manifest" href="/client/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/client.css?v={{ version }}">
+</head>
+<body class="mc-body mc-login-body">
+  <main class="mc-login-shell">
+    <section class="mc-login-card" aria-labelledby="client-login-title">
+      <div class="mc-brand">
+        <span class="mc-brand-mark">M</span>
+        <div>
+          <strong>MAKIA</strong>
+          <small>CLIENT</small>
+        </div>
+      </div>
+      <div class="mc-login-copy">
+        <span class="mc-eyebrow">SECURE ACCESS</span>
+        <h1 id="client-login-title">ورود به حساب کاربری</h1>
+        <p>برای مشاهده اشتراک، دستگاه‌ها و دسترسی‌های اختصاصی خود وارد شوید.</p>
+      </div>
+      {% if error %}<div class="mc-alert mc-alert-danger" role="alert">{{ error }}</div>{% endif %}
+      <form method="post" action="/client/login" class="mc-form" autocomplete="on">
+        <label>
+          <span>نام کاربری</span>
+          <input name="username" autocomplete="username" required maxlength="64" dir="ltr" value="{{ default_username or '' }}">
+        </label>
+        <label>
+          <span>رمز عبور</span>
+          <input name="password" type="password" autocomplete="current-password" required minlength="8">
+        </label>
+        <label>
+          <span>نام این دستگاه <small>اختیاری</small></span>
+          <input name="device_label" maxlength="120" placeholder="مثلاً iPhone شخصی">
+        </label>
+        <button class="mc-primary" type="submit">ورود امن</button>
+      </form>
+      <p class="mc-login-foot">Makia Client · v{{ version }}</p>
+    </section>
+  </main>
+</body>
+</html>

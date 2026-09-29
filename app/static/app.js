@@ -2350,6 +2350,58 @@ async function handleMakiaAction(btn){
   if(action==='settings-2fa-disable'){await disable2FA();return}
   if(action==='settings-api-new'){createApiToken();return}
   if(action==='settings-api-revoke'){await revokeApiToken(Number(btn.dataset.id));return}
+  if(action==='client-open-portal'){window.open(location.origin+'/client/','_blank','noopener');return}
+  if(action==='client-copy-portal'){copyText(location.origin+'/client/');toast(tr('لینک Client Portal کپی شد','Client Portal link copied'));return}
+  if(action==='client-copy-link'){copyText(clientPortalUrl(dataDec(btn.dataset.user)));toast(tr('لینک ورود کاربر کپی شد','Client login link copied'));return}
+  if(action==='client-openvpn-policy-enable'){
+    if(!confirm(tr('فعال‌سازی کنترل Client برای OpenVPN یک Restart کنترل‌شده OpenVPN انجام می‌دهد و ممکن است اتصال‌های OpenVPN فعلی برای چند ثانیه قطع و دوباره برقرار شوند. ادامه می‌دهی؟','Enabling OpenVPN Client policy performs a controlled OpenVPN restart and may briefly interrupt current OpenVPN sessions. Continue?')))return;
+    btn.disabled=true;
+    try{
+      const r=await api('/api/client-platform/openvpn-policy/enable',{method:'POST'});
+      toast(r.ready?tr('کنترل OpenVPN آماده شد','OpenVPN Client policy is ready'):tr('تنظیم انجام شد؛ وضعیت را دوباره بررسی کن','Configured; recheck status'));
+      await clientPlatformCenter();
+    }finally{btn.disabled=false}
+    return;
+  }
+  if(action==='client-platform-toggle'){
+    const next=btn.dataset.enabled==='1';
+    if(!confirm(next?tr('Client Portal برای کاربران فعال شود؟','Enable Client Portal for users?'):tr('Client Portal غیرفعال شود؟ اتصال‌های VPN فعلی قطع نمی‌شوند.','Disable Client Portal? Existing VPN connections will not be disconnected.')))return;
+    await api('/api/client-platform/settings',{method:'POST',body:JSON.stringify({enabled:next})});
+    toast(next?tr('Client Portal فعال شد','Client Portal enabled'):tr('Client Portal غیرفعال شد','Client Portal disabled'));
+    await clientPlatformCenter();return;
+  }
+  if(action==='client-account-new'){openClientAccountCreate();return}
+  if(action==='client-account-create'){await createClientAccount();return}
+  if(action==='client-account-open'){await openClientAccountManage(Number(btn.dataset.id));return}
+  if(action==='client-account-save'){await saveClientAccount(Number(btn.dataset.id));return}
+  if(action==='client-password-generate'){
+    const r=await api('/api/accounts/generate-secret?mode=strong');
+    const el=document.getElementById(btn.dataset.target);if(el){el.value=r.secret||'';el.type='text';el.focus()}return;
+  }
+  if(action==='client-password-rotate'){await rotateClientPassword(Number(btn.dataset.id),dataDec(btn.dataset.user));return}
+  if(action==='client-binding-add'){await bindClientAccess(Number(btn.dataset.account));return}
+  if(action==='client-binding-remove'){await removeClientBinding(Number(btn.dataset.account),btn.dataset.type,Number(btn.dataset.id));return}
+  if(action==='client-device-revoke-admin'){
+    if(!confirm(tr('این دستگاه لغو شود؟ Sessionهای همان دستگاه هم باطل می‌شوند.','Revoke this device and its sessions?')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.account)+'/devices/'+Number(btn.dataset.device)+'/revoke',{method:'POST'});
+    toast(tr('دستگاه لغو شد','Device revoked'));await openClientAccountManage(Number(btn.dataset.account));return;
+  }
+  if(action==='client-devices-revoke-all'){
+    if(!confirm(tr('همه دستگاه‌های این حساب لغو شوند؟ کاربر باید دوباره دستگاه ثبت کند.','Revoke all devices for this account? The user must register a device again.')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.account)+'/devices/revoke-all',{method:'POST'});
+    toast(tr('همه دستگاه‌ها لغو شدند','All devices revoked'));await openClientAccountManage(Number(btn.dataset.account));return;
+  }
+  if(action==='client-sessions-revoke-all'){
+    if(!confirm(tr('همه Sessionهای فعال این حساب خارج شوند؟','Revoke all active sessions for this account?')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.account)+'/sessions/revoke-all',{method:'POST'});
+    toast(tr('همه Sessionها باطل شدند','All sessions revoked'));return;
+  }
+  if(action==='client-account-delete'){
+    const user=dataDec(btn.dataset.user);
+    if(!confirm(tr('حساب Client '+user+' حذف شود؟ پروتکل‌ها و Credentialهای اصلی حذف نمی‌شوند.','Delete client account '+user+'? Original protocol credentials will remain untouched.')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.id),{method:'DELETE'});
+    closeModal();toast(tr('حساب Client حذف شد؛ Runtime دست‌نخورده ماند','Client account deleted; runtime remained untouched'));await clientPlatformCenter();return;
+  }
   if(action==='refresh'){await currentView();return}
 }
 
@@ -2882,12 +2934,213 @@ async function openDRWizard(){
   }catch(e){alert(e.message)}
 }
 
-const views={dashboard,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
+
+let clientPlatformCache=[];
+
+function clientDateValue(ts){
+  if(!Number(ts))return '';
+  const d=new Date(Number(ts)*1000);
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function clientExpireTs(value){
+  if(!value)return 0;
+  const n=Math.floor(new Date(value+'T23:59:59').getTime()/1000);
+  return Number.isFinite(n)?n:0;
+}
+function clientExpiryLabel(ts){
+  if(!Number(ts))return tr('بدون انقضا','No expiry');
+  try{return new Intl.DateTimeFormat(isFa()?'fa-IR':'en-US',{dateStyle:'medium'}).format(new Date(Number(ts)*1000))}
+  catch{return new Date(Number(ts)*1000).toLocaleDateString()}
+}
+function clientPortalUrl(username=''){
+  const base=location.origin+'/client/login';
+  return username?base+'?u='+encodeURIComponent(username):location.origin+'/client/';
+}
+function clientAccountState(a){
+  if(!a.enabled)return '<span class="status-chip bad">'+htmlEsc(tr('غیرفعال','Disabled'))+'</span>';
+  if(Number(a.expire_at||0)&&Number(a.expire_at)<Math.floor(Date.now()/1000))return '<span class="status-chip bad">'+htmlEsc(tr('منقضی','Expired'))+'</span>';
+  return '<span class="status-chip ok">'+htmlEsc(tr('فعال','Active'))+'</span>';
+}
+
+async function clientPlatformCenter(renderToken=window.__viewRenderToken){
+  title.textContent=tr('اپ کاربران','Client Platform');setPageContext('CLIENT PLATFORM');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>'+htmlEsc(tr('در حال همگام‌سازی Client Platform…','Synchronizing Client Platform…'))+'</b></div>';
+  const [status,accountsList]=await Promise.all([
+    api('/api/client-platform/status'),api('/api/client-platform/accounts')
+  ]);
+  if(renderToken!==window.__viewRenderToken||activeView!=='clientplatform')return;
+  clientPlatformCache=accountsList||[];
+  const enabled=Boolean(status.enabled);
+  const portal=location.origin+(status.portal_path||'/client/');
+  const totalQuota=clientPlatformCache.reduce((n,a)=>n+Number(a.quota_bytes||0),0);
+  const totalUsed=clientPlatformCache.reduce((n,a)=>n+Number(a.used_bytes||0),0);
+  const rows=clientPlatformCache.map(a=>{
+    const link=clientPortalUrl(a.username);
+    return '<div class="cp-account-row">'+
+      '<div class="cp-user-cell"><span class="cp-avatar">'+htmlEsc(String(a.username||'?').slice(0,1).toUpperCase())+'</span><div><b>'+htmlEsc(a.display_name||a.username)+'</b><small dir="ltr">'+htmlEsc(a.username)+'</small></div></div>'+
+      '<div><span class="cp-cell-label">'+htmlEsc(tr('پلن','Plan'))+'</span><b>'+htmlEsc(a.plan_name||'—')+'</b><small>'+htmlEsc(clientExpiryLabel(a.expire_at))+'</small></div>'+
+      '<div><span class="cp-cell-label">'+htmlEsc(tr('دستگاه','Devices'))+'</span><b>'+Number(a.active_devices||0)+' / '+Number(a.device_limit||1)+'</b><small>'+htmlEsc(tr('همزمان','Concurrent'))+' '+Number(a.concurrent_device_limit||1)+'</small></div>'+
+      '<div><span class="cp-cell-label">'+htmlEsc(tr('دسترسی‌ها','Access'))+'</span><b>'+Number(a.bindings||0)+'</b><small>'+fmtBytes(Number(a.used_bytes||0))+(Number(a.quota_bytes||0)?' / '+fmtBytes(Number(a.quota_bytes||0)):'')+'</small></div>'+
+      '<div class="cp-state-cell">'+clientAccountState(a)+'</div>'+
+      '<div class="cp-row-actions"><button class="ghost" data-action="client-copy-link" data-user="'+dataEnc(a.username)+'">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><button class="primary" data-action="client-account-open" data-id="'+Number(a.id)+'">'+htmlEsc(tr('مدیریت','Manage'))+'</button></div>'+
+    '</div>';
+  }).join('');
+  const override=status.enable_source==='env_on'||status.enable_source==='env_off';
+  content.innerHTML=[
+    '<div class="pro-page client-platform-page">',
+      '<section class="pro-page-head"><div><span class="pro-kicker">MAKIA CLIENT</span><h1>'+htmlEsc(tr('اپ کاربران','Client Platform'))+'</h1><p>'+htmlEsc(tr('حساب، دستگاه، اشتراک و تحویل امن پروتکل‌ها؛ بدون تغییر Credential کاربران فعلی.','Accounts, devices, subscriptions and secure delivery without rotating existing credentials.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="client-open-portal">'+htmlEsc(tr('باز کردن اپ کاربران','Open client app'))+'</button><button class="primary" data-action="client-account-new">＋ '+htmlEsc(tr('حساب جدید','New client'))+'</button></div></section>',
+      '<section class="cp-rollout-card '+(enabled?'is-on':'is-off')+'"><div><span class="pro-kicker">ROLLOUT CONTROL</span><h3>'+htmlEsc(enabled?tr('Client Portal فعال است','Client Portal is enabled'):tr('Client Portal غیرفعال است','Client Portal is disabled'))+'</h3><p>'+htmlEsc(override?tr('وضعیت توسط Environment Override قفل شده است.','State is locked by an environment override.'):tr('این کلید فقط Portal کاربران را کنترل می‌کند و سرویس‌های VPN فعلی را Restart یا Rotate نمی‌کند.','This switch controls only the client portal and does not restart or rotate active VPN services.'))+'</p></div><div class="cp-rollout-actions"><code>'+htmlEsc(portal)+'</code><button class="ghost" data-action="client-copy-portal">'+htmlEsc(tr('کپی','Copy'))+'</button><button class="'+(enabled?'danger':'primary')+'" data-action="client-platform-toggle" data-enabled="'+(enabled?'0':'1')+'" '+(status.admin_toggle_available?'':'disabled')+'>'+(enabled?htmlEsc(tr('غیرفعال کردن','Disable')):htmlEsc(tr('فعال کردن','Enable')))+'</button></div></section>',
+      '<section class="pro-stat-strip cp-stats"><div><span>'+htmlEsc(tr('حساب‌ها','Accounts'))+'</span><b>'+Number(status.account_count||0)+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+Number(status.active_accounts||0)+'</b></div><div><span>'+htmlEsc(tr('دستگاه ثبت‌شده','Registered devices'))+'</span><b>'+Number(status.registered_devices||0)+'</b></div><div><span>'+htmlEsc(tr('دسترسی‌های Bind شده','Bound access'))+'</span><b>'+Number(status.bindings||0)+'</b></div></section>',
+      '<section class="cp-safety-note"><b>'+htmlEsc(tr('مرز Enforcement','Enforcement boundary'))+'</b><span>'+htmlEsc(tr('محدودیت دستگاه Web/PWA روی خود Portal اعمال می‌شود. محدودیت زمان و حجم برای پروتکل‌هایی که Hard Policy دارند در Runtime سرور هم اعمال می‌شود. قفل سخت‌افزاری واقعی دستگاه در Native Agent مرحله بعد است.','Web/PWA device limits protect the portal itself. Expiry/quota are also enforced in server runtime where a hard policy adapter is available. Hardware-backed device lock comes with the native agent.'))+'</span></section>',
+      '<section class="cp-enforcement-grid">'+Object.entries(status.enforcement||{}).map(([name,e])=>'<article class="cp-enforcement-card"><div><b>'+htmlEsc(name.toUpperCase())+'</b><span class="status-chip '+(e.mode==='hard'?'ok':e.mode==='setup_required'?'warn':'muted')+'">'+htmlEsc(e.mode==='hard'?tr('کنترل فعال','Hard policy'):e.mode==='setup_required'?tr('نیاز به راه‌اندازی','Setup required'):tr('تحویل پروفایل','Delivery'))+'</span></div><small>'+htmlEsc((e.expiry?tr('انقضا ✓','Expiry ✓'):tr('انقضا —','Expiry —'))+' · '+(e.quota?tr('حجم ✓','Quota ✓'):tr('حجم —','Quota —'))+' · '+(e.device?tr('دستگاه ✓','Device ✓'):tr('دستگاه Portal','Portal device')))+'</small>'+(name==='openvpn'&&e.mode==='setup_required'?'<button class="ghost" data-action="client-openvpn-policy-enable">'+htmlEsc(tr('فعال‌سازی کنترل OpenVPN','Enable OpenVPN policy'))+'</button>':'')+(name==='openvpn'&&e.policy_conflict?'<em>'+htmlEsc(e.policy_conflict)+'</em>':'')+'</article>').join('')+'</section>',
+      '<section class="pro-directory cp-directory"><div class="pro-directory-toolbar"><div><h3>'+htmlEsc(tr('حساب‌های Client','Client accounts'))+'</h3><small>'+clientPlatformCache.length+' ACCOUNT · '+fmtBytes(totalUsed)+(totalQuota?' / '+fmtBytes(totalQuota):'')+'</small></div><div class="pro-search-wrap"><span>⌕</span><input id="clientPlatformSearch" placeholder="'+htmlEsc(tr('جستجو نام، پلن یا یوزرنیم…','Search name, plan or username…'))+'"></div></div>',
+      '<div class="cp-account-head"><span>'+htmlEsc(tr('کاربر','Client'))+'</span><span>'+htmlEsc(tr('پلن / انقضا','Plan / expiry'))+'</span><span>'+htmlEsc(tr('دستگاه','Devices'))+'</span><span>'+htmlEsc(tr('مصرف / دسترسی','Usage / access'))+'</span><span>'+htmlEsc(tr('وضعیت','Status'))+'</span><span></span></div>',
+      '<div id="clientPlatformRows">'+(rows||'<div class="empty">'+htmlEsc(tr('هنوز حساب Client ساخته نشده است.','No client account has been created yet.'))+'</div>')+'</div></section>',
+    '</div>'
+  ].join('');
+  const search=document.getElementById('clientPlatformSearch');
+  search?.addEventListener('input',()=>{
+    const q=(search.value||'').trim().toLowerCase();
+    document.querySelectorAll('#clientPlatformRows .cp-account-row').forEach((row,i)=>{
+      const a=clientPlatformCache[i],hay=((a?.username||'')+' '+(a?.display_name||'')+' '+(a?.plan_name||'')).toLowerCase();
+      row.hidden=Boolean(q&&!hay.includes(q));
+    });
+  });
+}
+
+function openClientAccountCreate(){
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop"><div class="modal cp-modal">',
+      '<div class="modal-head"><div><span class="pro-kicker">NEW CLIENT</span><h3>'+htmlEsc(tr('ساخت حساب Client','Create client account'))+'</h3><p>'+htmlEsc(tr('این عملیات فقط حساب Client می‌سازد؛ هیچ پروتکل فعالی تغییر نمی‌کند.','This creates only a client account; no active protocol is changed.'))+'</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="cp-form-grid">',
+        '<label><span>'+htmlEsc(tr('نام کاربری','Username'))+'</span><input id="cpUser" dir="ltr" maxlength="64" autocomplete="off"></label>',
+        '<label><span>'+htmlEsc(tr('نام نمایشی','Display name'))+'</span><input id="cpDisplay" maxlength="120"></label>',
+        '<label class="cp-span-2"><span>'+htmlEsc(tr('رمز عبور','Password'))+'</span><div class="cp-inline"><input id="cpPass" dir="ltr" type="text" maxlength="128" autocomplete="new-password"><button class="ghost" data-action="client-password-generate" data-target="cpPass">'+htmlEsc(tr('ساخت رمز قوی','Generate'))+'</button></div></label>',
+        '<label><span>'+htmlEsc(tr('پلن','Plan'))+'</span><input id="cpPlan" maxlength="120" placeholder="30 Days"></label>',
+        '<label><span>'+htmlEsc(tr('انقضا','Expiry'))+'</span><input id="cpExpire" type="date"></label>',
+        '<label><span>'+htmlEsc(tr('حجم کل GB','Quota GB'))+'</span><input id="cpQuota" type="number" min="0" step="1" value="0"></label>',
+        '<label><span>'+htmlEsc(tr('تعداد دستگاه','Device limit'))+'</span><input id="cpDevices" type="number" min="1" max="20" value="1"></label>',
+        '<label><span>'+htmlEsc(tr('دستگاه همزمان','Concurrent devices'))+'</span><input id="cpConcurrent" type="number" min="1" max="20" value="1"></label>',
+      '</div>',
+      '<div class="wizard-note"><b>'+htmlEsc(tr('پیشنهاد','Recommended'))+'</b><span>'+htmlEsc(tr('برای فروش تک‌دستگاه: Device limit = 1 و Concurrent = 1. رمز عبور حداقل ۸ کاراکتر باشد.','For a single-device plan use Device limit = 1 and Concurrent = 1. Password must be at least 8 characters.'))+'</span></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">'+htmlEsc(tr('انصراف','Cancel'))+'</button><button class="primary" data-action="client-account-create">'+htmlEsc(tr('ساخت حساب','Create account'))+'</button></div>',
+    '</div></div>'
+  ].join('');
+  const d=new Date();d.setDate(d.getDate()+30);const exp=document.getElementById('cpExpire');if(exp)exp.value=d.toISOString().slice(0,10);
+}
+
+async function createClientAccount(){
+  const username=document.getElementById('cpUser')?.value.trim()||'';
+  const password=document.getElementById('cpPass')?.value||'';
+  const display_name=document.getElementById('cpDisplay')?.value.trim()||'';
+  const plan_name=document.getElementById('cpPlan')?.value.trim()||'';
+  const device_limit=Number(document.getElementById('cpDevices')?.value||1);
+  const concurrent_device_limit=Number(document.getElementById('cpConcurrent')?.value||1);
+  const quota_gb=Number(document.getElementById('cpQuota')?.value||0);
+  const expire_at=clientExpireTs(document.getElementById('cpExpire')?.value||'');
+  if(username.length<3)throw new Error(tr('نام کاربری حداقل ۳ کاراکتر باشد.','Username must be at least 3 characters.'));
+  if(password.length<8)throw new Error(tr('رمز عبور حداقل ۸ کاراکتر باشد.','Password must be at least 8 characters.'));
+  const item=await api('/api/client-platform/accounts',{method:'POST',body:JSON.stringify({username,password,display_name,plan_name,expire_at,quota_gb,device_limit,concurrent_device_limit,enabled:true})});
+  window.__lastClientCredential={username,password,url:clientPortalUrl(username)};
+  showClientOnboarding(item,username,password);
+}
+
+function showClientOnboarding(item,username,password){
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop"><div class="modal cp-modal cp-onboarding">',
+      '<div class="modal-head"><div><span class="pro-kicker">READY</span><h3>'+htmlEsc(tr('حساب Client آماده است','Client account is ready'))+'</h3><p>'+htmlEsc(tr('این رمز را فقط یک‌بار و از مسیر امن به کاربر تحویل بده.','Deliver this password to the user once through a secure channel.'))+'</p></div><button class="close-btn" data-action="modal-close-refresh" data-view="clientplatform">×</button></div>',
+      '<div class="cp-credential-box"><label>'+htmlEsc(tr('نام کاربری','Username'))+'<input id="cpReadyUser" readonly dir="ltr" value="'+htmlEsc(username)+'"></label><label>'+htmlEsc(tr('رمز عبور','Password'))+'<input id="cpReadyPass" readonly dir="ltr" value="'+htmlEsc(password)+'"></label><label class="cp-span-2">'+htmlEsc(tr('لینک ورود','Login link'))+'<input id="cpReadyUrl" readonly dir="ltr" value="'+htmlEsc(clientPortalUrl(username))+'"></label></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="copy-target" data-target="cpReadyUrl">'+htmlEsc(tr('کپی لینک','Copy link'))+'</button><button class="ghost" data-action="copy-target" data-target="cpReadyUser">'+htmlEsc(tr('کپی یوزر','Copy username'))+'</button><button class="primary" data-action="copy-target" data-target="cpReadyPass">'+htmlEsc(tr('کپی رمز','Copy password'))+'</button><button class="primary" data-action="client-account-open" data-id="'+Number(item.id)+'">'+htmlEsc(tr('مدیریت حساب','Manage'))+'</button></div>',
+    '</div></div>'
+  ].join('');
+}
+
+async function openClientAccountManage(accountId){
+  const [a,protocolsData,artifactsData]=await Promise.all([
+    api('/api/client-platform/accounts/'+Number(accountId)),
+    api('/api/client-platform/protocols'),
+    api('/api/client-platform/artifacts')
+  ]);
+  const protocolBindings=a.bindings_detail||[],artifactBindings=a.artifact_bindings_detail||[];
+  const boundProtocolIds=new Set(protocolBindings.map(x=>Number(x.protocol_client_id)));
+  const boundArtifactIds=new Set(artifactBindings.map(x=>Number(x.artifact_id)));
+  const protocols=(protocolsData.items||[]).filter(x=>!x.bound||Number(x.bound_account_id)===Number(a.id));
+  const artifacts=(artifactsData.items||[]).filter(x=>['ssh','wireguard','openvpn'].includes(String(x.kind||'').toLowerCase())&&(!x.bound||Number(x.bound_account_id)===Number(a.id)));
+  const protocolOptions=protocols.map(x=>'<option value="p:'+Number(x.id)+'" '+(boundProtocolIds.has(Number(x.id))?'disabled':'')+'>'+htmlEsc((x.name||'')+' · '+String(x.protocol||x.engine||'').toUpperCase()+(x.bound?' · BOUND':''))+'</option>').join('');
+  const artifactOptions=artifacts.map(x=>'<option value="a:'+Number(x.id)+'" '+(boundArtifactIds.has(Number(x.id))?'disabled':'')+'>'+htmlEsc((x.display_name||x.external_key||'')+' · '+String(x.kind||'').toUpperCase()+(x.bound?' · BOUND':''))+'</option>').join('');
+  const bindings=[
+    ...protocolBindings.map(x=>({type:'protocol',id:x.protocol_client_id,label:x.label||x.protocol_name,kind:x.protocol,enabled:x.protocol_enabled})),
+    ...artifactBindings.map(x=>({type:'artifact',id:x.artifact_id,label:x.label||x.display_name,kind:x.kind,enabled:true}))
+  ];
+  const devices=(a.devices||[]).map(d=>'<div class="cp-device-row"><div><b>'+htmlEsc(d.label||'Web / PWA')+'</b><small>'+htmlEsc(d.platform||'web')+' · '+htmlEsc(d.last_ip||'')+' · ****'+htmlEsc(d.device_key_last4||'')+'</small></div><span class="status-chip '+(d.active?'ok':'bad')+'">'+htmlEsc(d.active?tr('فعال','Active'):tr('لغوشده','Revoked'))+'</span>'+(d.active?'<button class="danger" data-action="client-device-revoke-admin" data-account="'+Number(a.id)+'" data-device="'+Number(d.id)+'">'+htmlEsc(tr('لغو','Revoke'))+'</button>':'')+'</div>').join('');
+  const bindingRows=bindings.map(b=>'<div class="cp-binding-row"><div><span class="cp-protocol-mark">'+htmlEsc(String(b.kind||'').slice(0,3).toUpperCase())+'</span><div><b>'+htmlEsc(b.label||'Access')+'</b><small>'+htmlEsc(b.type==='protocol'?tr('Managed protocol','Managed protocol'):tr('Existing profile','Existing profile'))+'</small></div></div><button class="danger" data-action="client-binding-remove" data-account="'+Number(a.id)+'" data-type="'+b.type+'" data-id="'+Number(b.id)+'">'+htmlEsc(tr('حذف اتصال','Unbind'))+'</button></div>').join('');
+  modalRoot.innerHTML=[
+    '<div class="modal-backdrop detail-backdrop"><aside class="access-detail-drawer cp-manage-drawer">',
+      '<header><div><span class="pro-kicker">CLIENT ACCOUNT</span><h3>'+htmlEsc(a.display_name||a.username)+'</h3><p dir="ltr">'+htmlEsc(a.username)+'</p></div><button class="close-btn" data-action="modal-close">×</button></header>',
+      '<div class="access-detail-body">',
+        '<section class="cp-manage-grid">',
+          '<label><span>'+htmlEsc(tr('نام نمایشی','Display name'))+'</span><input id="cpmDisplay" value="'+htmlEsc(a.display_name||'')+'"></label>',
+          '<label><span>'+htmlEsc(tr('پلن','Plan'))+'</span><input id="cpmPlan" value="'+htmlEsc(a.plan_name||'')+'"></label>',
+          '<label><span>'+htmlEsc(tr('انقضا','Expiry'))+'</span><input id="cpmExpire" type="date" value="'+htmlEsc(clientDateValue(a.expire_at))+'"></label>',
+          '<label><span>'+htmlEsc(tr('حجم GB','Quota GB'))+'</span><input id="cpmQuota" type="number" min="0" step=".1" value="'+(Number(a.quota_bytes||0)/1073741824).toFixed(2).replace(/\.00$/,'')+'"></label>',
+          '<label><span>'+htmlEsc(tr('Device limit','Device limit'))+'</span><input id="cpmDevices" type="number" min="1" max="20" value="'+Number(a.device_limit||1)+'"></label>',
+          '<label><span>'+htmlEsc(tr('Concurrent','Concurrent'))+'</span><input id="cpmConcurrent" type="number" min="1" max="20" value="'+Number(a.concurrent_device_limit||1)+'"></label>',
+        '</section>',
+        '<div class="cp-account-control"><label class="switch-label"><input id="cpmEnabled" type="checkbox" '+(a.enabled?'checked':'')+'><span>'+htmlEsc(tr('حساب فعال','Account enabled'))+'</span></label><button class="primary" data-action="client-account-save" data-id="'+Number(a.id)+'">'+htmlEsc(tr('ذخیره تنظیمات','Save settings'))+'</button></div>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>'+htmlEsc(tr('اتصال دسترسی‌ها','Access bindings'))+'</h4><p>'+htmlEsc(tr('Credential موجود را بدون ساخت مجدد به این حساب متصل کن.','Bind existing credentials without recreating them.'))+'</p></div></div><div class="cp-bind-add"><select id="cpBindSelect"><option value="">'+htmlEsc(tr('انتخاب دسترسی…','Select access…'))+'</option><optgroup label="Xray / Outline">'+protocolOptions+'</optgroup><optgroup label="SSH / WireGuard / OpenVPN">'+artifactOptions+'</optgroup></select><input id="cpBindLabel" placeholder="'+htmlEsc(tr('نام نمایشی اختیاری','Optional label'))+'"><button class="primary" data-action="client-binding-add" data-account="'+Number(a.id)+'">'+htmlEsc(tr('Bind','Bind'))+'</button></div><div class="cp-binding-list">'+(bindingRows||'<div class="empty compact">'+htmlEsc(tr('هنوز دسترسی Bind نشده است.','No access is bound yet.'))+'</div>')+'</div></section>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>'+htmlEsc(tr('دستگاه‌ها','Devices'))+'</h4><p>'+htmlEsc(tr('لغو دستگاه، Sessionهای همان دستگاه را هم باطل می‌کند.','Revoking a device also invalidates its sessions.'))+'</p></div><button class="ghost" data-action="client-devices-revoke-all" data-account="'+Number(a.id)+'">'+htmlEsc(tr('لغو همه دستگاه‌ها','Revoke all'))+'</button></div><div class="cp-device-list">'+(devices||'<div class="empty compact">'+htmlEsc(tr('دستگاهی ثبت نشده است.','No registered device.'))+'</div>')+'</div></section>',
+        '<section class="detail-section"><div class="detail-section-head"><div><h4>'+htmlEsc(tr('رمز و Session','Password & sessions'))+'</h4><p>'+htmlEsc(tr('تعویض رمز همه Sessionهای فعلی را باطل می‌کند.','Changing the password revokes all current sessions.'))+'</p></div></div><div class="cp-password-row"><input id="cpmPassword" type="text" dir="ltr" placeholder="'+htmlEsc(tr('رمز جدید حداقل ۸ کاراکتر','New password, minimum 8 characters'))+'"><button class="ghost" data-action="client-password-generate" data-target="cpmPassword">'+htmlEsc(tr('ساخت رمز','Generate'))+'</button><button class="primary" data-action="client-password-rotate" data-id="'+Number(a.id)+'" data-user="'+dataEnc(a.username)+'">'+htmlEsc(tr('تعویض رمز','Rotate password'))+'</button><button class="danger" data-action="client-sessions-revoke-all" data-account="'+Number(a.id)+'">'+htmlEsc(tr('خروج همه Sessionها','Revoke sessions'))+'</button></div></section>',
+      '</div>',
+      '<footer><button class="danger" data-action="client-account-delete" data-id="'+Number(a.id)+'" data-user="'+dataEnc(a.username)+'">'+htmlEsc(tr('حذف حساب Client','Delete client account'))+'</button><button class="ghost" data-action="client-copy-link" data-user="'+dataEnc(a.username)+'">'+htmlEsc(tr('کپی لینک ورود','Copy login link'))+'</button><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></footer>',
+    '</aside></div>'
+  ].join('');
+}
+
+async function saveClientAccount(accountId){
+  const payload={
+    display_name:document.getElementById('cpmDisplay')?.value.trim()||'',
+    plan_name:document.getElementById('cpmPlan')?.value.trim()||'',
+    expire_at:clientExpireTs(document.getElementById('cpmExpire')?.value||''),
+    quota_gb:Number(document.getElementById('cpmQuota')?.value||0),
+    device_limit:Number(document.getElementById('cpmDevices')?.value||1),
+    concurrent_device_limit:Number(document.getElementById('cpmConcurrent')?.value||1),
+    enabled:Boolean(document.getElementById('cpmEnabled')?.checked)
+  };
+  await api('/api/client-platform/accounts/'+Number(accountId),{method:'PUT',body:JSON.stringify(payload)});
+  toast(tr('حساب Client بروزرسانی شد','Client account updated'));
+  await openClientAccountManage(accountId);
+}
+async function bindClientAccess(accountId){
+  const raw=document.getElementById('cpBindSelect')?.value||'';
+  if(!raw)throw new Error(tr('یک دسترسی انتخاب کن.','Select an access.'));
+  const [type,idText]=raw.split(':'),id=Number(idText),label=document.getElementById('cpBindLabel')?.value.trim()||'';
+  if(type==='p')await api('/api/client-platform/accounts/'+Number(accountId)+'/bindings',{method:'POST',body:JSON.stringify({protocol_client_id:id,label,priority:100,enabled:true})});
+  else if(type==='a')await api('/api/client-platform/accounts/'+Number(accountId)+'/artifact-bindings',{method:'POST',body:JSON.stringify({artifact_id:id,label,priority:100,enabled:true})});
+  else throw new Error('invalid binding');
+  toast(tr('دسترسی به حساب متصل شد','Access bound to account'));
+  await openClientAccountManage(accountId);
+}
+async function removeClientBinding(accountId,type,id){
+  if(!confirm(tr('این Bind حذف شود؟ Credential اصلی و Runtime حذف نمی‌شوند.','Remove this binding? The original credential and runtime will remain untouched.')))return;
+  const url=type==='protocol'?'/api/client-platform/accounts/'+accountId+'/bindings/'+id:'/api/client-platform/accounts/'+accountId+'/artifact-bindings/'+id;
+  await api(url,{method:'DELETE'});toast(tr('Bind حذف شد','Binding removed'));await openClientAccountManage(accountId);
+}
+async function rotateClientPassword(accountId,username){
+  const password=document.getElementById('cpmPassword')?.value||'';
+  if(password.length<8)throw new Error(tr('رمز جدید حداقل ۸ کاراکتر باشد.','New password must be at least 8 characters.'));
+  await api('/api/client-platform/accounts/'+accountId+'/password',{method:'POST',body:JSON.stringify({password})});
+  window.__lastClientCredential={username,password,url:clientPortalUrl(username)};
+  alert(tr('رمز تغییر کرد و همه Sessionهای قبلی باطل شدند. رمز جدید را اکنون به کاربر تحویل بده.','Password changed and all old sessions were revoked. Deliver the new password to the user now.'));
+  const el=document.getElementById('cpmPassword');if(el)el.value='';
+}
+
+const views={dashboard,clientplatform:clientPlatformCenter,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='clientplatform'?'CLIENT PLATFORM':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;

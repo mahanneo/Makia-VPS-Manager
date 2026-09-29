@@ -29,6 +29,9 @@ WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
 WSTUNNEL_SERVICE="makia-wstunnel"
 OVPN_TCP_FALLBACK_CONF=OVPN_DIR/"server/makia-tcp.conf"
 OVPN_TCP_FALLBACK_SERVICE="openvpn-server@makia-tcp"
+OVPN_CLIENT_POLICY_DIR=OVPN_DIR/"server/makia-client-policy"
+OVPN_MANAGEMENT_SOCKET=Path("/run/makia-openvpn-management.sock")
+OVPN_POLICY_MARKER="# Managed by Makia Client Platform"
 
 
 def _backup_dir():
@@ -1932,6 +1935,8 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         shutil.copy2(src,dst)
     uplink=_default_iface()
     up,down=_openvpn_forward_scripts(uplink)
+    OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
+    os.chmod(OVPN_CLIENT_POLICY_DIR,0o755)
     server_conf=server_dir/"server.conf"
     server_conf.write_text(
         f"port {port}\nproto {server_proto}\nlocal 0.0.0.0\ndev tun\n"
@@ -1942,7 +1947,10 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         "push \"dhcp-option DNS 1.1.1.1\"\npush \"dhcp-option DNS 8.8.8.8\"\n"
         "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
         "data-ciphers AES-256-GCM:AES-128-GCM\ndata-ciphers-fallback AES-256-GCM\nauth SHA256\nverb 3\n"
-        f"script-security 2\nup {up}\ndown {down}\n",
+        f"script-security 2\nup {up}\ndown {down}\n"
+        f"client-config-dir {OVPN_CLIENT_POLICY_DIR}\n"
+        f"management {OVPN_MANAGEMENT_SOCKET} unix\n"
+        "management-client-user root\nmanagement-client-group root\n",
         encoding="utf-8"
     )
     Path("/etc/sysctl.d/99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
@@ -2110,6 +2118,201 @@ def reconfigure_openvpn_server(port=1194,proto="udp",dns_servers=None,keepalive_
         except Exception:pass
         raise
     return {"ok":True,"backup":str(backup),"runtime":runtime,"options":_openvpn_server_options(),"firewall":firewall}
+
+
+def _validate_openvpn_client_name(name):
+    name=str(name or "")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name):
+        raise ProtocolError("invalid client name")
+    return name
+
+
+def _openvpn_policy_directives():
+    return {
+        "ccd":f"client-config-dir {OVPN_CLIENT_POLICY_DIR}",
+        "management":f"management {OVPN_MANAGEMENT_SOCKET} unix",
+        "management_user":"management-client-user root",
+        "management_group":"management-client-group root",
+    }
+
+
+def openvpn_policy_status():
+    server_conf=OVPN_DIR/"server/server.conf"
+    if not server_conf.exists():
+        return {"installed":False,"configured":False,"ready":False,"socket":False,"conflict":"","directory":str(OVPN_CLIENT_POLICY_DIR)}
+    text=server_conf.read_text(encoding="utf-8",errors="ignore")
+    directives=_openvpn_policy_directives()
+    ccd=[m.group(1).strip() for m in re.finditer(r"(?m)^\s*client-config-dir\s+(\S+)\s*$",text)]
+    management=[m.group(1).strip() for m in re.finditer(r"(?m)^\s*management\s+(.+?)\s*$",text)]
+    expected_ccd=str(OVPN_CLIENT_POLICY_DIR)
+    expected_mgmt=f"{OVPN_MANAGEMENT_SOCKET} unix"
+    conflict=""
+    if ccd and expected_ccd not in ccd:
+        conflict="existing client-config-dir is not managed by Makia"
+    elif management and expected_mgmt not in management:
+        conflict="existing OpenVPN management interface conflicts with Makia policy socket"
+    configured=all(value in text for value in directives.values())
+    socket_ready=OVPN_MANAGEMENT_SOCKET.exists()
+    return {
+        "installed":True,
+        "configured":configured,
+        "ready":bool(configured and socket_ready and _active("openvpn-server@server")),
+        "socket":socket_ready,
+        "conflict":conflict,
+        "directory":expected_ccd,
+        "management_socket":str(OVPN_MANAGEMENT_SOCKET),
+    }
+
+
+def enable_openvpn_policy_runtime():
+    server_conf=OVPN_DIR/"server/server.conf"
+    if not server_conf.exists():
+        raise ProtocolError("OpenVPN server is not bootstrapped")
+    before=openvpn_policy_status()
+    if before.get("conflict"):
+        raise ProtocolError(before["conflict"])
+    original=server_conf.read_text(encoding="utf-8",errors="ignore")
+    directives=_openvpn_policy_directives()
+    missing=[value for value in directives.values() if value not in original]
+    OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
+    os.chmod(OVPN_CLIENT_POLICY_DIR,0o755)
+    if not missing:
+        return {**openvpn_policy_status(),"changed":False}
+    backup=_backup_dir()/f"openvpn-server-policy-{int(time.time())}.conf"
+    shutil.copy2(server_conf,backup)
+    updated=original.rstrip()+"\n\n# Makia Client Platform policy controls\n"+"\n".join(missing)+"\n"
+    server_conf.write_text(updated,encoding="utf-8")
+    try:
+        runtime=_openvpn_server_runtime()
+        _run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        port=int(runtime.get("port") or _openvpn_server_runtime().get("port") or 1194)
+        proto="tcp" if str(runtime.get("proto") or "").startswith("tcp") else "udp"
+        if not _wait_listener(port,proto,timeout=10):
+            raise ProtocolError("OpenVPN listener did not recover after enabling Client policy runtime")
+        deadline=time.monotonic()+8
+        while time.monotonic()<deadline and not OVPN_MANAGEMENT_SOCKET.exists():
+            time.sleep(.2)
+        status=openvpn_policy_status()
+        if not status.get("ready"):
+            raise ProtocolError("OpenVPN Client policy management socket is not ready")
+        return {**status,"changed":True,"backup":str(backup)}
+    except Exception as exc:
+        shutil.copy2(backup,server_conf)
+        try:_run(["systemctl","restart","openvpn-server@server"],timeout=30)
+        except Exception:pass
+        if isinstance(exc,ProtocolError):
+            raise
+        raise ProtocolError(str(exc)) from exc
+
+
+def _openvpn_management_command(command,until_end=False):
+    if not OVPN_MANAGEMENT_SOCKET.exists():
+        raise ProtocolError("OpenVPN management socket is not available")
+    s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    s.settimeout(3.0)
+    try:
+        s.connect(str(OVPN_MANAGEMENT_SOCKET))
+        try:s.recv(4096)
+        except socket.timeout:pass
+        s.sendall((str(command).strip()+"\n").encode("utf-8"))
+        chunks=[]
+        deadline=time.monotonic()+4
+        while time.monotonic()<deadline:
+            try:data=s.recv(65536)
+            except socket.timeout:break
+            if not data:break
+            chunks.append(data)
+            text=b"".join(chunks).decode("utf-8","replace")
+            if until_end and re.search(r"(?m)^END\r?$",text):
+                break
+            if not until_end and ("SUCCESS:" in text or "ERROR:" in text):
+                break
+        return b"".join(chunks).decode("utf-8","replace")
+    except OSError as exc:
+        raise ProtocolError(f"OpenVPN management interface failed: {exc}") from exc
+    finally:
+        s.close()
+
+
+def _parse_openvpn_management_status(text):
+    header=None
+    rows=[]
+    for raw in str(text or "").splitlines():
+        line=raw.strip("\r")
+        sep="\t" if "\t" in line else ","
+        parts=line.split(sep)
+        if len(parts)>=3 and parts[0]=="HEADER" and parts[1]=="CLIENT_LIST":
+            header=parts[2:]
+            continue
+        if len(parts)>=3 and parts[0]=="CLIENT_LIST":
+            values=parts[1:]
+            if header:
+                item={header[i]:values[i] if i<len(values) else "" for i in range(len(header))}
+                rows.append(item)
+    out={}
+    for item in rows:
+        name=str(item.get("Common Name") or "").strip()
+        if not name:continue
+        try:rx=max(0,int(item.get("Bytes Received") or 0))
+        except Exception:rx=0
+        try:tx=max(0,int(item.get("Bytes Sent") or 0))
+        except Exception:tx=0
+        entry=out.setdefault(name,{"name":name,"rx":0,"tx":0,"total":0,"real_addresses":[],"client_ids":[]})
+        entry["rx"]+=rx;entry["tx"]+=tx;entry["total"]+=rx+tx
+        address=str(item.get("Real Address") or "").strip()
+        if address and address not in entry["real_addresses"]:entry["real_addresses"].append(address)
+        cid=str(item.get("Client ID") or "").strip()
+        if cid and cid not in entry["client_ids"]:entry["client_ids"].append(cid)
+    return out
+
+
+def openvpn_management_status():
+    status=openvpn_policy_status()
+    if not status.get("ready"):
+        return {"available":False,"clients":{},"error":status.get("conflict") or "policy runtime not ready"}
+    try:
+        text=_openvpn_management_command("status 3",until_end=True)
+        return {"available":True,"clients":_parse_openvpn_management_status(text),"error":""}
+    except ProtocolError as exc:
+        return {"available":False,"clients":{},"error":str(exc)[:300]}
+
+
+def openvpn_management_kill(name):
+    name=_validate_openvpn_client_name(name)
+    response=_openvpn_management_command(f"kill {name}",until_end=False)
+    if "ERROR:" in response:
+        raise ProtocolError(response.strip()[:500])
+    return {"name":name,"disconnected":"SUCCESS:" in response}
+
+
+def set_openvpn_client_policy_enabled(name,enabled):
+    name=_validate_openvpn_client_name(name)
+    status=openvpn_policy_status()
+    if not status.get("configured"):
+        raise ProtocolError("OpenVPN Client policy runtime is not configured")
+    path=OVPN_CLIENT_POLICY_DIR/name
+    marker=OVPN_POLICY_MARKER+"\n"
+    if enabled:
+        if path.exists():
+            current=path.read_text(encoding="utf-8",errors="ignore")
+            if not current.startswith(marker):
+                raise ProtocolError("OpenVPN client-config file is not owned by Makia")
+            path.unlink()
+        return {"name":name,"enabled":True,"disconnected":False}
+    if path.exists():
+        current=path.read_text(encoding="utf-8",errors="ignore")
+        if not current.startswith(marker):
+            raise ProtocolError("OpenVPN client-config file is not owned by Makia")
+    else:
+        tmp=path.with_name(path.name+".tmp")
+        tmp.write_text(marker+"disable\n",encoding="utf-8")
+        os.chmod(tmp,0o644)
+        os.replace(tmp,path)
+    disconnected=False
+    if status.get("ready"):
+        try:disconnected=bool(openvpn_management_kill(name).get("disconnected"))
+        except ProtocolError:disconnected=False
+    return {"name":name,"enabled":False,"disconnected":disconnected}
 
 
 def _openvpn_remote_block(endpoint,port):

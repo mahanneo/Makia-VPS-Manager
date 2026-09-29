@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0] - 2026-09-29
+
+### Makia Client Platform
+- Added a separate end-user Client Portal/PWA with independent authentication and no privilege sharing with the Admin panel.
+- Added Client accounts with expiry, aggregate quota, device limits, concurrent-device limits, password rotation and revocable sessions/devices.
+- Added explicit one-account ownership for bound protocol credentials and encrypted access artifacts.
+- Added secure delivery for Xray/Outline plus existing SSH, WireGuard and OpenVPN profiles with QR, native-file download and compatible deep links.
+- Added Admin UI for Client accounts, rollout control, access binding, device/session revocation, usage reset and onboarding credential delivery.
+- Client Portal defaults to disabled through the admin setting when `MAKIA_CLIENT_PORTAL_ENABLED=auto`; environment values `0` and `1` remain emergency hard overrides.
+- Added persistent post-binding traffic baselines so usage before Client assignment is not billed to the Client account.
+- Added hard Client account expiry/quota enforcement for managed Xray/Outline identities and bound WireGuard peers.
+- Added SSH account expiry and session/source-IP enforcement without falsely claiming byte accounting.
+- Added non-destructive OpenVPN Client policy support using a local CCD directory and Unix management socket. Existing OpenVPN servers require explicit local-admin activation with backup/restart/rollback; new OpenVPN bootstraps include the policy controls.
+- Added enforcement readiness matrix so the Admin UI distinguishes hard server policy from delivery-only/soft device controls.
+- Added full unit/browser regression coverage for Client login, PWA delivery, device limits, binding isolation, usage baselines, runtime suspension/restoration and existing Admin coexistence.
+- Rotated Admin and Client PWA caches to `makia-shell-v130` and `makia-client-v130`.
+
+
 ## [1.2.11] - 2026-09-29
 
 ### Immutable main updates

@@ -20,9 +20,10 @@ def seed():
     shutil.rmtree(DATA,ignore_errors=True)
     DATA.mkdir(parents=True,exist_ok=True)
     from app.db import init_db, create_protocol_client, upsert_access_artifact, get_protocol_client
-    from app import access_ops
+    from app import access_ops, client_store
 
     init_db()
+    client_store.init_client_db()
     client_id=create_protocol_client(
         "browser-client","xray","vless","browser-inbound","browser-credential",
         "vless://browser-credential@example.test:443?type=tcp&security=none#browser-client",
@@ -38,7 +39,21 @@ def seed():
         "xray",str(client_id),"browser-client","vless",payload["native_filename"],
         access_ops.seal_payload(payload),"{}",
     )
-    return client_id,get_protocol_client(client_id)["subscription_id"]
+    client_account_id=client_store.create_account(
+        "client-browser","client-browser-pass","Browser Client","Test Plan",
+        expire_at=int(time.time())+86400,quota_bytes=2*1024*1024*1024,
+        device_limit=2,concurrent_device_limit=1,
+    )
+    client_store.bind_protocol_client(client_account_id,client_id,"Fast Access",10,True)
+    ovpn_payload=access_ops.openvpn_payload(
+        "browser-openvpn","client\nproto udp\nremote vpn.example.test 1194\n"
+    )
+    ovpn_artifact_id=upsert_access_artifact(
+        "openvpn","browser-openvpn","browser-openvpn","openvpn",ovpn_payload["native_filename"],
+        access_ops.seal_payload(ovpn_payload),"{}",
+    )
+    client_store.bind_access_artifact(client_account_id,ovpn_artifact_id,"Browser OpenVPN",20,True)
+    return client_id,get_protocol_client(client_id)["subscription_id"],client_account_id
 
 
 def wait_server(timeout=20):
@@ -60,8 +75,9 @@ def leave_sidebar(page):
 
 
 def main():
-    client_id,subscription_id=seed()
+    client_id,subscription_id,client_account_id=seed()
     env=os.environ.copy()
+    env["MAKIA_CLIENT_PORTAL_ENABLED"]="1"
     proc=subprocess.Popen(
         [sys.executable,"-m","uvicorn","app.main:app","--host","127.0.0.1","--port","8787"],
         stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,env=env,
@@ -86,6 +102,35 @@ def main():
             assert portal.locator('#outline').count()==1
             assert portal.locator(".visual-steps svg").count()>=12
             portal.close()
+
+            # Makia Client Platform must coexist with the legacy subscription
+            # page and admin panel without sharing authentication cookies.
+            client_page=browser.new_page()
+            client_page.goto(BASE_URL+"/client/login",wait_until="networkidle")
+            assert "ورود به حساب کاربری" in client_page.locator("body").inner_text()
+            assert client_page.locator('link[rel="manifest"][href="/client/manifest.webmanifest"]').count()==1
+            client_page.locator('input[name="username"]').fill("client-browser")
+            client_page.locator('input[name="password"]').fill("client-browser-pass")
+            client_page.locator('input[name="device_label"]').fill("Browser CI")
+            client_page.locator('button[type="submit"]').click()
+            client_page.wait_for_url(BASE_URL+"/client/app")
+            client_page.locator("#protocolList .mc-protocol").first.wait_for()
+            assert client_page.locator("#protocolList .mc-protocol").count()==2
+            assert "Browser Client" in client_page.locator("body").inner_text()
+            assert "Fast Access" in client_page.locator("#protocolList").inner_text()
+            assert "Browser OpenVPN" in client_page.locator("#protocolList").inner_text()
+            assert "Test Plan" in client_page.locator("#planName").inner_text()
+            assert "1" in client_page.locator("#deviceCount").inner_text()
+            client_page.locator('[data-delivery-kind="protocol"]').click()
+            client_page.locator("#deliveryDialog[open]").wait_for()
+            assert client_page.locator("#deliveryValue").input_value().startswith("vless://")
+            client_page.locator("#closeDelivery").click()
+            client_page.locator('[data-delivery-kind="artifact"]').click()
+            client_page.locator("#deliveryDialog[open]").wait_for()
+            assert "remote vpn.example.test 1194" in client_page.locator("#deliveryValue").input_value()
+            client_page.screenshot(path='/tmp/makia-client-platform.png',full_page=True)
+            client_page.locator("#closeDelivery").click()
+            client_page.close()
 
             page=browser.new_page(accept_downloads=True)
             page_errors=[]
@@ -118,6 +163,23 @@ def main():
             assert "Inboundها" in page.locator(".pro-sidebar").inner_text()
             assert page.locator('.pro-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
+
+            # Client Platform admin workspace must coexist with the existing
+            # control panel and expose only metadata/bindings management.
+            page.locator('.pro-sidebar button[data-view="clientplatform"]').click()
+            leave_sidebar(page)
+            page.locator(".client-platform-page").wait_for()
+            assert "client-browser" in page.locator("#clientPlatformRows").inner_text()
+            assert "Client Portal" in page.locator(".cp-rollout-card").inner_text()
+            assert page.locator('[data-action="client-account-new"]').count()==1
+            page.locator('#clientPlatformRows [data-action="client-account-open"]').first.click()
+            page.locator(".cp-manage-drawer").wait_for()
+            drawer_text=page.locator(".cp-manage-drawer").inner_text()
+            assert "Fast Access" in drawer_text
+            assert "Browser OpenVPN" in drawer_text
+            assert page.locator('[data-action="client-binding-add"]').count()==1
+            page.screenshot(path='/tmp/makia-client-platform-admin.png',full_page=True)
+            page.locator('.cp-manage-drawer header [data-action="modal-close"]').click()
 
             # v1.2 regression: protocol cards must never render the missing x[4]
             # value as literal "undefined" or overlap the copy area.
