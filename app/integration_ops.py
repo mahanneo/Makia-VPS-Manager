@@ -270,31 +270,45 @@ def outline_list_keys():
 
 
 def outline_create_key(name,data_limit_bytes=0):
+    """Create one real Outline access key using the Manager API's stable flow.
+
+    The official server creates the credential first; naming and data limits are
+    separate operations. If policy application fails, delete the new key so
+    Makia never records an orphaned/partially configured credential.
+    """
     name=str(name or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_. -]{1,80}",name):
         raise IntegrationError("Outline key name contains unsupported characters")
-    body={"name":name}
-    if int(data_limit_bytes or 0)>0:
-        body["dataLimit"]={"bytes":int(data_limit_bytes)}
+    limit=max(0,int(data_limit_bytes or 0))
+    created=_outline_request("/access-keys",method="POST")
+    key_id=str(created.get("id") or "").strip()
+    access_url=str(created.get("accessUrl") or "").strip()
+    if not key_id or not access_url.startswith("ss://") or any(ch.isspace() for ch in access_url):
+        if key_id:
+            try:_outline_request(f"/access-keys/{urllib.parse.quote(key_id,safe='')}",method="DELETE")
+            except Exception:pass
+        raise IntegrationError("Outline did not return a valid ss:// access key")
     try:
-        created=_outline_request("/access-keys",method="POST",body=body)
-    except IntegrationError:
-        created=_outline_request("/access-keys",method="POST")
-        key_id=str(created.get("id") or "")
-        if not key_id:
-            raise
-        # Older compatible Outline versions expose rename / data-limit as separate calls.
-        _outline_request(f"/access-keys/{urllib.parse.quote(key_id,safe='')}/name",method="PUT",body={"name":name})
-        if int(data_limit_bytes or 0)>0:
+        _outline_request(
+            f"/access-keys/{urllib.parse.quote(key_id,safe='')}/name",
+            method="PUT",body={"name":name},
+        )
+        if limit>0:
             _outline_request(
                 f"/access-keys/{urllib.parse.quote(key_id,safe='')}/data-limit",
-                method="PUT",body={"limit":{"bytes":int(data_limit_bytes)}},
+                method="PUT",body={"limit":{"bytes":limit}},
             )
-        created=_outline_request(f"/access-keys/{urllib.parse.quote(key_id,safe='')}")
-    if not created.get("accessUrl"):
-        raise IntegrationError("Outline did not return an accessUrl")
-    return created
-
+    except Exception:
+        try:_outline_request(f"/access-keys/{urllib.parse.quote(key_id,safe='')}",method="DELETE")
+        except Exception:pass
+        raise
+    result=dict(created)
+    result["id"]=key_id
+    result["accessUrl"]=access_url
+    result["name"]=name
+    if limit>0:
+        result["dataLimit"]={"bytes":limit}
+    return result
 
 def outline_delete_key(key_id):
     key=str(key_id or "").strip()
