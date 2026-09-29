@@ -1,3 +1,6 @@
+import io
+import sqlite3
+import tarfile
 import time
 from pathlib import Path
 
@@ -454,3 +457,53 @@ def test_openvpn_policy_setup_requires_local_admin_contract():
     assert "register_client_admin(app,require_user,require_mutation,require_local_admin" in main
     assert "client-openvpn-policy-enable" in js
     assert "Restart" in js
+
+
+
+def test_client_platform_backup_snapshot_preserves_accounts_devices_bindings_and_policy_state(client_db,tmp_path):
+    from app import system_ops
+
+    account_id=client_store.create_account(
+        "backup-client","backup-client-pass","Backup Client","UAT",
+        expire_at=int(time.time())+86400,quota_bytes=1024**3,
+        device_limit=1,concurrent_device_limit=1,
+    )
+    device,_device_key=client_store.register_or_get_device(account_id,label="UAT browser",platform="web")
+    client_store.create_session(account_id,device["id"],"127.0.0.1")
+    protocol_id=db.create_protocol_client(
+        "backup-xray","xray","vless","backup-inbound","backup-credential",
+        "vless://backup-credential@example.test:443",0,0,1,0,
+    )
+    client_store.bind_protocol_client(account_id,protocol_id,"Backup Xray",10,True)
+    artifact_id=db.upsert_access_artifact(
+        "wireguard","backup-wg","backup-wg","wireguard","backup-wg.conf","sealed-test-payload","{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id,"Backup WireGuard",20,True)
+    client_store.set_artifact_policy_state(account_id,artifact_id,"client_account_expiry")
+
+    blob=system_ops._portable_data_tar(str(client_db.parent))
+    restored_root=tmp_path/"restored"
+    restored_root.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(blob),mode="r:gz") as tf:
+        tf.extract("data/makia.db",path=restored_root)
+
+    restored_db=restored_root/"data"/"makia.db"
+    con=sqlite3.connect(restored_db)
+    try:
+        assert con.execute("SELECT COUNT(*) FROM client_accounts WHERE username='backup-client'").fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_devices WHERE account_id=? AND active=1",(account_id,)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_sessions WHERE account_id=? AND revoked_at=0",(account_id,)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_protocol_bindings WHERE account_id=? AND protocol_client_id=?",(account_id,protocol_id)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_artifact_bindings WHERE account_id=? AND artifact_id=?",(account_id,artifact_id)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_usage_baselines WHERE account_id=? AND protocol_client_id=?",(account_id,protocol_id)).fetchone()[0]==1
+        assert con.execute("SELECT suspended_reason FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",(account_id,artifact_id)).fetchone()[0]=="client_account_expiry"
+    finally:
+        con.close()
+
+
+def test_update_contract_preserves_client_data_tree_and_takes_consistent_sqlite_backup():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "--exclude='data/makia.db'" in update
+    assert 'source.backup(target)' in update
+    assert 'tar -C "$BACKUP_TMP" -czf "$BACKUP" data' in update
+    assert 'rm -rf "$APP/data"' not in update
