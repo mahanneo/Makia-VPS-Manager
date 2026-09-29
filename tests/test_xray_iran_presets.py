@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app import protocol_ops
+from app import main as main_app
 
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -82,3 +83,21 @@ def test_preset_apply_keeps_normal_validated_builder_path():
 def test_presets_do_not_claim_guaranteed_connectivity():
     js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
     assert "Preset = شروع سریع، نه تضمین اتصال" in js
+
+
+def test_capabilities_endpoint_avoids_occupied_preset_ports(monkeypatch):
+    monkeypatch.setattr(main_app,"require_capability",lambda *a,**k:"admin")
+    monkeypatch.setattr(
+        protocol_ops,"_port_transport_in_use",
+        lambda port,proto: int(port) in {443,8443},
+    )
+    monkeypatch.setattr(
+        protocol_ops,"_port_owner_label",
+        lambda port,proto:"occupied-test" if int(port) in {443,8443} else "free",
+    )
+    caps=main_app.xray_inbound_capabilities(None)
+    primary=next(p for p in caps["presets"] if p["id"]=="ir-reality-raw-vision")
+    assert primary["suggested_port"]==2053
+    assert primary["port_state"][0]["occupied"] is True
+    assert primary["port_state"][1]["occupied"] is True
+    assert primary["port_state"][2]["occupied"] is False
