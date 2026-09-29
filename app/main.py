@@ -1091,7 +1091,7 @@ def xray_inbound_create(payload:XrayInboundBuilderPayload,request:Request):
             f"{origin}/client/{sub_id}" if sub_id and subscription_settings["client_page_enabled"] else ""
         )
         artifact_id=artifact_save("xray",str(client_id),payload.name,payload.protocol,delivery,{
-            "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
+            "client_id":client_id,"inbound_tag":result["tag"],"port":result["port"],
             "transport":result.get("transport",""),"security":result.get("security",""),
             "flow":payload.flow,"subscription_id":sub_id,
             "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,
@@ -1124,7 +1124,7 @@ def xray_inbound_create(payload:XrayInboundBuilderPayload,request:Request):
     result["reset_days"]=payload.reset_days
     audit(
         actor,"xray_inbound_builder_create",result["tag"],
-        f"protocol={payload.protocol}; transport={payload.transport}; security={payload.security}; port={payload.port}",
+        f"protocol={payload.protocol}; transport={payload.transport}; security={payload.security}; port={result['port']}; requested_port={payload.port}",
         ip(request)
     )
     return result
@@ -1257,7 +1257,7 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
         f"{origin}/client/{sub_id}" if sub_id and subscription_settings["client_page_enabled"] else ""
     )
     artifact_id=artifact_save("xray",str(client_id),payload.name,payload.protocol,delivery,{
-        "client_id":client_id,"inbound_tag":result["tag"],"port":payload.port,
+        "client_id":client_id,"inbound_tag":result["tag"],"port":result["port"],
         "transport":result.get("transport",""),"security":result.get("security",""),"manual":bool(payload.manual),
         "subscription_id":sub_id,"endpoint":endpoint,"endpoint_mode":payload.endpoint_mode
     })
@@ -1268,7 +1268,7 @@ def xray_quick_inbound(payload:XrayQuickInbound,request:Request):
     result["expire_at"]=expire_at
     result["ip_limit"]=payload.ip_limit
     result["reset_days"]=payload.reset_days
-    audit(actor,"xray_quick_inbound",result["tag"],f"protocol={payload.protocol}; port={payload.port}; quota={quota_bytes}; ip_limit={payload.ip_limit}",ip(request))
+    audit(actor,"xray_quick_inbound",result["tag"],f"protocol={payload.protocol}; port={result['port']}; requested_port={payload.port}; quota={quota_bytes}; ip_limit={payload.ip_limit}",ip(request))
     return result
 
 def _subscription_snapshot(row):
