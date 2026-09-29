@@ -14,6 +14,7 @@ function hintFor(x){const kind=String(x.engine||x.protocol||"").toLowerCase();if
 function canDeepOpen(value){return /^(?:vless|vmess|trojan|ss|hysteria2|hy2|npvt-ssh):\/\//i.test(String(value||""))}
 function downloadBase64(name,b64){if(!b64)return;const raw=atob(b64),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);const blob=new Blob([bytes],{type:"application/octet-stream"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name||"makia-config.txt";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 function renderDelivery(x){currentDelivery=x;$("#deliveryTitle").textContent=x.name||"دسترسی";$("#deliveryProtocol").textContent=((x.engine||"")+" · "+(x.protocol||"")).replace(/^ · | · $/g,"");$("#deliveryValue").value=x.share_link||"";$("#deliveryHint").textContent=hintFor(x);const qr=$("#deliveryQr"),wrap=$("#deliveryQrWrap");if(x.qr){qr.src=x.qr;wrap.hidden=false}else{qr.removeAttribute("src");wrap.hidden=true}const dl=$("#downloadDelivery");dl.hidden=!(x.native_base64&&x.native_filename);const open=$("#openDelivery");open.hidden=!canDeepOpen(x.share_link);$("#deliveryDialog").showModal()}
+function clearSensitiveDelivery(){currentDelivery=null;const value=$("#deliveryValue");if(value)value.value="";const qr=$("#deliveryQr");if(qr)qr.removeAttribute("src");const wrap=$("#deliveryQrWrap");if(wrap)wrap.hidden=true;const dialog=$("#deliveryDialog");if(dialog&&dialog.open)dialog.close()}
 document.addEventListener("click",async e=>{const delivery=e.target.closest("[data-delivery]");if(delivery){delivery.disabled=true;try{const kind=delivery.dataset.deliveryKind==="artifact"?"artifacts":"protocols";const x=await api("/client/api/"+kind+"/"+delivery.dataset.delivery+"/delivery",{method:"POST"});renderDelivery(x)}catch(err){alert(err.message)}finally{delivery.disabled=false}return}const revoke=e.target.closest("[data-revoke]");if(revoke){if(!confirm("این دستگاه غیرفعال شود؟"))return;try{await api("/client/api/devices/"+revoke.dataset.revoke+"/revoke",{method:"POST"});await load()}catch(err){alert(err.message)}}});
 $("#closeDelivery")?.addEventListener("click",()=>$("#deliveryDialog").close());
 $("#copyDelivery")?.addEventListener("click",async()=>{const v=$("#deliveryValue").value;await navigator.clipboard.writeText(v);$("#copyDelivery").textContent="کپی شد";setTimeout(()=>$("#copyDelivery").textContent="کپی اطلاعات اتصال",1200)});
@@ -23,6 +24,9 @@ $("#refreshClient")?.addEventListener("click",load);
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e;const b=$("#installClient");if(b)b.hidden=false});
 $("#installClient")?.addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice.catch(()=>null);installPrompt=null;$("#installClient").hidden=true});
 window.addEventListener("appinstalled",()=>{installPrompt=null;const b=$("#installClient");if(b)b.hidden=true});
+document.querySelector('form[action="/client/logout"]')?.addEventListener("submit",clearSensitiveDelivery);
+window.addEventListener("pagehide",clearSensitiveDelivery);
+window.addEventListener("pageshow",event=>{if(event.persisted)location.reload()});
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("/client/sw.js",{scope:"/client/"}).catch(()=>{}));
 load();
 })();
