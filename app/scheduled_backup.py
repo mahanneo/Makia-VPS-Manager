@@ -66,11 +66,17 @@ def run_once(force=False):
     access_ops.verify_protected_zip(blob,password,"manifest.json")
     manifest=json.loads(files["manifest.json"].decode("utf-8"))
     saved=system_ops.save_full_migration_backup(blob,VERSION,manifest)
-    set_setting("backup_schedule_last_run",str(now))
     status={
         "ok":True,"name":saved["name"],"sha256":saved["sha256"],
         "created_at":now,"remote":False,"remote_target":"",
     }
+
+    keep=max(1,min(int(cfg.get("keep_local") or 7),50))
+    system_ops.prune_backup_files(
+        Path(saved["path"]).parent,
+        "makia-full-migration-",
+        keep,
+    )
 
     remote=cfg.get("remote") or {}
     if bool(remote.get("enabled")):
@@ -85,12 +91,10 @@ def run_once(force=False):
         status["remote"]=True
         status["remote_target"]=target.get("target","")
 
-    keep=max(1,min(int(cfg.get("keep_local") or 7),50))
-    system_ops.prune_backup_files(
-        Path(saved["path"]).parent,
-        "makia-full-migration-",
-        keep,
-    )
+    # Advance the schedule only after every configured destination succeeds.
+    # If remote SCP fails, the hourly timer will retry instead of suppressing
+    # the next attempt for the full configured backup interval.
+    set_setting("backup_schedule_last_run",str(now))
     set_setting("backup_schedule_status",json.dumps(status,ensure_ascii=False,separators=(",",":")))
     audit("system","scheduled_full_backup",saved["name"],f"remote={status['remote']}; sha256={saved['sha256']}")
     _notify(f"✅ Makia backup completed\n{saved['name']}\nSHA256: {saved['sha256'][:16]}…")

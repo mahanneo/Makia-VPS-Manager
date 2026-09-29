@@ -580,6 +580,12 @@ def main():
     bundle_version=str(manifest.get("app_version") or "").strip()
     if installed_version and bundle_version and installed_version!=bundle_version and not args.allow_version_mismatch:
         raise SystemExit(f"Version mismatch: destination={installed_version}, bundle={bundle_version}. Install the matching Makia version or use --allow-version-mismatch after compatibility review.")
+    if "payload/outline.tar.gz" in payload and not shutil.which("docker"):
+        raise SystemExit(
+            "This migration bundle contains Outline state, but Docker is not installed on the destination VPS. "
+            "Install the Outline host dependency before restore (for an installed Makia host: "
+            "sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade), then re-run validation/apply."
+        )
 
     BACKUP_ROOT.mkdir(parents=True,exist_ok=True)
     if shutil.which("makia-backup"):

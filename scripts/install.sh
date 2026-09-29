@@ -62,6 +62,10 @@ trap install_failure_hint ERR
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban wireguard openvpn easy-rsa iptables stunnel4 certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
+if [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" ]]; then
+  apt-get install -y docker.io
+  systemctl enable --now docker
+fi
 
 install -d -m 0750 "$APP"
 if [[ ! -d "$DATA" && -d "$OLD_APP/data" ]]; then

@@ -166,10 +166,17 @@ command -v certbot >/dev/null 2>&1 || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' python3-certbot-nginx 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' strongswan 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
 dpkg-query -W -f='${Status}' libcharon-extra-plugins 2>/dev/null | grep -q 'install ok installed' || NEED_HOST_PACKAGES=1
-if [[ "$NEED_HOST_PACKAGES" -eq 1 ]]; then
-  echo "Ensuring host security/TLS/VPN packages outside the hardened web-service sandbox..."
+OUTLINE_HOST_PACKAGES=()
+if [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" || -s /opt/outline/access.txt ]]; then
+  dpkg-query -W -f='${Status}' docker.io 2>/dev/null | grep -q 'install ok installed' || OUTLINE_HOST_PACKAGES+=(docker.io)
+fi
+if [[ "$NEED_HOST_PACKAGES" -eq 1 || "${#OUTLINE_HOST_PACKAGES[@]}" -gt 0 ]]; then
+  echo "Ensuring host security/TLS/VPN/Outline packages outside the hardened web-service sandbox..."
   apt-get update
-  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
+  apt-get install -y fail2ban certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins "${OUTLINE_HOST_PACKAGES[@]}"
+fi
+if command -v docker >/dev/null 2>&1 && [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" || -s /opt/outline/access.txt ]]; then
+  systemctl enable --now docker
 fi
 
 ROLLBACK_ARMED=1
