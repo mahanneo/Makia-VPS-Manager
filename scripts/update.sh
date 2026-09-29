@@ -40,6 +40,8 @@ MTPROXY_ENV_PRE_SHA="$(file_sha256 "$MTPROXY_ENV_PATH")"
 MTPROXY_CONFIG_PRE_SHA="$(file_sha256 "$MTPROXY_CONFIG_PATH")"
 DNS_STATE_PRE_SHA="$(file_sha256 "$DNS_STATE_PATH")"
 DNS_CONFIG_PRE_SHA="$(file_sha256 "$DNS_CONFIG_PATH")"
+MTPROXY_ENV_ACCEPTED_SHA="$MTPROXY_ENV_PRE_SHA"
+MTPROXY_CONFIG_ACCEPTED_SHA="$MTPROXY_CONFIG_PRE_SHA"
 MTPROXY_WAS_ACTIVE=0
 DNS_WAS_ACTIVE=0
 systemctl is-active --quiet makia-mtproxy 2>/dev/null && MTPROXY_WAS_ACTIVE=1 || true
@@ -316,11 +318,18 @@ if [[ -f /etc/makia-vps-manager/mtproxy.toml ]] && getent group makia-mtproxy >/
   chmod 0640 /etc/makia-vps-manager/mtproxy.toml
 fi
 
+echo "Verifying optional installers did not mutate persistent network state..."
+assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
+assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA" "MTProxy config" || exit 8
+assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_PRE_SHA" "DNS state" || exit 8
+assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_PRE_SHA" "DNS config" || exit 8
+
 # A broken optional MTProxy from an older release must not prevent the release
-# containing its repair from being installed. Try the new runtime repair now.
-if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
+# containing its repair from being installed. Only repair if it was inactive
+# before the update; a healthy active proxy is preserved byte-for-byte.
+if [[ "$MTPROXY_WAS_ACTIVE" -eq 0 && -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
   echo "Repairing existing Telegram MTProxy with the new runtime contract..."
-  if ! (
+  if (
     cd "$APP"
     MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
 from app import network_services
@@ -334,13 +343,21 @@ if not result.get("service_active") or not result.get("listener"):
     raise SystemExit("MTProxy repair did not produce an active listener")
 PY
   ); then
+    MTPROXY_ENV_ACCEPTED_SHA="$(file_sha256 "$MTPROXY_ENV_PATH")"
+    MTPROXY_CONFIG_ACCEPTED_SHA="$(file_sha256 "$MTPROXY_CONFIG_PATH")"
+    echo "Accepted repaired MTProxy state for the remainder of this update transaction."
+  else
     echo "WARNING: pre-existing Telegram MTProxy remains unhealthy; core update will continue so the repaired panel/runtime code is retained."
+    # configure_mtproxy restores the previous state on failed reconfiguration.
+    # Keep the original hashes as the accepted transaction state.
+    assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state after failed repair" || exit 8
+    assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA" "MTProxy config after failed repair" || exit 8
   fi
 fi
 
-echo "Verifying persistent Telegram/DNS configuration was preserved..."
-assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
-assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA" "MTProxy config" || exit 8
+echo "Verifying accepted Telegram/DNS state after optional repair..."
+assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_ACCEPTED_SHA" "MTProxy accepted state" || exit 8
+assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_ACCEPTED_SHA" "MTProxy accepted config" || exit 8
 assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_PRE_SHA" "DNS state" || exit 8
 assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_PRE_SHA" "DNS config" || exit 8
 if [[ "$MTPROXY_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-mtproxy; then
@@ -499,8 +516,8 @@ echo "Running backend version verified: $RUNNING_VERSION"
 
 echo
 echo "Re-checking persistent network-service state before final acceptance..."
-assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_PRE_SHA" "MTProxy state" || exit 8
-assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_PRE_SHA" "MTProxy config" || exit 8
+assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_ACCEPTED_SHA" "MTProxy accepted state" || exit 8
+assert_preserved_file "$MTPROXY_CONFIG_PATH" "$MTPROXY_CONFIG_ACCEPTED_SHA" "MTProxy accepted config" || exit 8
 assert_preserved_file "$DNS_STATE_PATH" "$DNS_STATE_PRE_SHA" "DNS state" || exit 8
 assert_preserved_file "$DNS_CONFIG_PATH" "$DNS_CONFIG_PRE_SHA" "DNS config" || exit 8
 
