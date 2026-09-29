@@ -50,8 +50,11 @@ DNS_WAS_QUERY_OK=0
 systemctl is-active --quiet makia-mtproxy 2>/dev/null && MTPROXY_WAS_ACTIVE=1 || true
 systemctl is-active --quiet unbound 2>/dev/null && DNS_WAS_ACTIVE=1 || true
 if [[ "$DNS_WAS_ACTIVE" -eq 1 ]] && command -v dig >/dev/null 2>&1; then
-  if dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+
-
+  DNS_PRECHECK="$(dig @127.0.0.1 example.com A +short +time=2 +tries=1 2>/dev/null || true)"
+  if [[ -n "$DNS_PRECHECK" ]]; then
+    DNS_WAS_QUERY_OK=1
+  fi
+fi
 assert_preserved_file(){
   local path="$1" before="$2" label="$3"
   [[ -n "$before" ]] || return 0
