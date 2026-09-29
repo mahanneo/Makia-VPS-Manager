@@ -220,7 +220,7 @@ def client_me(request:Request):
 def client_protocols(request:Request):
     session=_require_session(request)
     return _no_store(JSONResponse({
-        "items":client_store.list_protocols(session["account_id"],include_secrets=False)
+        "items":client_store.client_access_list(session["account_id"])
     }))
 
 
@@ -236,6 +236,20 @@ def client_protocol_delivery(protocol_client_id:int,request:Request):
     audit(
         "client:"+session["username"],"client_protocol_delivery",
         target=str(protocol_client_id),detail=str(item.get("protocol") or ""),ip=_ip(request),
+    )
+    return _no_store(JSONResponse(item))
+
+
+@router.post("/client/api/artifacts/{artifact_id}/delivery")
+def client_artifact_delivery(artifact_id:int,request:Request):
+    session=_require_mutation(request)
+    try:
+        item=client_store.artifact_delivery(session["account_id"],artifact_id)
+    except ValueError:
+        raise HTTPException(status_code=404,detail="artifact binding not found")
+    audit(
+        "client:"+session["username"],"client_artifact_delivery",
+        target=str(artifact_id),detail=str(item.get("protocol") or ""),ip=_ip(request),
     )
     return _no_store(JSONResponse(item))
 
