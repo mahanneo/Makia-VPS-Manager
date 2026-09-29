@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1628">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <link rel="manifest" href="/client-app/manifest.webmanifest">
+  <link rel="icon" href="/static/client-app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/client-app.css">
+  <title>Makia Client</title>
+</head>
+<body class="client-shell">
+  <header class="client-topbar">
+    <div class="client-brand-inline">
+      <div class="client-brand-mark small">M</div>
+      <div><strong>MAKIA</strong><span>CLIENT</span></div>
+    </div>
+    <form method="post" action="/client-app/logout">
+      <button class="client-ghost" type="submit">خروج</button>
+    </form>
+  </header>
+
+  <main class="client-main">
+    <section class="client-hero">
+      <div>
+        <p class="client-eyebrow">CONTROL PLANE · PHASE A</p>
+        <h1>{{ account.display_name or account.username }}</h1>
+        <p>پروفایل شخصی شما برای مدیریت اشتراک، دستگاه‌ها و دسترسی‌های اختصاص‌یافته.</p>
+      </div>
+      <div class="client-state {% if policy.enabled and not policy.expired %}ok{% else %}bad{% endif %}">
+        <span class="client-state-dot"></span>
+        {% if policy.enabled and not policy.expired %}فعال{% else %}غیرفعال{% endif %}
+      </div>
+    </section>
+
+    <section class="client-stat-grid" aria-label="subscription summary">
+      <article class="client-stat">
+        <span>پلن</span>
+        <strong>{{ policy.plan or '—' }}</strong>
+      </article>
+      <article class="client-stat">
+        <span>انقضا</span>
+        <strong>{{ policy.expire_date or 'بدون تاریخ' }}</strong>
+      </article>
+      <article class="client-stat">
+        <span>سقف دستگاه</span>
+        <strong>{{ policy.device_limit }}</strong>
+      </article>
+      <article class="client-stat">
+        <span>نشست همزمان</span>
+        <strong>{{ policy.session_limit }}</strong>
+      </article>
+      <article class="client-stat">
+        <span>حجم پلن</span>
+        <strong>{% if policy.quota_mb %}{{ policy.quota_mb }} MB{% else %}نامحدود{% endif %}</strong>
+      </article>
+      <article class="client-stat">
+        <span>دستگاه فعلی</span>
+        <strong>{{ session.platform or 'Browser' }}</strong>
+      </article>
+    </section>
+
+    <section class="client-section">
+      <div class="client-section-head">
+        <div>
+          <p class="client-eyebrow">ACCESS</p>
+          <h2>دسترسی‌های من</h2>
+        </div>
+        <span class="client-count">{{ bindings|length }}</span>
+      </div>
+      {% if bindings %}
+      <div class="client-access-grid">
+        {% for item in bindings %}
+        <article class="client-access-card {% if not item.available %}muted{% endif %}">
+          <div class="client-access-icon">{{ (item.kind or '?')[:1]|upper }}</div>
+          <div class="client-access-copy">
+            <span>{{ item.kind|upper }}</span>
+            <strong>{{ item.display_name or item.external_key }}</strong>
+            <small>{{ item.protocol or item.kind }}</small>
+          </div>
+          <button class="client-connect" type="button" disabled title="Native Agent در فاز بعد فعال می‌شود">
+            اتصال
+          </button>
+        </article>
+        {% endfor %}
+      </div>
+      <div class="client-phase-note">
+        <strong>مرحله بعد: Makia Agent</strong>
+        <p>این دکمه‌ها عمداً هنوز Tunnel واقعی را اجرا نمی‌کنند تا هیچ Runtime فعلی Production تغییر نکند. Agent ویندوز/موبایل در Phase B این لایه را به WireGuard/OpenVPN/Xray/SSH متصل می‌کند.</p>
+      </div>
+      {% else %}
+      <div class="client-empty">
+        <strong>هنوز دسترسی‌ای به این حساب متصل نشده است.</strong>
+        <span>مدیر می‌تواند Accessهای موجود Makia را بدون تغییر Credential فعلی به این حساب Bind کند.</span>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="client-section">
+      <div class="client-section-head">
+        <div>
+          <p class="client-eyebrow">DEVICES</p>
+          <h2>دستگاه‌های ثبت‌شده</h2>
+        </div>
+        <span class="client-count">{{ devices|selectattr('active')|list|length }}/{{ policy.device_limit }}</span>
+      </div>
+      <div class="client-device-list">
+        {% for device in devices %}
+        <article class="client-device-row {% if not device.active %}revoked{% endif %}">
+          <div class="client-device-icon">◈</div>
+          <div>
+            <strong>{{ device.label or device.platform or 'Browser' }}</strong>
+            <span>{{ device.platform or 'Browser' }} · آخرین فعالیت {{ device.last_seen_at }}</span>
+          </div>
+          <span class="client-device-state">{% if device.active %}مجاز{% else %}لغوشده{% endif %}</span>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="client-section compact">
+      <div class="client-section-head">
+        <div>
+          <p class="client-eyebrow">SECURITY</p>
+          <h2>مدل امنیتی فعلی</h2>
+        </div>
+      </div>
+      <div class="client-security-grid">
+        <div><strong>Session</strong><span>Opaque server-revocable token</span></div>
+        <div><strong>Device</strong><span>Browser-bound identifier (Phase A)</span></div>
+        <div><strong>Credentials</strong><span>Protocol secrets are not stored in the browser shell</span></div>
+        <div><strong>Next</strong><span>Device key pair + Native Agent attestation</span></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="client-bottom-nav" aria-label="client navigation">
+    <a class="active" href="/client-app/">خانه</a>
+    <a href="#access">دسترسی‌ها</a>
+    <a href="#devices">دستگاه‌ها</a>
+  </nav>
+
+  <script src="/static/client-app.js" defer></script>
+</body>
+</html>
