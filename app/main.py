@@ -369,12 +369,28 @@ def generate_user_secret(mode:str="strong"):
     raise HTTPException(400,"unknown password mode")
 
 def suggested_username():
-    used={u["username"] for u in system_ops.ssh_users()}
+    """Return a name that is free across all first-class access engines.
+
+    The create wizard is protocol-agnostic at step 1, so a name that is only
+    free in Linux can still collide with Xray, Outline, WireGuard or OpenVPN.
+    Keep one global suggestion pool to prevent the UI from proposing a value
+    that another engine already owns.
+    """
+    used={str(u.get("username") or "") for u in system_ops.ssh_users()}
+    used.update(str(row.get("name") or "") for row in list_protocol_clients())
+    try: used.update(str(row.get("name") or "") for row in protocol_ops.list_wireguard_peers())
+    except Exception: pass
+    try: used.update(str(row.get("name") or "") for row in protocol_ops.list_openvpn_clients())
+    except Exception: pass
+    used={name for name in used if name}
     for i in range(1,10000):
         name=f"user{i:03d}"
         if name not in used:
             return name
-    return "user"+secrets.token_hex(2)
+    while True:
+        name="user"+secrets.token_hex(3)
+        if name not in used:
+            return name
 
 def account_rows():
     profiles=all_profiles()
