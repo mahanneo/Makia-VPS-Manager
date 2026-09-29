@@ -220,7 +220,7 @@ async function access(renderToken=window.__viewRenderToken){
       '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
       '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
       '<section class="pro-directory">',
-        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
+        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button><button data-filter-value="outline">Outline</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
         '<div id="accessRows" class="pro-user-list"></div>',
       '</section>',
@@ -247,7 +247,7 @@ function renderAccessRows(){
 }
 
 function accessUsageText(a){
-  if(a.kind==='xray'){
+  if(a.kind==='xray'||a.kind==='outline'){
     const used=fmtBytes(a.used_bytes||0),quota=a.quota_bytes?fmtBytes(a.quota_bytes):'∞';
     return used+' / '+quota;
   }
@@ -257,7 +257,7 @@ function accessUsageText(a){
 }
 function accessExpiryText(a){
   if(a.kind==='ssh')return a.expire_date||'بدون انقضا';
-  if(a.kind==='xray')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
+  if(a.kind==='xray'||a.kind==='outline')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
   if(a.kind==='wireguard')return a.address||'Peer';
   return 'Certificate';
 }
@@ -320,10 +320,21 @@ async function openAccessDetail(id){
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
   const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':a.kind==='outline'?'Access Key / QR':'';
-  const manage=(a.kind==='ssh'||a.kind==='xray')
-    ? '<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">ویرایش تنظیمات</button>'
-    : '<button class="primary" data-action="nav" data-view="'+kind+'">مدیریت '+htmlEsc(String(a.kind).toUpperCase())+'</button>';
-  const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':'Native config';
+  let manage='';
+  if(a.kind==='ssh'){
+    manage='<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">'+htmlEsc(tr('ویرایش کاربر','Edit user'))+'</button><button class="ghost" data-action="account-disconnect" data-user="'+key+'">'+htmlEsc(tr('قطع اتصال','Disconnect'))+'</button>';
+  }else if(a.kind==='xray'){
+    manage='<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">'+htmlEsc(tr('Policy / تنظیمات','Policy / settings'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="xray" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
+  }else if(a.kind==='wireguard'){
+    const enabled=a.enabled!==false;
+    manage='<button class="'+(enabled?'soft':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(enabled?'0':'1')+'">'+htmlEsc(enabled?tr('غیرفعال کردن','Disable'):tr('فعال کردن','Enable'))+'</button><button class="ghost" data-action="wg-reissue" data-key="'+key+'">'+htmlEsc(tr('تعویض کلید','Reissue'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="wireguard" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
+  }else if(a.kind==='outline'){
+    const quotaGb=Math.round(Number(a.quota_bytes||0)/1073741824*100)/100;
+    manage='<button class="primary" data-action="outline-renew" data-key="'+key+'">+30D</button><button class="ghost" data-action="outline-quota" data-key="'+key+'" data-name="'+name+'" data-quota="'+quotaGb+'">'+htmlEsc(tr('حجم','Quota'))+'</button><button class="ghost" data-action="outline-reissue" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('تعویض کلید','Reissue'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="outline" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
+  }else{
+    manage='<button class="primary" data-action="nav" data-view="'+kind+'">'+htmlEsc(tr('مدیریت پروتکل','Manage protocol'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
+  }
+  const nativeLabel=a.kind==='openvpn'?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':a.kind==='outline'?'Access Key':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
@@ -835,9 +846,9 @@ async function runSelfTest(){
 async function accounts(renderToken=window.__viewRenderToken){
   title.textContent='کاربران SSH';setPageContext('SSH USER MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بارگذاری کاربران SSH…</b></div>';
-  const rows=await api('/api/accounts');
+  const [rows,accessRows,operator]=await Promise.all([api('/api/accounts'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||!['accounts','ssh'].includes(activeView))return;
-  accountCache=rows;
+  accountCache=rows;accessCache=accessRows;window.__operatorSettings=operator;
   const active=rows.filter(a=>a.enabled&&!a.expired).length;
   const inactive=rows.length-active;
   const online=rows.reduce((n,a)=>n+Number(a.online||0),0);
@@ -870,7 +881,7 @@ function renderAccountRows(){
   document.getElementById('accountCount').textContent=rows.length+' / '+accountCache.length+' USERS';
   root.innerHTML=rows.length?rows.map(a=>{
     const u=dataEnc(a.username);
-    return '<div class="row account-row"><div><label class="check-user"><input class="account-check" type="checkbox" value="'+htmlEsc(a.username)+'"><div><b>'+htmlEsc(a.username)+'</b><div class="chips">'+statusFor(a)+'<span class="status-chip">Sessions '+Number(a.online||0)+'/'+Number(a.connection_limit||1)+'</span><span class="status-chip">Devices '+Number((a.online_ips||[]).length)+'/'+Number(a.device_limit||1)+'</span></div></div></label></div><div><b>'+htmlEsc(a.plan||'—')+'</b><div class="muted">'+htmlEsc(a.expire_date||'بدون انقضا')+(a.days_left!==null?' · '+a.days_left+'d':'')+'</div></div><div><b>'+htmlEsc((a.online_ips||[]).length?(a.online_ips||[]).join(', '):'بدون IP فعال')+'</b><div class="muted">'+htmlEsc(a.note||'بدون یادداشت')+'</div></div><div class="toolbar"><button class="ghost" data-action="account-edit" data-user="'+u+'">ویرایش</button><button class="ghost" data-action="account-disconnect" data-user="'+u+'">قطع</button><button class="danger" data-action="account-delete" data-user="'+u+'">حذف</button></div></div>';
+    return '<div class="row account-row"><div><label class="check-user"><input class="account-check" type="checkbox" value="'+htmlEsc(a.username)+'"><div><b>'+htmlEsc(a.username)+'</b><div class="chips">'+statusFor(a)+'<span class="status-chip">Sessions '+Number(a.online||0)+'/'+Number(a.connection_limit||1)+'</span><span class="status-chip">Devices '+Number((a.online_ips||[]).length)+'/'+Number(a.device_limit||1)+'</span></div></div></label></div><div><b>'+htmlEsc(a.plan||'—')+'</b><div class="muted">'+htmlEsc(a.expire_date||'بدون انقضا')+(a.days_left!==null?' · '+a.days_left+'d':'')+'</div></div><div><b>'+htmlEsc((a.online_ips||[]).length?(a.online_ips||[]).join(', '):'بدون IP فعال')+'</b><div class="muted">'+htmlEsc(a.note||'بدون یادداشت')+'</div></div><div class="pro-row-actions"><button class="pro-more" data-action="access-detail" data-id="'+dataEnc('ssh:'+a.username)+'" aria-label="جزئیات '+dataEnc(a.username)+'">•••</button></div></div>';
   }).join(''):'<div class="empty">نتیجه‌ای پیدا نشد.</div>';
 }
 async function bulkExtendPreset(days){const usernames=selectedAccounts();if(!usernames.length){alert('حداقل یک کاربر را انتخاب کنید.');return}try{const r=await api('/api/accounts/bulk',{method:'POST',body:JSON.stringify({usernames,action:'extend',days})});if(r.failed?.length)alert('برخی عملیات ناموفق بود: '+r.failed.length);toast('تمدید انجام شد');await accounts()}catch(e){alert(e.message)}}
@@ -973,16 +984,14 @@ async function wireguard(renderToken=window.__viewRenderToken){
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن WireGuard…</b></div>';
   const [stack,rows,operator]=await Promise.all([api('/api/protocols'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='wireguard')return;
-  window.__protocolData=stack;window.__operatorSettings=operator;
+  window.__protocolData=stack;window.__operatorSettings=operator;accessCache=rows;
   const peers=rows.filter(x=>x.kind==='wireguard'),service=stack.wireguard||{},defs=operator.defaults||{};
   const active=peers.filter(p=>p.enabled!==false).length;
   const connected=peers.filter(p=>p.enabled&&p.handshake_age!==null&&p.handshake_age!==undefined&&p.handshake_age<180).length;
   const rx=peers.reduce((n,p)=>n+Number(p.rx||0),0),tx=peers.reduce((n,p)=>n+Number(p.tx||0),0);
   const peerRows=peers.map(p=>{
     const key=dataEnc(p.key),enabled=p.enabled!==false;
-    return '<div class="row protocol-list-row"><div><b>'+htmlEsc(p.name)+'</b><div class="muted">'+htmlEsc(p.address||'WireGuard peer')+'</div></div><div><span class="status-chip '+(enabled?'ok':'bad')+'">'+(enabled?'فعال':'غیرفعال')+'</span><div class="muted">'+(p.handshake_age==null?'بدون Handshake':Math.floor(Number(p.handshake_age)/60)+' دقیقه پیش')+'</div></div><div><b>↓ '+fmtBytes(p.rx||0)+' · ↑ '+fmtBytes(p.tx||0)+'</b><div class="muted" dir="ltr">'+htmlEsc(p.endpoint||'—')+'</div></div><div class="toolbar">'+
-      (p.can_export?'<button class="ghost" data-action="access-share" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">QR</button><button class="ghost" data-action="native-export" data-kind="wireguard" data-key="'+key+'">Config</button>':'')+
-      '<button class="'+(enabled?'soft':'primary')+'" data-action="wg-toggle" data-key="'+key+'" data-enabled="'+(enabled?'0':'1')+'">'+(enabled?'خاموش':'روشن')+'</button><button class="danger" data-action="revoke-access" data-kind="wireguard" data-key="'+key+'" data-name="'+dataEnc(p.name)+'">حذف</button></div></div>';
+    return '<div class="row protocol-list-row"><div><b>'+htmlEsc(p.name)+'</b><div class="muted">'+htmlEsc(p.address||'WireGuard peer')+'</div></div><div><span class="status-chip '+(enabled?'ok':'bad')+'">'+(enabled?'فعال':'غیرفعال')+'</span><div class="muted">'+(p.handshake_age==null?'بدون Handshake':Math.floor(Number(p.handshake_age)/60)+' دقیقه پیش')+'</div></div><div><b>↓ '+fmtBytes(p.rx||0)+' · ↑ '+fmtBytes(p.tx||0)+'</b><div class="muted" dir="ltr">'+htmlEsc(p.endpoint||'—')+'</div></div><div class="pro-row-actions"><button class="pro-more" data-action="access-detail" data-id="'+dataEnc('wireguard:'+p.key)+'" aria-label="جزئیات '+dataEnc(p.name)+'">•••</button></div></div>';
   }).join('');
   content.innerHTML=[
     '<section class="wg-workspace-hero protocol-page-header pro-engine-hero"><div class="protocol-page-title">'+protocolGlyph('wireguard')+'<div><span class="pro-kicker">NATIVE VPN</span><h2>WireGuard</h2><p>Peer، QR، Handshake، ترافیک و تنظیمات سازگاری Client</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="wireguard-diagnostics">Diagnostics</button><button class="ghost" data-action="nav-settings" data-tab="vpn">Advanced settings</button><button class="primary" data-action="'+(service.config?'wizard-open':'protocol-setup')+'" data-kind="wireguard">'+(service.config?'＋ ساخت Peer':'راه‌اندازی WireGuard')+'</button></div></section>',
@@ -1528,7 +1537,7 @@ async function createXrayInboundClient(tag){
   }catch(e){alert('Add Xray client: '+e.message)}
 }
 
-function protocolClientRow(c){const quota=Number(c.quota_bytes||0),used=Number(c.usage?.total||0),p=quota?Math.min(100,(used/quota)*100):0;const expiry=c.expire_at?new Date(c.expire_at*1000).toLocaleDateString():'∞';const state=!c.enabled?('Disabled'+(c.disabled_reason?' · '+c.disabled_reason:'')):(c.expired?'Expired':'Active');const sub=location.origin+'/sub/'+c.subscription_id;const ipCount=Number(c.online_ip_count||0),ipState=c.ip_violation?'bad':(ipCount?'ok':'');const accounting=c.accounting_supported!==false;return `<div class="protocol-client-row"><div><div class="client-main"><b>${c.name}</b><span class="protocol-pill">${c.protocol.toUpperCase()}</span><span class="status-chip ${c.enabled&&!c.expired?'ok':'bad'}">${state}</span>${c.ip_violation?'<span class="status-chip bad">IP LIMIT</span>':''}</div><div class="muted">${c.inbound_tag}</div></div><div>${accounting?`<b>${fmtBytes(used)} / ${quota?fmtBytes(quota):'Unlimited'}</b><div class="usage-track"><i style="width:${p}%"></i></div><div class="muted">↑ ${fmtBytes(c.usage?.uplink||0)} · ↓ ${fmtBytes(c.usage?.downlink||0)} · Reset ${c.reset_days?c.reset_days+'d':'manual'}</div>`:'<span class="status-chip warn">Accounting unavailable</span><div class="muted">این پروتکل در این نسخه counter مستقل per-client ندارد.</div>'}</div><div><b>${expiry}</b><div class="muted">${c.days_left===null?'No expiry':c.days_left+' days left'}</div><div class="chips"><button class="status-chip ${ipState}" onclick="showClientIPs(${c.id})">IPs ${ipCount}/${c.ip_limit}</button></div></div><div class="toolbar"><button class="ghost" onclick="copyText('${sub}')">Subscription</button><button class="ghost" onclick="editProtocolClient(${c.id})">Policy</button>${accounting?'<button class="soft" onclick="resetProtocolTraffic('+c.id+')">Reset</button>':''}</div></div>`}
+function protocolClientRow(c){const quota=Number(c.quota_bytes||0),used=Number(c.usage?.total||0),p=quota?Math.min(100,(used/quota)*100):0;const expiry=c.expire_at?new Date(c.expire_at*1000).toLocaleDateString():'∞';const state=!c.enabled?('Disabled'+(c.disabled_reason?' · '+c.disabled_reason:'')):(c.expired?'Expired':'Active');const sub=location.origin+'/sub/'+c.subscription_id;const ipCount=Number(c.online_ip_count||0),ipState=c.ip_violation?'bad':(ipCount?'ok':'');const accounting=c.accounting_supported!==false;return `<div class="protocol-client-row"><div><div class="client-main"><b>${c.name}</b><span class="protocol-pill">${c.protocol.toUpperCase()}</span><span class="status-chip ${c.enabled&&!c.expired?'ok':'bad'}">${state}</span>${c.ip_violation?'<span class="status-chip bad">IP LIMIT</span>':''}</div><div class="muted">${c.inbound_tag}</div></div><div>${accounting?`<b>${fmtBytes(used)} / ${quota?fmtBytes(quota):'Unlimited'}</b><div class="usage-track"><i style="width:${p}%"></i></div><div class="muted">↑ ${fmtBytes(c.usage?.uplink||0)} · ↓ ${fmtBytes(c.usage?.downlink||0)} · Reset ${c.reset_days?c.reset_days+'d':'manual'}</div>`:'<span class="status-chip warn">Accounting unavailable</span><div class="muted">این پروتکل در این نسخه counter مستقل per-client ندارد.</div>'}</div><div><b>${expiry}</b><div class="muted">${c.days_left===null?'No expiry':c.days_left+' days left'}</div><div class="chips"><button class="status-chip ${ipState}" onclick="showClientIPs(${c.id})">IPs ${ipCount}/${c.ip_limit}</button></div></div><div class="pro-row-actions"><button class="pro-more" data-action="access-detail" data-id="${dataEnc('xray:'+c.id)}" aria-label="جزئیات ${dataEnc(c.name)}">•••</button></div></div>`}
 
 function showClientIPs(id){const c=(window.__protocolClients||[]).find(x=>x.id===id);if(!c)return;const rows=c.online?.ips||[];modalRoot.innerHTML=`<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><div class="eyebrow">XRAY ONLINE STATS</div><h3>Live IPs · ${c.name}</h3></div><button class="close-btn" onclick="closeModal()">×</button></div><div class="notice">${c.online?.available?'داده از Xray online-stats API خوانده شده است.':'این Xray Core یا Topology هنوز Online-IP API قابل استفاده ارائه نکرده است.'}</div><div class="ip-list">${rows.length?rows.map(x=>`<div><b>${x.ip}</b><span>${x.last_seen?new Date(x.last_seen*1000).toLocaleString():'-'}</span></div>`).join(''):'<div class="empty">IP آنلاین ثبت نشده است.</div>'}</div></div></div>`}
 
@@ -2488,9 +2497,9 @@ async function outlineWorkspace(renderToken=window.__viewRenderToken){
     const expiry=m?accessExpiryText({expire_at:Number(k.expire_at||m.expire_at||0)}):tr('خارج از Makia','External');
     const quota=Number(k.quota_bytes||m?.quota_bytes||0),used=Number(k.usage_bytes||0);
     const usage=m?(fmtBytes(used)+' / '+(quota?fmtBytes(quota):'∞')):fmtBytes(used);
-    return '<div class="row"><div><b>'+htmlEsc(name)+'</b><div class="muted">ID '+htmlEsc(k.id)+' · '+(m?tr('Managed','Managed'):tr('External','External'))+'</div></div><div><b>'+htmlEsc(usage)+'</b><div class="muted">'+htmlEsc(expiry)+'</div></div><div><span class="status-chip '+(m&&m.enabled!==false?'ok':m?'warn':'')+'">'+(m?(m.enabled!==false?'ACTIVE':'DISABLED'):'OUTLINE')+'</span></div><div class="toolbar">'+
-      (m?'<button class="ghost" data-action="access-share" data-kind="outline" data-key="'+dataEnc(clientId)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('Key / QR','Key / QR'))+'</button><button class="ghost" data-action="client-portal" data-kind="outline" data-key="'+dataEnc(clientId)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('Portal','Portal'))+'</button><button class="ghost" data-action="outline-quota" data-key="'+dataEnc(clientId)+'" data-name="'+dataEnc(name)+'" data-quota="'+String(Math.round(quota/1073741824*100)/100)+'">'+htmlEsc(tr('حجم','Quota'))+'</button><button class="ghost" data-action="outline-renew" data-key="'+dataEnc(clientId)+'">+30D</button><button class="ghost" data-action="outline-reissue" data-key="'+dataEnc(clientId)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('تعویض کلید','Reissue'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="outline" data-key="'+dataEnc(clientId)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('عیب‌یابی','Diagnostics'))+'</button>':'')+
-      '<button class="danger" data-action="outline-delete-key" data-key="'+dataEnc(String(k.id))+'">'+htmlEsc(tr('حذف','Delete'))+'</button></div></div>';
+    return '<div class="row"><div><b>'+htmlEsc(name)+'</b><div class="muted">ID '+htmlEsc(k.id)+' · '+(m?tr('Managed','Managed'):tr('External','External'))+'</div></div><div><b>'+htmlEsc(usage)+'</b><div class="muted">'+htmlEsc(expiry)+'</div></div><div><span class="status-chip '+(m&&m.enabled!==false?'ok':m?'warn':'')+'">'+(m?(m.enabled!==false?'ACTIVE':'DISABLED'):'OUTLINE')+'</span></div><div class="pro-row-actions">'+
+      (m?'<button class="pro-more" data-action="access-detail" data-id="'+dataEnc('outline:'+clientId)+'" aria-label="جزئیات '+dataEnc(name)+'">•••</button>':'<button class="danger" data-action="outline-delete-key" data-key="'+dataEnc(String(k.id))+'">'+htmlEsc(tr('حذف','Delete'))+'</button>')+
+      '</div></div>';
   }).join(''):'<div class="empty">'+htmlEsc(tr('کلیدی وجود ندارد.','No keys.'))+'</div>';
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title">'+protocolGlyph('outline')+'<div><span class="pro-kicker">OUTLINE SERVER</span><h2>Outline</h2><p>'+htmlEsc(tr('Management API واقعی، Traffic Metrics، Quota، Expiry و تحویل امن Access Key.','Real Management API, traffic metrics, quota, expiry and secure Access Key delivery.'))+'</p></div></div><div class="protocol-header-actions"><button class="ghost" onclick="setupOutline()">'+(ready?htmlEsc(tr('وضعیت نصب','Setup status')):htmlEsc(tr('راه‌اندازی','Setup')))+'</button><button class="primary" '+(ready?'onclick="openOutlineKeyCreate()"':'disabled')+'>＋ '+htmlEsc(tr('Access Key جدید','New Access Key'))+'</button></div></section>',
@@ -2502,12 +2511,32 @@ async function outlineWorkspace(renderToken=window.__viewRenderToken){
 async function setupOutline(){
   const host=prompt(tr('Hostname اختیاری برای Outline','Optional Outline hostname'),window.PANEL_DOMAIN||'')??'';if(host===null)return;
   const port=Number(prompt(tr('Port دسترسی Outline (0 = خودکار)','Outline access-key port (0 = automatic)'),'0')||0);
+  const prep='sudo MAKIA_ENABLE_OUTLINE=1 makia-upgrade';
   try{
     const r=await api('/api/protocols/outline/install',{method:'POST',body:JSON.stringify({hostname:host,keys_port:port})});
     if(r.already_ready){toast('Outline READY');await outlineWorkspace();return}
-    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">ROOT SETUP</div><h3>Outline Server</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="wizard-note"><b>'+htmlEsc(tr('عمداً خارج Web Service','Intentionally outside the web service'))+'</b><span>'+htmlEsc(r.note||'')+'</span></div><textarea id="outlineInstallCmd" class="config-output small" readonly></textarea><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="outlineInstallCmd">'+htmlEsc(tr('کپی دستور','Copy command'))+'</button><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div></div></div>';
-    document.getElementById('outlineInstallCmd').value=r.command||'';
-  }catch(e){alert(e.message)}
+    const dependency=Boolean(r.requires_dependency||r.status?.docker===false);
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal outline-setup-modal">',
+      '<div class="wizard-head"><div><div class="eyebrow">ROOT SETUP</div><h3>Outline Server</h3><p>'+htmlEsc(tr('نصب Host dependency و Outline باید در Shell روت انجام شود.','Host dependency and Outline installation must run in a root shell.'))+'</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="protocol-stat-grid compact"><div class="protocol-stat"><span class="icon">▣</span><div><span>Docker</span><b>'+(dependency?'REQUIRED':'READY')+'</b></div></div><div class="protocol-stat"><span class="icon">◈</span><div><span>Management API</span><b>'+(r.status?.api_ok?'READY':'PENDING')+'</b></div></div></div>',
+      dependency?'<div class="wizard-note warn"><b>'+htmlEsc(tr('مرحله ۱ · آماده‌سازی VPS','Step 1 · Prepare VPS'))+'</b><span>'+htmlEsc(tr('این دستور Docker را از مسیر Root نصب/فعال می‌کند و سرویس وب هیچ APTای اجرا نمی‌کند.','This root command prepares Docker; the web service never runs APT.'))+'</span></div><textarea id="outlineDependencyCmd" class="config-output small" readonly></textarea><div class="wizard-footer compact"><button class="primary" data-action="copy-target" data-target="outlineDependencyCmd">'+htmlEsc(tr('کپی دستور مرحله ۱','Copy step 1'))+'</button></div>':'',
+      '<div class="wizard-note"><b>'+htmlEsc(dependency?tr('مرحله ۲ · نصب Outline','Step 2 · Install Outline'):tr('نصب Outline','Install Outline'))+'</b><span>'+htmlEsc(r.note||'')+'</span></div>',
+      '<textarea id="outlineInstallCmd" class="config-output small" readonly></textarea>',
+      '<div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="outlineInstallCmd">'+htmlEsc(tr('کپی دستور نصب','Copy install command'))+'</button><button class="ghost" data-action="refresh">'+htmlEsc(tr('بعد از اجرا، بروزرسانی وضعیت','Refresh after running'))+'</button><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div>',
+      '</div></div>'
+    ].join('');
+    if(dependency){const dep=document.getElementById('outlineDependencyCmd');if(dep)dep.value=r.dependency_command||prep}
+    document.getElementById('outlineInstallCmd').value=r.command||'sudo makia-install-outline';
+  }catch(e){
+    const msg=String(e?.message||'');
+    if(/docker host dependency|MAKIA_ENABLE_OUTLINE/i.test(msg)){
+      modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal outline-setup-modal"><div class="wizard-head"><div><div class="eyebrow">HOST PREPARATION</div><h3>'+htmlEsc(tr('Docker برای Outline آماده نیست','Docker is not ready for Outline'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="wizard-note warn"><b>'+htmlEsc(tr('این خطا نیاز به نصب Root دارد','Root preparation required'))+'</b><span>'+htmlEsc(tr('دستور زیر را در SSH سرور اجرا کن، سپس دوباره Setup را باز کن.','Run this command in the VPS SSH shell, then reopen Setup.'))+'</span></div><textarea id="outlineDependencyCmd" class="config-output small" readonly></textarea><div class="wizard-footer"><button class="primary" data-action="copy-target" data-target="outlineDependencyCmd">'+htmlEsc(tr('کپی دستور','Copy command'))+'</button><button class="ghost" data-action="modal-close">'+htmlEsc(tr('بستن','Close'))+'</button></div></div></div>';
+      document.getElementById('outlineDependencyCmd').value=prep;
+      return;
+    }
+    alert(e.message)
+  }
 }
 function openOutlineKeyCreate(){
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">OUTLINE ACCESS KEY</div><h3>'+htmlEsc(tr('ساخت کاربر Outline','Create Outline client'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>'+htmlEsc(tr('نام','Name'))+'<input id="olName" value="outline01"></label><label>'+htmlEsc(tr('حجم GB','Quota GB'))+'<input id="olQuota" type="number" min="0" value="50"></label><label>'+htmlEsc(tr('مدت روز','Expiry days'))+'<input id="olDays" type="number" min="0" value="30"></label></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">'+htmlEsc(tr('انصراف','Cancel'))+'</button><button class="primary" onclick="createOutlineKey()">'+htmlEsc(tr('ساخت','Create'))+'</button></div></div></div>';
