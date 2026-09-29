@@ -533,6 +533,12 @@ def list_artifact_bindings(account_id):
 
 def unbind_access_artifact(account_id,artifact_id):
     with connect() as con:
+        state=con.execute(
+            "SELECT suspended_reason FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        ).fetchone()
+        if state and str(state["suspended_reason"] or "").startswith("client_account_"):
+            raise PermissionError("restore the Client account policy before unbinding this managed credential")
         con.execute(
             "DELETE FROM client_artifact_bindings WHERE account_id=? AND artifact_id=?",
             (int(account_id),int(artifact_id)),
@@ -784,6 +790,14 @@ def list_bindings(account_id):
 
 def unbind_protocol_client(account_id,protocol_client_id):
     with connect() as con:
+        row=con.execute(
+            """SELECT pc.disabled_reason FROM client_protocol_bindings b
+               JOIN protocol_clients pc ON pc.id=b.protocol_client_id
+               WHERE b.account_id=? AND b.protocol_client_id=?""",
+            (int(account_id),int(protocol_client_id)),
+        ).fetchone()
+        if row and str(row["disabled_reason"] or "").startswith("client_account_"):
+            raise PermissionError("restore the Client account policy before unbinding this managed credential")
         con.execute(
             "DELETE FROM client_protocol_bindings WHERE account_id=? AND protocol_client_id=?",
             (int(account_id),int(protocol_client_id)),
@@ -807,12 +821,26 @@ def delete_account(account_id):
     """Delete only client-plane ownership/session metadata.
 
     Existing protocol_clients, access_artifacts and live protocol runtime state
-    are deliberately left untouched.
+    are deliberately left untouched. A policy-suspended credential must first
+    be restored so deletion can never strand a runtime in a disabled state.
     """
     account_id=int(account_id)
     if not get_account(account_id):
         raise ValueError("account not found")
     with connect() as con:
+        protocol_hold=con.execute(
+            """SELECT 1 FROM client_protocol_bindings b
+               JOIN protocol_clients pc ON pc.id=b.protocol_client_id
+               WHERE b.account_id=? AND pc.disabled_reason LIKE 'client_account_%' LIMIT 1""",
+            (account_id,),
+        ).fetchone()
+        artifact_hold=con.execute(
+            """SELECT 1 FROM client_artifact_policy_state
+               WHERE account_id=? AND suspended_reason LIKE 'client_account_%' LIMIT 1""",
+            (account_id,),
+        ).fetchone()
+        if protocol_hold or artifact_hold:
+            raise PermissionError("restore the Client account policy before deleting this account")
         con.execute("DELETE FROM client_sessions WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_usage_baselines WHERE account_id=?",(account_id,))
