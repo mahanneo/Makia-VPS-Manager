@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/makia-brand.png" width="128" alt="Makia VPS Manager logo"></p>
+
 # ⚡ Makia VPS Manager
 
 Modern web-first VPS and access-infrastructure control center for Ubuntu.
