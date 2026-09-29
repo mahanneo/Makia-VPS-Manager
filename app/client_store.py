@@ -433,3 +433,126 @@ def account_snapshot(account_id):
     account["devices"]=list_devices(account_id)
     account["protocols"]=list_protocols(account_id,include_secrets=False)
     return account
+
+
+def list_accounts():
+    with connect() as con:
+        rows=con.execute(
+            """SELECT id,username,display_name,plan_name,enabled,expire_at,quota_bytes,
+                      device_limit,concurrent_device_limit,created_at,updated_at
+               FROM client_accounts ORDER BY id DESC"""
+        ).fetchall()
+    out=[]
+    for row in rows:
+        item=dict(row)
+        item["used_bytes"]=account_usage_bytes(item["id"])
+        with connect() as con:
+            device_count=con.execute(
+                "SELECT COUNT(*) AS n FROM client_devices WHERE account_id=? AND active=1",
+                (item["id"],),
+            ).fetchone()
+            binding_count=con.execute(
+                "SELECT COUNT(*) AS n FROM client_protocol_bindings WHERE account_id=? AND enabled=1",
+                (item["id"],),
+            ).fetchone()
+        item["active_devices"]=int(device_count["n"] or 0)
+        item["bindings"]=int(binding_count["n"] or 0)
+        out.append(item)
+    return out
+
+
+def update_account(
+    account_id,
+    display_name=None,
+    plan_name=None,
+    expire_at=None,
+    quota_bytes=None,
+    device_limit=None,
+    concurrent_device_limit=None,
+    enabled=None,
+):
+    account=get_account(account_id)
+    if not account:
+        raise ValueError("account not found")
+    values={
+        "display_name":account.get("display_name") or "",
+        "plan_name":account.get("plan_name") or "",
+        "expire_at":int(account.get("expire_at") or 0),
+        "quota_bytes":int(account.get("quota_bytes") or 0),
+        "device_limit":int(account.get("device_limit") or 1),
+        "concurrent_device_limit":int(account.get("concurrent_device_limit") or 1),
+        "enabled":1 if account.get("enabled") else 0,
+    }
+    if display_name is not None: values["display_name"]=str(display_name or "")[:120]
+    if plan_name is not None: values["plan_name"]=str(plan_name or "")[:120]
+    if expire_at is not None: values["expire_at"]=max(0,int(expire_at or 0))
+    if quota_bytes is not None: values["quota_bytes"]=max(0,int(quota_bytes or 0))
+    if device_limit is not None: values["device_limit"]=max(1,int(device_limit or 1))
+    if concurrent_device_limit is not None: values["concurrent_device_limit"]=max(1,int(concurrent_device_limit or 1))
+    if enabled is not None: values["enabled"]=1 if enabled else 0
+    if values["concurrent_device_limit"]>values["device_limit"]:
+        values["concurrent_device_limit"]=values["device_limit"]
+    with connect() as con:
+        con.execute(
+            """UPDATE client_accounts
+               SET display_name=?,plan_name=?,expire_at=?,quota_bytes=?,device_limit=?,
+                   concurrent_device_limit=?,enabled=?,updated_at=?
+               WHERE id=?""",
+            (
+                values["display_name"],values["plan_name"],values["expire_at"],values["quota_bytes"],
+                values["device_limit"],values["concurrent_device_limit"],values["enabled"],now_iso(),
+                int(account_id),
+            ),
+        )
+        if not values["enabled"]:
+            con.execute(
+                "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+                (int(time.time()),int(account_id)),
+            )
+    return get_account(account_id)
+
+
+def set_account_password(account_id,password):
+    if len(str(password or ""))<8:
+        raise ValueError("password must be at least 8 characters")
+    if not get_account(account_id):
+        raise ValueError("account not found")
+    with connect() as con:
+        con.execute(
+            "UPDATE client_accounts SET password_hash=?,updated_at=? WHERE id=?",
+            (hash_password(str(password)),now_iso(),int(account_id)),
+        )
+        con.execute(
+            "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+            (int(time.time()),int(account_id)),
+        )
+
+
+def list_bindings(account_id):
+    with connect() as con:
+        rows=con.execute(
+            """SELECT b.id,b.account_id,b.protocol_client_id,b.label,b.priority,b.enabled,b.created_at,
+                      pc.name AS protocol_name,pc.engine,pc.protocol,pc.enabled AS protocol_enabled,
+                      pc.expire_at,pc.quota_bytes
+               FROM client_protocol_bindings b
+               JOIN protocol_clients pc ON pc.id=b.protocol_client_id
+               WHERE b.account_id=? ORDER BY b.priority ASC,b.id ASC""",
+            (int(account_id),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def unbind_protocol_client(account_id,protocol_client_id):
+    with connect() as con:
+        con.execute(
+            "DELETE FROM client_protocol_bindings WHERE account_id=? AND protocol_client_id=?",
+            (int(account_id),int(protocol_client_id)),
+        )
+
+
+def account_admin_snapshot(account_id):
+    account=account_snapshot(account_id)
+    if not account:
+        return None
+    account["bindings_detail"]=list_bindings(account_id)
+    return account
