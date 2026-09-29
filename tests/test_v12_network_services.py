@@ -406,8 +406,11 @@ def test_update_can_land_fix_when_optional_mtproxy_was_already_broken():
 def test_force_main_update_bypasses_pinned_archive_and_verifies_running_version():
     update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
     assert 'FORCE_MAIN="${MAKIA_FORCE_MAIN:-0}"' in update
-    assert 'ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/main.tar.gz"' in update
-    assert "ignoring any pinned release archive override" in update
+    assert 'REF="main"' in update
+    assert 'SOURCE_COMMIT="$(resolve_github_commit "$REF")"' in update
+    assert 'ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"' in update
+    assert "pinned immutable source commit" in update
+    assert "archive/refs/heads/main.tar.gz" not in update
     assert "Running backend version verified" in update
     assert 'json.load(sys.stdin).get("version","")' in update
 
@@ -572,3 +575,31 @@ def test_uat_smoke_is_not_duplicated_or_truncated():
     assert uat.count("if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then")==1
     assert uat.count("if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then")==1
     assert "\n; then\n" not in uat
+
+
+def test_updater_pins_github_branch_to_immutable_commit_archive():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "resolve_github_commit(){" in update
+    assert 'https://api.github.com/repos/${REPO}/commits/${ref}' in update
+    assert 'https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}' in update
+    assert 'SOURCE_COMMIT="$(resolve_github_commit "$REF")"' in update
+    assert "pinned immutable source commit" in update
+    force=update.split('if [[ "$FORCE_MAIN" == "1" ]]',1)[1].split("elif",1)[0]
+    assert "archive/refs/heads/main.tar.gz" not in force
+
+
+def test_updater_validates_immutable_archive_identity_before_preflight():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'EXPECTED_PREFIX="Makia-VPS-Manager-${SOURCE_COMMIT}"' in update
+    assert "Immutable archive root mismatch" in update
+    assert '[[ -s "$SRC/VERSION" ]]' in update
+    assert "Downloaded immutable Makia release" in update
+    identity=update.index("Immutable archive root mismatch")
+    preflight=update.index("Preflighting critical release shell scripts")
+    assert identity < preflight
+
+
+def test_updater_validates_tarball_before_extracting_release():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'tar -tzf "$TMP/source.tar.gz" >/dev/null' in update
+    assert update.index('tar -tzf "$TMP/source.tar.gz" >/dev/null') < update.index('tar -xzf "$TMP/source.tar.gz" -C "$TMP"')
