@@ -100,3 +100,17 @@ def test_outline_access_rows_remain_outline_not_xray_static_contract():
     assert "rows=accessRows.filter(x=>x.kind==='xray')" in js
     assert 'if engine_filter and str(item.get("engine") or "").lower()!=engine_filter:' in main
     assert '"kind":kind' in main
+
+
+def test_management_forms_do_not_use_fragile_dom_id_globals():
+    import re
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    refs={m.group(1) for m in re.finditer(r"\b([A-Za-z_$][A-Za-z0-9_$]*)\.(?:value|checked|disabled|style|textContent)\b",js)}
+    allowed={"title"}
+    declared=set()
+    for m in re.finditer(r"\b(?:const|let|var)\s+([^;\n]+)",js):
+        for name in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]*)\b",m.group(1)):
+            declared.add(name)
+    helpers={"document","window","location","navigator","console","Math","JSON","Date","Number","String"}
+    suspicious=sorted(refs-declared-allowed-helpers)
+    assert suspicious==[]
