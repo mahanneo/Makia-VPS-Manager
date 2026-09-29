@@ -1964,6 +1964,7 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 .xray-preset-card b{font-size:11px;line-height:1.45}
 .xray-preset-card small{font-size:8px;color:#77a8d3}
 .xray-preset-card p{margin:4px 0 0;font-size:9px;line-height:1.65;color:var(--pro-muted)}
+.xray-preset-card .preset-port{font-size:8px;color:#7fc8ff;border:1px solid #274766;border-radius:7px;padding:2px 6px;background:rgba(36,79,121,.15)}
 .xray-preset-card em{margin-top:auto;font-style:normal;font-size:8px;color:#e9c46a}
 .xray-preset-card.tier-recommended .preset-tier{border-color:#267c65;color:#66e2bf;background:rgba(45,212,159,.08)}
 .xray-preset-card.tier-experimental{border-color:#725d2b}
