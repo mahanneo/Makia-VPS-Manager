@@ -27,7 +27,7 @@
       <form method="post" action="/client/login" class="mc-form" autocomplete="on">
         <label>
           <span>نام کاربری</span>
-          <input name="username" autocomplete="username" required maxlength="64" dir="ltr">
+          <input name="username" autocomplete="username" required maxlength="64" dir="ltr" value="{{ default_username or '' }}">
         </label>
         <label>
           <span>رمز عبور</span>
