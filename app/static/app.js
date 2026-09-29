@@ -1010,7 +1010,7 @@ async function toggleWireGuardPeer(key,enabled){
 async function inboundsWorkspace(renderToken=window.__viewRenderToken){
   title.textContent='Inboundها';setPageContext('INBOUNDS');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال خواندن Inboundها…</b></div>';
-  const [stack,clients]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients')]);
+  const [stack,clients]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients?engine=xray')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='inbounds')return;
   window.__protocolData=stack;window.__protocolClients=clients;
   const engine=stack.xray||{},rows=engine.inbounds||[];
@@ -1040,10 +1040,10 @@ async function inboundsWorkspace(renderToken=window.__viewRenderToken){
 async function xrayWorkspace(renderToken=window.__viewRenderToken){
   title.textContent='V2Ray / Xray';setPageContext('XRAY USER MANAGEMENT');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال همگام‌سازی Xray…</b></div>';
-  const [stack,clients,accessRows,operator]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients'),api('/api/access'),api('/api/settings/operator')]);
+  const [stack,clients,accessRows,operator]=await Promise.all([api('/api/protocols'),api('/api/protocol-clients?engine=xray'),api('/api/access'),api('/api/settings/operator')]);
   if(renderToken!==window.__viewRenderToken||activeView!=='xray')return;
   window.__protocolData=stack;window.__protocolClients=clients;window.__operatorSettings=operator;accessCache=accessRows;
-  const engine=stack.xray||{},managed=clients,rows=accessRows.filter(x=>x.kind==='xray');
+  const engine=stack.xray||{},managed=clients.filter(x=>String(x.engine||'xray').toLowerCase()==='xray'),rows=accessRows.filter(x=>x.kind==='xray');
   const active=managed.filter(x=>x.enabled&&!x.expired).length;
   const inactive=managed.length-active;
   const used=managed.reduce((sum,x)=>sum+Number(x.usage?.total||0),0);
@@ -2542,9 +2542,20 @@ function openOutlineKeyCreate(){
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="wizard-head"><div><div class="eyebrow">OUTLINE ACCESS KEY</div><h3>'+htmlEsc(tr('ساخت کاربر Outline','Create Outline client'))+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><div class="form-grid two"><label>'+htmlEsc(tr('نام','Name'))+'<input id="olName" value="outline01"></label><label>'+htmlEsc(tr('حجم GB','Quota GB'))+'<input id="olQuota" type="number" min="0" value="50"></label><label>'+htmlEsc(tr('مدت روز','Expiry days'))+'<input id="olDays" type="number" min="0" value="30"></label></div><div class="wizard-footer"><button class="ghost" data-action="modal-close">'+htmlEsc(tr('انصراف','Cancel'))+'</button><button class="primary" onclick="createOutlineKey()">'+htmlEsc(tr('ساخت','Create'))+'</button></div></div></div>';
 }
 async function createOutlineKey(){
+  const nameEl=document.getElementById('olName');
+  const quotaEl=document.getElementById('olQuota');
+  const daysEl=document.getElementById('olDays');
+  const name=(nameEl?.value||'').trim();
+  const quota=Number(quotaEl?.value||0);
+  const days=Number(daysEl?.value||0);
+  if(!name){alert(tr('نام کاربر Outline را وارد کنید','Enter an Outline client name'));return}
+  if(!Number.isFinite(quota)||quota<0){alert(tr('حجم نامعتبر است','Invalid quota'));return}
+  if(!Number.isFinite(days)||days<0){alert(tr('مدت نامعتبر است','Invalid expiry'));return}
   try{
-    const r=await api('/api/protocols/outline/keys',{method:'POST',body:JSON.stringify({name:olName.value.trim(),quota_gb:Number(olQuota.value||0),expire_days:Number(olDays.value||0)})});
-    closeModal();toast(tr('کلید Outline ساخته شد','Outline key created'));await openClientPortal('outline',String(r.client_id),olName.value.trim());
+    const r=await api('/api/protocols/outline/keys',{method:'POST',body:JSON.stringify({name,quota_gb:quota,expire_days:days})});
+    closeModal();
+    toast(tr('کلید Outline ساخته شد','Outline key created'));
+    await openClientPortal('outline',String(r.client_id),name);
   }catch(e){alert(e.message)}
 }
 async function deleteOutlineKey(id){if(!confirm(tr('این کلید Outline حذف شود؟','Delete this Outline key?')))return;try{await api('/api/protocols/outline/keys/'+encodeURIComponent(dataDec(id)),{method:'DELETE'});await outlineWorkspace()}catch(e){alert(e.message)}}
