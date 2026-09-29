@@ -2350,6 +2350,48 @@ async function handleMakiaAction(btn){
   if(action==='settings-2fa-disable'){await disable2FA();return}
   if(action==='settings-api-new'){createApiToken();return}
   if(action==='settings-api-revoke'){await revokeApiToken(Number(btn.dataset.id));return}
+  if(action==='client-open-portal'){window.open(location.origin+'/client/','_blank','noopener');return}
+  if(action==='client-copy-portal'){copyText(location.origin+'/client/');toast(tr('لینک Client Portal کپی شد','Client Portal link copied'));return}
+  if(action==='client-copy-link'){copyText(clientPortalUrl(dataDec(btn.dataset.user)));toast(tr('لینک ورود کاربر کپی شد','Client login link copied'));return}
+  if(action==='client-platform-toggle'){
+    const next=btn.dataset.enabled==='1';
+    if(!confirm(next?tr('Client Portal برای کاربران فعال شود؟','Enable Client Portal for users?'):tr('Client Portal غیرفعال شود؟ اتصال‌های VPN فعلی قطع نمی‌شوند.','Disable Client Portal? Existing VPN connections will not be disconnected.')))return;
+    await api('/api/client-platform/settings',{method:'POST',body:JSON.stringify({enabled:next})});
+    toast(next?tr('Client Portal فعال شد','Client Portal enabled'):tr('Client Portal غیرفعال شد','Client Portal disabled'));
+    await clientPlatformCenter();return;
+  }
+  if(action==='client-account-new'){openClientAccountCreate();return}
+  if(action==='client-account-create'){await createClientAccount();return}
+  if(action==='client-account-open'){await openClientAccountManage(Number(btn.dataset.id));return}
+  if(action==='client-account-save'){await saveClientAccount(Number(btn.dataset.id));return}
+  if(action==='client-password-generate'){
+    const r=await api('/api/accounts/generate-secret?mode=strong');
+    const el=document.getElementById(btn.dataset.target);if(el){el.value=r.secret||'';el.type='text';el.focus()}return;
+  }
+  if(action==='client-password-rotate'){await rotateClientPassword(Number(btn.dataset.id),dataDec(btn.dataset.user));return}
+  if(action==='client-binding-add'){await bindClientAccess(Number(btn.dataset.account));return}
+  if(action==='client-binding-remove'){await removeClientBinding(Number(btn.dataset.account),btn.dataset.type,Number(btn.dataset.id));return}
+  if(action==='client-device-revoke-admin'){
+    if(!confirm(tr('این دستگاه لغو شود؟ Sessionهای همان دستگاه هم باطل می‌شوند.','Revoke this device and its sessions?')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.account)+'/devices/'+Number(btn.dataset.device)+'/revoke',{method:'POST'});
+    toast(tr('دستگاه لغو شد','Device revoked'));await openClientAccountManage(Number(btn.dataset.account));return;
+  }
+  if(action==='client-devices-revoke-all'){
+    if(!confirm(tr('همه دستگاه‌های این حساب لغو شوند؟ کاربر باید دوباره دستگاه ثبت کند.','Revoke all devices for this account? The user must register a device again.')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.account)+'/devices/revoke-all',{method:'POST'});
+    toast(tr('همه دستگاه‌ها لغو شدند','All devices revoked'));await openClientAccountManage(Number(btn.dataset.account));return;
+  }
+  if(action==='client-sessions-revoke-all'){
+    if(!confirm(tr('همه Sessionهای فعال این حساب خارج شوند؟','Revoke all active sessions for this account?')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.account)+'/sessions/revoke-all',{method:'POST'});
+    toast(tr('همه Sessionها باطل شدند','All sessions revoked'));return;
+  }
+  if(action==='client-account-delete'){
+    const user=dataDec(btn.dataset.user);
+    if(!confirm(tr('حساب Client '+user+' حذف شود؟ پروتکل‌ها و Credentialهای اصلی حذف نمی‌شوند.','Delete client account '+user+'? Original protocol credentials will remain untouched.')))return;
+    await api('/api/client-platform/accounts/'+Number(btn.dataset.id),{method:'DELETE'});
+    closeModal();toast(tr('حساب Client حذف شد؛ Runtime دست‌نخورده ماند','Client account deleted; runtime remained untouched'));await clientPlatformCenter();return;
+  }
   if(action==='refresh'){await currentView();return}
 }
 
