@@ -5,7 +5,7 @@
 ### MTProxy root-cause fix
 - Fixed the real-host permission bug where `makia-mtproxy` could not traverse `/etc/makia-vps-manager` to read `mtproxy.toml`.
 - The config directory is now `0710 root:makia-mtproxy`: group traverse only, while other Makia secret files remain protected by their root-only modes.
-- Added a pre-start check that the actual `makia-mtproxy` account can read the config and validates the config with `mtg doctor`.
+- Added a pre-start check that the actual `makia-mtproxy` account can traverse and read the generated config before systemd starts.
 
 ### Automatic port allocation
 - Telegram Proxy now uses AUTO port selection from the start; 443 is no longer the default/preferred port.
