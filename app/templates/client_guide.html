@@ -27,6 +27,7 @@
         <a href="#xray"><span class="guide-mini-icon xray">X</span>Xray</a>
         <a href="#wireguard"><span class="guide-mini-icon wg">W</span>WireGuard</a>
         <a href="#openvpn"><span class="guide-mini-icon ovpn">O</span>OpenVPN</a>
+        <a href="#outline"><span class="guide-mini-icon outline">◈</span>Outline</a>
         <a href="#ssh"><span class="guide-mini-icon ssh">›_</span>SSH / NPV</a>
       </nav>
     </section>
@@ -74,6 +75,22 @@
         <article><b>macOS</b><p>{{'OpenVPN Connect را نصب کنید و همان فایل .ovpn را وارد کنید.' if fa else 'Install OpenVPN Connect and import the same .ovpn file.'}}</p></article>
       </div>
       <div class="notice">{{'اگر مدیر Port یا Transport سرور را تغییر داد، فایل OVPN جدید را از لینک اختصاصی خود دریافت کنید.' if fa else 'If the server port or transport changes, download a fresh OVPN file from your private access page.'}}</div>
+    </section>
+
+
+    <section class="client-card guide-section" id="outline">
+      <div class="guide-section-head"><span class="guide-icon outline">◈</span><div><div class="eyebrow">ACCESS KEY · QR · ONE-TAP</div><h2>Outline</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95zm25-9h9v9h-9zm17 15h9v9h-9z"/></svg><figcaption><b>{{'۱. دریافت Access Key' if fa else '1. Get the Access Key'}}</b><span>{{'از لینک اختصاصی، QR یا کلید اتصال را دریافت کنید.' if fa else 'Use your private page to get the QR code or access key.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="54" y="25" width="132" height="92" rx="11"/><path d="M76 48h88M76 66h62M76 84h75"/><path d="M160 47v39m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن در Outline Client' if fa else '2. Import into Outline Client'}}</b><span>{{'ورود مستقیم را بزنید یا کلید را در برنامه رسمی Paste کنید.' if fa else 'Use one-tap import or paste the key into the official Outline Client.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/></svg><figcaption><b>{{'۳. اتصال' if fa else '3. Connect'}}</b><span>{{'سرور را انتخاب و اتصال را فعال کنید.' if fa else 'Select the server and connect.'}}</span></figcaption></figure>
+      </div>
+      <div class="guide-method-grid">
+        <article><b>Android / iPhone</b><p>{{'Outline Client رسمی را نصب کنید. لینک ورود مستقیم را باز کنید یا QR/Access Key را وارد کنید.' if fa else 'Install the official Outline Client. Open the one-tap import link or use the QR/access key.'}}</p></article>
+        <article><b>Windows / macOS</b><p>{{'Outline Client را نصب کنید، Access Key را Copy/Paste کنید و Add Server را بزنید.' if fa else 'Install Outline Client, copy/paste the Access Key and choose Add Server.'}}</p></article>
+        <article><b>{{'نکته امنیتی' if fa else 'Security note'}}</b><p>{{'Access Key مانند رمز عبور است؛ آن را عمومی نکنید و در صورت لو رفتن از مدیر بخواهید Reissue انجام دهد.' if fa else 'Treat the Access Key like a password. Do not publish it; ask the administrator to reissue it if exposed.'}}</p></article>
+      </div>
+      <div class="notice">{{'اگر Quota یا Expiry تمام شده باشد، کلید ممکن است توسط سرور غیرفعال شود. برای تمدید با مدیر تماس بگیرید.' if fa else 'When quota or expiry is reached, the key may be disabled by the server. Contact the administrator to renew it.'}}</div>
     </section>
 
     <section class="client-card guide-section" id="ssh">
