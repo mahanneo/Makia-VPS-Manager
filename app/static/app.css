@@ -1972,3 +1972,59 @@ body.pro-login .pro-login-field input:-webkit-autofill:focus{
 .xray-preset-card.tier-compatibility .preset-tier{border-color:#65558b;color:#c4adff;background:rgba(139,92,246,.08)}
 @media(max-width:1180px){.xray-preset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.xray-preset-grid{grid-template-columns:1fr}.xray-preset-card{min-height:auto}}
+
+
+/* v1.2 — provisioning and Xray layout hardening */
+.provision-drawer{width:min(720px,100vw)}
+.pro-protocol-picker{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pro-protocol-card{
+  min-height:124px;
+  grid-template-columns:54px minmax(0,1fr);
+  grid-template-rows:auto auto;
+  column-gap:13px;
+  align-items:start;
+  overflow:hidden;
+}
+.protocol-card-icon{
+  width:50px;height:50px;
+  font-size:0;
+  overflow:hidden;
+}
+.protocol-card-icon .proto-glyph{width:50px;height:50px;margin:0}
+.protocol-card-icon .proto-glyph svg{width:25px;height:25px}
+.protocol-card-copy{min-width:0}
+.pro-protocol-card>div b,.pro-protocol-card>div small,.pro-protocol-card>div em{
+  overflow-wrap:anywhere;word-break:normal;white-space:normal
+}
+.pro-protocol-card>i{align-self:end;margin-top:8px}
+.xray-preset-section{grid-column:1/-1}
+.xray-preset-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px
+}
+.xray-preset-card{
+  min-width:0;
+  min-height:178px;
+  line-height:1.55;
+  overflow:hidden
+}
+.xray-preset-card b,.xray-preset-card small,.xray-preset-card p,.xray-preset-card em,.xray-preset-card .preset-port{
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  white-space:normal
+}
+.xray-preset-card b{line-height:1.5}
+.xray-preset-card p{line-height:1.75}
+.xray-builder-modal .form-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.xray-builder-modal label{min-width:0}
+.xray-builder-modal input,.xray-builder-modal select,.xray-builder-modal textarea{min-width:0}
+@media(max-width:760px){
+  .provision-drawer{width:100vw}
+  .pro-protocol-picker{grid-template-columns:1fr}
+  .provision-progress{grid-template-columns:repeat(2,1fr);gap:8px}
+  .provision-drawer .wizard-form.two{grid-template-columns:1fr}
+  .xray-preset-grid{grid-template-columns:1fr}
+  .xray-builder-modal .form-grid.two{grid-template-columns:1fr}
+}
