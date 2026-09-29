@@ -535,6 +535,8 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "ipsec_secrets":"/etc/ipsec.secrets",
         "stunnel_defaults":"/etc/default/stunnel4",
         "outline":"/opt/outline",
+        "mtproxy":"/opt/makia-mtproxy",
+        "unbound_conf":"/etc/unbound/unbound.conf.d/makia.conf",
     }
     paths={**defaults,**(system_paths or {})}
     files={
@@ -543,7 +545,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     }
     components={}
 
-    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d","outline"):
+    for name in ("wireguard","openvpn","letsencrypt","xray","xray_alt","makia_etc","stunnel","ipsec_d","outline","mtproxy"):
         blob=_tar_bytes(paths[name],name)
         if blob:
             files[f"payload/{name}.tar.gz"]=blob
@@ -551,7 +553,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         else:
             components[name]=False
 
-    for name in ("nginx_site","ipsec_conf","ipsec_secrets","stunnel_defaults"):
+    for name in ("nginx_site","ipsec_conf","ipsec_secrets","stunnel_defaults","unbound_conf"):
         src=Path(paths[name])
         if src.is_file():
             files[f"payload/{name}"]=src.read_bytes()
@@ -565,7 +567,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
         "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
         "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
-        "makia-ops-monitor.service","makia-ops-monitor.timer",
+        "makia-ops-monitor.service","makia-ops-monitor.timer","makia-mtproxy.service",
     ]
     systemd_count=0
     for unit in systemd_units:
