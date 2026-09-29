@@ -162,7 +162,7 @@ def test_full_migration_declares_mtproxy_and_dns_assets():
 def test_provisioning_wizard_no_longer_renders_missing_card_index():
     js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
     assert "protocolGlyph(x[0])" in js
-    assert "'+x[4]+'" not in js
+    assert '<span class="protocol-card-icon '+x[0]+'">'+x[4]+'</span>' not in js
     assert "protocol-card-copy" in js
 
 
