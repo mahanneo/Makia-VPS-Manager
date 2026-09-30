@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "ndk;28.0.13004108" "platforms;android-37.1" "build-tools;37.1.0"
+          sdkmanager "ndk;28.0.13004108" "platforms;android-37.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.0.13004108" >> "$GITHUB_ENV"
       - name: Checkout pinned official SFA and sing-box
         shell: bash
