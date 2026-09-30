@@ -74,7 +74,7 @@ jobs:
           grep -q 'makia-install-dns' scripts/install.sh scripts/update.sh
       - name: Client Platform 1.4.0 release contract
         run: |
-          test -f docs/UAT-1.3.0.md
+          test -f docs/UAT-1.4.0.md
           test -f docs/CLIENT-PLATFORM-V0.1.md
           test -f app/client_store.py
           test -f app/client_portal.py
@@ -241,7 +241,7 @@ jobs:
           grep -q 'body\[data-theme="glass"\]' app/static/app.css
           grep -q 'glass-status-hero' app/static/app.js
           grep -q 'Glass Aurora' app/static/app.js
-          grep -q "const CACHE='makia-shell-v130'" app/static/sw.js
+          grep -q "const CACHE='makia-shell-v140'" app/static/sw.js
           grep -q '/api/protocols/openvpn/diagnostics' app/main.py
           grep -q '/api/protocols/openvpn/repair' app/main.py
           grep -q 'openvpn_endpoint_diagnostics' app/protocol_ops.py
@@ -280,7 +280,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v130' app/static/sw.js
+          grep -q 'makia-shell-v140' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
@@ -322,7 +322,7 @@ jobs:
           grep -q 'security-posture-grid' app/static/app.js
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
-          grep -q 'makia-shell-v130' app/static/sw.js
+          grep -q 'makia-shell-v140' app/static/sw.js
 
       - name: Connection modes contract
         run: |
