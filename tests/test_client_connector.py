@@ -168,3 +168,19 @@ def test_connector_public_origin_ignores_forwarded_host(monkeypatch):
         base_url="http://127.0.0.1:8000/"
     monkeypatch.delenv("MAKIA_PUBLIC_BASE_URL",raising=False)
     assert client_portal._public_origin(RequestStub())=="https://panel.example.test"
+
+
+def test_android_signed_release_workflow_contract():
+    workflow=(ROOT/".github/workflows/android-release.yml").read_text(encoding="utf-8")
+    for marker in [
+        "Android Signed Release",
+        "MAKIA_ANDROID_KEYSTORE_B64",
+        "MAKIA_ANDROID_KEYSTORE_PASSWORD",
+        "MAKIA_ANDROID_KEY_ALIAS",
+        "MAKIA_ANDROID_KEY_PASSWORD",
+        ":app:assembleOtherRelease",
+        "apksigner",
+        "Makia-Android-Connector-1.4.0-Signed",
+    ]:
+        assert marker in workflow
+    assert 'release/v1.4.0-uat1' in workflow
