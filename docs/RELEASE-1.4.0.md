@@ -29,12 +29,15 @@ On the final 1.4.0 candidate line:
 - Windows Native Connector Build: PASS
 - Android Connector Build: PASS
 
-Final verified artifact digests from the green candidate run:
+Artifact integrity rule:
 
-- Windows `Makia-Client-Connector-Windows-x64`:
-  `sha256:6c0ce22b2c82e645df8c5c521ebe9e7bf83fa1b6476f3c046853653fc13ffb8c`
-- Android `Makia-Android-Connector-RC`:
-  `sha256:e6677669268bda57e85a1595fe874795a0ea1926793a7cb844e9e3aed68ba4ad`
+- use only artifacts produced by the green Actions runs for the frozen UAT SHA;
+- record the Windows and Android artifact digests in the UAT evidence / PR #73;
+- do not treat an older candidate digest as the final release digest.
+
+Expected UAT artifact names:
+- Windows: `Makia-Client-Connector-Windows-x64`
+- Android: `Makia-Android-Connector-1.4.0-UAT`
 
 ## Android signing boundary
 

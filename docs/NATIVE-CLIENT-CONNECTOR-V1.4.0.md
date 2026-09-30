@@ -107,13 +107,11 @@ See `docs/UAT-1.4.0.md` for the production gate.
 
 ## Final CI artifacts
 
-Final green candidate head before production UAT:
-
-`822989d337862b58e7e14ff3223627268b61796f`
+The authoritative connector artifacts must be taken from the green GitHub Actions runs for the **frozen UAT SHA** referenced by PR #73 / `release/v1.4.0-uat1`.
 
 - Windows artifact: `Makia-Client-Connector-Windows-x64`
-  - GitHub Actions artifact digest: `sha256:6c0ce22b2c82e645df8c5c521ebe9e7bf83fa1b6476f3c046853653fc13ffb8c`
-- Android artifact: `Makia-Android-Connector-RC`
-  - GitHub Actions artifact digest: `sha256:e6677669268bda57e85a1595fe874795a0ea1926793a7cb844e9e3aed68ba4ad`
+- Android UAT artifact: `Makia-Android-Connector-1.4.0-UAT`
+
+Record the GitHub Actions artifact digests from those exact runs in the UAT evidence. Do not copy a digest from an earlier candidate because build artifacts can differ even when product source changes are documentation/test-only.
 
 The Android PR/UAT artifact is debug-signed. Do not treat it as the permanent public signing identity. Before general Android distribution, configure and preserve a single private release signing key so later APK upgrades remain signature-compatible.

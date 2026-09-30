@@ -18,8 +18,7 @@
 
 ### Verification
 - Main CI, Xray Core smoke, browser smoke, Windows Native Connector Build and Android Connector Build pass on the final 1.4.0 candidate head.
-- Windows artifact digest: `sha256:6c0ce22b2c82e645df8c5c521ebe9e7bf83fa1b6476f3c046853653fc13ffb8c`.
-- Android artifact digest: `sha256:e6677669268bda57e85a1595fe874795a0ea1926793a7cb844e9e3aed68ba4ad`.
+- Connector artifact digests are release-run evidence and must be recorded from the final frozen UAT SHA; do not reuse a digest from an earlier candidate build.
 - Production rollout still requires full migration backup, real VPS UAT, disposable-client tests, existing-user connectivity verification and limited canary before enabling the Client Portal.
 
 ## [1.3.0] - 2026-09-29
