@@ -10,3 +10,5 @@ The Android connector build is a derivative of **SagerNet/sing-box-for-android**
 This Android connector/overlay is distributed under **GPL-3.0-or-later**. It is intentionally isolated under `client/android/` and is not used as a library by the Makia server application.
 
 The public application name is **Makia Connector**. It does not use the SFA name or claim association with SagerNet.
+
+Build artifacts are intended for controlled UAT until release signing and production validation are complete.
