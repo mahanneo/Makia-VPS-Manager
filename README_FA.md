@@ -74,7 +74,7 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 - Telegram Bot / Notifications
 - Diagnostics برای هر Access
 - Multi-VPS Dashboard
-- Client Portal بدون Login با Token اختصاصی
+- Client Portal / PWA احراز هویت‌شده برای کاربران نهایی
 - QR / Config / Protected ZIP
 - Audit Log
 - Host Diagnostics
