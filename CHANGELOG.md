@@ -12,6 +12,7 @@
 - Added public HTTPS origin normalization for Direct Connect behind reverse proxies and optional `MAKIA_PUBLIC_BASE_URL` / `MAKIA_ANDROID_CONNECTOR_URL` configuration.
 - Added connector error visibility/logging and hardened Android package validation.
 - Fixed literal `\\n` residues in the Client UI that could break mobile layout/rendering.
+- Client-only 1.4.0 updates now compare the installed protocol runtime code before protocol maintenance; when unchanged, the updater preserves active Xray/WireGuard/OpenVPN runtimes and skips automatic provisioning/repair/restart paths.
 
 ### Verification
 - Main CI, Xray Core smoke, browser smoke, Windows Native Connector Build and Android Connector Build pass on the final 1.4.0 candidate head.
