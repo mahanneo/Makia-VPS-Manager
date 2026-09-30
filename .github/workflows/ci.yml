@@ -91,7 +91,8 @@ jobs:
           grep -q 'makia_client_session' app/client_portal.py
           grep -q 'client_openvpn_policy_enable' app/client_admin.py
           grep -q 'client_policy_openvpn_suspend' app/client_policy.py
-          grep -q 'makia-client-v130' app/static/client-sw.js
+          grep -q 'makia-client-v140-mobile-login' app/static/client-sw.js
+          test -f app/static/client-login.js
           pytest -q tests/test_client_platform.py
 
       - name: Backup restore and migration compatibility tests
