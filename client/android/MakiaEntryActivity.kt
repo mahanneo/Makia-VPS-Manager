@@ -78,7 +78,6 @@ class MakiaEntryActivity : ComponentActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                Settings.dataStore.initialize()
                 val delivery = redeem(controller, ticket)
                 val config = buildConfig(delivery)
                 Libbox.checkConfig(config)
