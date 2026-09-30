@@ -47,8 +47,8 @@ jobs:
       - name: v1.2 network services and Iran inbound preset gate
         run: |
           pytest -q tests/test_rc8_operations.py tests/test_rc9_hardening.py tests/test_rc11_outline_runtime.py tests/test_v1_release_gate.py tests/test_xray_iran_presets.py
-          grep -Fxq '1.3.0' VERSION
-          grep -q 'VERSION = "1.3.0"' app/config.py
+          grep -Fxq '1.4.0' VERSION
+          grep -q 'VERSION = "1.4.0"' app/config.py
           grep -q 'makia-shell-v130' app/static/sw.js
           test -f docs/UAT-1.3.0.md
           test -f app/static/makia-brand.png
@@ -72,7 +72,7 @@ jobs:
           grep -q 'data-view="dnscenter"' app/templates/dashboard.html
           grep -q 'makia-install-mtproxy' scripts/install.sh scripts/update.sh
           grep -q 'makia-install-dns' scripts/install.sh scripts/update.sh
-      - name: Client Platform 1.3.0 release contract
+      - name: Client Platform 1.4.0 release contract
         run: |
           test -f docs/UAT-1.3.0.md
           test -f docs/CLIENT-PLATFORM-V0.1.md
