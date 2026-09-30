@@ -144,7 +144,7 @@ def test_pwa_shell_uses_no_store_for_private_api_and_separate_service_worker():
     assert 'window.addEventListener("pageshow",event=>{if(event.persisted)location.reload()})' in js
     assert 'u.pathname.startsWith("/client/")' in sw
     assert 'fetch(event.request,{cache:"no-store"})' in sw
-    assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-icon.svg"]' in sw
+    assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-login.js","/static/client-icon.svg"]' in sw
     assert '"/client/"' not in sw.split("const SHELL=",1)[1].split(";",1)[0]
     assert '@router.post("/client/logout")' in portal
     assert "client_store.revoke_session(token)" in portal
@@ -551,7 +551,7 @@ def test_client_pwa_rc_has_cross_platform_install_and_browser_security_contract(
     assert 'window.addEventListener("online"' in js
     assert 'document.addEventListener("visibilitychange"' in js
     assert ".mc-grid-4" in css
-    assert 'const CACHE="makia-client-v130"' in sw
+    assert 'const CACHE="makia-client-v140-mobile-login"' in sw
     assert 'response.headers["X-Frame-Options"]="DENY"' in portal
     assert 'response.headers["Referrer-Policy"]="no-referrer"' in portal
     assert 'response.headers["Content-Security-Policy"]' in portal
