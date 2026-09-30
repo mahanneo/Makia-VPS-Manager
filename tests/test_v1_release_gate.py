@@ -174,3 +174,14 @@ def test_official_brand_asset_is_referenced():
     assert "/static/makia-brand.png" in dashboard
     assert "/static/makia-brand.png" in login
     assert "docs/assets/makia-brand.png" in readme
+
+
+def test_client_only_update_preserves_active_vpn_runtimes_when_protocol_code_unchanged():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'cmp -s "$APP/app/protocol_ops.py" "$SRC/app/protocol_ops.py"' in update
+    assert 'PROTOCOL_RUNTIME_CHANGED=0' in update
+    assert 'if [[ "$PROTOCOL_RUNTIME_CHANGED" -eq 1 ]]; then' in update
+    assert 'skipping automatic Xray/WireGuard/OpenVPN provisioning and repair' in update
+    assert 'Existing protocol runtime state preserved.' in update
+    for service in ["xray","openvpn-server@server","wg-quick@wg0"]:
+        assert f"systemctl is-active --quiet {service}" in update
