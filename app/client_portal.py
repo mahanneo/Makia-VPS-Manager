@@ -47,6 +47,38 @@ def _secure_cookie(request):
     return request.headers.get("x-forwarded-proto","").lower()=="https" or request.url.scheme=="https"
 
 
+def _client_platform(request):
+    ua=(request.headers.get("user-agent") or "").lower()
+    if "android" in ua:
+        return "android"
+    if any(token in ua for token in ("iphone","ipad","ipod")) or ("macintosh" in ua and "mobile" in ua):
+        return "ios"
+    if "windows" in ua:
+        return "windows"
+    if "macintosh" in ua or "mac os x" in ua:
+        return "macos"
+    return "web"
+
+
+def _default_device_label(platform):
+    return {
+        "android":"Android / Makia",
+        "ios":"iPhone / iPad / Makia",
+        "windows":"Windows / Makia",
+        "macos":"macOS / Makia",
+    }.get(str(platform or "").lower(),"Web / PWA")
+
+
+def _android_connector_url():
+    raw=str(os.getenv("MAKIA_ANDROID_CONNECTOR_URL","")).strip()
+    if not raw:
+        return ""
+    parsed=urllib.parse.urlparse(raw)
+    if parsed.scheme!="https" or not parsed.netloc:
+        return ""
+    return raw
+
+
 def _normalize_origin(value):
     raw=str(value or "").strip().rstrip("/")
     if not raw:
@@ -146,7 +178,11 @@ def client_login_page(request:Request):
         return _no_store(RedirectResponse("/client/app",302))
     response=templates.TemplateResponse(
         "client_login.html",
-        {"request":request,"app_name":APP_NAME,"version":VERSION,"error":None,"default_username":str(request.query_params.get("u") or "")[:64]},
+        {
+            "request":request,"app_name":APP_NAME,"version":VERSION,"error":None,
+            "default_username":str(request.query_params.get("u") or "")[:64],
+            "detected_platform":_client_platform(request),
+        },
     )
     return _no_store(response)
 
@@ -196,11 +232,12 @@ def client_login(
             status_code=403,
         ))
     try:
+        platform=_client_platform(request)
         device,device_key=client_store.register_or_get_device(
             account["id"],
             request.cookies.get(CLIENT_DEVICE_COOKIE),
-            label=device_label or "Web / PWA",
-            platform="web",
+            label=device_label or _default_device_label(platform),
+            platform=platform,
             user_agent=request.headers.get("user-agent",""),
             ip=remote_ip,
         )
@@ -254,6 +291,8 @@ def client_app(request:Request):
         {
             "request":request,"app_name":APP_NAME,"version":VERSION,
             "username":session["username"],"display_name":session.get("display_name") or session["username"],
+            "detected_platform":_client_platform(request),
+            "android_connector_url":_android_connector_url(),
         },
     )
     return _no_store(response)
