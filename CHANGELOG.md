@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0] - 2026-09-30
+
+### Client Platform / Direct Connect
+- Promoted the authenticated Makia Client Portal/PWA flow into the 1.4.0 release line while keeping the portal disabled by default until live-host UAT/canary.
+- Added one-time, device-bound native connector tickets. Tickets expire quickly, can be redeemed once, and keep UUIDs, passwords, private keys and complete profiles out of the `makia://` launch URL.
+- Added Windows one-click Direct Connect for VLESS, VMess, Trojan, Hysteria2, Shadowsocks/Outline and SSH through sing-box TUN, with native WireGuard/OpenVPN launch paths.
+- Repaired and hardened the Windows installer. CI now executes the installer on a Windows runner, verifies the installed executable and validates `makia://` Registry registration.
+- Added Android native connector built from pinned SagerNet sing-box-for-android / sing-box sources, with VpnService-based Direct Connect for supported protocols and OpenVPN remaining import-based in this release.
+- Added mobile-first login/PWA guidance for Android and iPhone/iPad, real device-platform detection, Android connector download plumbing and iOS-specific Import/Open flow.
+- Added public HTTPS origin normalization for Direct Connect behind reverse proxies and optional `MAKIA_PUBLIC_BASE_URL` / `MAKIA_ANDROID_CONNECTOR_URL` configuration.
+- Added connector error visibility/logging and hardened Android package validation.
+- Fixed literal `\\n` residues in the Client UI that could break mobile layout/rendering.
+
+### Verification
+- Main CI, Xray Core smoke, browser smoke, Windows Native Connector Build and Android Connector Build pass on the final 1.4.0 candidate head.
+- Windows artifact digest: `sha256:76aa2b5aa2963e612e04e87d91b7ed70354d0f98d1cf1f10b1159a0ce213cdaa`.
+- Android artifact digest: `sha256:618dba8f8ff41c69c53dae7876c33e41015a2e485403b24cf15e84232af0c9c9`.
+- Production rollout still requires full migration backup, real VPS UAT, disposable-client tests, existing-user connectivity verification and limited canary before enabling the Client Portal.
+
 ## [1.3.0] - 2026-09-29
 
 ### Makia Client Platform
