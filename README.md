@@ -74,7 +74,7 @@ End users can open the same authenticated Client URL on Android, iPhone/iPad, Wi
 - Telegram status / expiry / backup integration
 - Per-access Diagnostics Center
 - Multi-VPS node telemetry
-- Public, tokenized Client Portal
+- Authenticated end-user Client Portal / PWA
 - QR / native config / protected ZIP delivery
 - Audit log and host diagnostics
 
