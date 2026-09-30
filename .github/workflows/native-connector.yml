@@ -1,0 +1,63 @@
+name: Native Connector Build
+
+on:
+  pull_request:
+    paths:
+      - "client/windows/**"
+      - "app/client_connector.py"
+      - "app/client_portal.py"
+      - "app/static/client.js"
+      - "app/templates/client_app.html"
+      - ".github/workflows/native-connector.yml"
+  workflow_dispatch:
+
+jobs:
+  windows-connector:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Connector syntax and unit dry-run imports
+        shell: pwsh
+        run: |
+          python -m py_compile client/windows/makia_client_connector.py app/client_connector.py app/client_portal.py
+      - name: Build connector exe
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "pyinstaller==6.16.0"
+          pyinstaller --noconfirm --clean --onefile --name MakiaClientConnector --uac-admin client/windows/makia_client_connector.py
+      - name: Fetch pinned sing-box 1.14.2
+        shell: pwsh
+        run: |
+          $url="https://github.com/SagerNet/sing-box/releases/download/v1.14.2/sing-box-1.14.2-windows-amd64.zip"
+          $zip="$env:RUNNER_TEMP\sing-box.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32") { throw "sing-box checksum mismatch: $hash" }
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\sing-box" -Force
+          $bin=Get-ChildItem "$env:RUNNER_TEMP\sing-box" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
+          if (!$bin) { throw "sing-box.exe not found" }
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist\MakiaClientConnector.exe package\MakiaClientConnector.exe
+          Copy-Item $bin.FullName package\sing-box.exe
+          Copy-Item client\windows\install.ps1 package\install.ps1
+          Copy-Item client\windows\uninstall.ps1 package\uninstall.ps1
+      - name: Smoke package
+        shell: pwsh
+        run: |
+          package\MakiaClientConnector.exe --status
+          if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
+          if (!(Test-Path package\sing-box.exe)) { throw "sing-box missing" }
+          package\sing-box.exe version
+      - name: Package zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path package\* -DestinationPath Makia-Client-Connector-Windows-x64.zip -Force
+          Get-FileHash Makia-Client-Connector-Windows-x64.zip -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Client-Connector-Windows-x64
+          path: Makia-Client-Connector-Windows-x64.zip
+          if-no-files-found: error
