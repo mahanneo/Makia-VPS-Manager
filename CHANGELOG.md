@@ -11,6 +11,8 @@
 - Added mobile-first login/PWA guidance for Android and iPhone/iPad, real device-platform detection, Android connector download plumbing and iOS-specific Import/Open flow.
 - Added public HTTPS origin normalization for Direct Connect behind reverse proxies and optional `MAKIA_PUBLIC_BASE_URL` / `MAKIA_ANDROID_CONNECTOR_URL` configuration.
 - Added connector error visibility/logging and hardened Android package validation.
+- Android package metadata is branded as Makia 1.4.0 with an independent versionCode for controlled upgrades.
+- Added a manual persistent Android release-signing workflow; PR/UAT builds remain debug-signed while general distribution requires protected signing secrets.
 - Fixed literal `\\n` residues in the Client UI that could break mobile layout/rendering.
 - Client-only 1.4.0 updates now compare the installed protocol runtime code before protocol maintenance; when unchanged, the updater preserves active Xray/WireGuard/OpenVPN runtimes and skips automatic provisioning/repair/restart paths.
 
