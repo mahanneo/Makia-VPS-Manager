@@ -131,6 +131,8 @@ def test_android_connector_overlay_and_reproducible_build_contract():
     assert '"hysteria2"' in activity
     assert '"npvt-ssh"' in activity
     assert 'applicationId = "com.makia.client"' in patch
+    assert 'MAKIA_VERSION_NAME="1.4.0"' in patch
+    assert 'MAKIA_VERSION_CODE="10400"' in patch
     assert 'a3668ae6e4bbcb3ceff8461d0cac55d79edf504f' in workflow
     assert 'v1.14.1' in workflow
     assert 'build_libbox -target android' in workflow
