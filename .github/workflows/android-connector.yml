@@ -57,8 +57,10 @@ jobs:
         working-directory: upstream/sing-box
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
+          mkdir -p ../sing-box-for-android/app/libs
           go run ./cmd/internal/build_libbox -target android
-          test -f ../sing-box-for-android/app/libs/libbox.aar
+          test -s ../sing-box-for-android/app/libs/libbox.aar
+          test -s ../sing-box-for-android/app/libs/libbox-legacy.aar
       - name: Apply Makia overlay
         shell: bash
         run: |
