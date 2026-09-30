@@ -1,4 +1,4 @@
-param([string]$SourceDir = $PSScriptRoot)
+# Makia Client Connector per-user installer; registers makia:// without touching VPS services.\nparam([string]$SourceDir = $PSScriptRoot)
 $ErrorActionPreference = "Stop"
 $target = Join-Path $env:LOCALAPPDATA "Makia\Connector\bin"
 New-Item -ItemType Directory -Force -Path $target | Out-Null
