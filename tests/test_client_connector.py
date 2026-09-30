@@ -154,3 +154,15 @@ def test_connector_public_origin_prefers_explicit_https(monkeypatch):
         base_url="http://internal.local:8000/"
     monkeypatch.setenv("MAKIA_PUBLIC_BASE_URL","https://vpn.example.test/")
     assert client_portal._public_origin(RequestStub())=="https://vpn.example.test"
+
+
+def test_connector_public_origin_ignores_forwarded_host(monkeypatch):
+    class RequestStub:
+        headers={
+            "x-forwarded-proto":"https",
+            "x-forwarded-host":"attacker.example",
+            "host":"panel.example.test",
+        }
+        base_url="http://127.0.0.1:8000/"
+    monkeypatch.delenv("MAKIA_PUBLIC_BASE_URL",raising=False)
+    assert client_portal._public_origin(RequestStub())=="https://panel.example.test"
