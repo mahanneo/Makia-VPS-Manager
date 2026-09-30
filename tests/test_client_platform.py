@@ -544,13 +544,14 @@ def test_client_pwa_rc_has_cross_platform_install_and_browser_security_contract(
     assert 'id="sessionText"' in html
     assert 'id="networkState"' in html
     assert 'apple-mobile-web-app-capable' in html
+    assert '-pwa-rc1' in html
     assert 'function platform()' in js
     assert 'function installCopy' in js
     assert 'function startSessionClock' in js
     assert 'window.addEventListener("online"' in js
     assert 'document.addEventListener("visibilitychange"' in js
     assert ".mc-grid-4" in css
-    assert 'const CACHE="makia-client-v131"' in sw
+    assert 'const CACHE="makia-client-v130"' in sw
     assert 'response.headers["X-Frame-Options"]="DENY"' in portal
     assert 'response.headers["Referrer-Policy"]="no-referrer"' in portal
     assert 'response.headers["Content-Security-Policy"]' in portal
