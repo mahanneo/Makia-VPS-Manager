@@ -45,6 +45,13 @@ jobs:
           git clone --branch v1.14.1 --depth 1 https://github.com/SagerNet/sing-box.git upstream/sing-box
           test "$(git -C upstream/sing-box-for-android rev-parse HEAD)" = "a3668ae6e4bbcb3ceff8461d0cac55d79edf504f"
           test "$(git -C upstream/sing-box describe --tags --exact-match)" = "v1.14.1"
+      - name: Install pinned gomobile toolchain
+        shell: bash
+        run: |
+          go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+          test -x "$(go env GOPATH)/bin/gomobile"
+          test -x "$(go env GOPATH)/bin/gobind"
       - name: Build official libbox Android AAR
         shell: bash
         working-directory: upstream/sing-box
