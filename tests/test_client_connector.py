@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app import client_connector, client_store, db, access_ops
+from app import client_connector, client_portal, client_store, db, access_ops
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -106,6 +106,13 @@ def test_pwa_native_connector_contract_is_present():
     assert "pyinstaller" in workflow.lower()
     assert "sing-box-1.14.2-windows-amd64.zip" in workflow
     assert "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32" in workflow
+    assert "Install-Makia.cmd" in workflow
+    assert "Smoke package and real installer" in workflow
+    install=(ROOT/"client/windows/install.ps1").read_text(encoding="utf-8")
+    assert "\\nparam" not in install
+    assert 'Set-Item -Path $base -Value "URL:Makia Client Connector"' in install
+    connector=(ROOT/"client/windows/makia_client_connector.py").read_text(encoding="utf-8")
+    assert "MessageBoxW" in connector
 
 def test_android_connector_overlay_and_reproducible_build_contract():
     activity=(ROOT/"client/android/MakiaEntryActivity.kt").read_text(encoding="utf-8")
@@ -115,6 +122,8 @@ def test_android_connector_overlay_and_reproducible_build_contract():
     assert 'uri.scheme != "makia"' in activity
     assert 'VpnService.prepare(this)' in activity
     assert 'Libbox.checkConfig(config)' in activity
+    assert 'Settings.rebuildServiceMode()' in activity
+    assert 'BoxService.start()' in activity
     assert 'BoxService.stop()' in activity
     assert '"wireguard"' in activity
     assert '"vless"' in activity
@@ -129,3 +138,19 @@ def test_android_connector_overlay_and_reproducible_build_contract():
     assert 'Makia-Android-Connector-RC' in workflow
     assert 'function directSupported(x)' in js
     assert 'p!=="android"' in js
+
+
+def test_connector_public_origin_uses_forwarded_https(monkeypatch):
+    class RequestStub:
+        headers={"x-forwarded-proto":"https","host":"panel.example.test"}
+        base_url="http://127.0.0.1:8000/"
+    monkeypatch.delenv("MAKIA_PUBLIC_BASE_URL",raising=False)
+    assert client_portal._public_origin(RequestStub())=="https://panel.example.test"
+
+
+def test_connector_public_origin_prefers_explicit_https(monkeypatch):
+    class RequestStub:
+        headers={"host":"internal.local:8000"}
+        base_url="http://internal.local:8000/"
+    monkeypatch.setenv("MAKIA_PUBLIC_BASE_URL","https://vpn.example.test/")
+    assert client_portal._public_origin(RequestStub())=="https://vpn.example.test"

@@ -13,13 +13,10 @@ import android.util.Base64
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.BuildConfig
 import io.nekohasekai.sfa.bg.BoxService
-import io.nekohasekai.sfa.bg.VPNService
-import io.nekohasekai.sfa.constant.ServiceMode
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.Settings
@@ -82,7 +79,7 @@ class MakiaEntryActivity : ComponentActivity() {
                 val config = buildConfig(delivery)
                 Libbox.checkConfig(config)
                 importProfile(config)
-                Settings.serviceMode = ServiceMode.VPN
+                Settings.rebuildServiceMode()
                 withContext(Dispatchers.Main) { requestVpnAndStart() }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) { fail(e.message ?: "اتصال ناموفق بود") }
@@ -141,9 +138,8 @@ class MakiaEntryActivity : ComponentActivity() {
 
     private fun startVpn() {
         startAfterPermission = false
-        Settings.startedByUser = true
-        ContextCompat.startForegroundService(this, Intent(this, VPNService::class.java))
-        Toast.makeText(this, "Makia متصل شد", Toast.LENGTH_SHORT).show()
+        BoxService.start()
+        Toast.makeText(this, "در حال برقراری اتصال Makia…", Toast.LENGTH_SHORT).show()
         finish()
     }
 

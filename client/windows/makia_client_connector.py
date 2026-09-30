@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, base64, json, os, re, signal, subprocess, sys, tempfile, time
+import argparse, base64, ctypes, json, os, re, signal, subprocess, sys, tempfile, time
 import urllib.parse, urllib.request
 from pathlib import Path
 
@@ -12,6 +12,14 @@ LOG=ROOT/"connector.log"
 def log(msg):
     ROOT.mkdir(parents=True,exist_ok=True)
     with LOG.open("a",encoding="utf-8") as f:f.write(time.strftime("%Y-%m-%d %H:%M:%S ")+str(msg)+"\n")
+
+def show_error(message):
+    if os.name!="nt":
+        return
+    try:
+        ctypes.windll.user32.MessageBoxW(0,str(message),APP,0x10)
+    except Exception:
+        pass
 
 def b64decode_loose(value):
     raw=str(value or "").strip()
@@ -218,6 +226,11 @@ def main():
         print(json.dumps(result,ensure_ascii=False))
         return 0
     except Exception as exc:
-        log(str(exc));print(json.dumps({"ok":False,"error":str(exc)},ensure_ascii=False));return 2
+        message=str(exc)
+        log(type(exc).__name__+": "+message)
+        if args.uri and not args.dry_run:
+            show_error(message+"\n\nLog: "+str(LOG))
+        print(json.dumps({"ok":False,"error":message},ensure_ascii=False))
+        return 2
 
 if __name__=="__main__":raise SystemExit(main())

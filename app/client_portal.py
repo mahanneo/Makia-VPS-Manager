@@ -47,6 +47,43 @@ def _secure_cookie(request):
     return request.headers.get("x-forwarded-proto","").lower()=="https" or request.url.scheme=="https"
 
 
+def _normalize_origin(value):
+    raw=str(value or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    parsed=urllib.parse.urlparse(raw)
+    if parsed.scheme not in {"http","https"} or not parsed.netloc:
+        return ""
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return ""
+    if parsed.path not in {"","/"} or any(ch.isspace() for ch in parsed.netloc):
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _public_origin(request):
+    configured=str(os.getenv("MAKIA_PUBLIC_BASE_URL","")).strip()
+    if configured:
+        origin=_normalize_origin(configured)
+        if not origin or urllib.parse.urlparse(origin).scheme!="https":
+            raise ValueError("MAKIA_PUBLIC_BASE_URL must be an HTTPS origin")
+        return origin
+
+    direct=_normalize_origin(str(request.base_url))
+    if direct and urllib.parse.urlparse(direct).scheme=="https":
+        return direct
+
+    forwarded_proto=(request.headers.get("x-forwarded-proto") or "").split(",",1)[0].strip().lower()
+    if forwarded_proto=="https":
+        forwarded_host=(request.headers.get("x-forwarded-host") or "").split(",",1)[0].strip()
+        host=forwarded_host or (request.headers.get("host") or "").strip()
+        origin=_normalize_origin("https://"+host) if host else ""
+        if origin:
+            return origin
+
+    return direct
+
+
 def _session(request):
     if not enabled():
         return None
@@ -291,7 +328,16 @@ def client_connector_ticket(delivery_kind:str,delivery_id:int,request:Request):
     ticket=client_connector.issue_ticket(
         session["account_id"],session["device_id"],kind,delivery_id
     )
-    origin=str(request.base_url).rstrip("/")
+    try:
+        origin=_public_origin(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc))
+    parsed_origin=urllib.parse.urlparse(origin)
+    if parsed_origin.scheme!="https" and parsed_origin.hostname not in {"127.0.0.1","localhost"}:
+        raise HTTPException(
+            status_code=503,
+            detail="Direct Connect requires a public HTTPS origin; configure MAKIA_PUBLIC_BASE_URL",
+        )
     launch="makia://connect?controller="+urllib.parse.quote(origin,safe="")+"&ticket="+urllib.parse.quote(ticket["ticket"],safe="")
     audit(
         "client:"+session["username"],"client_connector_ticket",

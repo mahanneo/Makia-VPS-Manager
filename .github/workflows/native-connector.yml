@@ -45,20 +45,46 @@ jobs:
           Copy-Item $bin.FullName package\sing-box.exe
           Copy-Item client\windows\install.ps1 package\install.ps1
           Copy-Item client\windows\uninstall.ps1 package\uninstall.ps1
-      - name: Smoke package
+          Copy-Item client\windows\Install-Makia.cmd package\Install-Makia.cmd
+          Copy-Item client\windows\Uninstall-Makia.cmd package\Uninstall-Makia.cmd
+          Copy-Item client\windows\INSTALL.txt package\INSTALL.txt
+      - name: Smoke package and real installer
         shell: pwsh
         run: |
           package\MakiaClientConnector.exe --status
           if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
           if (!(Test-Path package\sing-box.exe)) { throw "sing-box missing" }
           package\sing-box.exe version
-      - name: Package zip
+          $raw=Get-Content package\install.ps1 -Raw
+          if ($raw.Contains('\nparam')) { throw "install.ps1 contains a literal backslash-n before param" }
+          $oldLocal=$env:LOCALAPPDATA
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-installer-smoke"
+          try {
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            if ($LASTEXITCODE -ne 0) { throw "install.ps1 execution failed" }
+            $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
+            if (!(Test-Path $installed)) { throw "installed connector missing" }
+            $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
+            if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
+              throw "makia:// registry command invalid: $registered"
+            }
+          }
+          finally {
+            Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
+            $env:LOCALAPPDATA=$oldLocal
+          }
+      - name: Generate package checksums
         shell: pwsh
         run: |
-          Compress-Archive -Path package\* -DestinationPath Makia-Client-Connector-Windows-x64.zip -Force
-          Get-FileHash Makia-Client-Connector-Windows-x64.zip -Algorithm SHA256 | Format-List
+          $lines = Get-ChildItem package -File | Sort-Object Name | ForEach-Object {
+            $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          }
+          $lines | Set-Content -Encoding ascii package\SHA256SUMS.txt
+          Get-Content package\SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Makia-Client-Connector-Windows-x64
-          path: Makia-Client-Connector-Windows-x64.zip
+          path: package/
           if-no-files-found: error

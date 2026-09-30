@@ -73,17 +73,35 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :app:assembleOtherDebug
-      - name: Collect Android package
+      - name: Collect and validate Android package
         shell: bash
         run: |
-          mkdir -p package-android
-          find upstream/sing-box-for-android/app/build/outputs/apk -type f -name '*.apk' -print
-          cp upstream/sing-box-for-android/app/build/outputs/apk/other/debug/*.apk package-android/
+          set -euo pipefail
+          out=upstream/sing-box-for-android/app/build/outputs/apk/other/debug
+          mkdir -p package-android/advanced
+          find "$out" -type f -name '*.apk' -print
+          universal=$(find "$out" -maxdepth 1 -type f -name '*-universal-debug.apk' | head -n 1)
+          test -n "$universal"
+          cp "$universal" package-android/Makia-Android-Connector.apk
+          find "$out" -maxdepth 1 -type f -name '*.apk' ! -name '*-universal-debug.apk' -exec cp {} package-android/advanced/ \;
           cp makia/client/android/README-GPL.md package-android/
+          cp makia/client/android/INSTALL.txt package-android/
           cp makia/client/android/MakiaEntryActivity.kt package-android/
           cp makia/client/android/patch_sfa.py package-android/
-          (cd package-android && sha256sum *.apk > SHA256SUMS.txt)
+          python - <<'PY'
+          from pathlib import Path
+          apk=Path("package-android/Makia-Android-Connector.apk")
+          data=apk.read_bytes()
+          if b"APK Sig Block 42" not in data:
+              raise SystemExit("APK signing block missing")
+          if apk.stat().st_size < 10_000_000:
+              raise SystemExit("APK unexpectedly small")
+          print(f"Validated APK: {apk.name} ({apk.stat().st_size} bytes)")
+          PY
+          unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
           test -s package-android/SHA256SUMS.txt
+          cat package-android/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Makia-Android-Connector-RC
