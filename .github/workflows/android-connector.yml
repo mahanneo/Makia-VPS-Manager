@@ -107,7 +107,7 @@ jobs:
           cat package-android/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Android-Connector-RC
+          name: Makia-Android-Connector-1.4.0-UAT
           path: package-android/
           if-no-files-found: error
  upstream/sing-box-for-android/version.properties
