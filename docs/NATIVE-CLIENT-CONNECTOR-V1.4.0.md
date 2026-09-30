@@ -103,3 +103,17 @@ The authenticated Makia PWA supports iOS login, Add to Home Screen and platform-
 Makia 1.4.0 does **not** claim native in-app iOS VPN. A native iOS tunnel requires an Apple-signed application with Network Extension / Packet Tunnel entitlements and real-device UAT.
 
 See `docs/UAT-1.4.0.md` for the production gate.
+
+
+## Final CI artifacts
+
+Final green candidate head before production UAT:
+
+`822989d337862b58e7e14ff3223627268b61796f`
+
+- Windows artifact: `Makia-Client-Connector-Windows-x64`
+  - GitHub Actions artifact digest: `sha256:6c0ce22b2c82e645df8c5c521ebe9e7bf83fa1b6476f3c046853653fc13ffb8c`
+- Android artifact: `Makia-Android-Connector-RC`
+  - GitHub Actions artifact digest: `sha256:e6677669268bda57e85a1595fe874795a0ea1926793a7cb844e9e3aed68ba4ad`
+
+The Android PR/UAT artifact is debug-signed. Do not treat it as the permanent public signing identity. Before general Android distribution, configure and preserve a single private release signing key so later APK upgrades remain signature-compatible.
