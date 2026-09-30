@@ -70,6 +70,88 @@ jobs:
         run: |
           python makia/client/android/patch_sfa.py             upstream/sing-box-for-android             makia/client/android/MakiaEntryActivity.kt
           grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
+          grep -q '^VERSION_NAME=1.4.0      - name: Build installable Android debug APK
+        shell: bash
+        working-directory: upstream/sing-box-for-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleOtherDebug
+      - name: Collect and validate Android package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=upstream/sing-box-for-android/app/build/outputs/apk/other/debug
+          mkdir -p package-android/advanced
+          find "$out" -type f -name '*.apk' -print
+          universal=$(find "$out" -maxdepth 1 -type f -name '*-universal-debug.apk' | head -n 1)
+          test -n "$universal"
+          cp "$universal" package-android/Makia-Android-Connector.apk
+          find "$out" -maxdepth 1 -type f -name '*.apk' ! -name '*-universal-debug.apk' -exec cp {} package-android/advanced/ \;
+          cp makia/client/android/README-GPL.md package-android/
+          cp makia/client/android/INSTALL.txt package-android/
+          cp makia/client/android/MakiaEntryActivity.kt package-android/
+          cp makia/client/android/patch_sfa.py package-android/
+          python - <<'PY'
+          from pathlib import Path
+          apk=Path("package-android/Makia-Android-Connector.apk")
+          data=apk.read_bytes()
+          if b"APK Sig Block 42" not in data:
+              raise SystemExit("APK signing block missing")
+          if apk.stat().st_size < 10_000_000:
+              raise SystemExit("APK unexpectedly small")
+          print(f"Validated APK: {apk.name} ({apk.stat().st_size} bytes)")
+          PY
+          unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+          test -s package-android/SHA256SUMS.txt
+          cat package-android/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Android-Connector-RC
+          path: package-android/
+          if-no-files-found: error
+ upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10400      - name: Build installable Android debug APK
+        shell: bash
+        working-directory: upstream/sing-box-for-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleOtherDebug
+      - name: Collect and validate Android package
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=upstream/sing-box-for-android/app/build/outputs/apk/other/debug
+          mkdir -p package-android/advanced
+          find "$out" -type f -name '*.apk' -print
+          universal=$(find "$out" -maxdepth 1 -type f -name '*-universal-debug.apk' | head -n 1)
+          test -n "$universal"
+          cp "$universal" package-android/Makia-Android-Connector.apk
+          find "$out" -maxdepth 1 -type f -name '*.apk' ! -name '*-universal-debug.apk' -exec cp {} package-android/advanced/ \;
+          cp makia/client/android/README-GPL.md package-android/
+          cp makia/client/android/INSTALL.txt package-android/
+          cp makia/client/android/MakiaEntryActivity.kt package-android/
+          cp makia/client/android/patch_sfa.py package-android/
+          python - <<'PY'
+          from pathlib import Path
+          apk=Path("package-android/Makia-Android-Connector.apk")
+          data=apk.read_bytes()
+          if b"APK Sig Block 42" not in data:
+              raise SystemExit("APK signing block missing")
+          if apk.stat().st_size < 10_000_000:
+              raise SystemExit("APK unexpectedly small")
+          print(f"Validated APK: {apk.name} ({apk.stat().st_size} bytes)")
+          PY
+          unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+          test -s package-android/SHA256SUMS.txt
+          cat package-android/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Android-Connector-RC
+          path: package-android/
+          if-no-files-found: error
+ upstream/sing-box-for-android/version.properties
           grep -q 'android:scheme="makia"' upstream/sing-box-for-android/app/src/main/AndroidManifest.xml
       - name: Build installable Android debug APK
         shell: bash
