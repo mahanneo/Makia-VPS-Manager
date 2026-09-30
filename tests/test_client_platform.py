@@ -532,3 +532,28 @@ def test_host_uat_smoke_checks_client_schema_without_mutating_runtime():
     client_block=smoke.split("Client Platform schema + persistent policy state",1)[0].rsplit("if ( cd",1)[-1]
     for forbidden in ("systemctl restart","systemctl stop","systemctl start","UPDATE client_","DELETE FROM client_","INSERT INTO client_"):
         assert forbidden not in client_block
+
+def test_client_pwa_rc_has_cross_platform_install_and_browser_security_contract():
+    html=(ROOT/"app/templates/client_app.html").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/client.js").read_text(encoding="utf-8")
+    css=(ROOT/"app/static/client.css").read_text(encoding="utf-8")
+    sw=(ROOT/"app/static/client-sw.js").read_text(encoding="utf-8")
+    portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    assert 'id="installDialog"' in html
+    assert 'id="platformName"' in html
+    assert 'id="sessionText"' in html
+    assert 'id="networkState"' in html
+    assert 'apple-mobile-web-app-capable' in html
+    assert 'function platform()' in js
+    assert 'function installCopy' in js
+    assert 'function startSessionClock' in js
+    assert 'window.addEventListener("online"' in js
+    assert 'document.addEventListener("visibilitychange"' in js
+    assert ".mc-grid-4" in css
+    assert 'const CACHE="makia-client-v131"' in sw
+    assert 'response.headers["X-Frame-Options"]="DENY"' in portal
+    assert 'response.headers["Referrer-Policy"]="no-referrer"' in portal
+    assert 'response.headers["Content-Security-Policy"]' in portal
+    assert '"lang":"fa"' in portal
+    assert '"dir":"rtl"' in portal
+    assert '"id":"/client/"' in portal
