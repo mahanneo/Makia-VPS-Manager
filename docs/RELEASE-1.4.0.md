@@ -38,7 +38,16 @@ Final verified artifact digests from the green candidate run:
 
 ## Android signing boundary
 
-The CI Android package is suitable for RC/UAT but is debug-signed. General distribution requires one persistent private release signing identity. Do not rotate that key between releases, otherwise Android will reject seamless upgrades.
+The normal PR Android package is suitable for RC/UAT and is debug-signed.
+
+For general distribution, the repository now includes the manual **Android Signed Release** workflow. It builds from the UAT-approved ref and requires one persistent private signing identity stored in the protected `android-release` GitHub environment:
+
+- `MAKIA_ANDROID_KEYSTORE_B64`
+- `MAKIA_ANDROID_KEYSTORE_PASSWORD`
+- `MAKIA_ANDROID_KEY_ALIAS`
+- `MAKIA_ANDROID_KEY_PASSWORD`
+
+The signing key must be backed up securely and must not be rotated between routine releases; Android requires the same signing identity for seamless upgrades. The private keystore must never be committed to the repository or distributed with artifacts.
 
 ## iOS boundary
 
