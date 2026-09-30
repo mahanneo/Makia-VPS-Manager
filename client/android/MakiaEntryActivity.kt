@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import io.nekohasekai.libbox.Libbox
+import io.nekohasekai.sfa.BuildConfig
 import io.nekohasekai.sfa.bg.BoxService
 import io.nekohasekai.sfa.bg.VPNService
 import io.nekohasekai.sfa.constant.ServiceMode
