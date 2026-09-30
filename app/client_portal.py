@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import client_store
+from . import client_store, client_connector
 from .config import APP_NAME, VERSION
 from .db import audit, clear_login_failures, login_rate_state, record_login_failure, get_setting
 
@@ -269,6 +269,62 @@ def client_artifact_delivery(artifact_id:int,request:Request):
         target=str(artifact_id),detail=str(item.get("protocol") or ""),ip=_ip(request),
     )
     return _no_store(JSONResponse(item))
+
+
+
+
+@router.post("/client/api/connect/{delivery_kind}/{delivery_id}/ticket")
+def client_connector_ticket(delivery_kind:str,delivery_id:int,request:Request):
+    session=_require_mutation(request)
+    kind=str(delivery_kind or "").lower()
+    try:
+        if kind=="protocol":
+            client_store.protocol_delivery(session["account_id"],delivery_id)
+        elif kind=="artifact":
+            client_store.artifact_delivery(session["account_id"],delivery_id)
+        else:
+            raise ValueError("unsupported delivery kind")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail=str(exc))
+    ticket=client_connector.issue_ticket(
+        session["account_id"],session["device_id"],kind,delivery_id
+    )
+    origin=str(request.base_url).rstrip("/")
+    launch="makia://connect?controller="+urllib.parse.quote(origin,safe="")+"&ticket="+urllib.parse.quote(ticket["ticket"],safe="")
+    audit(
+        "client:"+session["username"],"client_connector_ticket",
+        target=f"{kind}:{delivery_id}",detail=f"ttl={ticket['ttl']}",ip=_ip(request),
+    )
+    return _no_store(JSONResponse({
+        "launch_url":launch,
+        "expires_at":ticket["expires_at"],
+        "ttl":ticket["ttl"],
+    }))
+
+
+@router.post("/client/connector/redeem")
+async def client_connector_redeem(request:Request):
+    _require_enabled()
+    try:
+        body=await request.json()
+    except Exception:
+        raise HTTPException(status_code=400,detail="invalid connector request")
+    ticket=str((body or {}).get("ticket") or "")
+    if not ticket or len(ticket)>256:
+        raise HTTPException(status_code=400,detail="connector ticket required")
+    try:
+        payload=client_connector.redeem_ticket(ticket)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    audit(
+        "connector","client_connector_redeem",
+        target=f"{payload['delivery_kind']}:{payload['delivery_id']}",
+        detail=f"account_id={payload['account_id']}; device_id={payload['device_id']}",
+        ip=_ip(request),
+    )
+    return _no_store(JSONResponse(payload["delivery"]))
 
 
 @router.get("/client/api/devices")
