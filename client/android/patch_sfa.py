@@ -4,6 +4,14 @@ import re, sys
 
 root=Path(sys.argv[1]).resolve()
 overlay=Path(sys.argv[2]).resolve()
+MAKIA_VERSION_NAME="1.4.0"
+MAKIA_VERSION_CODE="10400"
+
+version_props=root/"version.properties"
+vp=version_props.read_text(encoding="utf-8")
+vp=re.sub(r"(?m)^VERSION_NAME=.*$",f"VERSION_NAME={MAKIA_VERSION_NAME}",vp)
+vp=re.sub(r"(?m)^VERSION_CODE=.*$",f"VERSION_CODE={MAKIA_VERSION_CODE}",vp)
+version_props.write_text(vp,encoding="utf-8")
 
 build=root/"app/build.gradle.kts"
 s=build.read_text(encoding="utf-8")
