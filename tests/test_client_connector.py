@@ -137,7 +137,7 @@ def test_android_connector_overlay_and_reproducible_build_contract():
     assert 'v1.14.1' in workflow
     assert 'build_libbox -target android' in workflow
     assert ':app:assembleOtherDebug' in workflow
-    assert 'Makia-Android-Connector-RC' in workflow
+    assert 'Makia-Android-Connector-1.4.0-UAT' in workflow
     assert 'function directSupported(x)' in js
     assert 'p!=="android"' in js
 
