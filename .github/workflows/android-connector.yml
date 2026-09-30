@@ -9,10 +9,21 @@ on:
       - "app/static/client.js"
       - "app/templates/client_app.html"
       - ".github/workflows/android-connector.yml"
+  push:
+    branches:
+      - "feature/native-client-connector-v1.4.0"
+      - "release/v1.4.0-uat1"
+    paths:
+      - "client/android/**"
+      - "app/client_connector.py"
+      - "app/client_portal.py"
+      - "app/static/client.js"
+      - "app/templates/client_app.html"
+      - ".github/workflows/android-connector.yml"
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: android-connector-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,23 +34,28 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: makia
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26.8"
+
       - name: Setup Android command-line tools
         uses: android-actions/setup-android@v4
         with:
           packages: ""
+
       - name: Install Android NDK
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "ndk;28.0.13004108" "platforms;android-37.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.0.13004108" >> "$GITHUB_ENV"
+
       - name: Checkout pinned official SFA and sing-box
         shell: bash
         run: |
@@ -49,6 +65,7 @@ jobs:
           git clone --branch v1.14.1 --depth 1 https://github.com/SagerNet/sing-box.git upstream/sing-box
           test "$(git -C upstream/sing-box-for-android rev-parse HEAD)" = "a3668ae6e4bbcb3ceff8461d0cac55d79edf504f"
           test "$(git -C upstream/sing-box describe --tags --exact-match)" = "v1.14.1"
+
       - name: Install pinned gomobile toolchain
         shell: bash
         run: |
@@ -56,6 +73,7 @@ jobs:
           go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.13
           test -x "$(go env GOPATH)/bin/gomobile"
           test -x "$(go env GOPATH)/bin/gobind"
+
       - name: Build official libbox Android AAR
         shell: bash
         working-directory: upstream/sing-box
@@ -65,100 +83,23 @@ jobs:
           go run ./cmd/internal/build_libbox -target android
           test -s ../sing-box-for-android/app/libs/libbox.aar
           test -s ../sing-box-for-android/app/libs/libbox-legacy.aar
+
       - name: Apply Makia overlay
         shell: bash
         run: |
-          python makia/client/android/patch_sfa.py             upstream/sing-box-for-android             makia/client/android/MakiaEntryActivity.kt
+          python makia/client/android/patch_sfa.py upstream/sing-box-for-android makia/client/android/MakiaEntryActivity.kt
           grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
-          grep -q '^VERSION_NAME=1.4.0      - name: Build installable Android debug APK
-        shell: bash
-        working-directory: upstream/sing-box-for-android
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleOtherDebug
-      - name: Collect and validate Android package
-        shell: bash
-        run: |
-          set -euo pipefail
-          out=upstream/sing-box-for-android/app/build/outputs/apk/other/debug
-          mkdir -p package-android/advanced
-          find "$out" -type f -name '*.apk' -print
-          universal=$(find "$out" -maxdepth 1 -type f -name '*-universal-debug.apk' | head -n 1)
-          test -n "$universal"
-          cp "$universal" package-android/Makia-Android-Connector.apk
-          find "$out" -maxdepth 1 -type f -name '*.apk' ! -name '*-universal-debug.apk' -exec cp {} package-android/advanced/ \;
-          cp makia/client/android/README-GPL.md package-android/
-          cp makia/client/android/INSTALL.txt package-android/
-          cp makia/client/android/MakiaEntryActivity.kt package-android/
-          cp makia/client/android/patch_sfa.py package-android/
-          python - <<'PY'
-          from pathlib import Path
-          apk=Path("package-android/Makia-Android-Connector.apk")
-          data=apk.read_bytes()
-          if b"APK Sig Block 42" not in data:
-              raise SystemExit("APK signing block missing")
-          if apk.stat().st_size < 10_000_000:
-              raise SystemExit("APK unexpectedly small")
-          print(f"Validated APK: {apk.name} ({apk.stat().st_size} bytes)")
-          PY
-          unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libbox.so'
-          (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
-          test -s package-android/SHA256SUMS.txt
-          cat package-android/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Makia-Android-Connector-1.4.0-UAT
-          path: package-android/
-          if-no-files-found: error
- upstream/sing-box-for-android/version.properties
-          grep -q '^VERSION_CODE=10400      - name: Build installable Android debug APK
-        shell: bash
-        working-directory: upstream/sing-box-for-android
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleOtherDebug
-      - name: Collect and validate Android package
-        shell: bash
-        run: |
-          set -euo pipefail
-          out=upstream/sing-box-for-android/app/build/outputs/apk/other/debug
-          mkdir -p package-android/advanced
-          find "$out" -type f -name '*.apk' -print
-          universal=$(find "$out" -maxdepth 1 -type f -name '*-universal-debug.apk' | head -n 1)
-          test -n "$universal"
-          cp "$universal" package-android/Makia-Android-Connector.apk
-          find "$out" -maxdepth 1 -type f -name '*.apk' ! -name '*-universal-debug.apk' -exec cp {} package-android/advanced/ \;
-          cp makia/client/android/README-GPL.md package-android/
-          cp makia/client/android/INSTALL.txt package-android/
-          cp makia/client/android/MakiaEntryActivity.kt package-android/
-          cp makia/client/android/patch_sfa.py package-android/
-          python - <<'PY'
-          from pathlib import Path
-          apk=Path("package-android/Makia-Android-Connector.apk")
-          data=apk.read_bytes()
-          if b"APK Sig Block 42" not in data:
-              raise SystemExit("APK signing block missing")
-          if apk.stat().st_size < 10_000_000:
-              raise SystemExit("APK unexpectedly small")
-          print(f"Validated APK: {apk.name} ({apk.stat().st_size} bytes)")
-          PY
-          unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libbox.so'
-          (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
-          test -s package-android/SHA256SUMS.txt
-          cat package-android/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Makia-Android-Connector-RC
-          path: package-android/
-          if-no-files-found: error
- upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_NAME=1.4.0$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10400$' upstream/sing-box-for-android/version.properties
           grep -q 'android:scheme="makia"' upstream/sing-box-for-android/app/src/main/AndroidManifest.xml
+
       - name: Build installable Android debug APK
         shell: bash
         working-directory: upstream/sing-box-for-android
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :app:assembleOtherDebug
+
       - name: Collect and validate Android package
         shell: bash
         run: |
@@ -188,8 +129,10 @@ jobs:
           (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
           test -s package-android/SHA256SUMS.txt
           cat package-android/SHA256SUMS.txt
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Android-Connector-RC
+          name: Makia-Android-Connector-1.4.0-UAT
           path: package-android/
           if-no-files-found: error
+          retention-days: 90
