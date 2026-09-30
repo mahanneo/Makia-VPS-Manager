@@ -4,8 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#07111f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Makia">
   <title>Makia Client</title>
   <link rel="manifest" href="/client/manifest.webmanifest">
+  <link rel="icon" href="/static/client-icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/client.css?v={{ version }}">
 </head>
 <body class="mc-body">
@@ -15,8 +20,9 @@
       <div><strong>MAKIA</strong><small>CLIENT</small></div>
     </div>
     <div class="mc-top-actions">
+      <span class="mc-network" id="networkState" aria-live="polite">آنلاین</span>
       <span class="mc-user">{{ display_name }}</span>
-      <button class="mc-ghost" id="installClient" type="button" hidden>نصب برنامه</button>
+      <button class="mc-ghost" id="installClient" type="button">نصب برنامه</button>
       <form method="post" action="/client/logout"><button class="mc-ghost" type="submit">خروج</button></form>
     </div>
   </header>
@@ -31,7 +37,7 @@
       <div class="mc-status-pill" id="accountState"><span></span> در حال بررسی</div>
     </section>
 
-    <section class="mc-grid mc-grid-3">
+    <section class="mc-grid mc-grid-4">
       <article class="mc-card">
         <span class="mc-card-label">اشتراک</span>
         <strong id="planName">—</strong>
@@ -47,6 +53,21 @@
         <strong id="deviceCount">—</strong>
         <small id="deviceLimitText">—</small>
       </article>
+      <article class="mc-card">
+        <span class="mc-card-label">نشست فعلی</span>
+        <strong id="sessionText">—</strong>
+        <small>پس از پایان، ورود دوباره لازم است</small>
+      </article>
+    </section>
+
+    <section class="mc-section mc-quickstart">
+      <div class="mc-section-head">
+        <div><span class="mc-eyebrow">QUICK START</span><h2>راه‌اندازی روی این دستگاه</h2></div>
+        <span class="mc-platform-pill" id="platformName">تشخیص دستگاه…</span>
+      </div>
+      <div id="installGuide" class="mc-guide">
+        <strong>در حال آماده‌سازی راهنما…</strong>
+      </div>
     </section>
 
     <section class="mc-section">
@@ -69,11 +90,19 @@
     </section>
 
     <section class="mc-section mc-connect-note">
-      <span class="mc-eyebrow">WEB CLIENT</span>
-      <h2>دسترسی امن از موبایل و ویندوز</h2>
-      <p>این نسخه به‌صورت PWA نصب می‌شود و پروفایل‌های اختصاصی شما را با QR، کپی یا فایل اصلی تحویل می‌دهد. برای WireGuard و OpenVPN فایل را در کلاینت رسمی Import کنید؛ برای Xray/Outline/SSH سازگار، لینک مستقیم در صورت پشتیبانی دستگاه قابل باز شدن است.</p>
+      <span class="mc-eyebrow">SECURE DELIVERY</span>
+      <h2>اطلاعات اتصال فقط هنگام درخواست نمایش داده می‌شود</h2>
+      <p>QR، لینک و فایل کانفیگ در کش PWA ذخیره نمی‌شوند و با خروج یا ترک صفحه از حافظه رابط کاربری پاک می‌شوند. برای WireGuard و OpenVPN از Import فایل/QR و برای Xray، Outline و SSH از کلاینت سازگار دستگاه استفاده کنید.</p>
     </section>
   </main>
+
+  <dialog id="installDialog" class="mc-dialog mc-install-dialog">
+    <div class="mc-dialog-head">
+      <div><span class="mc-eyebrow">INSTALL MAKIA</span><h3>نصب Makia Client</h3></div>
+      <button class="mc-icon-btn" id="closeInstall" type="button" aria-label="بستن">×</button>
+    </div>
+    <div id="installDialogBody" class="mc-guide"></div>
+  </dialog>
 
   <dialog id="deliveryDialog" class="mc-dialog">
     <div class="mc-dialog-head">
@@ -84,7 +113,7 @@
     <div class="mc-delivery-grid">
       <div id="deliveryQrWrap" class="mc-delivery-qr" hidden><img id="deliveryQr" alt="QR دسترسی"></div>
       <div class="mc-delivery-main">
-        <textarea id="deliveryValue" readonly dir="ltr"></textarea>
+        <textarea id="deliveryValue" readonly dir="ltr" spellcheck="false"></textarea>
         <p id="deliveryHint" class="mc-muted"></p>
       </div>
     </div>
