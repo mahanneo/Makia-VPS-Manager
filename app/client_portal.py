@@ -76,10 +76,22 @@ def _require_mutation(request):
     return session
 
 
+def _client_security_headers(response):
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="no-referrer"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["Content-Security-Policy"]=(
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+        "form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; manifest-src 'self'; worker-src 'self'"
+    )
+    return response
+
+
 def _no_store(response):
     response.headers["Cache-Control"]="no-store"
-    response.headers["X-Content-Type-Options"]="nosniff"
-    return response
+    return _client_security_headers(response)
 
 
 @router.get("/client/")
@@ -290,13 +302,18 @@ def client_manifest(request:Request):
         "background_color":"#07111f",
         "theme_color":"#07111f",
         "description":"Makia secure client access portal",
+        "lang":"fa",
+        "dir":"rtl",
+        "id":"/client/",
+        "categories":["utilities","productivity"],
+        "shortcuts":[{"name":"Makia Client","short_name":"Client","url":"/client/app"}],
         "icons":[
             {"src":"/static/client-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
         ],
     }
     response=JSONResponse(manifest,media_type="application/manifest+json")
     response.headers["Cache-Control"]="public, max-age=3600"
-    return response
+    return _client_security_headers(response)
 
 
 @router.get("/client/sw.js")
@@ -305,4 +322,4 @@ def client_service_worker(request:Request):
     response=FileResponse(BASE/"static"/"client-sw.js",media_type="application/javascript")
     response.headers["Cache-Control"]="no-cache"
     response.headers["Service-Worker-Allowed"]="/client/"
-    return response
+    return _client_security_headers(response)
