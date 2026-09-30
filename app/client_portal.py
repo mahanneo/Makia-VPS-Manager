@@ -107,8 +107,10 @@ def _public_origin(request):
 
     forwarded_proto=(request.headers.get("x-forwarded-proto") or "").split(",",1)[0].strip().lower()
     if forwarded_proto=="https":
-        forwarded_host=(request.headers.get("x-forwarded-host") or "").split(",",1)[0].strip()
-        host=forwarded_host or (request.headers.get("host") or "").strip()
+        # The service binds to localhost behind the managed reverse proxy. Do not
+        # trust X-Forwarded-Host for connector launch URLs: an untrusted value
+        # could redirect the one-time ticket to another HTTPS origin.
+        host=(request.headers.get("host") or "").strip()
         origin=_normalize_origin("https://"+host) if host else ""
         if origin:
             return origin
