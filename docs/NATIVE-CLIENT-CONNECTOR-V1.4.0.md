@@ -1,8 +1,8 @@
-# Makia Native Client Connector v1.4.0 — RC Handoff
+# Makia Native Client Connector v1.4.0 — Release Handoff
 
-Branch: `feature/native-client-connector-v1.4.0`
+Release line: `1.4.0`
 
-Base PWA RC: `feature/client-platform-pwa-v1.3.1`
+Development branch: `feature/native-client-connector-v1.4.0`
 
 ## Goal
 
@@ -59,7 +59,7 @@ Installer registers the per-user `makia://` URL protocol.
 - Existing production credentials are not rotated.
 - Existing VPN services on the VPS are not restarted by this client work.
 - Direct-connect tickets are additive metadata in the Client plane.
-- No merge to main until VPS UAT + Windows canary passes.
+- Repository promotion to `main` does not enable the Client Portal. Production activation remains blocked until real-host UAT and canary pass.
 
 ## Required live Windows UAT
 
@@ -78,6 +78,28 @@ Installer registers the per-user `makia://` URL protocol.
 13. Backup -> restore -> repeat one direct-connect smoke.
 14. Limited canary only after all checks pass.
 
-## Apple / Android
+## Android
 
-The ticket API is platform-neutral, but true system VPN on Android/iOS requires a signed native app using the OS VPN APIs. The Windows RC does not claim those native apps are production-ready.
+The Android connector is built from pinned official SagerNet sources and uses Android `VpnService`.
+
+Direct Connect support in 1.4.0:
+
+- VLESS
+- VMess
+- Trojan
+- Hysteria2
+- Shadowsocks / Outline
+- SSH
+- WireGuard
+
+OpenVPN remains Import-based in 1.4.0.
+
+The Android package is validated in GitHub Actions and must still pass real-device UAT before general rollout.
+
+## iPhone / iPad
+
+The authenticated Makia PWA supports iOS login, Add to Home Screen and platform-aware profile Open/Import.
+
+Makia 1.4.0 does **not** claim native in-app iOS VPN. A native iOS tunnel requires an Apple-signed application with Network Extension / Packet Tunnel entitlements and real-device UAT.
+
+See `docs/UAT-1.4.0.md` for the production gate.
