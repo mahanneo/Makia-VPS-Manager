@@ -260,7 +260,7 @@ jobs:
       - name: Open access contract
         run: |
           grep -q 'VERSION = "1.3.0"' app/config.py
-          grep -Fxq '1.3.0' VERSION
+          grep -Fxq '1.4.0' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
