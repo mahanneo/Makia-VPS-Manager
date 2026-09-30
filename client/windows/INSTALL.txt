@@ -1,4 +1,4 @@
-Makia Client Connector — Windows RC
+Makia Client Connector 1.4.0 — Windows UAT
 
 Recommended install:
 1. Extract the GitHub artifact ZIP once.
