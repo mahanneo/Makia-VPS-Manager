@@ -15,12 +15,14 @@ Required before host work:
 - Android Connector Build: PASS
 - `VERSION` and `app/config.py`: `1.4.0`
 
-Reference final candidate artifacts:
+Frozen UAT ref: `release/v1.4.0-uat1`
+
+Reference UAT artifacts for the frozen SHA:
 
 - Windows Actions artifact: `Makia-Client-Connector-Windows-x64`
-- Windows artifact digest: `sha256:76aa2b5aa2963e612e04e87d91b7ed70354d0f98d1cf1f10b1159a0ce213cdaa`
-- Android Actions artifact: `Makia-Android-Connector-RC`
-- Android artifact digest: `sha256:618dba8f8ff41c69c53dae7876c33e41015a2e485403b24cf15e84232af0c9c9`
+- Android Actions artifact: `Makia-Android-Connector-1.4.0-UAT`
+- exact GitHub Actions artifact digests are recorded on PR #73 for the frozen SHA and must be copied into the UAT evidence from those exact runs;
+- do not reuse a digest from an earlier candidate build.
 
 ## Safety invariants
 
@@ -49,13 +51,15 @@ The 1.4.0 rollout must not:
 
 ## Update
 
-Use the normal immutable updater path only after the backup is verified:
+For **pre-merge UAT**, pin the updater to the exact 40-character frozen commit recorded on PR #73. Replace the placeholder below with that SHA:
 
 ```bash
-sudo makia-upgrade
+sudo env MAKIA_REF=<FROZEN_UAT_SHA_FROM_PR_73> MAKIA_FORCE_MAIN=0 makia-upgrade
 ```
 
-Do not use a floating/unverified archive override.
+The updater resolves the requested ref to an immutable GitHub commit before downloading the archive and prints the resolved commit. Verify that printed commit matches the frozen PR #73 SHA before accepting the update result.
+
+Do not run plain `sudo makia-upgrade` for pre-merge UAT because its default ref is `main`. Do not use a floating/unverified archive override.
 
 ## Immediate post-update checks
 

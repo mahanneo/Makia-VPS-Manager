@@ -81,6 +81,12 @@ jobs:
       - name: Generate package checksums
         shell: pwsh
         run: |
+          @(
+            "commit=$env:GITHUB_SHA"
+            "ref=$env:GITHUB_REF"
+            "run_id=$env:GITHUB_RUN_ID"
+            "run_attempt=$env:GITHUB_RUN_ATTEMPT"
+          ) | Set-Content -Encoding ascii package\BUILD-INFO.txt
           $lines = Get-ChildItem package -File | Sort-Object Name | ForEach-Object {
             $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"

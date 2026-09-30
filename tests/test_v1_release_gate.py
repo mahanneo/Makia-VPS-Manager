@@ -185,3 +185,23 @@ def test_client_only_update_preserves_active_vpn_runtimes_when_protocol_code_unc
     assert 'Existing protocol runtime state preserved.' in update
     for service in ["xray","openvpn-server@server","wg-quick@wg0"]:
         assert f"systemctl is-active --quiet {service}" in update
+
+def test_v140_uat_artifact_provenance_contract():
+    uat=(ROOT/"docs/UAT-1.4.0.md").read_text(encoding="utf-8")
+    release=(ROOT/"docs/RELEASE-1.4.0.md").read_text(encoding="utf-8")
+    win=(ROOT/".github/workflows/native-connector.yml").read_text(encoding="utf-8")
+    android=(ROOT/".github/workflows/android-connector.yml").read_text(encoding="utf-8")
+    assert "release/v1.4.0-uat1" in uat
+    assert "Makia-Client-Connector-Windows-x64" in uat
+    assert "Makia-Android-Connector-1.4.0-UAT" in uat
+    assert "Makia-Android-Connector-RC" not in uat
+    assert "PR #73" in uat
+    assert "MAKIA_REF=<FROZEN_UAT_SHA_FROM_PR_73>" in uat
+    assert "MAKIA_FORCE_MAIN=0" in uat
+    assert "Do not run plain `sudo makia-upgrade` for pre-merge UAT" in uat
+    assert "Frozen UAT branch: `release/v1.4.0-uat1`" in release
+    assert "\\\\n\\\\nFrozen UAT branch" not in release
+    for workflow in (win, android):
+        assert "BUILD-INFO.txt" in workflow
+        assert "GITHUB_SHA" in workflow
+        assert "GITHUB_RUN_ID" in workflow

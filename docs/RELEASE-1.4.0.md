@@ -4,7 +4,9 @@ Status: **Code-complete / repository-verified / production-UAT pending**
 
 Target branch after UAT: `main`
 
-Release branch: `feature/native-client-connector-v1.4.0`
+Development branch: `feature/native-client-connector-v1.4.0`
+
+Frozen UAT branch: `release/v1.4.0-uat1`
 
 ## Included
 

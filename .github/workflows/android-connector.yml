@@ -115,6 +115,12 @@ jobs:
           cp makia/client/android/INSTALL.txt package-android/
           cp makia/client/android/MakiaEntryActivity.kt package-android/
           cp makia/client/android/patch_sfa.py package-android/
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "ref=$GITHUB_REF"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+          } > package-android/BUILD-INFO.txt
           python - <<'PY'
           from pathlib import Path
           apk=Path("package-android/Makia-Android-Connector.apk")
