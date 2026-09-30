@@ -22,7 +22,8 @@ jobs:
       - name: Connector syntax and unit dry-run imports
         shell: pwsh
         run: |
-          python -m py_compile client/windows/makia_client_connector.py app/client_connector.py app/client_portal.py\n          node --check app/static/client.js
+          python -m py_compile client/windows/makia_client_connector.py app/client_connector.py app/client_portal.py
+          node --check app/static/client.js
       - name: Build connector exe
         shell: pwsh
         run: |
