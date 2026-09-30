@@ -1,4 +1,4 @@
-Makia Android Connector — RC install notes
+Makia Android Connector 1.4.0 — UAT install notes
 
 Recommended APK:
 Makia-Android-Connector.apk
