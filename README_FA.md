@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>نسخه ۱.۱.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+  <strong>نسخه ۱.۴.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
-**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه v1](docs/UAT-1.1.0.md)**
+**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۴](docs/UAT-1.4.0.md)**
 
 ---
 
@@ -50,6 +50,16 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 در Xray مسیرهای Guided برای پروتکل‌های پشتیبانی‌شده مانند VLESS، VMess، Trojan، Shadowsocks و Hysteria2 وجود دارند و تنظیمات Advanced قبل از Apply توسط Core اعتبارسنجی می‌شوند.
 
 در WireGuard/OpenVPN، Makia قابلیتی را که Engine واقعاً enforce نمی‌کند به‌صورت Fake نمایش نمی‌دهد.
+
+## Makia Client نسخه ۱.۴
+
+کاربر نهایی یک آدرس HTTPS واحد از Makia می‌گیرد و با نام کاربری و رمز خودش وارد می‌شود. داخل Client Portal فقط حجم، تاریخ انقضا، وضعیت دستگاه‌ها و دسترسی‌های همان حساب نمایش داده می‌شود.
+
+- **Windows:** اتصال مستقیم با Makia Client Connector.
+- **Android:** Makia Android Connector برای پروتکل‌های پشتیبانی‌شده از Android VpnService استفاده می‌کند؛ OpenVPN در نسخه ۱.۴ همچنان Import-based است.
+- **iPhone / iPad:** کاربر در Safari وارد می‌شود، Makia را با Add to Home Screen نصب می‌کند و از جریان Open/Import متناسب با iOS استفاده می‌کند. VPN Native داخل خود Makia در iOS تا زمان ساخت Apple-signed با Network Extension و UAT روی دستگاه واقعی ادعا نمی‌شود.
+- Ticket اتصال Native یک‌بارمصرف، وابسته به Device و کوتاه‌عمر است و Secret اصلی داخل لینک `makia://` قرار نمی‌گیرد.
+- Client Portal تا پایان UAT/Canary واقعی روی Host به‌صورت پیش‌فرض غیرفعال می‌ماند.
 
 ## قابلیت‌های مدیریتی
 
@@ -180,7 +190,7 @@ CI نسخه ۱ شامل Python compile/import، Pytest، DB/Migration، JavaScri
 
 موارد وابسته به محیط مانند Firewall/NAT، DNS propagation، Docker/Shadowbox واقعی، اتصال Client واقعی و SCP واقعی باید روی Host مقصد تست شوند.
 
-جزئیات در **[docs/UAT-1.1.0.md](docs/UAT-1.1.0.md)** ثبت شده است.
+جزئیات در **[docs/UAT-1.4.0.md](docs/UAT-1.4.0.md)** ثبت شده است.
 
 ## مجوز
 
