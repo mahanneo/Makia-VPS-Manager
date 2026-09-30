@@ -84,7 +84,8 @@ def main():
     ]
     body="# Makia owner/distribution configuration. Keep this file root-only.\n"
     for key in keys:
-        value=data.get(key,"")
+        default="auto" if key=="MAKIA_CLIENT_PORTAL_ENABLED" else ""
+        value=data.get(key,default)
         body+=f"{key}={value}\n"
     ENV_PATH.write_text(body,encoding="utf-8")
     os.chmod(ENV_PATH,0o600)
