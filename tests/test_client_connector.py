@@ -106,3 +106,26 @@ def test_pwa_native_connector_contract_is_present():
     assert "pyinstaller" in workflow.lower()
     assert "sing-box-1.14.2-windows-amd64.zip" in workflow
     assert "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32" in workflow
+
+def test_android_connector_overlay_and_reproducible_build_contract():
+    activity=(ROOT/"client/android/MakiaEntryActivity.kt").read_text(encoding="utf-8")
+    patch=(ROOT/"client/android/patch_sfa.py").read_text(encoding="utf-8")
+    workflow=(ROOT/".github/workflows/android-connector.yml").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/client.js").read_text(encoding="utf-8")
+    assert 'uri.scheme != "makia"' in activity
+    assert 'VpnService.prepare(this)' in activity
+    assert 'Libbox.checkConfig(config)' in activity
+    assert 'BoxService.stop()' in activity
+    assert '"wireguard"' in activity
+    assert '"vless"' in activity
+    assert '"vmess"' in activity
+    assert '"hysteria2"' in activity
+    assert '"npvt-ssh"' in activity
+    assert 'applicationId = "com.makia.client"' in patch
+    assert 'a3668ae6e4bbcb3ceff8461d0cac55d79edf504f' in workflow
+    assert 'v1.14.1' in workflow
+    assert 'build_libbox -target android' in workflow
+    assert ':app:assembleOtherDebug' in workflow
+    assert 'Makia-Android-Connector-RC' in workflow
+    assert 'function directSupported(x)' in js
+    assert 'p!=="android"' in js
