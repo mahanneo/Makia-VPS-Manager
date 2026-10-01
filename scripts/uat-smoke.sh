@@ -115,6 +115,34 @@ else
   bad "SQLite integrity / crypto smoke"
 fi
 
+if ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app.db import connect, get_setting
+
+required={
+    "client_accounts","client_devices","client_sessions",
+    "client_protocol_bindings","client_artifact_bindings",
+    "client_usage_baselines","client_artifact_usage","client_artifact_policy_state",
+}
+with connect() as con:
+    tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+missing=sorted(required-tables)
+assert not missing, "missing Client Platform tables: "+", ".join(missing)
+state=str(get_setting("client_portal_enabled","0") or "0").strip().lower()
+print("client_portal_enabled="+state)
+PY
+) >/tmp/makia-client-platform-smoke.txt 2>&1; then
+  ok "Client Platform schema + persistent policy state"
+  CLIENT_PORTAL_STATE="$(sed -n 's/^client_portal_enabled=//p' /tmp/makia-client-platform-smoke.txt | tail -n1)"
+  if [[ "$CLIENT_PORTAL_STATE" =~ ^(1|true|yes|on)$ ]]; then
+    warn "Client Portal is enabled; confirm this is intentional for the current UAT/canary stage"
+  else
+    ok "Client Portal rollout switch remains disabled"
+  fi
+else
+  bad "Client Platform schema / persistent policy state"
+  sed -n '1,12p' /tmp/makia-client-platform-smoke.txt || true
+fi
+
 if ( cd "$APP" && "$APP/.venv/bin/python" -c 'import app.main; print(app.main.APP_NAME, app.main.VERSION)' ) >/tmp/makia-import.txt; then
   ok "Application import"
 else

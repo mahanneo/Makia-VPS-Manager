@@ -1,0 +1,15 @@
+Makia Android Connector 1.4.0 — UAT install notes
+
+Recommended APK:
+Makia-Android-Connector.apk
+
+Requirements:
+- Android 7.0 or newer (API 24+).
+- Allow installation from the browser/files app if Android asks.
+
+If Android says "App not installed" and an older Makia Connector RC is already installed:
+- Uninstall only the old Makia Connector app, then install this APK again.
+- Current RC artifacts are debug-signed by GitHub Actions, so an older RC built by another runner may have a different signing certificate.
+- This removes only local connector app data. It does not rotate, delete, or recreate any VPS user, UUID, WireGuard key, certificate, or server credential.
+
+Advanced ABI-specific APKs are in the advanced/ folder. Use them only if needed.
