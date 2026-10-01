@@ -207,10 +207,32 @@ def test_v140_uat_artifact_provenance_contract():
         assert "GITHUB_RUN_ID" in workflow
 
 
-def test_clean_installer_bootstraps_python_before_first_python3_use():
+def test_clean_installer_bootstrap_contract():
+    bootstrap=(ROOT/"install.sh").read_text(encoding="utf-8")
     install=(ROOT/"scripts/install.sh").read_text(encoding="utf-8")
-    bootstrap='if ! command -v python3 >/dev/null 2>&1; then'
+
+    # The public bootstrap must accept both branch names and exact frozen SHAs.
+    assert "https://codeload.github.com/\${REPO}/tar.gz/\${REF}" in bootstrap
+    assert "refs/heads/\${REF}" not in bootstrap
+    assert "--retry 5 --retry-all-errors" in bootstrap
+    assert 'MAKIA_INSTALL_SOURCE_REF="$REF"' in bootstrap
+
+    # Fresh minimal Ubuntu must receive runtime dependencies before Python is used.
     password='ADMIN_PASSWORD="$(python3 - <<\'PY\''
-    assert bootstrap in install
-    assert 'apt-get install -y python3 ca-certificates' in install
-    assert install.index(bootstrap) < install.index(password)
+    packages='apt_retry install -y'
+    assert packages in install
+    assert "python3 python3-venv python3-pip" in install
+    assert "iproute2 iptables openssl" in install
+    assert install.index(packages) < install.index(password)
+
+    # A rerun after a partial install must preserve the existing admin credential.
+    assert 'ADMIN_EXISTS=0' in install
+    assert 'SELECT 1 FROM admins LIMIT 1' in install
+    assert 'Existing administrator detected' in install
+    assert 'existing credential preserved' in install
+    assert 'sudo makia-reset-admin' in install
+
+    # Fail early with an actionable message on unsupported raw-host environments.
+    assert 'Makia requires an Ubuntu VPS booted with systemd' in install
+    assert 'At least 1 GiB of free disk space is required' in install
+    assert 'DPkg::Lock::Timeout=180' in install
