@@ -26,53 +26,109 @@ SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP=/opt/makia-vps-manager
 OLD_APP=/opt/dragon-vps-manager-ng
 DATA="$APP/data"
+CREDENTIAL_FILE=/root/makia-install-credentials.txt
 ADMIN_PASSWORD="${MAKIA_INITIAL_ADMIN_PASSWORD:-${DRAGON_INITIAL_ADMIN_PASSWORD:-}}"
+NEW_ADMIN_BOOTSTRAP=0
 
-# Bootstrap Python before it is used to generate the initial admin password.
-# Minimal Ubuntu images are not guaranteed to ship with python3 preinstalled.
-export DEBIAN_FRONTEND=noninteractive
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "Bootstrapping Python 3 required by the installer..."
-  apt-get update
-  apt-get install -y python3 ca-certificates
+if ! command -v systemctl >/dev/null 2>&1 || [[ ! -d /run/systemd/system ]]; then
+  echo "Unsupported environment: Makia requires an Ubuntu VPS booted with systemd." >&2
+  echo "Use a normal Ubuntu 22.04/24.04 VPS, not a minimal container without systemd." >&2
+  exit 1
 fi
 
-if [[ -z "$ADMIN_PASSWORD" ]]; then
-  ADMIN_PASSWORD="$(python3 - <<'PY'
+case "$(uname -m)" in
+  x86_64|amd64|aarch64|arm64) ;;
+  *) echo "Unsupported CPU architecture: $(uname -m). Supported: amd64/arm64." >&2; exit 1 ;;
+esac
+
+FREE_KB="$(df -Pk / | awk 'NR==2 {print $4}')"
+if [[ ! "$FREE_KB" =~ ^[0-9]+$ ]] || (( FREE_KB < 1048576 )); then
+  echo "At least 1 GiB of free disk space is required for a clean Makia install." >&2
+  exit 1
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+apt_retry() {
+  local attempt
+  for attempt in 1 2 3; do
+    if apt-get -o DPkg::Lock::Timeout=180 "$@"; then
+      return 0
+    fi
+    echo "[MAKIA] apt-get $* failed (attempt $attempt/3); retrying..." >&2
+    sleep $((attempt * 5))
+  done
+  return 1
+}
+
+echo "[MAKIA] Installing required Ubuntu packages..."
+apt_retry update
+apt_retry install -y \
+  python3 python3-venv python3-pip nginx curl ca-certificates tar gzip unzip \
+  iproute2 iptables openssl fail2ban wireguard openvpn easy-rsa stunnel4 \
+  certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
+
+# A failed/partial install can already contain the administrator row. Never
+# generate or advertise a new password in that case: init_db intentionally
+# preserves the existing admin credential.
+ADMIN_EXISTS=0
+if [[ -s "$DATA/makia.db" ]]; then
+  ADMIN_EXISTS="$(python3 - "$DATA/makia.db" <<'PY'
+import sqlite3, sys
+db=sys.argv[1]
+try:
+    con=sqlite3.connect(db)
+    row=con.execute("SELECT 1 FROM admins LIMIT 1").fetchone()
+    print("1" if row else "0")
+except Exception:
+    print("0")
+PY
+)"
+fi
+
+if [[ "$ADMIN_EXISTS" == "1" ]]; then
+  if [[ -n "$ADMIN_PASSWORD" ]]; then
+    echo "[MAKIA] Existing administrator detected; MAKIA_INITIAL_ADMIN_PASSWORD will not overwrite it." >&2
+    echo "[MAKIA] Use 'sudo makia-reset-admin' after installation if the password must be changed." >&2
+  fi
+  ADMIN_PASSWORD=""
+else
+  if [[ -z "$ADMIN_PASSWORD" ]]; then
+    ADMIN_PASSWORD="$(python3 - <<'PY'
 import secrets
 print(secrets.token_urlsafe(24))
 PY
 )"
-fi
-if [[ ${#ADMIN_PASSWORD} -lt 16 ]]; then
-  echo "MAKIA_INITIAL_ADMIN_PASSWORD must be at least 16 characters."
-  exit 1
-fi
-
-CREDENTIAL_FILE=/root/makia-install-credentials.txt
-umask 077
-cat >"$CREDENTIAL_FILE" <<EOF
+  fi
+  if [[ ${#ADMIN_PASSWORD} -lt 16 ]]; then
+    echo "MAKIA_INITIAL_ADMIN_PASSWORD must be at least 16 characters."
+    exit 1
+  fi
+  NEW_ADMIN_BOOTSTRAP=1
+  umask 077
+  cat >"$CREDENTIAL_FILE" <<EOF
 Makia VPS Manager
 Username: admin
 Bootstrap password: $ADMIN_PASSWORD
 Panel: pending until installation completes
 EOF
-chmod 0600 "$CREDENTIAL_FILE"
+  chmod 0600 "$CREDENTIAL_FILE"
+fi
 
 install_failure_hint() {
   rc=$?
   printf '\n[MAKIA] Installation stopped before the final success screen (exit %s).\n' "$rc" >&2
-  printf '[MAKIA] The generated admin credential is preserved at: %s\n' "$CREDENTIAL_FILE" >&2
+  if [[ "$NEW_ADMIN_BOOTSTRAP" == "1" ]]; then
+    printf '[MAKIA] The generated admin credential is preserved at: %s\n' "$CREDENTIAL_FILE" >&2
+  else
+    printf '[MAKIA] Existing administrator credentials were preserved and were not rotated.\n' >&2
+  fi
   printf '[MAKIA] Fix the reported error and re-run the installer; existing Makia data is not intentionally deleted.\n\n' >&2
   exit "$rc"
 }
 trap install_failure_hint ERR
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates tar fail2ban wireguard openvpn easy-rsa iptables stunnel4 certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
 if [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" ]]; then
-  apt-get install -y docker.io
+  apt_retry install -y docker.io
   systemctl enable --now docker
 fi
 
