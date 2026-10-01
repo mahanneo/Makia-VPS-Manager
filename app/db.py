@@ -182,6 +182,14 @@ def init_db():
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_notification_events_created_at ON notification_events(created_at);
+        CREATE TABLE IF NOT EXISTS commerce_requests (
+          idempotency_key TEXT PRIMARY KEY,
+          route TEXT NOT NULL,
+          request_hash TEXT NOT NULL,
+          response_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_commerce_requests_created_at ON commerce_requests(created_at);
         ''')
         # Migration-safe columns for future profile growth.
         _add_column(con, "account_profiles", "plan TEXT NOT NULL DEFAULT ''")
