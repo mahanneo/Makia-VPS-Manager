@@ -919,7 +919,7 @@ def install_component(component):
     if _process_no_new_privileges():
         raise ProtocolError("Host component installation is disabled inside the hardened web service; run sudo makia-upgrade")
     packages={
-        "wireguard":["wireguard","iptables"],
+        "wireguard":["wireguard-tools","iptables"],
         "openvpn":["openvpn","easy-rsa","iptables"],
         "stunnel":["stunnel4"],
     }
