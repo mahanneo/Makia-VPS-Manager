@@ -329,6 +329,14 @@ if command -v docker >/dev/null 2>&1 && [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" |
   systemctl enable --now docker
 fi
 
+PROTOCOL_RUNTIME_CHANGED=1
+if [[ -f "$APP/app/protocol_ops.py" && -f "$SRC/app/protocol_ops.py" ]] && cmp -s "$APP/app/protocol_ops.py" "$SRC/app/protocol_ops.py"; then
+  PROTOCOL_RUNTIME_CHANGED=0
+  echo "Protocol runtime code is unchanged; active VPN runtimes will be preserved without repair/restart."
+else
+  echo "Protocol runtime code changed; protocol readiness/repair gates remain enabled."
+fi
+
 ROLLBACK_ARMED=1
 systemctl stop makia-vps-manager
 rm -rf "$APP/app"
@@ -497,9 +505,10 @@ install_verified_shell "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
 
-echo "Ensuring the complete Makia protocol stack is installed and ready..."
-(
-  cd "$APP"
+if [[ "$PROTOCOL_RUNTIME_CHANGED" -eq 1 ]]; then
+  echo "Protocol runtime changed; ensuring the complete Makia protocol stack is installed and ready..."
+  (
+    cd "$APP"
   MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
 from app import protocol_ops
 from app.db import set_setting
@@ -600,6 +609,22 @@ PY
     echo "WARNING: WireGuard was already unhealthy before the update and automatic repair could not fix it."
     echo "The panel update will continue so WireGuard Diagnostics and Repair are available."
   fi
+fi
+else
+  echo "Protocol runtime code unchanged; skipping automatic Xray/WireGuard/OpenVPN provisioning and repair."
+  if [[ "$XRAY_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet xray; then
+    echo "Xray was active before update but is no longer active; updater will roll back." >&2
+    exit 5
+  fi
+  if [[ "$OVPN_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet openvpn-server@server; then
+    echo "OpenVPN was active before update but is no longer active; updater will roll back." >&2
+    exit 6
+  fi
+  if [[ "$WG_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet wg-quick@wg0; then
+    echo "WireGuard was active before update but is no longer active; updater will roll back." >&2
+    exit 7
+  fi
+  echo "Existing protocol runtime state preserved."
 fi
 
 nginx -t

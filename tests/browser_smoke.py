@@ -107,7 +107,7 @@ def main():
             # page and admin panel without sharing authentication cookies.
             client_page=browser.new_page()
             client_page.goto(BASE_URL+"/client/login",wait_until="networkidle")
-            assert "ورود به حساب کاربری" in client_page.locator("body").inner_text()
+            assert "ورود به Makia" in client_page.locator("body").inner_text()
             assert client_page.locator('link[rel="manifest"][href="/client/manifest.webmanifest"]').count()==1
             client_page.locator('input[name="username"]').fill("client-browser")
             client_page.locator('input[name="password"]').fill("client-browser-pass")

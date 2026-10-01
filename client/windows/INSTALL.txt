@@ -1,0 +1,15 @@
+Makia Client Connector 1.4.0 — Windows UAT
+
+Recommended install:
+1. Extract the GitHub artifact ZIP once.
+2. Double-click Install-Makia.cmd.
+3. Windows may show a UAC prompt when the connector starts because TUN mode requires elevated privileges.
+4. Return to Makia Client PWA and press Direct Connect again.
+
+If Direct Connect fails, read:
+%LOCALAPPDATA%\Makia\Connector\connector.log
+
+Uninstall:
+Double-click Uninstall-Makia.cmd.
+
+This RC does not modify VPS credentials or restart production services.
