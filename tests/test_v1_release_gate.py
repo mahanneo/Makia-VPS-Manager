@@ -232,6 +232,7 @@ def test_clean_installer_bootstrap_contract():
     assert 'Existing administrator detected' in install
     assert 'existing credential preserved' in install
     assert 'sudo makia-reset-admin' in install
+    assert 'from app.security import ensure_secret; init_db(); ensure_secret()' in install
 
     # Fail early with an actionable message on unsupported raw-host environments.
     assert 'Makia requires an Ubuntu VPS booted with systemd' in install
