@@ -62,7 +62,7 @@ apt_retry() {
 
 echo "[MAKIA] Installing required Ubuntu packages..."
 apt_retry update
-apt_retry install -y \
+apt_retry install -y --no-install-recommends \
   python3 python3-venv python3-pip nginx curl ca-certificates tar gzip unzip \
   iproute2 openssl fail2ban \
   wireguard-tools openvpn easy-rsa iptables stunnel4 \
