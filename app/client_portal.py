@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import client_store
+from . import client_store, client_connector
 from .config import APP_NAME, VERSION
 from .db import audit, clear_login_failures, login_rate_state, record_login_failure, get_setting
 
@@ -47,6 +47,77 @@ def _secure_cookie(request):
     return request.headers.get("x-forwarded-proto","").lower()=="https" or request.url.scheme=="https"
 
 
+def _client_platform(request):
+    ua=(request.headers.get("user-agent") or "").lower()
+    if "android" in ua:
+        return "android"
+    if any(token in ua for token in ("iphone","ipad","ipod")) or ("macintosh" in ua and "mobile" in ua):
+        return "ios"
+    if "windows" in ua:
+        return "windows"
+    if "macintosh" in ua or "mac os x" in ua:
+        return "macos"
+    return "web"
+
+
+def _default_device_label(platform):
+    return {
+        "android":"Android / Makia",
+        "ios":"iPhone / iPad / Makia",
+        "windows":"Windows / Makia",
+        "macos":"macOS / Makia",
+    }.get(str(platform or "").lower(),"Web / PWA")
+
+
+def _android_connector_url():
+    raw=str(os.getenv("MAKIA_ANDROID_CONNECTOR_URL","")).strip()
+    if not raw:
+        return ""
+    parsed=urllib.parse.urlparse(raw)
+    if parsed.scheme!="https" or not parsed.netloc:
+        return ""
+    return raw
+
+
+def _normalize_origin(value):
+    raw=str(value or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    parsed=urllib.parse.urlparse(raw)
+    if parsed.scheme not in {"http","https"} or not parsed.netloc:
+        return ""
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return ""
+    if parsed.path not in {"","/"} or any(ch.isspace() for ch in parsed.netloc):
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _public_origin(request):
+    configured=str(os.getenv("MAKIA_PUBLIC_BASE_URL","")).strip()
+    if configured:
+        origin=_normalize_origin(configured)
+        if not origin or urllib.parse.urlparse(origin).scheme!="https":
+            raise ValueError("MAKIA_PUBLIC_BASE_URL must be an HTTPS origin")
+        return origin
+
+    direct=_normalize_origin(str(request.base_url))
+    if direct and urllib.parse.urlparse(direct).scheme=="https":
+        return direct
+
+    forwarded_proto=(request.headers.get("x-forwarded-proto") or "").split(",",1)[0].strip().lower()
+    if forwarded_proto=="https":
+        # The service binds to localhost behind the managed reverse proxy. Do not
+        # trust X-Forwarded-Host for connector launch URLs: an untrusted value
+        # could redirect the one-time ticket to another HTTPS origin.
+        host=(request.headers.get("host") or "").strip()
+        origin=_normalize_origin("https://"+host) if host else ""
+        if origin:
+            return origin
+
+    return direct
+
+
 def _session(request):
     if not enabled():
         return None
@@ -76,10 +147,22 @@ def _require_mutation(request):
     return session
 
 
+def _client_security_headers(response):
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="no-referrer"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(), payment=()"
+    response.headers["Content-Security-Policy"]=(
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+        "form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; manifest-src 'self'; worker-src 'self'"
+    )
+    return response
+
+
 def _no_store(response):
     response.headers["Cache-Control"]="no-store"
-    response.headers["X-Content-Type-Options"]="nosniff"
-    return response
+    return _client_security_headers(response)
 
 
 @router.get("/client/")
@@ -97,7 +180,11 @@ def client_login_page(request:Request):
         return _no_store(RedirectResponse("/client/app",302))
     response=templates.TemplateResponse(
         "client_login.html",
-        {"request":request,"app_name":APP_NAME,"version":VERSION,"error":None,"default_username":str(request.query_params.get("u") or "")[:64]},
+        {
+            "request":request,"app_name":APP_NAME,"version":VERSION,"error":None,
+            "default_username":str(request.query_params.get("u") or "")[:64],
+            "detected_platform":_client_platform(request),
+        },
     )
     return _no_store(response)
 
@@ -147,11 +234,12 @@ def client_login(
             status_code=403,
         ))
     try:
+        platform=_client_platform(request)
         device,device_key=client_store.register_or_get_device(
             account["id"],
             request.cookies.get(CLIENT_DEVICE_COOKIE),
-            label=device_label or "Web / PWA",
-            platform="web",
+            label=device_label or _default_device_label(platform),
+            platform=platform,
             user_agent=request.headers.get("user-agent",""),
             ip=remote_ip,
         )
@@ -205,6 +293,8 @@ def client_app(request:Request):
         {
             "request":request,"app_name":APP_NAME,"version":VERSION,
             "username":session["username"],"display_name":session.get("display_name") or session["username"],
+            "detected_platform":_client_platform(request),
+            "android_connector_url":_android_connector_url(),
         },
     )
     return _no_store(response)
@@ -259,6 +349,71 @@ def client_artifact_delivery(artifact_id:int,request:Request):
     return _no_store(JSONResponse(item))
 
 
+
+
+@router.post("/client/api/connect/{delivery_kind}/{delivery_id}/ticket")
+def client_connector_ticket(delivery_kind:str,delivery_id:int,request:Request):
+    session=_require_mutation(request)
+    kind=str(delivery_kind or "").lower()
+    try:
+        if kind=="protocol":
+            client_store.protocol_delivery(session["account_id"],delivery_id)
+        elif kind=="artifact":
+            client_store.artifact_delivery(session["account_id"],delivery_id)
+        else:
+            raise ValueError("unsupported delivery kind")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail=str(exc))
+    ticket=client_connector.issue_ticket(
+        session["account_id"],session["device_id"],kind,delivery_id
+    )
+    try:
+        origin=_public_origin(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc))
+    parsed_origin=urllib.parse.urlparse(origin)
+    if parsed_origin.scheme!="https" and parsed_origin.hostname not in {"127.0.0.1","localhost"}:
+        raise HTTPException(
+            status_code=503,
+            detail="Direct Connect requires a public HTTPS origin; configure MAKIA_PUBLIC_BASE_URL",
+        )
+    launch="makia://connect?controller="+urllib.parse.quote(origin,safe="")+"&ticket="+urllib.parse.quote(ticket["ticket"],safe="")
+    audit(
+        "client:"+session["username"],"client_connector_ticket",
+        target=f"{kind}:{delivery_id}",detail=f"ttl={ticket['ttl']}",ip=_ip(request),
+    )
+    return _no_store(JSONResponse({
+        "launch_url":launch,
+        "expires_at":ticket["expires_at"],
+        "ttl":ticket["ttl"],
+    }))
+
+
+@router.post("/client/connector/redeem")
+async def client_connector_redeem(request:Request):
+    _require_enabled()
+    try:
+        body=await request.json()
+    except Exception:
+        raise HTTPException(status_code=400,detail="invalid connector request")
+    ticket=str((body or {}).get("ticket") or "")
+    if not ticket or len(ticket)>256:
+        raise HTTPException(status_code=400,detail="connector ticket required")
+    try:
+        payload=client_connector.redeem_ticket(ticket)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    audit(
+        "connector","client_connector_redeem",
+        target=f"{payload['delivery_kind']}:{payload['delivery_id']}",
+        detail=f"account_id={payload['account_id']}; device_id={payload['device_id']}",
+        ip=_ip(request),
+    )
+    return _no_store(JSONResponse(payload["delivery"]))
+
+
 @router.get("/client/api/devices")
 def client_devices(request:Request):
     session=_require_session(request)
@@ -290,13 +445,18 @@ def client_manifest(request:Request):
         "background_color":"#07111f",
         "theme_color":"#07111f",
         "description":"Makia secure client access portal",
+        "lang":"fa",
+        "dir":"rtl",
+        "id":"/client/",
+        "categories":["utilities","productivity"],
+        "shortcuts":[{"name":"Makia Client","short_name":"Client","url":"/client/app"}],
         "icons":[
             {"src":"/static/client-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
         ],
     }
     response=JSONResponse(manifest,media_type="application/manifest+json")
     response.headers["Cache-Control"]="public, max-age=3600"
-    return response
+    return _client_security_headers(response)
 
 
 @router.get("/client/sw.js")
@@ -305,4 +465,4 @@ def client_service_worker(request:Request):
     response=FileResponse(BASE/"static"/"client-sw.js",media_type="application/javascript")
     response.headers["Cache-Control"]="no-cache"
     response.headers["Service-Worker-Allowed"]="/client/"
-    return response
+    return _client_security_headers(response)

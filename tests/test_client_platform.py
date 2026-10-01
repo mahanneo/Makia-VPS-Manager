@@ -1,3 +1,6 @@
+import io
+import sqlite3
+import tarfile
 import time
 from pathlib import Path
 
@@ -133,13 +136,22 @@ def test_client_admin_api_never_calls_protocol_runtime_mutators():
 def test_pwa_shell_uses_no_store_for_private_api_and_separate_service_worker():
     js=(ROOT/"app/static/client.js").read_text(encoding="utf-8")
     sw=(ROOT/"app/static/client-sw.js").read_text(encoding="utf-8")
-    manifest=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
     assert 'cache:"no-store"' in js
+    assert "function clearSensitiveDelivery()" in js
+    assert 'form[action="/client/logout"]' in js
+    assert 'window.addEventListener("pagehide",clearSensitiveDelivery)' in js
+    assert 'window.addEventListener("pageshow",event=>{if(event.persisted)location.reload()})' in js
     assert 'u.pathname.startsWith("/client/")' in sw
-    assert 'cache:"no-store"' in sw
-    assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-icon.svg"]' in sw
-    assert '"/client/sw.js"' in manifest
-    assert '"display":"standalone"' in manifest
+    assert 'fetch(event.request,{cache:"no-store"})' in sw
+    assert 'const SHELL=["/static/client.css","/static/client.js","/static/client-login.js","/static/client-icon.svg"]' in sw
+    assert '"/client/"' not in sw.split("const SHELL=",1)[1].split(";",1)[0]
+    assert '@router.post("/client/logout")' in portal
+    assert "client_store.revoke_session(token)" in portal
+    assert "response.delete_cookie(CLIENT_SESSION_COOKIE,path=\"/client\")" in portal
+    assert 'response.headers["Cache-Control"]="no-store"' in portal
+    assert '"/client/sw.js"' in portal
+    assert '"display":"standalone"' in portal
 
 
 def test_protocol_identity_cannot_be_shared_across_client_accounts(client_db):
@@ -454,3 +466,95 @@ def test_openvpn_policy_setup_requires_local_admin_contract():
     assert "register_client_admin(app,require_user,require_mutation,require_local_admin" in main
     assert "client-openvpn-policy-enable" in js
     assert "Restart" in js
+
+
+
+def test_client_platform_backup_snapshot_preserves_accounts_devices_bindings_and_policy_state(client_db,tmp_path):
+    from app import system_ops
+
+    account_id=client_store.create_account(
+        "backup-client","backup-client-pass","Backup Client","UAT",
+        expire_at=int(time.time())+86400,quota_bytes=1024**3,
+        device_limit=1,concurrent_device_limit=1,
+    )
+    device,_device_key=client_store.register_or_get_device(account_id,label="UAT browser",platform="web")
+    client_store.create_session(account_id,device["id"],"127.0.0.1")
+    protocol_id=db.create_protocol_client(
+        "backup-xray","xray","vless","backup-inbound","backup-credential",
+        "vless://backup-credential@example.test:443",0,0,1,0,
+    )
+    client_store.bind_protocol_client(account_id,protocol_id,"Backup Xray",10,True)
+    artifact_id=db.upsert_access_artifact(
+        "wireguard","backup-wg","backup-wg","wireguard","backup-wg.conf","sealed-test-payload","{}",
+    )
+    client_store.bind_access_artifact(account_id,artifact_id,"Backup WireGuard",20,True)
+    client_store.set_artifact_policy_state(account_id,artifact_id,"client_account_expiry")
+
+    blob=system_ops._portable_data_tar(str(client_db.parent))
+    restored_root=tmp_path/"restored"
+    restored_root.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(blob),mode="r:gz") as tf:
+        tf.extract("data/makia.db",path=restored_root)
+
+    restored_db=restored_root/"data"/"makia.db"
+    con=sqlite3.connect(restored_db)
+    try:
+        assert con.execute("SELECT COUNT(*) FROM client_accounts WHERE username='backup-client'").fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_devices WHERE account_id=? AND active=1",(account_id,)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_sessions WHERE account_id=? AND revoked_at=0",(account_id,)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_protocol_bindings WHERE account_id=? AND protocol_client_id=?",(account_id,protocol_id)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_artifact_bindings WHERE account_id=? AND artifact_id=?",(account_id,artifact_id)).fetchone()[0]==1
+        assert con.execute("SELECT COUNT(*) FROM client_usage_baselines WHERE account_id=? AND protocol_client_id=?",(account_id,protocol_id)).fetchone()[0]==1
+        assert con.execute("SELECT suspended_reason FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",(account_id,artifact_id)).fetchone()[0]=="client_account_expiry"
+    finally:
+        con.close()
+
+
+def test_update_contract_preserves_client_data_tree_and_takes_consistent_sqlite_backup():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "--exclude='data/makia.db'" in update
+    assert 'source.backup(target)' in update
+    assert 'tar -C "$BACKUP_TMP" -czf "$BACKUP" data' in update
+    assert 'rm -rf "$APP/data"' not in update
+
+
+
+def test_host_uat_smoke_checks_client_schema_without_mutating_runtime():
+    smoke=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    for table in (
+        "client_accounts","client_devices","client_sessions",
+        "client_protocol_bindings","client_artifact_bindings",
+        "client_usage_baselines","client_artifact_usage","client_artifact_policy_state",
+    ):
+        assert table in smoke
+    assert 'get_setting("client_portal_enabled","0")' in smoke
+    assert "Client Portal rollout switch remains disabled" in smoke
+    client_block=smoke.split("Client Platform schema + persistent policy state",1)[0].rsplit("if ( cd",1)[-1]
+    for forbidden in ("systemctl restart","systemctl stop","systemctl start","UPDATE client_","DELETE FROM client_","INSERT INTO client_"):
+        assert forbidden not in client_block
+
+def test_client_pwa_rc_has_cross_platform_install_and_browser_security_contract():
+    html=(ROOT/"app/templates/client_app.html").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/client.js").read_text(encoding="utf-8")
+    css=(ROOT/"app/static/client.css").read_text(encoding="utf-8")
+    sw=(ROOT/"app/static/client-sw.js").read_text(encoding="utf-8")
+    portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    assert 'id="installDialog"' in html
+    assert 'id="platformName"' in html
+    assert 'id="sessionText"' in html
+    assert 'id="networkState"' in html
+    assert 'apple-mobile-web-app-capable' in html
+    assert '-pwa-rc1' in html
+    assert 'function platform()' in js
+    assert 'function installCopy' in js
+    assert 'function startSessionClock' in js
+    assert 'window.addEventListener("online"' in js
+    assert 'document.addEventListener("visibilitychange"' in js
+    assert ".mc-grid-4" in css
+    assert 'const CACHE="makia-client-v140-mobile-login"' in sw
+    assert 'response.headers["X-Frame-Options"]="DENY"' in portal
+    assert 'response.headers["Referrer-Policy"]="no-referrer"' in portal
+    assert 'response.headers["Content-Security-Policy"]' in portal
+    assert '"lang":"fa"' in portal
+    assert '"dir":"rtl"' in portal
+    assert '"id":"/client/"' in portal

@@ -19,13 +19,15 @@ def parse_existing():
     return out
 
 def main():
-    p=argparse.ArgumentParser(description="Configure Makia publisher/support contact.")
+    p=argparse.ArgumentParser(description="Configure Makia owner/support and public client URLs.")
     p.add_argument("--telegram",default=None,help="Telegram username without @")
     p.add_argument("--webhook",default=None,help="Optional HTTPS support webhook")
     p.add_argument("--support-token",default=None,help="Bearer token used for secure ticket ingestion")
     p.add_argument("--release-archive-url",default=None,help="Optional private release .tar.gz URL")
     p.add_argument("--release-token",default=None,help="Optional bearer token for private release download")
     p.add_argument("--admin-cidrs",default=None,help="Optional comma-separated admin CIDRs, e.g. 203.0.113.4/32,10.0.0.0/8")
+    p.add_argument("--public-base-url",default=None,help="Public HTTPS Makia origin used by native Direct Connect")
+    p.add_argument("--android-connector-url",default=None,help="HTTPS URL of the approved Makia Android Connector APK")
     args=p.parse_args()
     data=parse_existing()
     if args.telegram is not None:
@@ -51,6 +53,20 @@ def main():
         data["MAKIA_RELEASE_ARCHIVE_URL"]=url
     if args.release_token is not None:
         data["MAKIA_RELEASE_BEARER_TOKEN"]=args.release_token.strip()
+    if args.public_base_url is not None:
+        url=args.public_base_url.strip().rstrip("/")
+        if url:
+            parsed=urllib.parse.urlparse(url)
+            if parsed.scheme!="https" or not parsed.netloc or parsed.path not in {"","/"} or parsed.query or parsed.fragment:
+                raise SystemExit("Public base URL must be an HTTPS origin without path/query/fragment")
+        data["MAKIA_PUBLIC_BASE_URL"]=url
+    if args.android_connector_url is not None:
+        url=args.android_connector_url.strip()
+        if url:
+            parsed=urllib.parse.urlparse(url)
+            if parsed.scheme!="https" or not parsed.netloc:
+                raise SystemExit("Android connector URL must be HTTPS")
+        data["MAKIA_ANDROID_CONNECTOR_URL"]=url
     if args.admin_cidrs is not None:
         import ipaddress
         values=[]
@@ -61,10 +77,15 @@ def main():
             values.append(str(ipaddress.ip_network(item,strict=False)))
         data["MAKIA_ADMIN_ALLOWED_CIDRS"]=",".join(values)
     ENV_PATH.parent.mkdir(parents=True,exist_ok=True)
-    keys=["MAKIA_SUPPORT_TELEGRAM","MAKIA_SUPPORT_WEBHOOK_URL","MAKIA_SUPPORT_WEBHOOK_TOKEN","MAKIA_RELEASE_ARCHIVE_URL","MAKIA_RELEASE_BEARER_TOKEN","MAKIA_ADMIN_ALLOWED_CIDRS"]
+    keys=[
+        "MAKIA_SUPPORT_TELEGRAM","MAKIA_SUPPORT_WEBHOOK_URL","MAKIA_SUPPORT_WEBHOOK_TOKEN",
+        "MAKIA_RELEASE_ARCHIVE_URL","MAKIA_RELEASE_BEARER_TOKEN","MAKIA_ADMIN_ALLOWED_CIDRS",
+        "MAKIA_CLIENT_PORTAL_ENABLED","MAKIA_PUBLIC_BASE_URL","MAKIA_ANDROID_CONNECTOR_URL",
+    ]
     body="# Makia owner/distribution configuration. Keep this file root-only.\n"
     for key in keys:
-        value=data.get(key,"")
+        default="auto" if key=="MAKIA_CLIENT_PORTAL_ENABLED" else ""
+        value=data.get(key,default)
         body+=f"{key}={value}\n"
     ENV_PATH.write_text(body,encoding="utf-8")
     os.chmod(ENV_PATH,0o600)

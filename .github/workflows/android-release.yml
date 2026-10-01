@@ -1,0 +1,122 @@
+name: Android Signed Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Git ref to build (use the UAT-approved release commit/branch)"
+        required: true
+        default: "release/v1.4.0-uat1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-signed-release
+  cancel-in-progress: false
+
+jobs:
+  signed-android:
+    runs-on: ubuntu-latest
+    environment: android-release
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Makia release source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref }}
+          path: makia
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.8"
+      - name: Setup Android command-line tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+      - name: Install Android NDK and build tools
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;28.0.13004108" "platforms;android-37.1" "build-tools;37.1.0"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.0.13004108" >> "$GITHUB_ENV"
+      - name: Checkout pinned official SFA and sing-box
+        shell: bash
+        run: |
+          mkdir -p upstream
+          git clone https://github.com/SagerNet/sing-box-for-android.git upstream/sing-box-for-android
+          git -C upstream/sing-box-for-android checkout a3668ae6e4bbcb3ceff8461d0cac55d79edf504f
+          git clone --branch v1.14.1 --depth 1 https://github.com/SagerNet/sing-box.git upstream/sing-box
+          test "$(git -C upstream/sing-box-for-android rev-parse HEAD)" = "a3668ae6e4bbcb3ceff8461d0cac55d79edf504f"
+          test "$(git -C upstream/sing-box describe --tags --exact-match)" = "v1.14.1"
+      - name: Install pinned gomobile toolchain
+        shell: bash
+        run: |
+          go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+      - name: Build official libbox Android AAR
+        shell: bash
+        working-directory: upstream/sing-box
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          mkdir -p ../sing-box-for-android/app/libs
+          go run ./cmd/internal/build_libbox -target android
+          test -s ../sing-box-for-android/app/libs/libbox.aar
+          test -s ../sing-box-for-android/app/libs/libbox-legacy.aar
+      - name: Apply Makia overlay
+        shell: bash
+        run: |
+          python makia/client/android/patch_sfa.py upstream/sing-box-for-android makia/client/android/MakiaEntryActivity.kt
+          grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
+          grep -q '^VERSION_NAME=1.4.0$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10400$' upstream/sing-box-for-android/version.properties
+      - name: Install persistent release signing identity
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.MAKIA_ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.MAKIA_ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS_NAME: ${{ secrets.MAKIA_ANDROID_KEY_ALIAS }}
+          ALIAS_PASS: ${{ secrets.MAKIA_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64" || { echo "MAKIA_ANDROID_KEYSTORE_B64 is required"; exit 1; }
+          test -n "$KEYSTORE_PASS" || { echo "MAKIA_ANDROID_KEYSTORE_PASSWORD is required"; exit 1; }
+          test -n "$ALIAS_NAME" || { echo "MAKIA_ANDROID_KEY_ALIAS is required"; exit 1; }
+          test -n "$ALIAS_PASS" || { echo "MAKIA_ANDROID_KEY_PASSWORD is required"; exit 1; }
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > upstream/sing-box-for-android/app/release.keystore
+          chmod 600 upstream/sing-box-for-android/app/release.keystore
+          {
+            printf 'KEYSTORE_PASS=%s\n' "$KEYSTORE_PASS"
+            printf 'ALIAS_NAME=%s\n' "$ALIAS_NAME"
+            printf 'ALIAS_PASS=%s\n' "$ALIAS_PASS"
+          } > upstream/sing-box-for-android/local.properties
+          chmod 600 upstream/sing-box-for-android/local.properties
+      - name: Build signed Makia Android release APK
+        shell: bash
+        working-directory: upstream/sing-box-for-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleOtherRelease
+      - name: Collect and verify signed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=upstream/sing-box-for-android/app/build/outputs/apk/other/release
+          universal=$(find "$out" -maxdepth 1 -type f -name '*-universal*.apk' | head -n 1)
+          test -n "$universal"
+          mkdir -p package-android-release
+          cp "$universal" package-android-release/Makia-Android-Connector-1.4.0.apk
+          apksigner="$ANDROID_HOME/build-tools/37.1.0/apksigner"
+          "$apksigner" verify --verbose --print-certs package-android-release/Makia-Android-Connector-1.4.0.apk | tee package-android-release/SIGNATURE.txt
+          unzip -l package-android-release/Makia-Android-Connector-1.4.0.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          (cd package-android-release && sha256sum Makia-Android-Connector-1.4.0.apk > SHA256SUMS.txt)
+          cat package-android-release/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Android-Connector-1.4.0-Signed
+          path: package-android-release/
+          if-no-files-found: error
+          retention-days: 90

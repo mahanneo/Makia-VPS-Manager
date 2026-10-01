@@ -4,9 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#07111f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Makia">
   <title>Makia Client</title>
   <link rel="manifest" href="/client/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/client.css?v={{ version }}">
+  <link rel="icon" href="/static/client-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/client.css?v={{ version }}-mobile-login-rc1">
 </head>
 <body class="mc-body mc-login-body">
   <main class="mc-login-shell">
@@ -18,12 +23,24 @@
           <small>CLIENT</small>
         </div>
       </div>
+
       <div class="mc-login-copy">
         <span class="mc-eyebrow">SECURE ACCESS</span>
-        <h1 id="client-login-title">ورود به حساب کاربری</h1>
-        <p>برای مشاهده اشتراک، دستگاه‌ها و دسترسی‌های اختصاصی خود وارد شوید.</p>
+        <h1 id="client-login-title">ورود به Makia</h1>
+        <p>با نام کاربری و رمز اشتراک وارد شوید. بعد از ورود فقط حجم، زمان، دستگاه‌ها و اتصال‌های مخصوص حساب خودتان نمایش داده می‌شود.</p>
       </div>
+
+      <div class="mc-mobile-entry" id="mobileEntry">
+        <div>
+          <span class="mc-card-label">این دستگاه</span>
+          <strong id="loginPlatformName">{{ detected_platform }}</strong>
+          <small id="loginPlatformHint">در حال آماده‌سازی راهنمای دستگاه…</small>
+        </div>
+        <button class="mc-ghost" id="installLoginClient" type="button">نصب Makia روی دستگاه</button>
+      </div>
+
       {% if error %}<div class="mc-alert mc-alert-danger" role="alert">{{ error }}</div>{% endif %}
+
       <form method="post" action="/client/login" class="mc-form" autocomplete="on">
         <label>
           <span>نام کاربری</span>
@@ -35,12 +52,19 @@
         </label>
         <label>
           <span>نام این دستگاه <small>اختیاری</small></span>
-          <input name="device_label" maxlength="120" placeholder="مثلاً iPhone شخصی">
+          <input name="device_label" id="deviceLabel" maxlength="120" placeholder="مثلاً گوشی شخصی">
         </label>
         <button class="mc-primary" type="submit">ورود امن</button>
       </form>
+
+      <div class="mc-login-guide" id="loginInstallGuide">
+        <strong>بعد از ورود</strong>
+        <p>Android: در پروتکل‌های پشتیبانی‌شده «اتصال مستقیم» فعال می‌شود. iPhone/iPad: Makia را از Safari روی Home Screen نصب کنید و اتصال را با Import یا بازکردن پروفایل انجام دهید.</p>
+      </div>
+
       <p class="mc-login-foot">Makia Client · v{{ version }}</p>
     </section>
   </main>
+  <script src="/static/client-login.js?v={{ version }}-mobile-login-rc1" defer></script>
 </body>
 </html>

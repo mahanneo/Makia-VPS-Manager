@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.1.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.4.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1 UAT](docs/UAT-1.1.0.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.4 UAT](docs/UAT-1.4.0.md)**
 
 ---
 
@@ -51,6 +51,16 @@ Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 wh
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
+## Makia Client 1.4
+
+End users can open the same authenticated Client URL on Android, iPhone/iPad, Windows or macOS. The portal shows only the signed-in account's quota, expiry, device state and assigned access profiles.
+
+- **Windows:** one-click Direct Connect through the Makia Client Connector.
+- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; OpenVPN remains import-based in 1.4.0.
+- **iPhone / iPad:** install the PWA from Safari with Add to Home Screen and use the platform-aware Open/Import flow. Native in-app iOS tunnelling is not claimed until an Apple-signed Network Extension build completes real-device UAT.
+- Native launch tickets are one-time, device-bound and short-lived; VPN secrets are not embedded in the `makia://` URL.
+- The Client Portal remains disabled by default until the operator completes host UAT/canary.
+
 ## Operations Suite
 
 - Plans / Templates
@@ -64,7 +74,7 @@ WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engi
 - Telegram status / expiry / backup integration
 - Per-access Diagnostics Center
 - Multi-VPS node telemetry
-- Public, tokenized Client Portal
+- Authenticated end-user Client Portal / PWA
 - QR / native config / protected ZIP delivery
 - Audit log and host diagnostics
 
@@ -193,7 +203,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.1.0.md](docs/UAT-1.1.0.md)**.
+See **[docs/UAT-1.4.0.md](docs/UAT-1.4.0.md)**.
 
 ## Runtime layout
 

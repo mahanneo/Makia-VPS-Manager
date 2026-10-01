@@ -106,6 +106,32 @@ After the test account passes:
 
 The PWA device registration is a browser/device-control layer, not hardware attestation. Users can securely receive/import their VPN profile from the PWA today. Hardware-backed device binding and one-click native tunnel control require the later Makia native agent/mobile client phase.
 
+## Repository-side privacy and persistence gates
+
+Before canary rollout, CI must also prove these invariants:
+
+- Client logout revokes the server-side Client session and removes the Client session cookie.
+- Client PWA CacheStorage is limited to the static shell; private `/client/` pages, API responses and delivered credentials are always network-only with `no-store`.
+- A consistent SQLite backup preserves Client accounts, registered devices, sessions, protocol bindings, artifact bindings, usage baselines and Client-owned policy state.
+- The updater creates a consistent pre-change data backup and never replaces or removes the persistent application `data` tree.
+- These repository gates complement, but do not replace, the live VPS Backup → Update → Restore test and real-device PWA UAT.
+
+## Live VPS evidence to capture
+
+For the production UAT record, retain evidence for:
+
+- the Full Migration Backup created before the host update, including its SHA256;
+- the immutable source commit used for the update;
+- installed `VERSION` and local `/healthz` result after update;
+- the complete `makia-uat-smoke` result;
+- before/after status of existing Xray, WireGuard, OpenVPN, SSH and Outline users/services;
+- the disposable Client account parameters and bound disposable credential;
+- mobile and Windows PWA login/install/device-limit results;
+- protocol delivery results for QR, native file and compatible deep link;
+- Backup → Restore verification that Client account/device/binding/policy state survives.
+
+Do not promote the Client Portal to general availability from CI alone. The real VPS and canary gates below remain mandatory.
+
 ## Stable promotion gate
 
 Release 1.3.0 is code-promotable only when:

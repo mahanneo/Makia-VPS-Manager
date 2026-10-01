@@ -170,6 +170,24 @@ def test_full_stack_provisions_missing_engines(monkeypatch):
     assert result["ports"]=={"wireguard":443,"openvpn":1194}
 
 
+def test_wait_openvpn_runtime_tolerates_startup_race(monkeypatch):
+    states=[
+        {"service_active":False,"listener":False,"port":1194},
+        {"service_active":True,"listener":False,"port":1194},
+        {"service_active":True,"listener":True,"port":1194},
+    ]
+    calls={"n":0}
+    def runtime():
+        calls["n"]+=1
+        return states.pop(0) if len(states)>1 else states[0]
+    monkeypatch.setattr(protocol_ops,"_openvpn_server_runtime",runtime)
+    monkeypatch.setattr(protocol_ops.time,"sleep",lambda _seconds:None)
+    result=protocol_ops._wait_openvpn_server_runtime(timeout=2,interval=0.05)
+    assert result["service_active"] is True
+    assert result["listener"] is True
+    assert calls["n"]==3
+
+
 @pytest.mark.parametrize("protocol,transport,security,expected",[
     ("vless","tcp","reality",("tcp","reality")),
     ("vless","grpc","reality",("grpc","reality")),
