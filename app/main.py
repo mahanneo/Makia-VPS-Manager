@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import date, datetime, timedelta
-import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket
+import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib
 import pyotp, qrcode
 import qrcode.image.svg
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
-from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
+from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered, idempotency_get, idempotency_claim, idempotency_complete, idempotency_fail
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
 from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin
 
@@ -352,6 +352,71 @@ def require_api_scope(request:Request,scope:str):
     if not identity:
         raise HTTPException(status_code=403,detail="invalid token or scope")
     return identity
+
+
+def _write_api_client_ip(request:Request):
+    peer=(request.client.host if request.client else "").strip()
+    # Only trust X-Forwarded-For when the immediate peer is loopback (local Nginx).
+    try:
+        peer_ip=ipaddress.ip_address(peer)
+    except ValueError:
+        peer_ip=None
+    if peer_ip and peer_ip.is_loopback:
+        forwarded=(request.headers.get("x-forwarded-for") or "").split(",",1)[0].strip()
+        if forwarded:
+            try:
+                return ipaddress.ip_address(forwarded)
+            except ValueError:
+                pass
+    try:
+        return ipaddress.ip_address(peer)
+    except ValueError:
+        raise HTTPException(status_code=403,detail="write API client address unavailable")
+
+def require_write_api_scope(request:Request,scope:str):
+    identity=require_api_scope(request,scope)
+    allowed_raw=(os.getenv("MAKIA_WRITE_API_ALLOWED_CIDRS") or "127.0.0.1/32,::1/128").strip()
+    try:
+        networks=[ipaddress.ip_network(x.strip(),strict=False) for x in allowed_raw.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=503,detail="write API allowlist is invalid")
+    client_ip=_write_api_client_ip(request)
+    if not networks or not any(client_ip in network for network in networks):
+        audit(f"api:{identity['name']}","write_api_ip_denied",scope,str(client_ip),str(client_ip))
+        raise HTTPException(status_code=403,detail="write API client is not allowlisted")
+    return identity
+
+def _idempotency_key(request:Request):
+    key=(request.headers.get("idempotency-key") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}",key):
+        raise HTTPException(status_code=400,detail="valid Idempotency-Key header required")
+    return key
+
+def _idempotent_write(request:Request,identity,operation:str,payload:dict,callback):
+    key=_idempotency_key(request)
+    body=json.dumps(payload,sort_keys=True,separators=(",",":"),ensure_ascii=False)
+    request_hash=hashlib.sha256(body.encode("utf-8")).hexdigest()
+    existing=idempotency_get(identity["id"],operation,key)
+    if existing:
+        if not secrets.compare_digest(str(existing.get("request_hash") or ""),request_hash):
+            raise HTTPException(status_code=409,detail="Idempotency-Key was already used with a different request")
+        if existing.get("status")=="complete" and existing.get("response_enc"):
+            try:
+                return access_ops.open_payload(existing["response_enc"])["response"]
+            except Exception:
+                raise HTTPException(status_code=500,detail="stored idempotent response is unreadable")
+        if existing.get("status")=="pending":
+            raise HTTPException(status_code=409,detail="matching request is already in progress")
+        raise HTTPException(status_code=409,detail="previous matching request failed; use a new Idempotency-Key")
+    if not idempotency_claim(identity["id"],operation,key,request_hash):
+        raise HTTPException(status_code=409,detail="matching request was claimed concurrently")
+    try:
+        response=callback()
+        idempotency_complete(identity["id"],operation,key,access_ops.seal_payload({"response":response}))
+        return response
+    except Exception:
+        idempotency_fail(identity["id"],operation,key)
+        raise
 
 def days_left(expire_date):
     if not expire_date: return None
@@ -3388,6 +3453,205 @@ def api_v1_nodes(request:Request):
     require_api_scope(request,"nodes:read")
     return list_nodes()
 
+
+class APIXrayProvision(BaseModel):
+    inbound_tag:str=Field(min_length=1,max_length=120)
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    credential:str=Field(default="",max_length=128)
+    flow:str=""
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    reset_days:int=Field(default=0,ge=0,le=3650)
+
+@app.post("/api/v1/provision/xray")
+def api_v1_provision_xray(payload:APIXrayProvision,request:Request):
+    identity=require_write_api_scope(request,"xray:provision")
+    def execute():
+        if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
+            raise HTTPException(409,"Xray client name already exists")
+        result=None
+        client_id=None
+        try:
+            endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
+            result=protocol_ops.add_xray_client_to_inbound(payload.inbound_tag,payload.name,endpoint,payload.credential,payload.flow)
+            quota_bytes=int(payload.quota_gb*1024*1024*1024)
+            expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+            client_id=create_protocol_client(
+                payload.name,"xray",result["protocol"],result["tag"],result["credential"],result["share_link"],
+                quota_bytes,expire_at,payload.ip_limit,payload.reset_days
+            )
+            row=get_protocol_client(client_id) or {}
+            sub_id=row.get("subscription_id") or ""
+            origin=public_origin(request)
+            sub_settings=operator_settings_snapshot()["subscription"]
+            delivery=access_ops.xray_payload(
+                payload.name,result["protocol"],result["share_link"],
+                f"{origin}/sub/{sub_id}?format={sub_settings['default_format']}" if sub_id and sub_settings["enabled"] else "",
+                f"{origin}/client/{sub_id}" if sub_id and sub_settings["client_page_enabled"] else ""
+            )
+            artifact_save("xray",str(client_id),payload.name,result["protocol"],delivery,{
+                "client_id":client_id,"inbound_tag":result["tag"],"subscription_id":sub_id,
+                "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,"source":"write-api-v1"
+            })
+        except protocol_ops.ProtocolError as exc:
+            raise HTTPException(400,str(exc))
+        except Exception:
+            if result and result.get("tag"):
+                try:protocol_ops.remove_xray_client_from_inbound(result["tag"],payload.name)
+                except Exception:pass
+            if client_id:
+                try:
+                    delete_access_artifact_by_key("xray",str(client_id))
+                    delete_protocol_client(client_id)
+                except Exception:pass
+            raise
+        audit(f"api:{identity['name']}","api_xray_provision",str(client_id),f"name={payload.name}; inbound={payload.inbound_tag}",str(_write_api_client_ip(request)))
+        return {
+            "ok":True,"kind":"xray","client_id":client_id,"name":payload.name,
+            "protocol":result["protocol"],"share_link":result["share_link"],"subscription_id":sub_id,
+            "credential":result["credential"],"expire_at":expire_at,"quota_bytes":quota_bytes,
+        }
+    return _idempotent_write(request,identity,"xray:provision",payload.model_dump(),execute)
+
+class APIOutlineProvision(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+
+@app.post("/api/v1/provision/outline")
+def api_v1_provision_outline(payload:APIOutlineProvision,request:Request):
+    identity=require_write_api_scope(request,"outline:provision")
+    def execute():
+        quota_bytes=int(payload.quota_gb*1024*1024*1024)
+        expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+        created=None
+        client_id=None
+        try:
+            created=integration_ops.outline_create_key(payload.name,quota_bytes)
+            key_id=str(created.get("id") or "")
+            access_url=str(created.get("accessUrl") or "")
+            if not key_id or not access_url.startswith("ss://"):
+                raise HTTPException(502,"Outline returned an invalid access key")
+            client_id=create_protocol_client(payload.name,"outline","outline",key_id,key_id,access_url,quota_bytes,expire_at,1,0)
+            artifact_save("outline",str(client_id),payload.name,"outline",access_ops.outline_payload(payload.name,access_url,key_id,quota_bytes),{
+                "client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes,"source":"write-api-v1"
+            })
+        except Exception as exc:
+            if created and created.get("id"):
+                try:integration_ops.outline_delete_key(created["id"])
+                except Exception:pass
+            if client_id:
+                try:delete_protocol_client(client_id)
+                except Exception:pass
+            if isinstance(exc,HTTPException):raise
+            raise HTTPException(400,str(exc))
+        audit(f"api:{identity['name']}","api_outline_provision",str(client_id),f"name={payload.name}",str(_write_api_client_ip(request)))
+        return {"ok":True,"kind":"outline","client_id":client_id,"name":payload.name,"access_url":access_url,"outline_key_id":key_id,"expire_at":expire_at,"quota_bytes":quota_bytes}
+    return _idempotent_write(request,identity,"outline:provision",payload.model_dump(),execute)
+
+class APIWireGuardProvision(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    dns:str=Field(default="1.1.1.1",max_length=64)
+    mtu:int=Field(default=1280,ge=576,le=1500)
+    keepalive:int=Field(default=15,ge=0,le=3600)
+    allowed_ips:str=Field(default="0.0.0.0/0",max_length=255)
+
+@app.post("/api/v1/provision/wireguard")
+def api_v1_provision_wireguard(payload:APIWireGuardProvision,request:Request):
+    identity=require_write_api_scope(request,"wireguard:provision")
+    def execute():
+        try:
+            endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
+            result=protocol_ops.create_wireguard_peer(payload.name,endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
+            artifact_save("wireguard",payload.name,payload.name,"wireguard",access_ops.wireguard_payload(payload.name,result["config"],result.get("address")),{
+                "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
+                "endpoint":result.get("endpoint",""),"endpoint_mode":payload.endpoint_mode,"source":"write-api-v1"
+            })
+        except protocol_ops.ProtocolError as exc:
+            raise HTTPException(400,str(exc))
+        audit(f"api:{identity['name']}","api_wireguard_provision",payload.name,ip=str(_write_api_client_ip(request)))
+        return {"ok":True,"kind":"wireguard","name":payload.name,"config":result["config"],"address":result.get("address"),"public_key":result.get("public_key")}
+    return _idempotent_write(request,identity,"wireguard:provision",payload.model_dump(),execute)
+
+class APIOpenVPNProvision(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    port:int=Field(default=1194,ge=1,le=65535)
+    proto:str="udp"
+
+@app.post("/api/v1/provision/openvpn")
+def api_v1_provision_openvpn(payload:APIOpenVPNProvision,request:Request):
+    identity=require_write_api_scope(request,"openvpn:provision")
+    def execute():
+        try:
+            endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
+            result=protocol_ops.create_openvpn_client(payload.name,endpoint,payload.port,payload.proto)
+            artifact_save("openvpn",payload.name,payload.name,"openvpn",access_ops.openvpn_payload(payload.name,result["config"]),{
+                "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,"port":payload.port,"transport":payload.proto,"source":"write-api-v1"
+            })
+        except protocol_ops.ProtocolError as exc:
+            raise HTTPException(400,str(exc))
+        audit(f"api:{identity['name']}","api_openvpn_provision",payload.name,ip=str(_write_api_client_ip(request)))
+        return {"ok":True,"kind":"openvpn","name":payload.name,"config":result["config"],"port":payload.port,"proto":payload.proto}
+    return _idempotent_write(request,identity,"openvpn:provision",payload.model_dump(),execute)
+
+class APIClientPolicyUpdate(BaseModel):
+    quota_gb:float|None=Field(default=None,ge=0,le=100000)
+    expire_days:int|None=Field(default=None,ge=0,le=3650)
+    ip_limit:int|None=Field(default=None,ge=1,le=50)
+    reset_days:int|None=Field(default=None,ge=0,le=3650)
+    enabled:bool|None=None
+
+@app.patch("/api/v1/protocol-clients/{client_id}")
+def api_v1_protocol_client_update(client_id:int,payload:APIClientPolicyUpdate,request:Request):
+    identity=require_write_api_scope(request,"protocols:write")
+    def execute():
+        row=get_protocol_client(client_id)
+        if not row: raise HTTPException(404,"client not found")
+        quota_bytes=int(payload.quota_gb*1024*1024*1024) if payload.quota_gb is not None else None
+        expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days is not None and payload.expire_days>0 else (0 if payload.expire_days==0 else None)
+        if payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
+            if row.get("engine")=="xray":
+                try:
+                    if payload.enabled:
+                        protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+                    else:
+                        protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
+                except protocol_ops.ProtocolError as exc:
+                    raise HTTPException(400,str(exc))
+            elif row.get("engine")=="outline":
+                try:
+                    if payload.enabled:
+                        # Reissue is explicit; suspended Outline keys cannot be silently recreated.
+                        raise HTTPException(409,"Outline resume requires explicit reissue")
+                    integration_ops.outline_delete_key(str(row.get("inbound_tag") or ""))
+                except integration_ops.IntegrationError as exc:
+                    raise HTTPException(400,str(exc))
+        update_protocol_client_state(client_id,payload.enabled,quota_bytes,expire_at,payload.ip_limit,payload.reset_days)
+        audit(f"api:{identity['name']}","api_protocol_client_update",str(client_id),json.dumps(payload.model_dump(),separators=(",",":")),str(_write_api_client_ip(request)))
+        return {"ok":True,"client_id":client_id}
+    return _idempotent_write(request,identity,f"protocols:write:{client_id}",payload.model_dump(),execute)
+
+@app.get("/api/v1/access/{kind}/{key}")
+def api_v1_access_get(kind:str,key:str,request:Request):
+    identity=require_api_scope(request,"credentials:read")
+    if kind not in {"xray","outline","wireguard","openvpn"}:
+        raise HTTPException(404,"unsupported access kind")
+    payload,artifact=_resolve_access_payload(kind,key,request)
+    current=_current_delivery_payload(kind,key,payload,request)
+    audit(f"api:{identity['name']}","api_access_read",f"{kind}:{key}",ip=str(_write_api_client_ip(request)))
+    return {
+        "kind":kind,"key":key,"summary":current.get("summary") or {},
+        "primary_text":current.get("primary_text") or current.get("share_text") or "",
+        "files":{name:base64.b64encode(data if isinstance(data,bytes) else str(data).encode()).decode("ascii") for name,data in (current.get("files") or {}).items()},
+    }
+
 class APITokenCreate(BaseModel):
     name:str=Field(min_length=1,max_length=80)
     scopes:list[str]=Field(default_factory=lambda:["status:read"])
@@ -3401,7 +3665,10 @@ def admin_tokens(request:Request):
 def admin_token_create(payload:APITokenCreate,request:Request):
     actor=require_local_admin(request)
     require_mutation(request)
-    allowed={"status:read","accounts:read","protocols:read","nodes:read"}
+    allowed={
+        "status:read","accounts:read","protocols:read","nodes:read","credentials:read",
+        "xray:provision","outline:provision","wireguard:provision","openvpn:provision","protocols:write"
+    }
     scopes=[x for x in payload.scopes if x in allowed]
     if not scopes:
         raise HTTPException(400,"at least one valid scope is required")

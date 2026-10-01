@@ -73,6 +73,19 @@ def init_db():
           created_at TEXT NOT NULL,
           last_used_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS api_idempotency (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          token_id INTEGER NOT NULL,
+          operation TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL,
+          request_hash TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          response_enc TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(token_id,operation,idempotency_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_idempotency_created_at ON api_idempotency(created_at);
         CREATE TABLE IF NOT EXISTS nodes (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -337,6 +350,43 @@ def verify_api_token(token,required_scope=None):
             return None
         con.execute("UPDATE api_tokens SET last_used_at=? WHERE id=?",(now(),row["id"]))
         return {"id":row["id"],"name":row["name"],"scopes":sorted(scopes)}
+
+def idempotency_get(token_id,operation,idempotency_key):
+    with connect() as con:
+        row=con.execute(
+            "SELECT * FROM api_idempotency WHERE token_id=? AND operation=? AND idempotency_key=?",
+            (int(token_id),str(operation),str(idempotency_key))
+        ).fetchone()
+        return dict(row) if row else None
+
+def idempotency_claim(token_id,operation,idempotency_key,request_hash):
+    ts=now()
+    try:
+        with connect() as con:
+            con.execute(
+                """INSERT INTO api_idempotency(token_id,operation,idempotency_key,request_hash,status,response_enc,created_at,updated_at)
+                   VALUES(?,?,?,?,?,'',?,?)""",
+                (int(token_id),str(operation),str(idempotency_key),str(request_hash),"pending",ts,ts)
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+def idempotency_complete(token_id,operation,idempotency_key,response_enc):
+    with connect() as con:
+        con.execute(
+            """UPDATE api_idempotency SET status='complete',response_enc=?,updated_at=?
+               WHERE token_id=? AND operation=? AND idempotency_key=?""",
+            (str(response_enc),now(),int(token_id),str(operation),str(idempotency_key))
+        )
+
+def idempotency_fail(token_id,operation,idempotency_key):
+    with connect() as con:
+        con.execute(
+            """UPDATE api_idempotency SET status='failed',updated_at=?
+               WHERE token_id=? AND operation=? AND idempotency_key=?""",
+            (now(),int(token_id),str(operation),str(idempotency_key))
+        )
 
 def create_node(name):
     token="mn_"+secrets.token_urlsafe(32)
