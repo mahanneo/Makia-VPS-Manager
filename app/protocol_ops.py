@@ -1778,6 +1778,19 @@ def _openvpn_server_runtime():
                         break
     return result
 
+def _wait_openvpn_server_runtime(timeout=15.0, interval=0.25):
+    """Wait for systemd activation and the OpenVPN listener to become observable."""
+    deadline=time.monotonic()+max(0.0,float(timeout))
+    last={}
+    while True:
+        last=_openvpn_server_runtime()
+        if last.get("service_active") and last.get("listener"):
+            return last
+        if time.monotonic()>=deadline:
+            return last
+        time.sleep(max(0.05,float(interval)))
+
+
 def _openvpn_forward_scripts(uplink):
     """Permit tunnel routing even when the host firewall denies forwarded packets."""
     up=OVPN_DIR/"makia-up.sh"
@@ -2684,7 +2697,7 @@ def ensure_full_protocol_stack():
         bootstrap_openvpn(ov_port,"udp")
     elif not ov.get("service_active"):
         repair_openvpn_ipv4_runtime()
-    ov_runtime=_openvpn_server_runtime()
+    ov_runtime=_wait_openvpn_server_runtime()
     if not ov_runtime.get("service_active") or not ov_runtime.get("listener"):
         raise ProtocolError("OpenVPN full-stack provisioning did not reach READY state")
     result["openvpn"]=openvpn_status()
