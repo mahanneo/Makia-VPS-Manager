@@ -168,7 +168,7 @@ python3 -m venv "$APP/.venv"
 
 (
   cd "$APP"
-  MAKIA_INITIAL_ADMIN_PASSWORD="$ADMIN_PASSWORD"   MAKIA_DATA_DIR="$DATA"   "$APP/.venv/bin/python" -c 'from app.db import init_db; init_db()'
+  MAKIA_INITIAL_ADMIN_PASSWORD="$ADMIN_PASSWORD"   MAKIA_DATA_DIR="$DATA"   "$APP/.venv/bin/python" -c 'from app.db import init_db; from app.security import ensure_secret; init_db(); ensure_secret()'
 )
 
 systemctl disable --now dragon-vps-manager 2>/dev/null || true
