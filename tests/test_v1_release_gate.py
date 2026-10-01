@@ -212,8 +212,8 @@ def test_clean_installer_bootstrap_contract():
     install=(ROOT/"scripts/install.sh").read_text(encoding="utf-8")
 
     # The public bootstrap must accept both branch names and exact frozen SHAs.
-    assert "https://codeload.github.com/\${REPO}/tar.gz/\${REF}" in bootstrap
-    assert "refs/heads/\${REF}" not in bootstrap
+    assert "https://codeload.github.com/${REPO}/tar.gz/${REF}" in bootstrap
+    assert "refs/heads/${REF}" not in bootstrap
     assert "--retry 5 --retry-all-errors" in bootstrap
     assert 'MAKIA_INSTALL_SOURCE_REF="$REF"' in bootstrap
 
