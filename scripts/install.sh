@@ -65,7 +65,7 @@ apt_retry update
 apt_retry install -y \
   python3 python3-venv python3-pip nginx curl ca-certificates tar gzip unzip \
   iproute2 openssl fail2ban \
-  wireguard openvpn easy-rsa iptables stunnel4 \
+  wireguard-tools openvpn easy-rsa iptables stunnel4 \
   certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
 
 # A failed/partial install can already contain the administrator row. Never
