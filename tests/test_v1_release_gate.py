@@ -205,3 +205,12 @@ def test_v140_uat_artifact_provenance_contract():
         assert "BUILD-INFO.txt" in workflow
         assert "GITHUB_SHA" in workflow
         assert "GITHUB_RUN_ID" in workflow
+
+
+def test_clean_installer_bootstraps_python_before_first_python3_use():
+    install=(ROOT/"scripts/install.sh").read_text(encoding="utf-8")
+    bootstrap='if ! command -v python3 >/dev/null 2>&1; then'
+    password='ADMIN_PASSWORD="$(python3 - <<\'PY\''
+    assert bootstrap in install
+    assert 'apt-get install -y python3 ca-certificates' in install
+    assert install.index(bootstrap) < install.index(password)
