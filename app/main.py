@@ -3388,6 +3388,233 @@ def api_v1_nodes(request:Request):
     require_api_scope(request,"nodes:read")
     return list_nodes()
 
+
+class MahiNetProvisionBase(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    endpoint:str=Field(min_length=1,max_length=255)
+    endpoint_mode:str="auto"
+    idempotency_key:str=Field(min_length=8,max_length=120)
+
+def _mahinet_idem_table():
+    with connect() as con:
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS api_idempotency(
+          idem_key TEXT PRIMARY KEY,
+          operation TEXT NOT NULL,
+          response_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+        """)
+
+def _mahinet_idem_get(key:str,operation:str):
+    _mahinet_idem_table()
+    with connect() as con:
+        row=con.execute("SELECT response_json FROM api_idempotency WHERE idem_key=? AND operation=?",(key,operation)).fetchone()
+    if not row:
+        return None
+    try:
+        return json.loads(row["response_json"])
+    except Exception:
+        return None
+
+def _mahinet_idem_put(key:str,operation:str,payload:dict):
+    _mahinet_idem_table()
+    with connect() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO api_idempotency(idem_key,operation,response_json,created_at) VALUES(?,?,?,?)",
+            (key,operation,json.dumps(payload,separators=(",",":")),int(time.time()))
+        )
+
+class MahiNetXrayProvision(MahiNetProvisionBase):
+    inbound_tag:str=Field(min_length=1,max_length=120)
+    credential:str=Field(default="",max_length=128)
+    flow:str=""
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    reset_days:int=Field(default=0,ge=0,le=3650)
+
+@app.post("/api/v1/provision/xray")
+def api_v1_provision_xray(payload:MahiNetXrayProvision,request:Request):
+    actor=require_api_scope(request,"provision:xray")
+    op="provision:xray"
+    cached=_mahinet_idem_get(payload.idempotency_key,op)
+    if cached is not None:
+        return {**cached,"idempotent_replay":True}
+    if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
+        raise HTTPException(409,"client name already exists")
+    result=None
+    client_id=None
+    try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode)
+        result=protocol_ops.add_xray_client_to_inbound(payload.inbound_tag,payload.name,endpoint,payload.credential,payload.flow)
+        quota_bytes=int(payload.quota_gb*1024*1024*1024)
+        expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+        client_id=create_protocol_client(
+            payload.name,"xray",result["protocol"],result["tag"],result["credential"],result["share_link"],
+            quota_bytes,expire_at,payload.ip_limit,payload.reset_days
+        )
+        row=get_protocol_client(client_id)
+        sub_id=(row or {}).get("subscription_id") or ""
+        origin=public_origin(request)
+        settings=operator_settings_snapshot()["subscription"]
+        delivery=access_ops.xray_payload(
+            payload.name,result["protocol"],result["share_link"],
+            f"{origin}/sub/{sub_id}?format={settings['default_format']}" if sub_id and settings["enabled"] else "",
+            f"{origin}/client/{sub_id}" if sub_id and settings["client_page_enabled"] else ""
+        )
+        artifact_id=artifact_save("xray",str(client_id),payload.name,result["protocol"],delivery,{
+            "client_id":client_id,"inbound_tag":result["tag"],"subscription_id":sub_id,
+            "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,"builder":"mahinet-api-v1"
+        })
+        out={"ok":True,"kind":"xray","client_id":client_id,"artifact_id":artifact_id,"subscription_id":sub_id,
+             "share_link":result["share_link"],"protocol":result["protocol"],"inbound_tag":result["tag"],
+             "quota_bytes":quota_bytes,"expire_at":expire_at}
+        _mahinet_idem_put(payload.idempotency_key,op,out)
+        audit(actor,"api_v1_provision_xray",str(client_id),f"name={payload.name}",ip=ip(request))
+        return out
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    except Exception:
+        if result and result.get("tag"):
+            try: protocol_ops.remove_xray_client_from_inbound(result["tag"],payload.name)
+            except Exception: pass
+        if client_id is not None:
+            try:
+                delete_access_artifact_by_key("xray",str(client_id))
+                delete_protocol_client(client_id)
+            except Exception: pass
+        raise
+
+class MahiNetOutlineProvision(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    idempotency_key:str=Field(min_length=8,max_length=120)
+
+@app.post("/api/v1/provision/outline")
+def api_v1_provision_outline(payload:MahiNetOutlineProvision,request:Request):
+    actor=require_api_scope(request,"provision:outline")
+    op="provision:outline"
+    cached=_mahinet_idem_get(payload.idempotency_key,op)
+    if cached is not None:
+        return {**cached,"idempotent_replay":True}
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+    created=None
+    client_id=None
+    try:
+        created=integration_ops.outline_create_key(payload.name,quota_bytes)
+        key_id=str(created.get("id") or "")
+        access_url=str(created.get("accessUrl") or "")
+        client_id=create_protocol_client(payload.name,"outline","outline",key_id,key_id,access_url,quota_bytes,expire_at,1,0)
+        delivery=access_ops.outline_payload(payload.name,access_url,key_id,quota_bytes)
+        artifact_id=artifact_save("outline",str(client_id),payload.name,"outline",delivery,{"client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes})
+        out={"ok":True,"kind":"outline","client_id":client_id,"artifact_id":artifact_id,"key_id":key_id,
+             "access_url":access_url,"quota_bytes":quota_bytes,"expire_at":expire_at}
+        _mahinet_idem_put(payload.idempotency_key,op,out)
+        audit(actor,"api_v1_provision_outline",key_id,f"name={payload.name}",ip=ip(request))
+        return out
+    except Exception as exc:
+        if created and created.get("id"):
+            try: integration_ops.outline_delete_key(created["id"])
+            except Exception: pass
+        if client_id:
+            try: delete_protocol_client(client_id)
+            except Exception: pass
+        raise HTTPException(400,str(exc))
+
+class MahiNetWireGuardProvision(MahiNetProvisionBase):
+    dns:str=Field(default="1.1.1.1",max_length=64)
+    mtu:int=Field(default=1280,ge=576,le=1500)
+    keepalive:int=Field(default=15,ge=0,le=3600)
+    allowed_ips:str=Field(default="0.0.0.0/0",max_length=255)
+
+@app.post("/api/v1/provision/wireguard")
+def api_v1_provision_wireguard(payload:MahiNetWireGuardProvision,request:Request):
+    actor=require_api_scope(request,"provision:wireguard")
+    op="provision:wireguard"
+    cached=_mahinet_idem_get(payload.idempotency_key,op)
+    if cached is not None:
+        return {**cached,"idempotent_replay":True}
+    try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
+        result=protocol_ops.create_wireguard_peer(payload.name,endpoint,dns=payload.dns,mtu=payload.mtu,keepalive=payload.keepalive,allowed_ips=payload.allowed_ips)
+        delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
+        artifact_id=artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
+            "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
+            "endpoint":result.get("endpoint",""),"endpoint_mode":payload.endpoint_mode,"port":result.get("port")
+        })
+        out={"ok":True,"kind":"wireguard","artifact_id":artifact_id,"public_key":result.get("public_key",""),
+             "address":result.get("address",""),"config":result.get("config",""),"endpoint":result.get("endpoint","")}
+        _mahinet_idem_put(payload.idempotency_key,op,out)
+        audit(actor,"api_v1_provision_wireguard",payload.name,ip=ip(request))
+        return out
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+
+class MahiNetOpenVPNProvision(MahiNetProvisionBase):
+    port:int=Field(default=1194,ge=1,le=65535)
+    proto:str="udp"
+
+@app.post("/api/v1/provision/openvpn")
+def api_v1_provision_openvpn(payload:MahiNetOpenVPNProvision,request:Request):
+    actor=require_api_scope(request,"provision:openvpn")
+    op="provision:openvpn"
+    cached=_mahinet_idem_get(payload.idempotency_key,op)
+    if cached is not None:
+        return {**cached,"idempotent_replay":True}
+    try:
+        endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint,payload.endpoint_mode,direct=True)
+        result=protocol_ops.create_openvpn_client(payload.name,endpoint,payload.port,payload.proto)
+        delivery=access_ops.openvpn_payload(payload.name,result["config"])
+        artifact_id=artifact_save("openvpn",payload.name,payload.name,"openvpn",delivery,{
+            "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,"port":payload.port,"transport":payload.proto
+        })
+        out={"ok":True,"kind":"openvpn","artifact_id":artifact_id,"config":result.get("config",""),"endpoint":endpoint,
+             "port":payload.port,"proto":payload.proto}
+        _mahinet_idem_put(payload.idempotency_key,op,out)
+        audit(actor,"api_v1_provision_openvpn",payload.name,ip=ip(request))
+        return out
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+
+class MahiNetServicePolicy(BaseModel):
+    enabled:bool|None=None
+    quota_gb:float|None=Field(default=None,ge=0,le=100000)
+    expire_days:int|None=Field(default=None,ge=0,le=3650)
+    ip_limit:int|None=Field(default=None,ge=1,le=50)
+    reset_days:int|None=Field(default=None,ge=0,le=3650)
+    idempotency_key:str=Field(min_length=8,max_length=120)
+
+@app.post("/api/v1/service/{client_id}/policy")
+def api_v1_service_policy(client_id:int,payload:MahiNetServicePolicy,request:Request):
+    actor=require_api_scope(request,"service:manage")
+    op=f"service:policy:{client_id}"
+    cached=_mahinet_idem_get(payload.idempotency_key,op)
+    if cached is not None:
+        return {**cached,"idempotent_replay":True}
+    row=get_protocol_client(client_id)
+    if not row:
+        raise HTTPException(404,"client not found")
+    quota_bytes=int(payload.quota_gb*1024*1024*1024) if payload.quota_gb is not None else None
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days is not None and payload.expire_days>0 else (0 if payload.expire_days==0 else None)
+    if payload.enabled is not None and bool(payload.enabled)!=bool(row.get("enabled")):
+        if row.get("engine")=="xray":
+            try:
+                if payload.enabled:
+                    protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+                else:
+                    protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
+            except protocol_ops.ProtocolError as exc:
+                raise HTTPException(400,str(exc))
+    update_protocol_client_state(client_id,payload.enabled,quota_bytes,expire_at,payload.ip_limit,payload.reset_days)
+    out={"ok":True,"client_id":client_id}
+    _mahinet_idem_put(payload.idempotency_key,op,out)
+    audit(actor,"api_v1_service_policy",str(client_id),ip=ip(request))
+    return out
+
+
 class APITokenCreate(BaseModel):
     name:str=Field(min_length=1,max_length=80)
     scopes:list[str]=Field(default_factory=lambda:["status:read"])
@@ -3401,7 +3628,7 @@ def admin_tokens(request:Request):
 def admin_token_create(payload:APITokenCreate,request:Request):
     actor=require_local_admin(request)
     require_mutation(request)
-    allowed={"status:read","accounts:read","protocols:read","nodes:read"}
+    allowed={"status:read","accounts:read","protocols:read","nodes:read","provision:xray","provision:outline","provision:wireguard","provision:openvpn","service:manage"}
     scopes=[x for x in payload.scopes if x in allowed]
     if not scopes:
         raise HTTPException(400,"at least one valid scope is required")
