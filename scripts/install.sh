@@ -290,14 +290,16 @@ echo "Running full-stack installation smoke gate..."
 
 SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
 PANEL_URL="http://${SERVER_IP:-SERVER_IP}/"
-cat >"$CREDENTIAL_FILE" <<EOF
+if [[ "$NEW_ADMIN_BOOTSTRAP" == "1" ]]; then
+  cat >"$CREDENTIAL_FILE" <<EOF
 Makia VPS Manager
 Panel: $PANEL_URL
 Username: admin
 Bootstrap password: $ADMIN_PASSWORD
 Credential file: $CREDENTIAL_FILE
 EOF
-chmod 0600 "$CREDENTIAL_FILE"
+  chmod 0600 "$CREDENTIAL_FILE"
+fi
 trap - ERR
 
 printf '\n'
@@ -306,11 +308,18 @@ printf '|                 MAKIA VPS MANAGER - INSTALL READY                |\n'
 printf '+------------------------------------------------------------------+\n'
 printf '| Panel    : %-53s |\n' "$PANEL_URL"
 printf '| Username : %-53s |\n' "admin"
-printf '| Password : %-53s |\n' "$ADMIN_PASSWORD"
-printf '+------------------------------------------------------------------+\n'
-printf '| Credentials saved (root-only): %-32s |\n' "$CREDENTIAL_FILE"
-printf '+------------------------------------------------------------------+\n'
-printf '\nIMPORTANT: save the password now, then change it after first login.\n'
+if [[ "$NEW_ADMIN_BOOTSTRAP" == "1" ]]; then
+  printf '| Password : %-53s |\n' "$ADMIN_PASSWORD"
+  printf '+------------------------------------------------------------------+\n'
+  printf '| Credentials saved (root-only): %-32s |\n' "$CREDENTIAL_FILE"
+  printf '+------------------------------------------------------------------+\n'
+  printf '\nIMPORTANT: save the password now, then change it after first login.\n'
+else
+  printf '| Password : %-53s |\n' "existing credential preserved"
+  printf '+------------------------------------------------------------------+\n'
+  printf '\nExisting administrator detected; its password was not changed.\n'
+  printf 'If needed, reset it explicitly with: sudo makia-reset-admin\n'
+fi
 printf 'For public exposure, configure Domain + HTTPS and review Security Center.\n'
 printf 'Protocol stack: Xray + WireGuard + OpenVPN are preinstalled and bootstrapped.\n'
 printf 'Run: makia-doctor   for host diagnostics.\n\n'
