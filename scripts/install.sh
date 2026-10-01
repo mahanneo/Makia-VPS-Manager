@@ -28,6 +28,15 @@ OLD_APP=/opt/dragon-vps-manager-ng
 DATA="$APP/data"
 ADMIN_PASSWORD="${MAKIA_INITIAL_ADMIN_PASSWORD:-${DRAGON_INITIAL_ADMIN_PASSWORD:-}}"
 
+# Bootstrap Python before it is used to generate the initial admin password.
+# Minimal Ubuntu images are not guaranteed to ship with python3 preinstalled.
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Bootstrapping Python 3 required by the installer..."
+  apt-get update
+  apt-get install -y python3 ca-certificates
+fi
+
 if [[ -z "$ADMIN_PASSWORD" ]]; then
   ADMIN_PASSWORD="$(python3 - <<'PY'
 import secrets
