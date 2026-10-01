@@ -222,7 +222,8 @@ def test_clean_installer_bootstrap_contract():
     packages='apt_retry install -y'
     assert packages in install
     assert "python3 python3-venv python3-pip" in install
-    assert "iproute2 iptables openssl" in install
+    for dependency in ("iproute2","iptables","openssl","wireguard","openvpn","easy-rsa","stunnel4"):
+        assert dependency in install
     assert install.index(packages) < install.index(password)
 
     # A rerun after a partial install must preserve the existing admin credential.
