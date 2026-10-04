@@ -244,6 +244,10 @@ systemctl enable --now makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
 systemctl enable --now makia-browser-gateway
+BROWSER_GATEWAY_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  ufw allow "${BROWSER_GATEWAY_PORT}/tcp" comment 'Makia Browser Gateway' >/dev/null 2>&1 || true
+fi
 systemctl enable --now makia-scheduled-backup.timer
 systemctl enable --now makia-ops-monitor.timer
 
