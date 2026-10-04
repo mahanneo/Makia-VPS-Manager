@@ -466,3 +466,156 @@ def client_service_worker(request:Request):
     response.headers["Cache-Control"]="no-cache"
     response.headers["Service-Worker-Allowed"]="/client/"
     return _client_security_headers(response)
+
+
+# Makia Browser VPN extension API.
+# The extension uses opaque Client sessions and one-time connector tickets; VPN
+# credentials are never returned to extension JavaScript.
+MAKIA_BROWSER_EXTENSION_ID="jgpmmenelldgfmjfnonhjaaaccfeniji"
+MAKIA_BROWSER_EXTENSION_ORIGIN="chrome-extension://"+MAKIA_BROWSER_EXTENSION_ID
+
+def _extension_headers(request):
+    if request.headers.get("x-makia-extension")!="1":
+        raise HTTPException(status_code=403,detail="invalid Makia extension request")
+    origin=(request.headers.get("origin") or "").rstrip("/")
+    if origin and origin!=MAKIA_BROWSER_EXTENSION_ORIGIN:
+        raise HTTPException(status_code=403,detail="invalid extension origin")
+
+def _extension_response(request,payload,status_code=200):
+    response=JSONResponse(payload,status_code=status_code)
+    origin=(request.headers.get("origin") or "").rstrip("/")
+    if origin==MAKIA_BROWSER_EXTENSION_ORIGIN:
+        response.headers["Access-Control-Allow-Origin"]=MAKIA_BROWSER_EXTENSION_ORIGIN
+        response.headers["Vary"]="Origin"
+    response.headers["Cache-Control"]="no-store"
+    return _client_security_headers(response)
+
+def _extension_bearer(request):
+    _require_enabled()
+    _extension_headers(request)
+    raw=(request.headers.get("authorization") or "").strip()
+    if not raw.lower().startswith("bearer "):
+        raise HTTPException(status_code=401,detail="extension authentication required")
+    session=client_store.session_by_token(raw[7:].strip(),_ip(request))
+    if not session:
+        raise HTTPException(status_code=401,detail="extension session is invalid or expired")
+    return session,raw[7:].strip()
+
+@router.options("/client/extension/{rest:path}")
+def client_extension_options(rest:str,request:Request):
+    origin=(request.headers.get("origin") or "").rstrip("/")
+    if origin!=MAKIA_BROWSER_EXTENSION_ORIGIN:
+        raise HTTPException(status_code=403,detail="invalid extension origin")
+    response=Response(status_code=204)
+    response.headers["Access-Control-Allow-Origin"]=MAKIA_BROWSER_EXTENSION_ORIGIN
+    response.headers["Access-Control-Allow-Headers"]="authorization,content-type,x-makia-extension"
+    response.headers["Access-Control-Allow-Methods"]="GET,POST,OPTIONS"
+    response.headers["Access-Control-Max-Age"]="600"
+    response.headers["Vary"]="Origin"
+    return response
+
+@router.post("/client/extension/login")
+async def client_extension_login(request:Request):
+    _require_enabled()
+    _extension_headers(request)
+    try:
+        body=await request.json()
+    except Exception:
+        raise HTTPException(status_code=400,detail="invalid JSON")
+    username=str(body.get("username") or "").strip()
+    password=str(body.get("password") or "")
+    device_key=str(body.get("device_key") or "").strip()
+    device_label=str(body.get("device_label") or "Chrome / Edge · Makia Browser VPN")[:120]
+    remote_ip=_ip(request) or "unknown"
+    rate_key="client-extension:"+remote_ip
+    now_ts=int(time.time())
+    state=login_rate_state(rate_key,now_ts)
+    if int(state.get("blocked_until") or 0)>now_ts:
+        raise HTTPException(status_code=429,detail="too many failed login attempts")
+    account=client_store.verify_account_password(username,password)
+    if not account:
+        record_login_failure(rate_key,now_ts,max_failures=6,window_seconds=900,block_seconds=900)
+        audit("client:"+str(username or "unknown"),"browser_extension_login_failed",ip=remote_ip)
+        raise HTTPException(status_code=401,detail="نام کاربری یا رمز عبور صحیح نیست.")
+    ok,reason=client_store.account_available(account,now_ts)
+    if not ok:
+        raise HTTPException(status_code=403,detail="client account unavailable: "+reason)
+    try:
+        device,new_device_key=client_store.register_or_get_device(
+            account["id"],device_key,label=device_label,platform="browser-extension",
+            user_agent=request.headers.get("user-agent",""),ip=remote_ip,
+        )
+        token,expires_at=client_store.create_session(
+            account["id"],device["id"],remote_ip,CLIENT_SESSION_TTL
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    clear_login_failures(rate_key)
+    snapshot=client_store.account_snapshot(account["id"]) or {}
+    snapshot["current_device_id"]=device["id"]
+    audit("client:"+account["username"],"browser_extension_login_success",target=str(device["id"]),ip=remote_ip)
+    return _extension_response(request,{
+        "token":token,
+        "expires_at":expires_at,
+        "device_key":new_device_key or "",
+        "account":snapshot,
+        "extension_id":MAKIA_BROWSER_EXTENSION_ID,
+    })
+
+@router.post("/client/extension/logout")
+def client_extension_logout(request:Request):
+    session,token=_extension_bearer(request)
+    client_store.revoke_session(token)
+    audit("client:"+session["username"],"browser_extension_logout",target=str(session["device_id"]),ip=_ip(request))
+    return _extension_response(request,{"ok":True})
+
+@router.get("/client/extension/me")
+def client_extension_me(request:Request):
+    session,_=_extension_bearer(request)
+    snapshot=client_store.account_snapshot(session["account_id"])
+    if not snapshot:
+        raise HTTPException(status_code=404,detail="account not found")
+    snapshot["current_device_id"]=session["device_id"]
+    snapshot["session_expires_at"]=session["expires_at"]
+    return _extension_response(request,snapshot)
+
+@router.get("/client/extension/protocols")
+def client_extension_protocols(request:Request):
+    session,_=_extension_bearer(request)
+    return _extension_response(request,{"items":client_store.client_access_list(session["account_id"])})
+
+@router.post("/client/extension/connect/{delivery_kind}/{delivery_id}/ticket")
+def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
+    session,_=_extension_bearer(request)
+    kind=str(delivery_kind or "").lower()
+    try:
+        if kind=="protocol":
+            item=client_store.protocol_delivery(session["account_id"],delivery_id)
+        elif kind=="artifact":
+            item=client_store.artifact_delivery(session["account_id"],delivery_id)
+        else:
+            raise ValueError("unsupported delivery kind")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail=str(exc))
+    engine=str(item.get("engine") or "").lower()
+    if engine in {"wireguard","openvpn"}:
+        raise HTTPException(status_code=409,detail="This profile requires Full Device / Import mode")
+    ticket=client_connector.issue_ticket(
+        session["account_id"],session["device_id"],kind,delivery_id
+    )
+    try:
+        origin=_public_origin(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc))
+    parsed=urllib.parse.urlparse(origin)
+    if parsed.scheme!="https" and parsed.hostname not in {"127.0.0.1","localhost"}:
+        raise HTTPException(status_code=503,detail="Browser VPN requires a public HTTPS Makia origin")
+    audit("client:"+session["username"],"browser_extension_ticket",target=str(delivery_id),detail=kind,ip=_ip(request))
+    return _extension_response(request,{
+        "ticket":ticket["ticket"],
+        "expires_at":ticket["expires_at"],
+        "controller":origin,
+        "mode":"browser",
+    })
