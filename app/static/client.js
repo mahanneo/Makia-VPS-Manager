@@ -25,6 +25,35 @@ function clearSensitiveDelivery(){clearSensitiveDeliveryState(true)}
 function clearSensitiveDeliveryState(close=true){currentDelivery=null;const value=$("#deliveryValue");if(value)value.value="";const qr=$("#deliveryQr");if(qr)qr.removeAttribute("src");const wrap=$("#deliveryQrWrap");if(wrap)wrap.hidden=true;const dialog=$("#deliveryDialog");if(close&&dialog?.open)dialog.close()}
 function updateNetwork(){const el=$("#networkState");if(!el)return;el.textContent=navigator.onLine?"آنلاین":"آفلاین";el.classList.toggle("is-offline",!navigator.onLine)}
 document.addEventListener("click",async e=>{const direct=e.target.closest("[data-direct]");if(direct){direct.disabled=true;try{const data=await api("/client/api/connect/"+direct.dataset.directKind+"/"+direct.dataset.direct+"/ticket",{method:"POST"});location.href=data.launch_url;setTimeout(()=>{if(document.visibilityState==="visible"){$("#installDialogBody").innerHTML="<strong>Makia Connector باز نشد؟</strong><p>برنامه Makia Connector را روی دستگاه نصب کنید و دوباره «اتصال مستقیم» را بزنید.</p>";$("#installDialog").showModal()}},1600)}catch(err){alert(err.message)}finally{setTimeout(()=>direct.disabled=false,1800)}return}const delivery=e.target.closest("[data-delivery]");if(delivery){delivery.disabled=true;try{const kind=delivery.dataset.deliveryKind==="artifact"?"artifacts":"protocols";renderDelivery(await api("/client/api/"+kind+"/"+delivery.dataset.delivery+"/delivery",{method:"POST"}))}catch(err){alert(err.message)}finally{delivery.disabled=false}return}const revoke=e.target.closest("[data-revoke]");if(revoke){if(!confirm("این دستگاه غیرفعال شود؟"))return;try{await api("/client/api/devices/"+revoke.dataset.revoke+"/revoke",{method:"POST"});await load()}catch(err){alert(err.message)}}});
+$("#browserPair")?.addEventListener("click",async()=>{
+  const button=$("#browserPair");
+  button.disabled=true;
+  try{
+    const pair=await api("/client/api/browser/pair-ticket",{method:"POST"});
+    $("#browserPairController").value=pair.controller||"";
+    $("#browserPairCode").value=pair.code||"";
+    $("#browserPairExpiry").textContent="اعتبار کد: "+Math.max(1,Math.floor(Number(pair.ttl||300)/60))+" دقیقه";
+    $("#browserPairDialog").showModal();
+  }catch(err){alert(err.message)}
+  finally{button.disabled=false}
+});
+$("#closeBrowserPair")?.addEventListener("click",()=>{
+  $("#browserPairCode").value="";
+  $("#browserPairController").value="";
+  $("#browserPairDialog").close();
+});
+$("#browserPairDialog")?.addEventListener("close",()=>{
+  $("#browserPairCode").value="";
+  $("#browserPairController").value="";
+});
+$("#copyBrowserPair")?.addEventListener("click",async()=>{
+  const code=$("#browserPairCode").value;
+  if(!code)return;
+  try{await navigator.clipboard.writeText(code)}
+  catch{$("#browserPairCode").select();document.execCommand("copy")}
+  $("#copyBrowserPair").textContent="کپی شد";
+  setTimeout(()=>$("#copyBrowserPair").textContent="کپی Pair Code",1200);
+});
 $("#closeDelivery")?.addEventListener("click",()=>clearSensitiveDelivery());$("#deliveryDialog")?.addEventListener("close",()=>clearSensitiveDeliveryState(false));$("#closeInstall")?.addEventListener("click",()=>$("#installDialog").close());
 $("#copyDelivery")?.addEventListener("click",async()=>{const v=$("#deliveryValue").value;if(!v)return;try{await navigator.clipboard.writeText(v)}catch{$("#deliveryValue").select();document.execCommand("copy")}$("#copyDelivery").textContent="کپی شد";setTimeout(()=>$("#copyDelivery").textContent="کپی اطلاعات اتصال",1200)});
 $("#downloadDelivery")?.addEventListener("click",()=>{if(currentDelivery)downloadBase64(currentDelivery.native_filename,currentDelivery.native_base64)});$("#openDelivery")?.addEventListener("click",()=>{if(currentDelivery&&canDeepOpen(currentDelivery.share_link))location.href=currentDelivery.share_link});$("#refreshClient")?.addEventListener("click",load);$("#disconnectDirect")?.addEventListener("click",()=>{location.href="makia://disconnect"});
