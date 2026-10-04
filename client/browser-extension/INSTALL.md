@@ -33,5 +33,5 @@ The Windows installer allowlists this ID for Native Messaging. When the extensio
 - Pair codes are one-time and short-lived.
 - VPN delivery secrets never enter extension storage.
 - The native Client session token is stored by Makia Browser Host encrypted with Windows DPAPI.
-- The extension requests only nativeMessaging and proxy permissions.
+- The extension requests only nativeMessaging, proxy and privacy permissions. The privacy permission is used only to disable non-proxied WebRTC UDP while Browser Only is active, then released on disconnect.
 - There are no content scripts, host permissions, cookies permission, remote JavaScript, wildcard Native Messaging origins or generic shell commands.
