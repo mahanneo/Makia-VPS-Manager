@@ -1,4 +1,4 @@
-Makia Client Connector 1.4.1 — Windows + Browser VPN UAT
+Makia Client Connector 1.4.2 — Windows + Browser VPN UAT
 
 Recommended install:
 1. Extract the GitHub artifact ZIP once.
@@ -23,3 +23,10 @@ Uninstall:
 Double-click Uninstall-Makia.cmd.
 
 This package does not rotate VPS credentials and does not restart production VPN services.
+
+Browser VPN repair:
+- Double-click Repair-Makia-Browser.cmd.
+- Approve the Administrator prompt.
+- The repair registers the Native Messaging host for Chrome and Edge at user + machine scope and runs a self-test.
+- Close every Chrome/Edge window and reopen the browser.
+- Run Check-Makia-Browser.ps1 if you need a diagnostic report.

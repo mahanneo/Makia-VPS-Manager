@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_browser_extension_manifest_contract():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert manifest["version"]=="1.4.1"
+    assert manifest["version"]=="1.4.2"
     assert "nativeMessaging" in manifest["permissions"]
     assert "proxy" in manifest["permissions"]
     assert manifest["optional_host_permissions"]==["https://*/*"]
@@ -31,3 +31,18 @@ def test_extension_api_never_returns_delivery_secret():
     block=source.split('@router.post("/client/extension/connect/{delivery_kind}/{delivery_id}/ticket")',1)[1]
     assert '"ticket":ticket["ticket"]' in block
     assert '"share_link"' not in block.split("\n@router.",1)[0]
+
+
+def test_windows_installer_has_machine_and_user_native_host_registration():
+    source=(ROOT/"client/windows/install.ps1").read_text(encoding="utf-8")
+    assert "HKCU:\\Software\\Google\\Chrome\\NativeMessagingHosts" in source
+    assert "HKLM:\\Software\\Google\\Chrome\\NativeMessagingHosts" in source
+    assert "HKLM:\\Software\\Microsoft\\Edge\\NativeMessagingHosts" in source
+    assert "WOW6432Node" in source
+    assert "--self-test" in source
+    assert "jgpmmenelldgfmjfnonhjaaaccfeniji" in source
+
+
+def test_browser_repair_tools_are_packaged_sources():
+    assert (ROOT/"client/windows/Repair-Makia-Browser.cmd").is_file()
+    assert (ROOT/"client/windows/Check-Makia-Browser.ps1").is_file()

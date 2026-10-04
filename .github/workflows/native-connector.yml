@@ -61,6 +61,8 @@ jobs:
           Copy-Item client\windows\Install-Makia.cmd package\Install-Makia.cmd
           Copy-Item client\windows\Uninstall-Makia.cmd package\Uninstall-Makia.cmd
           Copy-Item client\windows\INSTALL.txt package\INSTALL.txt
+          Copy-Item client\windows\Check-Makia-Browser.ps1 package\Check-Makia-Browser.ps1
+          Copy-Item client\windows\Repair-Makia-Browser.cmd package\Repair-Makia-Browser.cmd
           Copy-Item -Recurse client\browser-extension package\browser-extension
 
       - name: Smoke package and real installer
@@ -73,13 +75,13 @@ jobs:
           package\sing-box.exe version
 
           $manifest=Get-Content package\browser-extension\manifest.json -Raw | ConvertFrom-Json
-          if ($manifest.version -ne "1.4.1") { throw "browser extension version mismatch" }
+          if ($manifest.version -ne "1.4.2") { throw "browser extension version mismatch" }
           if ($manifest.permissions -notcontains "nativeMessaging" -or $manifest.permissions -notcontains "proxy") { throw "browser extension permissions missing" }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-installer-smoke"
           try {
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -Scope User
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 execution failed" }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
@@ -92,6 +94,10 @@ jobs:
             if (!(Test-Path $chromeHost) -or $chromeHost -ne $edgeHost) { throw "native messaging registration invalid" }
             $hostConfig=Get-Content $chromeHost -Raw | ConvertFrom-Json
             if ($hostConfig.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "extension id mismatch" }
+            $probe=(& $browser --self-test | ConvertFrom-Json)
+            if (!$probe.ok -or !$probe.sing_box) { throw "browser native host self-test failed" }
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\Check-Makia-Browser.ps1 -Quiet
+            if ($LASTEXITCODE -ne 0) { throw "browser registration diagnostic failed" }
 
             $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
             if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
@@ -104,6 +110,27 @@ jobs:
             Remove-Item -Recurse -Force "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
             $env:LOCALAPPDATA=$oldLocal
+          }
+
+          $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal=New-Object Security.Principal.WindowsPrincipal($identity)
+          if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -Scope Machine
+            if ($LASTEXITCODE -ne 0) { throw "machine-scope install failed" }
+            $machineHost=(Get-Item "HKLM:\Software\Google\Chrome\NativeMessagingHosts\com.makia.browser_host").GetValue("")
+            $machineEdge=(Get-Item "HKLM:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host").GetValue("")
+            if (!(Test-Path $machineHost) -or $machineHost -ne $machineEdge) { throw "machine native messaging registration invalid" }
+            $machineCfg=Get-Content $machineHost -Raw | ConvertFrom-Json
+            if ($machineCfg.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "machine extension id mismatch" }
+            $machineProbe=(& $machineCfg.path --self-test | ConvertFrom-Json)
+            if (!$machineProbe.ok -or !$machineProbe.sing_box) { throw "machine browser host self-test failed" }
+            Remove-Item -Recurse -Force "HKLM:\Software\Google\Chrome\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force "HKLM:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force "HKLM:\Software\WOW6432Node\Google\Chrome\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force "HKLM:\Software\WOW6432Node\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force (Join-Path $env:ProgramFiles "Makia\Connector") -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Runner is not elevated; machine-scope registration smoke skipped."
           }
 
       - name: Generate package checksums
@@ -124,6 +151,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.4.1
+          name: Makia-Client-Connector-Windows-x64-1.4.2
           path: package/
           if-no-files-found: error

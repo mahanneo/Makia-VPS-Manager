@@ -44,7 +44,7 @@ def redeem(controller,ticket):
     req=urllib.request.Request(
         controller.rstrip("/")+"/client/connector/redeem",
         data=data,
-        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.4.1"},
+        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.4.2"},
         method="POST",
     )
     with urllib.request.urlopen(req,timeout=15) as r:
@@ -388,9 +388,22 @@ def main():
     ap.add_argument("--native-host",action="store_true")
     ap.add_argument("--browser-disconnect",action="store_true")
     ap.add_argument("--parent-window",default="")
+    ap.add_argument("--self-test",action="store_true")
     args=ap.parse_args()
     browser_host_binary=Path(sys.executable).stem.lower()=="makiabrowserhost"
     try:
+        if args.self_test:
+            print(json.dumps({
+                "ok":True,
+                "app":APP,
+                "native_host_binary":browser_host_binary,
+                "sing_box":bool(find_binary(["sing-box.exe"])),
+                "root":str(ROOT),
+            },ensure_ascii=False))
+            return 0
+        if browser_host_binary and args.uri and args.uri.startswith("chrome-extension://"):
+            if args.uri.rstrip("/")!="chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji":
+                raise RuntimeError("Untrusted browser extension origin")
         if args.native_host or browser_host_binary:
             native_write(handle_native_message(native_read()))
             return 0

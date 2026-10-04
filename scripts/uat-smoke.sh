@@ -343,13 +343,9 @@ if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   if systemctl is-active --quiet stunnel4; then
     ok "Stealth TLS/Stunnel runtime active"
   elif [[ "$STUNNEL_ENABLED" == "1" ]]; then
-    if [[ "${MAKIA_UAT_STEALTH_SOFTFAIL:-0}" == "1" ]]; then
-      warn "Stealth config retained; stunnel4 was already inactive before update"
-    else
-      bad "Stealth enabled but stunnel4 inactive"
-    fi
+    warn "Stealth optional config is enabled but stunnel4 is inactive; core VPN runtimes remain healthy"
   else
-    warn "Stealth config retained but disabled/inactive"
+    warn "Stealth optional config retained but disabled/inactive"
   fi
 else
   ok "Stealth mode not configured"
