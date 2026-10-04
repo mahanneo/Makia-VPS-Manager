@@ -47,6 +47,40 @@ async function applyBrowserProxy(port){
   });
 }
 
+function privacyGet(api){
+  return new Promise(resolve=>api.get({},resolve));
+}
+
+function privacySet(api,value){
+  return new Promise((resolve,reject)=>api.set({value},()=>{
+    const last=chrome.runtime.lastError;
+    if(last)reject(new Error(last.message));else resolve();
+  }));
+}
+
+function privacyClear(api){
+  return new Promise((resolve,reject)=>api.clear({},()=>{
+    const last=chrome.runtime.lastError;
+    if(last)reject(new Error(last.message));else resolve();
+  }));
+}
+
+async function enableWebRtcLeakProtection(){
+  const api=chrome.privacy&&chrome.privacy.network&&chrome.privacy.network.webRTCIPHandlingPolicy;
+  if(!api)return;
+  const current=await privacyGet(api);
+  if(["controllable_by_this_extension","controlled_by_this_extension"].includes(current.levelOfControl)){
+    await privacySet(api,"disable_non_proxied_udp");
+  }
+}
+
+async function clearWebRtcLeakProtection(){
+  const api=chrome.privacy&&chrome.privacy.network&&chrome.privacy.network.webRTCIPHandlingPolicy;
+  if(!api)return;
+  const current=await privacyGet(api);
+  if(current.levelOfControl==="controlled_by_this_extension")await privacyClear(api);
+}
+
 async function badge(status){
   const on=!!(status&&status.connected);
   await chrome.action.setBadgeText({text:on?"ON":""});
@@ -74,18 +108,23 @@ async function handle(message){
     if(mode==="browser"){
       if(!result.proxy_port)throw new Error("Local Browser Only proxy did not start");
       await applyBrowserProxy(result.proxy_port);
+      await enableWebRtcLeakProtection();
+    }else{
+      await clearWebRtcLeakProtection();
     }
     await badge({connected:true});
     return result;
   }
   if(action==="disconnect"){
     await proxyClear();
+    await clearWebRtcLeakProtection();
     const result=await native({action:"disconnect"});
     await badge({connected:false});
     return result;
   }
   if(action==="logout"){
     await proxyClear();
+    await clearWebRtcLeakProtection();
     try{await native({action:"disconnect"})}catch(_e){}
     const result=await native({action:"logout"});
     await badge({connected:false});
@@ -102,8 +141,13 @@ chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{
 async function restore(){
   try{
     const s=await native({action:"status"});
-    if(s.connected&&s.scope==="browser"&&s.proxy_port)await applyBrowserProxy(s.proxy_port);
-    else if(!s.connected)await proxyClear();
+    if(s.connected&&s.scope==="browser"&&s.proxy_port){
+      await applyBrowserProxy(s.proxy_port);
+      await enableWebRtcLeakProtection();
+    }else if(!s.connected){
+      await proxyClear();
+      await clearWebRtcLeakProtection();
+    }
     await badge(s);
   }catch(_e){
     await badge({connected:false});
