@@ -161,11 +161,15 @@ async def _relay(reader,writer,limit,usage):
 
 async def _serve_tunnel(client_reader,client_writer,target_reader,target_writer,account_id,limit):
     usage=[0]
+    tasks=[
+        asyncio.create_task(_relay(client_reader,target_writer,limit,usage)),
+        asyncio.create_task(_relay(target_reader,client_writer,limit,usage)),
+    ]
     try:
-        await asyncio.gather(
-            _relay(client_reader,target_writer,limit,usage),
-            _relay(target_reader,client_writer,limit,usage),
-        )
+        done,pending=await asyncio.wait(tasks,return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)
     finally:
         if usage[0]:
             try:
