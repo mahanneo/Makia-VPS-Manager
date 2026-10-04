@@ -624,7 +624,7 @@ def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
 
 def _browser_gateway_public_config():
     host=str(os.getenv("MAKIA_BROWSER_GATEWAY_HOST","") or get_setting("panel_domain","") or "").strip().lower()
-    port=int(os.getenv("MAKIA_BROWSER_GATEWAY_PORT","9443") or 9443)
+    port=int(os.getenv("MAKIA_BROWSER_GATEWAY_PORT","9444") or 9443)
     if not host:
         raise HTTPException(status_code=503,detail="Browser Gateway requires a configured panel domain")
     cert=Path(f"/etc/letsencrypt/live/{host}/fullchain.pem")
