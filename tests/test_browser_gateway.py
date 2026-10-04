@@ -75,3 +75,15 @@ def test_extension_api_supports_store_id_allowlist():
     assert "def _browser_extension_ids" in source
     assert "def _browser_extension_origin" in source
     assert 're.fullmatch(r"[a-p]{32}"' in source
+
+
+def test_gateway_connection_counter_only_decrements_after_successful_increment():
+    source=(ROOT/"app/browser_gateway.py").read_text(encoding="utf-8")
+    assert "counted_active=False" in source
+    assert "counted_active=True" in source
+    assert "if account_id and counted_active:" in source
+
+
+def test_gateway_tls_host_honors_explicit_override():
+    source=(ROOT/"app/browser_gateway.py").read_text(encoding="utf-8")
+    assert 'os.getenv("MAKIA_BROWSER_GATEWAY_HOST","") or get_setting("panel_domain","")' in source
