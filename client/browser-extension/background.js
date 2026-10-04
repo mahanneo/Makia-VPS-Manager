@@ -1,5 +1,22 @@
+async function clearPrivacyProtection() {
+  try { await chrome.privacy.network.webRTCIPHandlingPolicy.clear({scope:"regular"}); } catch (_) {}
+  try { await chrome.privacy.network.networkPredictionEnabled.clear({scope:"regular"}); } catch (_) {}
+}
+
+async function applyPrivacyProtection() {
+  await chrome.privacy.network.webRTCIPHandlingPolicy.set({
+    value:"disable_non_proxied_udp",
+    scope:"regular"
+  });
+  await chrome.privacy.network.networkPredictionEnabled.set({
+    value:false,
+    scope:"regular"
+  });
+}
+
 async function clearBrowserProxy() {
   await chrome.proxy.settings.clear({scope: "regular"});
+  await clearPrivacyProtection();
   await chrome.storage.session.remove(["proxyAuth","proxyEndpoint"]);
   await chrome.storage.local.set({connected:false,activeLabel:"",proxyHost:"",proxyPort:0});
 }
@@ -13,6 +30,7 @@ async function setBrowserProxy(proxy) {
     proxyAuth:{username:String(proxy.username||""),password:String(proxy.password||"")},
     proxyEndpoint:{host,port}
   });
+  await applyPrivacyProtection();
   await chrome.proxy.settings.set({
     value:{
       mode:"fixed_servers",
