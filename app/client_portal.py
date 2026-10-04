@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import client_store, client_connector
+from . import client_store, client_connector, browser_gateway_store, browser_gateway
 from .config import APP_NAME, VERSION
 from .db import audit, clear_login_failures, login_rate_state, record_login_failure, get_setting
 
@@ -565,6 +565,7 @@ async def client_extension_login(request:Request):
 @router.post("/client/extension/logout")
 def client_extension_logout(request:Request):
     session,token=_extension_bearer(request)
+    browser_gateway_store.revoke_for_client_session(session["session_id"])
     client_store.revoke_session(token)
     audit("client:"+session["username"],"browser_extension_logout",target=str(session["device_id"]),ip=_ip(request))
     return _extension_response(request,{"ok":True})
@@ -583,6 +584,72 @@ def client_extension_me(request:Request):
 def client_extension_protocols(request:Request):
     session,_=_extension_bearer(request)
     return _extension_response(request,{"items":client_store.client_access_list(session["account_id"])})
+
+
+def _browser_gateway_public_config():
+    cfg=browser_gateway.gateway_config()
+    try:
+        browser_gateway.validate_config(cfg,require_files=True)
+    except Exception as exc:
+        return {"available":False,"reason":str(exc),"host":cfg.get("host") or "","port":int(cfg.get("port") or 0)}
+    return {
+        "available":True,
+        "host":cfg["host"],
+        "port":int(cfg["port"]),
+        "scheme":"https",
+    }
+
+
+@router.get("/client/extension/browser-status")
+def client_extension_browser_status(request:Request):
+    session,_=_extension_bearer(request)
+    snapshot=client_store.account_snapshot(session["account_id"]) or {}
+    return _extension_response(request,{
+        "gateway":_browser_gateway_public_config(),
+        "account":{
+            "available":bool(snapshot.get("available")),
+            "status_reason":snapshot.get("status_reason") or "",
+            "used_bytes":int(snapshot.get("used_bytes") or 0),
+            "quota_bytes":int(snapshot.get("quota_bytes") or 0),
+            "remaining_bytes":int(snapshot.get("remaining_bytes") or 0),
+        },
+    })
+
+
+@router.post("/client/extension/browser-session")
+def client_extension_browser_session(request:Request):
+    session,_=_extension_bearer(request)
+    gateway=_browser_gateway_public_config()
+    if not gateway.get("available"):
+        raise HTTPException(status_code=503,detail="Browser Gateway is not ready: "+str(gateway.get("reason") or "unavailable"))
+    try:
+        proxy=browser_gateway_store.issue(session)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    audit(
+        "client:"+session["username"],"browser_gateway_session_issue",
+        target=str(session["device_id"]),detail=f"ttl={proxy['ttl']}",ip=_ip(request),
+    )
+    return _extension_response(request,{
+        "gateway":gateway,
+        "proxy":{
+            "username":proxy["username"],
+            "password":proxy["password"],
+            "expires_at":proxy["expires_at"],
+            "ttl":proxy["ttl"],
+        },
+    })
+
+
+@router.post("/client/extension/browser-disconnect")
+def client_extension_browser_disconnect(request:Request):
+    session,_=_extension_bearer(request)
+    browser_gateway_store.revoke_for_client_session(session["session_id"])
+    audit(
+        "client:"+session["username"],"browser_gateway_disconnect",
+        target=str(session["device_id"]),ip=_ip(request),
+    )
+    return _extension_response(request,{"ok":True})
 
 @router.post("/client/extension/connect/{delivery_kind}/{delivery_id}/ticket")
 def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
