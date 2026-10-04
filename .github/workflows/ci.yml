@@ -51,8 +51,8 @@ jobs:
       - name: v1.2 network services and Iran inbound preset gate
         run: |
           pytest -q tests/test_rc8_operations.py tests/test_rc9_hardening.py tests/test_rc11_outline_runtime.py tests/test_v1_release_gate.py tests/test_xray_iran_presets.py
-          grep -Fxq '1.4.2' VERSION
-          grep -q 'VERSION = "1.4.2"' app/config.py
+          grep -Fxq '1.5.0' VERSION
+          grep -q 'VERSION = "1.5.0"' app/config.py
           grep -q 'makia-shell-v140' app/static/sw.js
           test -f docs/UAT-1.4.0.md
           test -f app/static/makia-brand.png
@@ -76,7 +76,7 @@ jobs:
           grep -q 'data-view="dnscenter"' app/templates/dashboard.html
           grep -q 'makia-install-mtproxy' scripts/install.sh scripts/update.sh
           grep -q 'makia-install-dns' scripts/install.sh scripts/update.sh
-      - name: Client Platform 1.4.2 release contract
+      - name: Client Platform 1.5.0 release contract
         run: |
           test -f docs/UAT-1.4.0.md
           test -f docs/CLIENT-PLATFORM-V0.1.md
@@ -259,8 +259,8 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "1.4.2"' app/config.py
-          grep -Fxq '1.4.2' VERSION
+          grep -q 'VERSION = "1.5.0"' app/config.py
+          grep -Fxq '1.5.0' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
           grep -q '/api/support/grants' app/main.py
@@ -327,6 +327,28 @@ jobs:
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
           grep -q 'makia-shell-v140' app/static/sw.js
+
+      - name: Pure Browser Gateway 1.5.0 contract
+        run: |
+          test -f app/browser_gateway.py
+          test -f systemd/makia-browser-gateway.service
+          test -f tests/browser_gateway_smoke.sh
+          test -f docs/BROWSER-GATEWAY-1.5.0.md
+          test -f docs/CHROME-WEB-STORE-1.5.0.md
+          grep -q 'makia-browser-gateway.service' scripts/install.sh
+          grep -q 'makia-browser-gateway.service' scripts/update.sh
+          grep -q 'makia-browser-gateway' scripts/uninstall.sh
+          grep -q 'makia-browser-gateway' scripts/doctor.sh
+          grep -q 'makia-browser-gateway' scripts/uat-smoke.sh
+          grep -q 'client_browser_tokens' app/client_store.py
+          grep -q 'client_browser_usage' app/client_store.py
+          grep -q '/client/extension/browser-gateway/credential' app/client_portal.py
+          grep -q 'webRequestAuthProvider' client/browser-extension/manifest.json
+          ! grep -q 'nativeMessaging' client/browser-extension/manifest.json
+          ! grep -q 'sendNativeMessage' client/browser-extension/background.js
+          grep -q 'singleProxy:{scheme:"https"' client/browser-extension/background.js
+          grep -q 'Browser Extension Build' .github/workflows/browser-extension.yml
+          python -m pytest -q tests/test_browser_gateway.py tests/test_browser_extension_contract.py
 
       - name: Connection modes contract
         run: |

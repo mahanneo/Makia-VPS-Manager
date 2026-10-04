@@ -12,11 +12,12 @@
       <div class="brand"><span class="mark">M</span><div><strong>Makia</strong><small>Browser VPN</small></div></div>
       <span id="statusDot" class="dot off"></span>
     </header>
+
     <section id="setupView" class="card">
       <h1>اتصال به Makia</h1>
-      <p>آدرس پنل Makia و حساب کاربری خود را وارد کنید.</p>
+      <p>بدون نصب برنامه ویندوز؛ فقط آدرس پنل و حساب کاربری خود را وارد کنید.</p>
       <label>آدرس پنل</label>
-      <input id="controller" type="url" placeholder="https://panel.example.com" autocomplete="url">
+      <input id="controller" type="url" placeholder="https://p.example.com" autocomplete="url">
       <label>نام کاربری</label>
       <input id="username" autocomplete="username">
       <label>رمز عبور</label>
@@ -24,15 +25,36 @@
       <button id="loginBtn" class="primary">ورود امن</button>
       <div id="setupError" class="error"></div>
     </section>
+
     <section id="appView" class="hidden">
       <div class="hero card">
-        <div><span id="connectionState" class="eyebrow">قطع</span><h1 id="activeLabel">Browser VPN</h1><p id="accountMeta">—</p></div>
-        <button id="disconnectBtn" class="danger hidden">قطع اتصال</button>
+        <div>
+          <span id="connectionState" class="eyebrow">قطع</span>
+          <h1 id="activeLabel">Browser VPN</h1>
+          <p id="accountMeta">—</p>
+        </div>
+        <button id="disconnectBtn" class="danger hidden">قطع</button>
       </div>
-      <div class="sectionHead"><strong>سرورها و دسترسی‌ها</strong><button id="refreshBtn" class="link">↻</button></div>
-      <div id="profiles" class="profiles"></div>
+
+      <div class="sectionHead">
+        <strong>Browser Gateway</strong>
+        <button id="refreshBtn" class="link">↻</button>
+      </div>
+
+      <div class="profile">
+        <div>
+          <strong>Makia Secure Gateway</strong>
+          <small id="gatewayHost">—</small>
+          <span id="gatewayState" class="badge">در حال بررسی</span>
+        </div>
+        <button id="connectBtn">اتصال</button>
+      </div>
+
       <div id="appError" class="error"></div>
-      <footer><button id="logoutBtn" class="link">خروج از حساب</button><span>فقط ترافیک این مرورگر</span></footer>
+      <footer>
+        <button id="logoutBtn" class="link">خروج از حساب</button>
+        <span>فقط ترافیک Chrome / Edge</span>
+      </footer>
     </section>
   </main>
   <script src="popup.js"></script>

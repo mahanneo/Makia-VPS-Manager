@@ -178,6 +178,7 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-vps-manager.service" /etc/systemd/sys
 install -m 0644 "$SOURCE_DIR/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
@@ -242,6 +243,11 @@ systemctl enable --now makia-vps-manager
 systemctl enable --now makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
+systemctl enable --now makia-browser-gateway
+BROWSER_GATEWAY_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9444}"
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  ufw allow "${BROWSER_GATEWAY_PORT}/tcp" comment 'Makia Browser Gateway' >/dev/null 2>&1 || true
+fi
 systemctl enable --now makia-scheduled-backup.timer
 systemctl enable --now makia-ops-monitor.timer
 

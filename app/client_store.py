@@ -139,6 +139,34 @@ def init_client_db():
               FOREIGN KEY(account_id) REFERENCES client_accounts(id),
               FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
             );
+
+            CREATE TABLE IF NOT EXISTS client_browser_tokens (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              session_id INTEGER NOT NULL,
+              account_id INTEGER NOT NULL,
+              device_id INTEGER NOT NULL,
+              token_hash TEXT UNIQUE NOT NULL,
+              token_last4 TEXT NOT NULL,
+              expires_at INTEGER NOT NULL,
+              revoked_at INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              last_used_at TEXT,
+              last_ip TEXT NOT NULL DEFAULT '',
+              FOREIGN KEY(session_id) REFERENCES client_sessions(id),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(device_id) REFERENCES client_devices(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_client_browser_tokens_account
+              ON client_browser_tokens(account_id,revoked_at,expires_at);
+            CREATE INDEX IF NOT EXISTS idx_client_browser_tokens_session
+              ON client_browser_tokens(session_id,revoked_at,expires_at);
+
+            CREATE TABLE IF NOT EXISTS client_browser_usage (
+              account_id INTEGER PRIMARY KEY,
+              used_bytes INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT NOT NULL,
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id)
+            );
             """
         )
 
@@ -249,7 +277,11 @@ def account_usage_bytes(account_id):
                WHERE b.account_id=? AND b.enabled=1""",
             (account_id,),
         ).fetchone()
-        return int(row["used"] or 0)+int(artifact["used"] or 0)
+        browser=con.execute(
+            "SELECT COALESCE(used_bytes,0) AS used FROM client_browser_usage WHERE account_id=?",
+            (account_id,),
+        ).fetchone()
+        return int(row["used"] or 0)+int(artifact["used"] or 0)+int(browser["used"] or 0 if browser else 0)
 
 
 def _active_devices_count(con,account_id):
@@ -383,11 +415,21 @@ def session_by_token(token,ip=""):
 def revoke_session(token):
     if not token:
         return
+    now_ts=int(time.time())
     with connect() as con:
+        row=con.execute(
+            "SELECT id FROM client_sessions WHERE token_hash=?",
+            (_token_hash(token),),
+        ).fetchone()
         con.execute(
             "UPDATE client_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at=0",
-            (int(time.time()),_token_hash(token)),
+            (now_ts,_token_hash(token)),
         )
+        if row:
+            con.execute(
+                "UPDATE client_browser_tokens SET revoked_at=? WHERE session_id=? AND revoked_at=0",
+                (now_ts,int(row["id"])),
+            )
 
 
 def list_devices(account_id):
@@ -410,6 +452,10 @@ def revoke_device(account_id,device_id):
         )
         con.execute(
             "UPDATE client_sessions SET revoked_at=? WHERE device_id=? AND account_id=? AND revoked_at=0",
+            (now_ts,int(device_id),int(account_id)),
+        )
+        con.execute(
+            "UPDATE client_browser_tokens SET revoked_at=? WHERE device_id=? AND account_id=? AND revoked_at=0",
             (now_ts,int(device_id),int(account_id)),
         )
 
@@ -1005,3 +1051,103 @@ def protocol_usage_for_account(account_id,protocol_client_id):
         if not row:
             return 0
         return max(0,int(row["raw"] or 0)-int(row["baseline"] or 0))
+
+
+def issue_browser_proxy_token(session, ttl_seconds=1800):
+    """Issue a short-lived proxy credential bound to an active Client session."""
+    if not session:
+        raise PermissionError("client session required")
+    account_id=int(session.get("account_id") or 0)
+    device_id=int(session.get("device_id") or 0)
+    session_id=int(session.get("session_id") or 0)
+    if not account_id or not device_id or not session_id:
+        raise PermissionError("invalid client session")
+    account=get_account(account_id)
+    ok,reason=account_available(account)
+    if not ok:
+        raise PermissionError(reason)
+    now_ts=int(time.time())
+    ttl=max(300,min(int(ttl_seconds or 1800),12*60*60))
+    token="bp_"+secrets.token_urlsafe(36)
+    with connect() as con:
+        con.execute(
+            "UPDATE client_browser_tokens SET revoked_at=? WHERE expires_at<=? AND revoked_at=0",
+            (now_ts,now_ts),
+        )
+        con.execute(
+            """INSERT INTO client_browser_tokens(
+                 session_id,account_id,device_id,token_hash,token_last4,expires_at,
+                 revoked_at,created_at,last_used_at,last_ip
+               ) VALUES(?,?,?,?,?,?,0,?,?,?)""",
+            (
+                session_id,account_id,device_id,_token_hash(token),token[-4:],
+                now_ts+ttl,now_iso(),None,"",
+            ),
+        )
+    return {
+        "username":str(session.get("username") or ""),
+        "password":token,
+        "expires_at":now_ts+ttl,
+    }
+
+
+def browser_proxy_auth(username, token, ip=""):
+    """Validate a Browser Gateway Basic-auth credential without exposing secrets."""
+    username=str(username or "").strip()
+    token=str(token or "").strip()
+    if not username or not token:
+        return None
+    now_ts=int(time.time())
+    with connect() as con:
+        row=con.execute(
+            """SELECT t.id AS browser_token_id,t.session_id,t.account_id,t.device_id,t.expires_at,
+                      a.username,a.display_name,a.plan_name,a.enabled,a.expire_at,a.quota_bytes,
+                      a.device_limit,a.concurrent_device_limit
+               FROM client_browser_tokens t
+               JOIN client_sessions s ON s.id=t.session_id
+               JOIN client_accounts a ON a.id=t.account_id
+               JOIN client_devices d ON d.id=t.device_id
+               WHERE t.token_hash=? AND t.revoked_at=0 AND t.expires_at>?
+                 AND s.revoked_at=0 AND s.expires_at>?
+                 AND a.enabled=1 AND d.active=1 AND a.username=?""",
+            (_token_hash(token),now_ts,now_ts,username),
+        ).fetchone()
+        if not row:
+            return None
+        account=dict(row)
+        ok,_=account_available(account,now_ts)
+        if not ok:
+            con.execute(
+                "UPDATE client_browser_tokens SET revoked_at=? WHERE id=?",
+                (now_ts,int(row["browser_token_id"])),
+            )
+            return None
+        con.execute(
+            "UPDATE client_browser_tokens SET last_used_at=?,last_ip=? WHERE id=?",
+            (now_iso(),str(ip or "")[:96],int(row["browser_token_id"])),
+        )
+        return account
+
+
+def add_browser_usage(account_id, byte_count):
+    byte_count=max(0,int(byte_count or 0))
+    if not byte_count:
+        return
+    with connect() as con:
+        con.execute(
+            """INSERT INTO client_browser_usage(account_id,used_bytes,updated_at)
+               VALUES(?,?,?)
+               ON CONFLICT(account_id) DO UPDATE SET
+                 used_bytes=client_browser_usage.used_bytes+excluded.used_bytes,
+                 updated_at=excluded.updated_at""",
+            (int(account_id),byte_count,now_iso()),
+        )
+
+
+def browser_usage_bytes(account_id):
+    with connect() as con:
+        row=con.execute(
+            "SELECT used_bytes FROM client_browser_usage WHERE account_id=?",
+            (int(account_id),),
+        ).fetchone()
+        return int(row["used_bytes"] or 0) if row else 0

@@ -55,7 +55,18 @@ else
   ok "Panel domain not configured; HTTPS domain gate skipped (IP mode)"
 fi
 
-for svc in makia-vps-manager makia-policy-enforcer makia-metrics-sampler makia-protocol-traffic nginx fail2ban; do
+BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9444}"
+if [[ -n "$PANEL_DOMAIN" && -s "/etc/letsencrypt/live/$PANEL_DOMAIN/fullchain.pem" ]]; then
+  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:|\])${BROWSER_PORT}$"; then
+    ok "Browser Gateway TLS listener TCP/$BROWSER_PORT"
+  else
+    bad "Browser Gateway domain/certificate ready but listener TCP/$BROWSER_PORT missing"
+  fi
+else
+  ok "Browser Gateway listener gate waiting for panel domain/certificate"
+fi
+
+for svc in makia-vps-manager makia-policy-enforcer makia-metrics-sampler makia-protocol-traffic makia-browser-gateway nginx fail2ban; do
   if systemctl is-active --quiet "$svc"; then ok "Service $svc"; else bad "Service $svc"; fi
 done
 
@@ -123,6 +134,7 @@ required={
     "client_accounts","client_devices","client_sessions",
     "client_protocol_bindings","client_artifact_bindings",
     "client_usage_baselines","client_artifact_usage","client_artifact_policy_state",
+    "client_browser_tokens","client_browser_usage",
 }
 with connect() as con:
     tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}

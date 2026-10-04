@@ -6,8 +6,11 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_browser_extension_manifest_contract():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert manifest["version"]=="1.4.2"
-    assert "nativeMessaging" in manifest["permissions"]
+    assert manifest["version"]=="1.5.0"
+    assert "nativeMessaging" not in manifest["permissions"]
+    assert "webRequest" in manifest["permissions"]
+    assert "webRequestAuthProvider" in manifest["permissions"]
+    assert manifest["host_permissions"]==["<all_urls>"]
     assert "proxy" in manifest["permissions"]
     assert manifest["optional_host_permissions"]==["https://*/*"]
 
@@ -46,3 +49,20 @@ def test_windows_installer_has_machine_and_user_native_host_registration():
 def test_browser_repair_tools_are_packaged_sources():
     assert (ROOT/"client/windows/Repair-Makia-Browser.cmd").is_file()
     assert (ROOT/"client/windows/Check-Makia-Browser.ps1").is_file()
+
+
+def test_proxy_auth_is_scoped_to_exact_gateway_challenger():
+    background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    assert "details.challenger" in background
+    assert "challengerHost !== expectedHost" in background
+    assert "challengerPort !== expectedPort" in background
+
+
+def test_browser_extension_enables_webrtc_and_dns_leak_protection():
+    manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
+    background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    assert "privacy" in manifest["permissions"]
+    assert "disable_non_proxied_udp" in background
+    assert "networkPredictionEnabled.set" in background
+    assert "networkPredictionEnabled.clear" in background
+    assert "webRTCIPHandlingPolicy.clear" in background

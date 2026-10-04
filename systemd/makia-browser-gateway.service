@@ -1,0 +1,32 @@
+[Unit]
+Description=Makia Browser Gateway
+After=network-online.target makia-vps-manager.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/makia-vps-manager
+Environment=MAKIA_DATA_DIR=/opt/makia-vps-manager/data
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/makia-vps-manager/makia.env
+ExecStart=/opt/makia-vps-manager/.venv/bin/python -m app.browser_gateway
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/etc/letsencrypt
+ReadWritePaths=/opt/makia-vps-manager/data
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

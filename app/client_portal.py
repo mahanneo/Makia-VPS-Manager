@@ -2,9 +2,11 @@ import json
 import os
 import time
 import urllib.parse
+import subprocess
+import re
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -472,20 +474,35 @@ def client_service_worker(request:Request):
 # The extension uses opaque Client sessions and one-time connector tickets; VPN
 # credentials are never returned to extension JavaScript.
 MAKIA_BROWSER_EXTENSION_ID="jgpmmenelldgfmjfnonhjaaaccfeniji"
-MAKIA_BROWSER_EXTENSION_ORIGIN="chrome-extension://"+MAKIA_BROWSER_EXTENSION_ID
+
+def _browser_extension_ids():
+    ids={MAKIA_BROWSER_EXTENSION_ID}
+    raw=str(os.getenv("MAKIA_BROWSER_EXTENSION_IDS","") or "")
+    for value in raw.split(","):
+        value=value.strip().lower()
+        if re.fullmatch(r"[a-p]{32}",value):
+            ids.add(value)
+    return sorted(ids)
+
+def _browser_extension_origin(origin):
+    origin=str(origin or "").strip().rstrip("/")
+    if not origin.startswith("chrome-extension://"):
+        return ""
+    extension_id=origin.split("://",1)[1].lower()
+    return origin if extension_id in _browser_extension_ids() else ""
 
 def _extension_headers(request):
     if request.headers.get("x-makia-extension")!="1":
         raise HTTPException(status_code=403,detail="invalid Makia extension request")
     origin=(request.headers.get("origin") or "").rstrip("/")
-    if origin and origin!=MAKIA_BROWSER_EXTENSION_ORIGIN:
+    if origin and not _browser_extension_origin(origin):
         raise HTTPException(status_code=403,detail="invalid extension origin")
 
 def _extension_response(request,payload,status_code=200):
     response=JSONResponse(payload,status_code=status_code)
-    origin=(request.headers.get("origin") or "").rstrip("/")
-    if origin==MAKIA_BROWSER_EXTENSION_ORIGIN:
-        response.headers["Access-Control-Allow-Origin"]=MAKIA_BROWSER_EXTENSION_ORIGIN
+    origin=_browser_extension_origin(request.headers.get("origin") or "")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"]=origin
         response.headers["Vary"]="Origin"
     response.headers["Cache-Control"]="no-store"
     return _client_security_headers(response)
@@ -503,11 +520,11 @@ def _extension_bearer(request):
 
 @router.options("/client/extension/{rest:path}")
 def client_extension_options(rest:str,request:Request):
-    origin=(request.headers.get("origin") or "").rstrip("/")
-    if origin!=MAKIA_BROWSER_EXTENSION_ORIGIN:
+    origin=_browser_extension_origin(request.headers.get("origin") or "")
+    if not origin:
         raise HTTPException(status_code=403,detail="invalid extension origin")
     response=Response(status_code=204)
-    response.headers["Access-Control-Allow-Origin"]=MAKIA_BROWSER_EXTENSION_ORIGIN
+    response.headers["Access-Control-Allow-Origin"]=origin
     response.headers["Access-Control-Allow-Headers"]="authorization,content-type,x-makia-extension"
     response.headers["Access-Control-Allow-Methods"]="GET,POST,OPTIONS"
     response.headers["Access-Control-Max-Age"]="600"
@@ -560,6 +577,7 @@ async def client_extension_login(request:Request):
         "device_key":new_device_key or "",
         "account":snapshot,
         "extension_id":MAKIA_BROWSER_EXTENSION_ID,
+        "extension_ids":_browser_extension_ids(),
     })
 
 @router.post("/client/extension/logout")
@@ -618,4 +636,75 @@ def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
         "expires_at":ticket["expires_at"],
         "controller":origin,
         "mode":"browser",
+    })
+
+
+def _browser_gateway_public_config():
+    host=str(os.getenv("MAKIA_BROWSER_GATEWAY_HOST","") or get_setting("panel_domain","") or "").strip().lower()
+    port=int(os.getenv("MAKIA_BROWSER_GATEWAY_PORT","9444") or 9443)
+    if not host:
+        raise HTTPException(status_code=503,detail="Browser Gateway requires a configured panel domain")
+    cert=Path(f"/etc/letsencrypt/live/{host}/fullchain.pem")
+    key=Path(f"/etc/letsencrypt/live/{host}/privkey.pem")
+    if not cert.is_file() or not key.is_file():
+        raise HTTPException(status_code=503,detail="Browser Gateway requires a valid Let's Encrypt certificate")
+    active=False
+    try:
+        active=subprocess.run(
+            ["systemctl","is-active","--quiet","makia-browser-gateway"],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=2,check=False,
+        ).returncode==0
+    except Exception:
+        active=False
+    return {
+        "host":host,
+        "port":port,
+        "scheme":"https",
+        "service_active":active,
+    }
+
+
+@router.get("/client/extension/browser-gateway")
+def client_extension_browser_gateway_status(request:Request):
+    session,_=_extension_bearer(request)
+    cfg=_browser_gateway_public_config()
+    snapshot=client_store.account_snapshot(session["account_id"]) or {}
+    return _extension_response(request,{
+        "available":bool(cfg["service_active"]),
+        "gateway":cfg,
+        "account":{
+            "used_bytes":int(snapshot.get("used_bytes") or 0),
+            "quota_bytes":int(snapshot.get("quota_bytes") or 0),
+            "expire_at":int(snapshot.get("expire_at") or 0),
+        },
+    })
+
+
+@router.post("/client/extension/browser-gateway/credential")
+def client_extension_browser_gateway_credential(request:Request):
+    session,_=_extension_bearer(request)
+    cfg=_browser_gateway_public_config()
+    if not cfg["service_active"]:
+        raise HTTPException(status_code=503,detail="Browser Gateway service is not active")
+    try:
+        credential=client_store.issue_browser_proxy_token(session,CLIENT_SESSION_TTL)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    audit(
+        "client:"+session["username"],
+        "browser_gateway_credential",
+        target=str(session["device_id"]),
+        detail=f"{cfg['host']}:{cfg['port']}",
+        ip=_ip(request),
+    )
+    return _extension_response(request,{
+        "proxy":{
+            "scheme":cfg["scheme"],
+            "host":cfg["host"],
+            "port":cfg["port"],
+            "username":credential["username"],
+            "password":credential["password"],
+        },
+        "expires_at":credential["expires_at"],
+        "mode":"browser-gateway",
     })

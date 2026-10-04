@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.4.2</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.5.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
 **[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.4 UAT](docs/UAT-1.4.0.md)**
@@ -51,7 +51,11 @@ Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 wh
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## Makia Client 1.4.2
+## Makia Client 1.5.0
+
+### Pure Browser Gateway
+
+Chrome/Edge users can connect without installing any Windows executable. The Manifest V3 extension obtains a short-lived Browser Gateway credential from the Client Platform and routes browser HTTP/HTTPS traffic through the Makia VPS over an authenticated TLS proxy. Full-device Windows/Android clients remain available separately.
 
 End users can open the same authenticated Client URL on Android, iPhone/iPad, Windows or macOS. The portal shows only the signed-in account's quota, expiry, device state and assigned access profiles.
 
@@ -204,7 +208,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.4.2.md](docs/UAT-1.4.2.md)** for the browser-extension patch release and **[docs/UAT-1.4.0.md](docs/UAT-1.4.0.md)** for the original client-platform gate.
+See **[docs/UAT-1.5.0.md](docs/UAT-1.5.0.md)** for the browser-extension patch release and **[docs/UAT-1.4.0.md](docs/UAT-1.4.0.md)** for the original client-platform gate.
 
 ## Runtime layout
 
