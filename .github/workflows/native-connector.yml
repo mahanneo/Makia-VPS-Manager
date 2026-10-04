@@ -76,7 +76,8 @@ jobs:
 
           $manifest=Get-Content package\browser-extension\manifest.json -Raw | ConvertFrom-Json
           if ($manifest.version -ne "1.5.0") { throw "browser extension version mismatch" }
-          if ($manifest.permissions -notcontains "nativeMessaging" -or $manifest.permissions -notcontains "proxy") { throw "browser extension permissions missing" }
+          if ($manifest.permissions -contains "nativeMessaging") { throw "pure browser extension must not require nativeMessaging" }
+          if ($manifest.permissions -notcontains "proxy" -or $manifest.permissions -notcontains "webRequestAuthProvider") { throw "browser extension permissions missing" }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-installer-smoke"
