@@ -51,7 +51,12 @@ docker exec "$CONTAINER" bash -lc '
   cd /opt/makia-vps-manager
   MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python -c "from app.security import ensure_secret; ensure_secret()"
   systemctl restart makia-vps-manager
-  curl -fsS http://127.0.0.1:8787/healthz | grep -q "1.3.0"
+  healthy=0
+  for _ in {1..20}; do
+    if curl -fsS --max-time 2 http://127.0.0.1:8787/healthz | grep -q "1.3.0"; then healthy=1; break; fi
+    sleep 1
+  done
+  test "$healthy" = "1"
   systemctl is-active --quiet xray
   systemctl is-active --quiet wg-quick@wg0
   systemctl is-active --quiet openvpn-server@server
@@ -69,7 +74,7 @@ docker exec "$CONTAINER" bash -lc '
   cd /opt/makia-vps-manager
   MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python -c "from app.db import connect; c=connect(); r=c.execute(\"SELECT password_hash FROM admins WHERE username='admin'\").fetchone(); assert r and r[0]; print(r[0]); c.close()" >/root/pre-admin.hash
   awk -F= "/^[[:space:]]*PrivateKey[[:space:]]*=/{gsub(/[[:space:]]/,\"\",\$2); print \$2}" /etc/wireguard/wg0.conf >/root/pre-wg-private
-  sha256sum /etc/openvpn/server/pki/ca.crt | awk "{print \$1}" >/root/pre-ovpn-ca
+  sha256sum /etc/openvpn/server/server.conf | awk "{print \$1}" >/root/pre-ovpn-config
 '
 
 docker exec -e MAKIA_REF="$CANDIDATE_SHA" -e MAKIA_FORCE_MAIN=0 \
@@ -89,8 +94,8 @@ docker exec "$CONTAINER" bash -lc '
   cmp -s /root/pre-admin.hash /root/post-admin.hash
   awk -F= "/^[[:space:]]*PrivateKey[[:space:]]*=/{gsub(/[[:space:]]/,\"\",\$2); print \$2}" /etc/wireguard/wg0.conf >/root/post-wg-private
   cmp -s /root/pre-wg-private /root/post-wg-private
-  sha256sum /etc/openvpn/server/pki/ca.crt | awk "{print \$1}" >/root/post-ovpn-ca
-  cmp -s /root/pre-ovpn-ca /root/post-ovpn-ca
+  sha256sum /etc/openvpn/server/server.conf | awk "{print \$1}" >/root/post-ovpn-config
+  cmp -s /root/pre-ovpn-config /root/post-ovpn-config
 
   ! systemctl is-active --quiet stunnel4
   grep -Eq "^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*0[[:space:]]*$" /etc/default/stunnel4
