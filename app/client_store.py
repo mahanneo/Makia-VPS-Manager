@@ -139,6 +139,31 @@ def init_client_db():
               FOREIGN KEY(account_id) REFERENCES client_accounts(id),
               FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
             );
+
+            CREATE TABLE IF NOT EXISTS browser_proxy_sessions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              client_session_id INTEGER NOT NULL,
+              account_id INTEGER NOT NULL,
+              device_id INTEGER NOT NULL,
+              proxy_username TEXT UNIQUE NOT NULL,
+              secret_hash TEXT NOT NULL,
+              expires_at INTEGER NOT NULL,
+              revoked_at INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              last_seen_at TEXT,
+              last_ip TEXT NOT NULL DEFAULT '',
+              bytes_up INTEGER NOT NULL DEFAULT 0,
+              bytes_down INTEGER NOT NULL DEFAULT 0,
+              FOREIGN KEY(client_session_id) REFERENCES client_sessions(id),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(device_id) REFERENCES client_devices(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_browser_proxy_account
+              ON browser_proxy_sessions(account_id,revoked_at,expires_at);
+            CREATE INDEX IF NOT EXISTS idx_browser_proxy_device
+              ON browser_proxy_sessions(device_id,revoked_at,expires_at);
+            CREATE INDEX IF NOT EXISTS idx_browser_proxy_client_session
+              ON browser_proxy_sessions(client_session_id,revoked_at,expires_at);
             """
         )
 
@@ -249,7 +274,12 @@ def account_usage_bytes(account_id):
                WHERE b.account_id=? AND b.enabled=1""",
             (account_id,),
         ).fetchone()
-        return int(row["used"] or 0)+int(artifact["used"] or 0)
+        browser=con.execute(
+            """SELECT COALESCE(SUM(bytes_up+bytes_down),0) AS used
+               FROM browser_proxy_sessions WHERE account_id=?""",
+            (account_id,),
+        ).fetchone()
+        return int(row["used"] or 0)+int(artifact["used"] or 0)+int(browser["used"] or 0)
 
 
 def _active_devices_count(con,account_id):
@@ -383,11 +413,21 @@ def session_by_token(token,ip=""):
 def revoke_session(token):
     if not token:
         return
+    now_ts=int(time.time())
     with connect() as con:
+        rows=con.execute(
+            "SELECT id FROM client_sessions WHERE token_hash=? AND revoked_at=0",
+            (_token_hash(token),),
+        ).fetchall()
         con.execute(
             "UPDATE client_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at=0",
-            (int(time.time()),_token_hash(token)),
+            (now_ts,_token_hash(token)),
         )
+        for row in rows:
+            con.execute(
+                "UPDATE browser_proxy_sessions SET revoked_at=? WHERE client_session_id=? AND revoked_at=0",
+                (now_ts,int(row["id"])),
+            )
 
 
 def list_devices(account_id):
@@ -410,6 +450,10 @@ def revoke_device(account_id,device_id):
         )
         con.execute(
             "UPDATE client_sessions SET revoked_at=? WHERE device_id=? AND account_id=? AND revoked_at=0",
+            (now_ts,int(device_id),int(account_id)),
+        )
+        con.execute(
+            "UPDATE browser_proxy_sessions SET revoked_at=? WHERE device_id=? AND account_id=? AND revoked_at=0",
             (now_ts,int(device_id),int(account_id)),
         )
 
@@ -751,9 +795,14 @@ def update_account(
             ),
         )
         if not values["enabled"]:
+            now_ts=int(time.time())
             con.execute(
                 "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
-                (int(time.time()),int(account_id)),
+                (now_ts,int(account_id)),
+            )
+            con.execute(
+                "UPDATE browser_proxy_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+                (now_ts,int(account_id)),
             )
     return get_account(account_id)
 
