@@ -1,4 +1,4 @@
-Makia Client Connector 1.4.2 — Windows + Browser VPN UAT
+Makia Client Connector 1.5.0 — Windows Full-Device Connector
 
 Recommended install:
 1. Extract the GitHub artifact ZIP once.
@@ -30,3 +30,5 @@ Browser VPN repair:
 - The repair registers the Native Messaging host for Chrome and Edge at user + machine scope and runs a self-test.
 - Close every Chrome/Edge window and reopen the browser.
 - Run Check-Makia-Browser.ps1 if you need a diagnostic report.
+
+Makia Browser VPN 1.5 does NOT require this Windows package. This package is only for Full Device/native connection modes and legacy compatibility.
