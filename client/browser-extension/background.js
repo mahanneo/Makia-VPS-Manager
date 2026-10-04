@@ -151,7 +151,10 @@ chrome.alarms.onAlarm.addListener(alarm => {
   }
 });
 
-chrome.runtime.onInstalled.addListener(() => clearProxyState().catch(()=>{}));
+chrome.runtime.onInstalled.addListener(details => {
+  const upgrading = details && details.reason === "update";
+  clearProxyState(upgrading).catch(()=>{});
+});
 
 chrome.runtime.onStartup.addListener(() => {
   (async () => {
