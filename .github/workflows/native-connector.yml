@@ -112,6 +112,27 @@ jobs:
             $env:LOCALAPPDATA=$oldLocal
           }
 
+          $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal=New-Object Security.Principal.WindowsPrincipal($identity)
+          if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -Scope Machine
+            if ($LASTEXITCODE -ne 0) { throw "machine-scope install failed" }
+            $machineHost=(Get-Item "HKLM:\Software\Google\Chrome\NativeMessagingHosts\com.makia.browser_host").GetValue("")
+            $machineEdge=(Get-Item "HKLM:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host").GetValue("")
+            if (!(Test-Path $machineHost) -or $machineHost -ne $machineEdge) { throw "machine native messaging registration invalid" }
+            $machineCfg=Get-Content $machineHost -Raw | ConvertFrom-Json
+            if ($machineCfg.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "machine extension id mismatch" }
+            $machineProbe=(& $machineCfg.path --self-test | ConvertFrom-Json)
+            if (!$machineProbe.ok -or !$machineProbe.sing_box) { throw "machine browser host self-test failed" }
+            Remove-Item -Recurse -Force "HKLM:\Software\Google\Chrome\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force "HKLM:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force "HKLM:\Software\WOW6432Node\Google\Chrome\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force "HKLM:\Software\WOW6432Node\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force (Join-Path $env:ProgramFiles "Makia\Connector") -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Runner is not elevated; machine-scope registration smoke skipped."
+          }
+
       - name: Generate package checksums
         shell: pwsh
         run: |
