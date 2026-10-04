@@ -55,6 +55,17 @@ else
   ok "Panel domain not configured; HTTPS domain gate skipped (IP mode)"
 fi
 
+BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+if [[ -n "$PANEL_DOMAIN" && -s "/etc/letsencrypt/live/$PANEL_DOMAIN/fullchain.pem" ]]; then
+  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:|\])${BROWSER_PORT}$"; then
+    ok "Browser Gateway TLS listener TCP/$BROWSER_PORT"
+  else
+    bad "Browser Gateway domain/certificate ready but listener TCP/$BROWSER_PORT missing"
+  fi
+else
+  ok "Browser Gateway listener gate waiting for panel domain/certificate"
+fi
+
 for svc in makia-vps-manager makia-policy-enforcer makia-metrics-sampler makia-protocol-traffic makia-browser-gateway nginx fail2ban; do
   if systemctl is-active --quiet "$svc"; then ok "Service $svc"; else bad "Service $svc"; fi
 done
