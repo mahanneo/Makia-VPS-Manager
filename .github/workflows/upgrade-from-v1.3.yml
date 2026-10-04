@@ -67,10 +67,24 @@ jobs:
         shell: bash
         run: |
           docker cp baseline-v130 makia-upgrade:/tmp/makia-v130
+          set +e
           docker exec \
             -e MAKIA_INITIAL_ADMIN_PASSWORD="UpgradeBaseline!130" \
             makia-upgrade bash -lc 'bash /tmp/makia-v130/scripts/install.sh'
-          docker exec makia-upgrade bash -lc 'test "$(cat /opt/makia-vps-manager/VERSION)" = "1.3.0"'
+          install_rc=$?
+          set -e
+          echo "Baseline installer exit: $install_rc"
+          docker exec makia-upgrade bash -lc '
+            test "$(cat /opt/makia-vps-manager/VERSION)" = "1.3.0"
+            systemctl enable --now nginx
+            cd /opt/makia-vps-manager
+            MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python -c "from app.security import ensure_secret; ensure_secret()"
+            systemctl restart makia-vps-manager
+            curl -fsS http://127.0.0.1:8787/healthz | grep -q "\"version\":\"1.3.0\""
+            systemctl is-active --quiet xray
+            systemctl is-active --quiet wg-quick@wg0
+            systemctl is-active --quiet openvpn-server@server
+          '
 
       - name: Reproduce production inactive Stealth state
         shell: bash
@@ -94,14 +108,28 @@ jobs:
         shell: bash
         run: |
           docker exec makia-upgrade bash -lc '
-            sha256sum /opt/makia-vps-manager/data/makia.db > /root/pre-db.sha
-            sha256sum /etc/wireguard/wg0.conf > /root/pre-wg.sha
-            sha256sum /etc/openvpn/server/server.conf > /root/pre-ovpn.sha
-            if [[ -f /usr/local/etc/xray/config.json ]]; then
-              sha256sum /usr/local/etc/xray/config.json > /root/pre-xray.sha
-            else
-              sha256sum /etc/xray/config.json > /root/pre-xray.sha
-            fi
+            cd /opt/makia-vps-manager
+            MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python - <<'"'"'PY'"'"' >/root/pre-admin.hash
+from app.db import connect
+with connect() as con:
+    row=con.execute("SELECT password_hash FROM admins WHERE username='"'"'admin'"'"'").fetchone()
+assert row and row[0]
+print(row[0])
+PY
+            awk -F= "/^[[:space:]]*PrivateKey[[:space:]]*=/{gsub(/[[:space:]]/,\"\",\$2); print \$2}" /etc/wireguard/wg0.conf > /root/pre-wg-private
+            sha256sum /etc/openvpn/server/pki/ca.crt | awk "{print \$1}" > /root/pre-ovpn-ca
+            python3 - <<'"'"'PY'"'"' >/root/pre-xray-ids
+import json
+from pathlib import Path
+p=Path("/usr/local/etc/xray/config.json")
+if not p.exists(): p=Path("/etc/xray/config.json")
+obj=json.loads(p.read_text())
+ids=[]
+for inbound in obj.get("inbounds",[]):
+    for c in (inbound.get("settings") or {}).get("clients",[]) or []:
+        if c.get("id"): ids.append(str(c["id"]))
+print("\n".join(sorted(set(ids))))
+PY
           '
 
       - name: Upgrade 1.3.0 to exact candidate SHA
@@ -117,16 +145,42 @@ jobs:
         run: |
           docker exec makia-upgrade bash -lc '
             test "$(cat /opt/makia-vps-manager/VERSION)" = "1.4.1"
-            curl -fsS http://127.0.0.1:8787/healthz | grep -q ""version":"1.4.1""
+            curl -fsS http://127.0.0.1:8787/healthz | grep -q "\"version\":\"1.4.1\""
             systemctl is-active --quiet makia-vps-manager
+            systemctl is-active --quiet nginx
             systemctl is-active --quiet xray
             systemctl is-active --quiet wg-quick@wg0
             systemctl is-active --quiet openvpn-server@server
 
-            sha256sum -c /root/pre-db.sha
-            sha256sum -c /root/pre-wg.sha
-            sha256sum -c /root/pre-ovpn.sha
-            sha256sum -c /root/pre-xray.sha
+            cd /opt/makia-vps-manager
+            MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python - <<'"'"'PY'"'"' >/root/post-admin.hash
+from app.db import connect
+with connect() as con:
+    row=con.execute("SELECT password_hash FROM admins WHERE username='"'"'admin'"'"'").fetchone()
+assert row and row[0]
+print(row[0])
+PY
+            cmp -s /root/pre-admin.hash /root/post-admin.hash
+
+            awk -F= "/^[[:space:]]*PrivateKey[[:space:]]*=/{gsub(/[[:space:]]/,\"\",\$2); print \$2}" /etc/wireguard/wg0.conf > /root/post-wg-private
+            cmp -s /root/pre-wg-private /root/post-wg-private
+
+            sha256sum /etc/openvpn/server/pki/ca.crt | awk "{print \$1}" > /root/post-ovpn-ca
+            cmp -s /root/pre-ovpn-ca /root/post-ovpn-ca
+
+            python3 - <<'"'"'PY'"'"' >/root/post-xray-ids
+import json
+from pathlib import Path
+p=Path("/usr/local/etc/xray/config.json")
+if not p.exists(): p=Path("/etc/xray/config.json")
+obj=json.loads(p.read_text())
+ids=[]
+for inbound in obj.get("inbounds",[]):
+    for c in (inbound.get("settings") or {}).get("clients",[]) or []:
+        if c.get("id"): ids.append(str(c["id"]))
+print("\n".join(sorted(set(ids))))
+PY
+            cmp -s /root/pre-xray-ids /root/post-xray-ids
 
             ! systemctl is-active --quiet stunnel4
             grep -Eq "^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*0[[:space:]]*$" /etc/default/stunnel4
