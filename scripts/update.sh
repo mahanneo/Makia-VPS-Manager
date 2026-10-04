@@ -147,6 +147,13 @@ if [[ -f /etc/wireguard/wg0.conf ]]; then
   systemctl is-active --quiet wg-quick@wg0 2>/dev/null && WG_WAS_ACTIVE=1 || true
 fi
 
+STUNNEL_WAS_CONFIGURED=0
+STUNNEL_WAS_ACTIVE=0
+if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+  STUNNEL_WAS_CONFIGURED=1
+  systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
+fi
+
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="/var/backups/makia-vps-manager/makia-data-${STAMP_DATA}.tar.gz"
 BACKUP_TMP="$(mktemp -d)"
@@ -624,6 +631,10 @@ else
     echo "WireGuard was active before update but is no longer active; updater will roll back." >&2
     exit 7
   fi
+  if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet stunnel4; then
+    echo "Stealth/Stunnel was active before update but is no longer active; updater will roll back." >&2
+    exit 9
+  fi
   echo "Existing protocol runtime state preserved."
 fi
 
@@ -681,6 +692,9 @@ if [[ "$MTPROXY_WAS_ACTIVE" -eq 0 ]]; then
 fi
 if [[ "$DNS_WAS_QUERY_OK" -eq 0 ]]; then
   UAT_ENV+=(MAKIA_UAT_DNS_SOFTFAIL=1)
+fi
+if [[ "$STUNNEL_WAS_CONFIGURED" -eq 1 && "$STUNNEL_WAS_ACTIVE" -eq 0 ]]; then
+  UAT_ENV+=(MAKIA_UAT_STEALTH_SOFTFAIL=1)
 fi
 UAT_CMD=("${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke)
 if ! "${UAT_CMD[@]}"; then
