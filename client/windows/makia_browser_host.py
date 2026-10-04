@@ -45,12 +45,14 @@ def _dpapi(data,protect=True):
     buf=ctypes.create_string_buffer(raw)
     inp=DATA_BLOB(len(raw),ctypes.cast(buf,ctypes.POINTER(ctypes.c_byte)))
     out=DATA_BLOB()
+    crypt32=ctypes.windll.crypt32
+    kernel32=ctypes.windll.kernel32
     if protect:
-        ok=ctypes.windll.crypt32.CryptProtectData(
+        ok=crypt32.CryptProtectData(
             ctypes.byref(inp),"Makia Browser Host",None,None,None,0,ctypes.byref(out)
         )
     else:
-        ok=ctypes.windll.crypt32.CryptUnprotectData(
+        ok=crypt32.CryptUnprotectData(
             ctypes.byref(inp),None,None,None,None,0,ctypes.byref(out)
         )
     if not ok:
@@ -58,7 +60,10 @@ def _dpapi(data,protect=True):
     try:
         return ctypes.string_at(out.pbData,out.cbData)
     finally:
-        ctypes.windll.kernel32.LocalFree(out.pbData)
+        local_free=kernel32.LocalFree
+        local_free.argtypes=[ctypes.c_void_p]
+        local_free.restype=ctypes.c_void_p
+        local_free(ctypes.cast(out.pbData,ctypes.c_void_p))
 
 
 def seal(value):
@@ -210,8 +215,10 @@ def run_elevated(args,expect_scope=None,expect_disconnect=False):
         before_mtime=connector.STATE.stat().st_mtime_ns
     except OSError:
         before_mtime=0
-    rc=ctypes.windll.shell32.ShellExecuteW(None,"runas",_connector_exe(),params,None,1)
-    if int(rc)<=32:
+    shell_execute=ctypes.windll.shell32.ShellExecuteW
+    shell_execute.restype=ctypes.c_void_p
+    rc=shell_execute(None,"runas",_connector_exe(),params,None,1)
+    if int(rc or 0)<=32:
         raise RuntimeError("Unable to start elevated Makia Connector")
     state=wait_connector_state(
         scope=expect_scope,
