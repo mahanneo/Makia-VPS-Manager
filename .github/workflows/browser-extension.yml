@@ -61,7 +61,7 @@ jobs:
         run: |
           mkdir -p dist
           python - <<'PY'
-          import hashlib, zipfile
+          import hashlib, os, zipfile
           from pathlib import Path
           root=Path("client/browser-extension")
           out=Path("dist/Makia-Browser-VPN-Chrome-Edge-1.5.0.zip")
@@ -75,7 +75,7 @@ jobs:
           digest=hashlib.sha256(data).hexdigest()
           Path("dist/SHA256SUMS.txt").write_text(f"{digest}  {out.name}\n",encoding="ascii")
           Path("dist/BUILD-INFO.txt").write_text(
-              "commit=${GITHUB_SHA}\nversion=1.5.0\nmode=pure-browser\n",
+              f"commit={os.environ.get('GITHUB_SHA','')}\nversion=1.5.0\nmode=pure-browser\n",
               encoding="ascii",
           )
           print(digest,out)
