@@ -49,6 +49,7 @@ jobs:
           assert "proxy" in m["permissions"]
           assert "webRequest" in m["permissions"]
           assert "webRequestAuthProvider" in m["permissions"]
+          assert "privacy" in m["permissions"]
           assert m["host_permissions"]==["<all_urls>"]
           assert m["optional_host_permissions"]==["https://*/*"]
           PY
