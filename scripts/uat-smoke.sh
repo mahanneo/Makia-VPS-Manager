@@ -55,7 +55,7 @@ else
   ok "Panel domain not configured; HTTPS domain gate skipped (IP mode)"
 fi
 
-BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9444}"
 if [[ -n "$PANEL_DOMAIN" && -s "/etc/letsencrypt/live/$PANEL_DOMAIN/fullchain.pem" ]]; then
   if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:|\])${BROWSER_PORT}$"; then
     ok "Browser Gateway TLS listener TCP/$BROWSER_PORT"
