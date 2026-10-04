@@ -337,35 +337,11 @@ if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then
 else
   ok "OpenVPN TCP fallback not configured"
 fi
+
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   if systemctl is-active --quiet stunnel4; then
     ok "Stealth TLS/Stunnel runtime active"
-  elif grep -Eq '^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*
-
-if command -v makia-restore-portable >/dev/null 2>&1; then
-  ok "Portable restore command"
-else
-  bad "Portable restore command missing"
-fi
-
-if command -v makia-doctor >/dev/null 2>&1; then
-  makia-doctor || true
-else
-  bad "makia-doctor command missing"
-fi
-
-printf '\n'
-if [[ "$FAIL" -eq 0 ]]; then
-  printf 'HOST SMOKE: PASS\n'
-else
-  printf 'HOST SMOKE: FAIL\n'
-  printf 'Failure summary (%d):\n' "${#FAILURES[@]}"
-  for item in "${FAILURES[@]}"; do
-    printf '  - %s\n' "$item"
-  done
-fi
-exit "$FAIL"
- /etc/default/stunnel4 2>/dev/null; then
+  elif grep -Eq '^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/default/stunnel4 2>/dev/null; then
     if [[ "${MAKIA_UAT_STEALTH_SOFTFAIL:-0}" == "1" ]]; then
       warn "Stealth config retained; stunnel4 was already inactive before update"
     else
