@@ -140,7 +140,17 @@ fi
 
 if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then
   ok "Stunnel tooling" "installed"
-  if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then check_service stunnel4 "Stealth TLS/Stunnel" yes; else warn "Stealth TLS/Stunnel" "not configured"; fi
+  if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+    if systemctl is-active --quiet stunnel4; then
+      ok "Stealth TLS/Stunnel" "active"
+    elif grep -Eq '^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/default/stunnel4 2>/dev/null; then
+      fail "Stealth TLS/Stunnel" "configured + ENABLED=1 but service inactive"
+    else
+      warn "Stealth TLS/Stunnel" "config retained but service is disabled/inactive"
+    fi
+  else
+    warn "Stealth TLS/Stunnel" "not configured"
+  fi
 else
   fail "Stunnel tooling" "not installed"
 fi

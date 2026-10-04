@@ -3,9 +3,10 @@ set -Eeuo pipefail
 
 APP=/opt/makia-vps-manager
 FAIL=0
+FAILURES=()
 
 ok(){ printf '✓ %s\n' "$1"; }
-bad(){ printf '✗ %s\n' "$1"; FAIL=1; }
+bad(){ printf '✗ %s\n' "$1"; FAIL=1; FAILURES+=("$1"); }
 warn(){ printf '⚠ %s\n' "$1"; }
 xray_bad(){ bad "$1"; }
 ovpn_bad(){ bad "$1"; }
@@ -113,6 +114,34 @@ then
   ok "SQLite integrity + secret permission + AES ZIP"
 else
   bad "SQLite integrity / crypto smoke"
+fi
+
+if ( cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app.db import connect, get_setting
+
+required={
+    "client_accounts","client_devices","client_sessions",
+    "client_protocol_bindings","client_artifact_bindings",
+    "client_usage_baselines","client_artifact_usage","client_artifact_policy_state",
+}
+with connect() as con:
+    tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+missing=sorted(required-tables)
+assert not missing, "missing Client Platform tables: "+", ".join(missing)
+state=str(get_setting("client_portal_enabled","0") or "0").strip().lower()
+print("client_portal_enabled="+state)
+PY
+) >/tmp/makia-client-platform-smoke.txt 2>&1; then
+  ok "Client Platform schema + persistent policy state"
+  CLIENT_PORTAL_STATE="$(sed -n 's/^client_portal_enabled=//p' /tmp/makia-client-platform-smoke.txt | tail -n1)"
+  if [[ "$CLIENT_PORTAL_STATE" =~ ^(1|true|yes|on)$ ]]; then
+    warn "Client Portal is enabled; confirm this is intentional for the current UAT/canary stage"
+  else
+    ok "Client Portal rollout switch remains disabled"
+  fi
+else
+  bad "Client Platform schema / persistent policy state"
+  sed -n '1,12p' /tmp/makia-client-platform-smoke.txt || true
 fi
 
 if ( cd "$APP" && "$APP/.venv/bin/python" -c 'import app.main; print(app.main.APP_NAME, app.main.VERSION)' ) >/tmp/makia-import.txt; then
@@ -308,11 +337,19 @@ if [[ -f /etc/openvpn/server/makia-tcp.conf ]]; then
 else
   ok "OpenVPN TCP fallback not configured"
 fi
+
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+  STUNNEL_ENABLED="$(sed -n 's/^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*\([01]\)[[:space:]]*$/\1/p' /etc/default/stunnel4 2>/dev/null | tail -n1)"
   if systemctl is-active --quiet stunnel4; then
     ok "Stealth TLS/Stunnel runtime active"
+  elif [[ "$STUNNEL_ENABLED" == "1" ]]; then
+    if [[ "${MAKIA_UAT_STEALTH_SOFTFAIL:-0}" == "1" ]]; then
+      warn "Stealth config retained; stunnel4 was already inactive before update"
+    else
+      bad "Stealth enabled but stunnel4 inactive"
+    fi
   else
-    bad "Stealth configured but stunnel4 inactive"
+    warn "Stealth config retained but disabled/inactive"
   fi
 else
   ok "Stealth mode not configured"
@@ -335,5 +372,9 @@ if [[ "$FAIL" -eq 0 ]]; then
   printf 'HOST SMOKE: PASS\n'
 else
   printf 'HOST SMOKE: FAIL\n'
+  printf 'Failure summary (%d):\n' "${#FAILURES[@]}"
+  for item in "${FAILURES[@]}"; do
+    printf '  - %s\n' "$item"
+  done
 fi
 exit "$FAIL"

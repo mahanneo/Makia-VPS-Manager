@@ -1,0 +1,120 @@
+name: Clean Install Smoke
+
+on:
+  pull_request:
+    paths:
+      - "install.sh"
+      - "scripts/install.sh"
+      - "scripts/uat-smoke.sh"
+      - "scripts/doctor.sh"
+      - "scripts/install-wstunnel.sh"
+      - "scripts/install-mtproxy.sh"
+      - "scripts/install-dns.sh"
+      - "app/**"
+      - "systemd/**"
+      - "nginx/**"
+      - "requirements.txt"
+      - "VERSION"
+      - ".github/workflows/clean-install.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: clean-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ["22.04", "24.04"]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build systemd Ubuntu test image
+        shell: bash
+        run: |
+          cat > /tmp/MakiaDockerfile <<EOF
+          FROM ubuntu:${{ matrix.ubuntu }}
+          ENV DEBIAN_FRONTEND=noninteractive container=docker
+          RUN apt-get update \
+           && apt-get install -y systemd systemd-sysv dbus curl ca-certificates \
+           && apt-get clean \
+           && rm -rf /var/lib/apt/lists/*
+          STOPSIGNAL SIGRTMIN+3
+          CMD ["/sbin/init"]
+          EOF
+          docker build -t makia-clean-install:${{ matrix.ubuntu }} -f /tmp/MakiaDockerfile /tmp
+
+      - name: Start clean Ubuntu VPS-like container
+        shell: bash
+        run: |
+          extra=()
+          if [[ -e /dev/net/tun ]]; then extra+=(--device /dev/net/tun); fi
+          docker run -d --name makia-clean \
+            --privileged --cgroupns=host \
+            -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            -v /lib/modules:/lib/modules:ro \
+            --tmpfs /run --tmpfs /run/lock \
+            "${extra[@]}" \
+            makia-clean-install:${{ matrix.ubuntu }}
+          for i in {1..30}; do
+            docker exec makia-clean systemctl list-units >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          docker logs makia-clean
+          exit 1
+
+      - name: Install Makia from exact commit SHA
+        shell: bash
+        run: |
+          docker exec \
+            -e MAKIA_REF="${GITHUB_SHA}" \
+            -e MAKIA_INITIAL_ADMIN_PASSWORD="CleanInstallTest!140-Only" \
+            makia-clean bash -lc \
+            'bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/${MAKIA_REF}/install.sh)'
+
+      - name: Verify installed panel and protocol services
+        shell: bash
+        run: |
+          docker exec makia-clean bash -lc '
+            test "$(cat /opt/makia-vps-manager/VERSION)" = "1.4.1"
+            systemctl is-active --quiet makia-vps-manager
+            systemctl is-active --quiet nginx
+            systemctl is-active --quiet xray
+            systemctl is-active --quiet wg-quick@wg0
+            systemctl is-active --quiet openvpn-server@server
+            curl -fsS http://127.0.0.1:8787/healthz
+            makia-doctor
+            makia-uat-smoke
+          '
+
+      - name: Verify installer rerun preserves admin credential
+        shell: bash
+        run: |
+          before="$(docker exec makia-clean sha256sum /opt/makia-vps-manager/data/makia.db | awk '{print $1}')"
+          docker exec \
+            -e MAKIA_REF="${GITHUB_SHA}" \
+            -e MAKIA_INITIAL_ADMIN_PASSWORD="ThisMustNotRotate!140" \
+            makia-clean bash -lc \
+            'bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/${MAKIA_REF}/install.sh)'
+          after="$(docker exec makia-clean sha256sum /opt/makia-vps-manager/data/makia.db | awk '{print $1}')"
+          test -n "$before"
+          test -n "$after"
+          docker exec makia-clean grep -q "Bootstrap password: CleanInstallTest!140-Only" /root/makia-install-credentials.txt
+          docker exec makia-clean systemctl is-active --quiet makia-vps-manager
+          docker exec makia-clean curl -fsS http://127.0.0.1:8787/healthz
+
+      - name: Diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          docker ps -a || true
+          docker logs makia-clean || true
+          docker exec makia-clean systemctl --failed --no-pager || true
+          docker exec makia-clean journalctl -u makia-vps-manager -n 200 --no-pager || true
+          docker exec makia-clean journalctl -u xray -n 120 --no-pager || true
+          docker exec makia-clean journalctl -u openvpn-server@server -n 120 --no-pager || true
+          docker exec makia-clean journalctl -u wg-quick@wg0 -n 120 --no-pager || true

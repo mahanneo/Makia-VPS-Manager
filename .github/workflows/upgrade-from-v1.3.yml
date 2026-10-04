@@ -1,0 +1,42 @@
+name: Upgrade From 1.3.0 Smoke
+
+on:
+  push:
+    branches:
+      - "feature/browser-extension-v1.4.1"
+  pull_request:
+    paths:
+      - "scripts/update.sh"
+      - "scripts/uat-smoke.sh"
+      - "scripts/doctor.sh"
+      - "upgrade.sh"
+      - "tests/upgrade_v130_smoke.sh"
+      - "app/**"
+      - "systemd/**"
+      - "VERSION"
+      - ".github/workflows/upgrade-from-v1.3.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: upgrade-v130-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade-v130:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v5
+
+      - name: Checkout exact production baseline 1.3.0
+        uses: actions/checkout@v5
+        with:
+          ref: 3a2b5eb8f33063eb41f04c073e159ade18a28d8c
+          path: baseline-v130
+
+      - name: Bash syntax
+        run: bash -n tests/upgrade_v130_smoke.sh
+
+      - name: Production-parity upgrade smoke
+        run: bash tests/upgrade_v130_smoke.sh "${GITHUB_SHA}" baseline-v130

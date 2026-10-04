@@ -174,3 +174,67 @@ def test_official_brand_asset_is_referenced():
     assert "/static/makia-brand.png" in dashboard
     assert "/static/makia-brand.png" in login
     assert "docs/assets/makia-brand.png" in readme
+
+
+def test_client_only_update_preserves_active_vpn_runtimes_when_protocol_code_unchanged():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'cmp -s "$APP/app/protocol_ops.py" "$SRC/app/protocol_ops.py"' in update
+    assert 'PROTOCOL_RUNTIME_CHANGED=0' in update
+    assert 'if [[ "$PROTOCOL_RUNTIME_CHANGED" -eq 1 ]]; then' in update
+    assert 'skipping automatic Xray/WireGuard/OpenVPN provisioning and repair' in update
+    assert 'Existing protocol runtime state preserved.' in update
+    for service in ["xray","openvpn-server@server","wg-quick@wg0"]:
+        assert f"systemctl is-active --quiet {service}" in update
+
+def test_v140_uat_artifact_provenance_contract():
+    uat=(ROOT/"docs/UAT-1.4.0.md").read_text(encoding="utf-8")
+    release=(ROOT/"docs/RELEASE-1.4.0.md").read_text(encoding="utf-8")
+    win=(ROOT/".github/workflows/native-connector.yml").read_text(encoding="utf-8")
+    android=(ROOT/".github/workflows/android-connector.yml").read_text(encoding="utf-8")
+    assert "release/v1.4.0-uat1" in uat
+    assert "Makia-Client-Connector-Windows-x64" in uat
+    assert "Makia-Android-Connector-1.4.0-UAT" in uat
+    assert "Makia-Android-Connector-RC" not in uat
+    assert "PR #73" in uat
+    assert "MAKIA_REF=<FROZEN_UAT_SHA_FROM_PR_73>" in uat
+    assert "MAKIA_FORCE_MAIN=0" in uat
+    assert "Do not run plain `sudo makia-upgrade` for pre-merge UAT" in uat
+    assert "Frozen UAT branch: `release/v1.4.0-uat1`" in release
+    assert "\\\\n\\\\nFrozen UAT branch" not in release
+    for workflow in (win, android):
+        assert "BUILD-INFO.txt" in workflow
+        assert "GITHUB_SHA" in workflow
+        assert "GITHUB_RUN_ID" in workflow
+
+
+def test_clean_installer_bootstrap_contract():
+    bootstrap=(ROOT/"install.sh").read_text(encoding="utf-8")
+    install=(ROOT/"scripts/install.sh").read_text(encoding="utf-8")
+
+    # The public bootstrap must accept both branch names and exact frozen SHAs.
+    assert "https://codeload.github.com/${REPO}/tar.gz/${REF}" in bootstrap
+    assert "refs/heads/${REF}" not in bootstrap
+    assert "--retry 5 --retry-all-errors" in bootstrap
+    assert 'MAKIA_INSTALL_SOURCE_REF="$REF"' in bootstrap
+
+    # Fresh minimal Ubuntu must receive runtime dependencies before Python is used.
+    password='ADMIN_PASSWORD="$(python3 - <<\'PY\''
+    packages='apt_retry install -y'
+    assert packages in install
+    assert "python3 python3-venv python3-pip" in install
+    for dependency in ("iproute2","iptables","openssl","wireguard-tools","openvpn","easy-rsa","stunnel4"):
+        assert dependency in install
+    assert install.index(packages) < install.index(password)
+
+    # A rerun after a partial install must preserve the existing admin credential.
+    assert 'ADMIN_EXISTS=0' in install
+    assert 'SELECT 1 FROM admins LIMIT 1' in install
+    assert 'Existing administrator detected' in install
+    assert 'existing credential preserved' in install
+    assert 'sudo makia-reset-admin' in install
+    assert 'from app.security import ensure_secret; init_db(); ensure_secret()' in install
+
+    # Fail early with an actionable message on unsupported raw-host environments.
+    assert 'Makia requires an Ubuntu VPS booted with systemd' in install
+    assert 'At least 1 GiB of free disk space is required' in install
+    assert 'DPkg::Lock::Timeout=180' in install

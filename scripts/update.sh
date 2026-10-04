@@ -90,6 +90,19 @@ on_exit(){
     systemctl restart makia-policy-enforcer 2>/dev/null
     systemctl restart makia-metrics-sampler 2>/dev/null
     systemctl restart makia-protocol-traffic 2>/dev/null
+    if [[ "${XRAY_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl restart xray 2>/dev/null
+    fi
+    if [[ "${WG_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl restart wg-quick@wg0 2>/dev/null
+    fi
+    if [[ "${OVPN_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl restart openvpn-server@server 2>/dev/null
+    fi
+    if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now stunnel4 2>/dev/null
+      systemctl restart stunnel4 2>/dev/null
+    fi
     if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
       systemctl enable --now makia-mtproxy 2>/dev/null
       systemctl restart makia-mtproxy 2>/dev/null
@@ -147,6 +160,13 @@ if [[ -f /etc/wireguard/wg0.conf ]]; then
   systemctl is-active --quiet wg-quick@wg0 2>/dev/null && WG_WAS_ACTIVE=1 || true
 fi
 
+STUNNEL_WAS_CONFIGURED=0
+STUNNEL_WAS_ACTIVE=0
+if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+  STUNNEL_WAS_CONFIGURED=1
+  systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
+fi
+
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="/var/backups/makia-vps-manager/makia-data-${STAMP_DATA}.tar.gz"
 BACKUP_TMP="$(mktemp -d)"
@@ -195,6 +215,35 @@ for item in \
   "etc/systemd/system/makia-ops-monitor.service" \
   "etc/systemd/system/makia-ops-monitor.timer" \
   "etc/systemd/system/makia-mtproxy.service" \
+  "etc/systemd/system/makia-wstunnel.service" \
+  "etc/systemd/system/makia-ikev2-network.service" \
+  "usr/local/sbin/makia-update" \
+  "usr/local/sbin/makia-upgrade" \
+  "usr/local/sbin/makia-backup" \
+  "usr/local/sbin/makia-uninstall" \
+  "usr/local/sbin/makia-doctor" \
+  "usr/local/sbin/makia-uat-smoke" \
+  "usr/local/sbin/makia-restore-portable" \
+  "usr/local/sbin/makia-run-migration-restore" \
+  "usr/local/sbin/makia-reset-admin" \
+  "usr/local/sbin/makia-owner-config" \
+  "usr/local/sbin/makia-ikev2-network" \
+  "usr/local/sbin/makia-install-wstunnel" \
+  "usr/local/sbin/makia-install-outline" \
+  "usr/local/sbin/makia-install-mtproxy" \
+  "usr/local/sbin/makia-refresh-mtproxy" \
+  "usr/local/sbin/makia-install-dns" \
+  "etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync" \
+  "etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync" \
+  "usr/local/etc/xray/config.json" \
+  "etc/xray/config.json" \
+  "etc/wireguard/wg0.conf" \
+  "etc/openvpn/server" \
+  "etc/stunnel/makia-openvpn.conf" \
+  "etc/default/stunnel4" \
+  "etc/ipsec.conf" \
+  "etc/ipsec.secrets" \
+  "etc/makia-vps-manager/wstunnel.env" \
   "etc/makia-vps-manager/mtproxy.env" \
   "etc/makia-vps-manager/mtproxy.toml" \
   "etc/makia-vps-manager/dns.json" \
@@ -327,6 +376,14 @@ if [[ "$NEED_HOST_PACKAGES" -eq 1 || "${#OUTLINE_HOST_PACKAGES[@]}" -gt 0 ]]; th
 fi
 if command -v docker >/dev/null 2>&1 && [[ "${MAKIA_ENABLE_OUTLINE:-0}" == "1" || -s /opt/outline/access.txt ]]; then
   systemctl enable --now docker
+fi
+
+PROTOCOL_RUNTIME_CHANGED=1
+if [[ -f "$APP/app/protocol_ops.py" && -f "$SRC/app/protocol_ops.py" ]] && cmp -s "$APP/app/protocol_ops.py" "$SRC/app/protocol_ops.py"; then
+  PROTOCOL_RUNTIME_CHANGED=0
+  echo "Protocol runtime code is unchanged; active VPN runtimes will be preserved without repair/restart."
+else
+  echo "Protocol runtime code changed; protocol readiness/repair gates remain enabled."
 fi
 
 ROLLBACK_ARMED=1
@@ -497,9 +554,10 @@ install_verified_shell "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 
 systemctl daemon-reload
 
-echo "Ensuring the complete Makia protocol stack is installed and ready..."
-(
-  cd "$APP"
+if [[ "$PROTOCOL_RUNTIME_CHANGED" -eq 1 ]]; then
+  echo "Protocol runtime changed; ensuring the complete Makia protocol stack is installed and ready..."
+  (
+    cd "$APP"
   MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
 from app import protocol_ops
 from app.db import set_setting
@@ -601,6 +659,26 @@ PY
     echo "The panel update will continue so WireGuard Diagnostics and Repair are available."
   fi
 fi
+else
+  echo "Protocol runtime code unchanged; skipping automatic Xray/WireGuard/OpenVPN provisioning and repair."
+  if [[ "$XRAY_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet xray; then
+    echo "Xray was active before update but is no longer active; updater will roll back." >&2
+    exit 5
+  fi
+  if [[ "$OVPN_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet openvpn-server@server; then
+    echo "OpenVPN was active before update but is no longer active; updater will roll back." >&2
+    exit 6
+  fi
+  if [[ "$WG_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet wg-quick@wg0; then
+    echo "WireGuard was active before update but is no longer active; updater will roll back." >&2
+    exit 7
+  fi
+  if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet stunnel4; then
+    echo "Stealth/Stunnel was active before update but is no longer active; updater will roll back." >&2
+    exit 9
+  fi
+  echo "Existing protocol runtime state preserved."
+fi
 
 nginx -t
 systemctl restart makia-vps-manager
@@ -656,6 +734,9 @@ if [[ "$MTPROXY_WAS_ACTIVE" -eq 0 ]]; then
 fi
 if [[ "$DNS_WAS_QUERY_OK" -eq 0 ]]; then
   UAT_ENV+=(MAKIA_UAT_DNS_SOFTFAIL=1)
+fi
+if [[ "$STUNNEL_WAS_CONFIGURED" -eq 1 && "$STUNNEL_WAS_ACTIVE" -eq 0 ]]; then
+  UAT_ENV+=(MAKIA_UAT_STEALTH_SOFTFAIL=1)
 fi
 UAT_CMD=("${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke)
 if ! "${UAT_CMD[@]}"; then

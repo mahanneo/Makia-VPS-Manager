@@ -1,6 +1,6 @@
 from pathlib import Path
-from datetime import date, datetime, timedelta
-import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket
+from datetime import date, datetime, timedelta, timezone
+import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib
 import pyotp, qrcode
 import qrcode.image.svg
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
@@ -3388,6 +3388,357 @@ def api_v1_nodes(request:Request):
     require_api_scope(request,"nodes:read")
     return list_nodes()
 
+
+class CommerceProvisionRequest(BaseModel):
+    external_id:str=Field(min_length=1,max_length=120)
+    name:str=Field(min_length=1,max_length=48)
+    profile:str=Field(min_length=1,max_length=160)
+    product_slug:str=Field(default="",max_length=160)
+    variant:str=Field(default="",max_length=160)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    expire_days:int=Field(default=30,ge=0,le=3650)
+    ip_limit:int=Field(default=1,ge=1,le=50)
+    attributes:dict=Field(default_factory=dict)
+
+class CommerceServiceActionRequest(BaseModel):
+    external_id:str=Field(min_length=1,max_length=120)
+    provision_ref:str=Field(min_length=1,max_length=220)
+    action:str=Field(min_length=1,max_length=32)
+    days:int=Field(default=0,ge=0,le=3650)
+    quota_add_gb:float=Field(default=0,ge=0,le=100000)
+    period:str=Field(default="",max_length=80)
+    plan:str=Field(default="",max_length=120)
+
+def _commerce_source_ip(request:Request):
+    direct=(request.client.host if request.client else "").strip()
+    try:
+        direct_ip=ipaddress.ip_address(direct)
+    except ValueError:
+        raise HTTPException(403,"commerce source address is invalid")
+    # Forwarded client addresses are trusted only when the immediate peer is
+    # the local reverse proxy. Direct remote callers cannot spoof these headers.
+    if direct_ip.is_loopback:
+        forwarded=(request.headers.get("x-forwarded-for") or "").split(",",1)[0].strip()
+        if not forwarded:
+            forwarded=(request.headers.get("x-real-ip") or "").strip()
+        if forwarded:
+            try:
+                return str(ipaddress.ip_address(forwarded))
+            except ValueError:
+                raise HTTPException(403,"commerce forwarded source address is invalid")
+    return str(direct_ip)
+
+def _commerce_require(request:Request,scope:str):
+    identity=require_api_scope(request,scope)
+    raw=(os.getenv("MAKIA_COMMERCE_ALLOWED_CIDRS") or "127.0.0.1/32,::1/128").strip()
+    try:
+        source=ipaddress.ip_address(_commerce_source_ip(request))
+        nets=[ipaddress.ip_network(x.strip(),strict=False) for x in raw.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(503,"commerce network allowlist is invalid")
+    if not nets or not any(source in n for n in nets):
+        audit(_commerce_actor(identity),"commerce_source_denied",scope,str(source),str(source))
+        raise HTTPException(403,"commerce source is not allowed")
+    return identity
+
+def _commerce_model_dict(payload):
+    return payload.model_dump() if hasattr(payload,"model_dump") else payload.dict()
+
+def _commerce_idempotency_replay(row,req_hash):
+    if str(row["request_hash"])!=str(req_hash):
+        raise HTTPException(409,"idempotency key was already used for a different request")
+    status=str(row["status"] or "")
+    if status=="complete":
+        token=str(row["response_enc"] or "")
+        if not token:
+            raise HTTPException(500,"stored idempotent response is unavailable")
+        try:
+            response=access_ops.open_payload(token).get("response")
+        except Exception:
+            raise HTTPException(500,"stored idempotent response is unreadable")
+        if not isinstance(response,dict):
+            raise HTTPException(500,"stored idempotent response is invalid")
+        return response
+    if status=="pending":
+        raise HTTPException(409,"matching commerce request is already in progress")
+    if status=="failed":
+        raise HTTPException(409,"previous matching commerce request failed; use a new Idempotency-Key")
+    raise HTTPException(409,"matching commerce request is not replayable")
+
+def _commerce_idempotency(request:Request,identity,route:str,payload):
+    key=(request.headers.get("idempotency-key") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}",key):
+        raise HTTPException(400,"valid Idempotency-Key header required")
+    body=_commerce_model_dict(payload)
+    req_hash=hashlib.sha256(json.dumps(body,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
+    token_id=int((identity or {}).get("id") or 0)
+    if token_id<=0:
+        raise HTTPException(403,"commerce API token identity is invalid")
+
+    with connect() as con:
+        row=con.execute(
+            "SELECT * FROM commerce_idempotency WHERE token_id=? AND route=? AND idempotency_key=?",
+            (token_id,route,key)
+        ).fetchone()
+    if row:
+        return key,req_hash,_commerce_idempotency_replay(row,req_hash)
+
+    ts=datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        cur=con.execute(
+            """INSERT OR IGNORE INTO commerce_idempotency
+               (token_id,route,idempotency_key,request_hash,status,response_enc,created_at,updated_at)
+               VALUES(?,?,?,?,?,'',?,?)""",
+            (token_id,route,key,req_hash,"pending",ts,ts)
+        )
+        claimed=(cur.rowcount==1)
+        if not claimed:
+            row=con.execute(
+                "SELECT * FROM commerce_idempotency WHERE token_id=? AND route=? AND idempotency_key=?",
+                (token_id,route,key)
+            ).fetchone()
+    if not claimed:
+        if not row:
+            raise HTTPException(409,"commerce idempotency claim failed")
+        return key,req_hash,_commerce_idempotency_replay(row,req_hash)
+
+    request.state.commerce_idempotency={
+        "token_id":token_id,
+        "route":route,
+        "idempotency_key":key,
+        "request_hash":req_hash,
+    }
+    return key,req_hash,None
+
+def _commerce_idempotency_store(request:Request,response:dict):
+    ctx=getattr(request.state,"commerce_idempotency",None)
+    if not ctx:
+        return
+    response_enc=access_ops.seal_payload({"response":response})
+    ts=datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        cur=con.execute(
+            """UPDATE commerce_idempotency
+               SET status='complete',response_enc=?,updated_at=?
+               WHERE token_id=? AND route=? AND idempotency_key=? AND request_hash=? AND status='pending'""",
+            (
+                response_enc,ts,ctx["token_id"],ctx["route"],ctx["idempotency_key"],
+                ctx["request_hash"]
+            )
+        )
+    if cur.rowcount!=1:
+        raise HTTPException(409,"commerce idempotency claim is no longer pending")
+    request.state.commerce_idempotency=None
+
+def _commerce_idempotency_fail(request:Request):
+    ctx=getattr(request.state,"commerce_idempotency",None)
+    if not ctx:
+        return
+    with connect() as con:
+        con.execute(
+            """UPDATE commerce_idempotency SET status='failed',updated_at=?
+               WHERE token_id=? AND route=? AND idempotency_key=? AND request_hash=? AND status='pending'""",
+            (
+                datetime.now(timezone.utc).isoformat(),ctx["token_id"],ctx["route"],
+                ctx["idempotency_key"],ctx["request_hash"]
+            )
+        )
+    request.state.commerce_idempotency=None
+
+@app.middleware("http")
+async def commerce_idempotency_failure_guard(request:Request,call_next):
+    try:
+        response=await call_next(request)
+    except Exception:
+        _commerce_idempotency_fail(request)
+        raise
+    if response.status_code>=400:
+        _commerce_idempotency_fail(request)
+    return response
+
+def _commerce_expiry_text(expire_at):
+    value=int(expire_at or 0)
+    return datetime.fromtimestamp(value,timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+def _commerce_actor(identity):
+    return "api:"+str((identity or {}).get("name") or "commerce")
+
+@app.post("/api/v1/commerce/provision")
+def api_v1_commerce_provision(payload:CommerceProvisionRequest,request:Request):
+    identity=_commerce_require(request,"commerce:provision")
+    idem,req_hash,cached=_commerce_idempotency(request,identity,"provision",payload)
+    if cached is not None:return cached
+    actor=_commerce_actor(identity)
+    profile=str(payload.profile or "").strip()
+    attrs=payload.attributes or {}
+    endpoint=str(attrs.get("endpoint") or public_host(request)).strip()
+    endpoint_mode=str(attrs.get("endpoint_mode") or "auto").strip()
+    expire_at=int(time.time()+payload.expire_days*86400) if payload.expire_days else 0
+    quota_bytes=int(payload.quota_gb*1024*1024*1024)
+    response=None
+    if profile.startswith("xray:"):
+        inbound_tag=profile.split(":",1)[1].strip()
+        if not inbound_tag:raise HTTPException(422,"xray profile requires an inbound tag")
+        if any(row.get("engine")=="xray" and row.get("name")==payload.name for row in list_protocol_clients()):
+            raise HTTPException(409,"commerce client name already exists")
+        result=None;client_id=None
+        try:
+            endpoint=protocol_ops.validate_endpoint_selection(endpoint,endpoint_mode)
+            result=protocol_ops.add_xray_client_to_inbound(inbound_tag,payload.name,endpoint,"",str(attrs.get("flow") or ""))
+            client_id=create_protocol_client(
+                payload.name,"xray",result["protocol"],result["tag"],result["credential"],result["share_link"],
+                quota_bytes,expire_at,payload.ip_limit,int(attrs.get("reset_days") or 0)
+            )
+            row=get_protocol_client(client_id);sub_id=(row or {}).get("subscription_id") or ""
+            origin=public_origin(request)
+            sub_settings=operator_settings_snapshot()["subscription"]
+            sub_url=f"{origin}/sub/{sub_id}?format={sub_settings['default_format']}" if sub_id and sub_settings["enabled"] else ""
+            client_url=f"{origin}/client/{sub_id}" if sub_id and sub_settings["client_page_enabled"] else ""
+            delivery=access_ops.xray_payload(payload.name,result["protocol"],result["share_link"],sub_url,client_url)
+            artifact_save("xray",str(client_id),payload.name,result["protocol"],delivery,{
+                "client_id":client_id,"inbound_tag":result["tag"],"subscription_id":sub_id,
+                "endpoint":endpoint,"endpoint_mode":endpoint_mode,"commerce_external_id":payload.external_id
+            })
+        except Exception as exc:
+            if result and result.get("tag"):
+                try:protocol_ops.remove_xray_client_from_inbound(result["tag"],payload.name)
+                except Exception:pass
+            if client_id:
+                try:delete_access_artifact_by_key("xray",str(client_id));delete_protocol_client(client_id)
+                except Exception:pass
+            if isinstance(exc,HTTPException):raise
+            if isinstance(exc,protocol_ops.ProtocolError):raise HTTPException(400,str(exc))
+            raise
+        qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(result["share_link"])).decode("ascii")
+        response={"ok":True,"kind":"xray","provision_ref":f"xray:{client_id}","protocol":result["protocol"],
+                  "credential":result["share_link"],"connection":{"share_link":result["share_link"],"subscription_url":sub_url,"client_url":client_url,"qr":qr},
+                  "expires_at":_commerce_expiry_text(expire_at),"quota_bytes":quota_bytes,"device_limit":payload.ip_limit,
+                  "node":endpoint,"region":str(attrs.get("region") or "")}
+    elif profile=="outline":
+        created=None;client_id=None
+        try:
+            created=integration_ops.outline_create_key(payload.name,quota_bytes)
+            key_id=str(created.get("id") or "");access_url=str(created.get("accessUrl") or "")
+            client_id=create_protocol_client(payload.name,"outline","outline",key_id,key_id,access_url,quota_bytes,expire_at,1,0)
+            delivery=access_ops.outline_payload(payload.name,access_url,key_id,quota_bytes)
+            artifact_save("outline",str(client_id),payload.name,"outline",delivery,{
+                "client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes,"commerce_external_id":payload.external_id
+            })
+        except Exception as exc:
+            if created and created.get("id"):
+                try:integration_ops.outline_delete_key(created["id"])
+                except Exception:pass
+            if client_id:
+                try:delete_protocol_client(client_id)
+                except Exception:pass
+            if isinstance(exc,integration_ops.IntegrationError):raise HTTPException(400,str(exc))
+            raise
+        qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(access_url)).decode("ascii")
+        response={"ok":True,"kind":"outline","provision_ref":f"outline:{client_id}","protocol":"outline",
+                  "credential":access_url,"connection":{"access_url":access_url,"qr":qr},
+                  "expires_at":_commerce_expiry_text(expire_at),"quota_bytes":quota_bytes,"device_limit":1,
+                  "node":public_host(request),"region":str(attrs.get("region") or "")}
+    elif profile=="wireguard":
+        try:
+            endpoint=protocol_ops.validate_endpoint_selection(endpoint,endpoint_mode,direct=True)
+            result=protocol_ops.create_wireguard_peer(
+                payload.name,endpoint,dns=str(attrs.get("dns") or "1.1.1.1"),
+                mtu=int(attrs.get("mtu") or 1280),keepalive=int(attrs.get("keepalive") or 15),
+                allowed_ips=str(attrs.get("allowed_ips") or "0.0.0.0/0")
+            )
+            delivery=access_ops.wireguard_payload(payload.name,result["config"],result.get("address"))
+            artifact_save("wireguard",payload.name,payload.name,"wireguard",delivery,{
+                "public_key":result.get("public_key",""),"address":result.get("address",""),"interface":"wg0",
+                "endpoint":result.get("endpoint",""),"endpoint_mode":endpoint_mode,"commerce_external_id":payload.external_id
+            })
+        except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
+        qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(result["config"])).decode("ascii")
+        response={"ok":True,"kind":"wireguard","provision_ref":"wireguard:"+payload.name,"protocol":"wireguard",
+                  "credential":result["config"],"connection":{"config":result["config"],"qr":qr},
+                  "expires_at":_commerce_expiry_text(expire_at),"quota_bytes":0,"device_limit":1,
+                  "node":endpoint,"region":str(attrs.get("region") or ""),"policy_note":"expiry/quota enforcement is not native per peer"}
+    elif profile=="openvpn":
+        port=int(attrs.get("port") or get_setting("default_openvpn_port",1194) or 1194)
+        proto=str(attrs.get("proto") or get_setting("default_openvpn_proto","udp") or "udp")
+        try:
+            endpoint=protocol_ops.validate_endpoint_selection(endpoint,endpoint_mode,direct=True)
+            result=protocol_ops.create_openvpn_client(payload.name,endpoint,port,proto)
+            delivery=access_ops.openvpn_payload(payload.name,result["config"])
+            artifact_save("openvpn",payload.name,payload.name,"openvpn",delivery,{
+                "endpoint":endpoint,"endpoint_mode":endpoint_mode,"port":port,"transport":proto,"commerce_external_id":payload.external_id
+            })
+        except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
+        response={"ok":True,"kind":"openvpn","provision_ref":"openvpn:"+payload.name,"protocol":"openvpn",
+                  "credential":result["config"],"connection":{"config":result["config"]},
+                  "expires_at":_commerce_expiry_text(expire_at),"quota_bytes":0,"device_limit":1,
+                  "node":endpoint,"region":str(attrs.get("region") or ""),"policy_note":"expiry/quota enforcement is not native per client"}
+    else:
+        raise HTTPException(422,"unsupported commerce profile; use xray:<inbound_tag>, outline, wireguard or openvpn")
+    audit(actor,"commerce_provision",payload.external_id,f"profile={profile}; ref={response.get('provision_ref')}",ip=_commerce_source_ip(request))
+    _commerce_idempotency_store(request,response)
+    return response
+
+@app.post("/api/v1/commerce/service-action")
+def api_v1_commerce_service_action(payload:CommerceServiceActionRequest,request:Request):
+    identity=_commerce_require(request,"commerce:service")
+    idem,req_hash,cached=_commerce_idempotency(request,identity,"service-action",payload)
+    if cached is not None:return cached
+    actor=_commerce_actor(identity)
+    action=str(payload.action or "").lower().strip()
+    if action not in {"renew","suspend","resume","reissue","upgrade"}:raise HTTPException(422,"unsupported service action")
+    if ":" not in payload.provision_ref:raise HTTPException(422,"invalid provision_ref")
+    kind,key=payload.provision_ref.split(":",1);kind=kind.lower().strip();key=key.strip()
+    response={"ok":True,"provision_ref":payload.provision_ref}
+    if kind in {"xray","outline"}:
+        try:row=get_protocol_client(int(key))
+        except Exception:row=None
+        if not row or str(row.get("engine") or "")!=kind:raise HTTPException(404,"managed client not found")
+        if action=="renew":
+            days=max(1,int(payload.days or 30));res=_renew_managed_item(kind,key,days,payload.quota_add_gb,actor,request);fresh=get_protocol_client(int(key)) or row
+            response.update({"service_status":"active","expires_at":_commerce_expiry_text(fresh.get("expire_at")),"quota_bytes":int(fresh.get("quota_bytes") or 0)})
+            if kind=="outline" and res.get("outline_key_id"):
+                response["credential"]=str((get_protocol_client(int(key)) or {}).get("share_link") or "")
+        elif action=="upgrade":
+            quota=int(row.get("quota_bytes") or 0)+int(float(payload.quota_add_gb or 0)*1024*1024*1024)
+            if kind=="outline" and bool(row.get("enabled")):
+                try:integration_ops.outline_set_limit(str(row.get("inbound_tag") or ""),quota)
+                except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+            update_protocol_client_state(row["id"],None,quota,None,None,None)
+            response.update({"service_status":"active" if row.get("enabled") else "suspended","quota_bytes":quota})
+        elif action=="suspend":
+            if kind=="xray":
+                try:protocol_ops.disable_xray_client(row["inbound_tag"],row["name"])
+                except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
+            else:
+                try:integration_ops.outline_delete_key(str(row.get("inbound_tag") or ""))
+                except integration_ops.IntegrationError as exc:raise HTTPException(400,str(exc))
+            update_protocol_client_state(row["id"],False,None,None,None,None);response["service_status"]="suspended"
+        elif action=="resume":
+            if kind=="xray":
+                try:protocol_ops.enable_xray_client(row["inbound_tag"],row["name"],row["protocol"],row["credential"])
+                except protocol_ops.ProtocolError as exc:raise HTTPException(400,str(exc))
+                update_protocol_client_state(row["id"],True,None,None,None,None)
+            else:
+                try:res=_outline_reissue_managed_client(row)
+                except Exception as exc:raise HTTPException(400,str(exc))
+                response["credential"]=str(res.get("access_url") or "")
+                response["connection"]={"access_url":str(res.get("access_url") or ""),"qr":"data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(str(res.get("access_url") or ""))).decode("ascii")}
+            response["service_status"]="active"
+        elif action=="reissue":
+            if kind!="outline":raise HTTPException(409,"credential reissue is currently supported for Outline only")
+            try:res=_outline_reissue_managed_client(row)
+            except Exception as exc:raise HTTPException(400,str(exc))
+            access_url=str(res.get("access_url") or "")
+            response.update({"service_status":"active","credential":access_url,"connection":{"access_url":access_url,"qr":"data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(access_url)).decode("ascii")}})
+    elif kind in {"wireguard","openvpn"}:
+        raise HTTPException(409,"lifecycle enforcement for this access type remains manual; Makia does not claim per-client expiry/quota controls")
+    else:
+        raise HTTPException(422,"unsupported provision_ref kind")
+    audit(actor,"commerce_service_action",payload.external_id,f"action={action}; ref={payload.provision_ref}",ip=_commerce_source_ip(request))
+    _commerce_idempotency_store(request,response)
+    return response
+
+
 class APITokenCreate(BaseModel):
     name:str=Field(min_length=1,max_length=80)
     scopes:list[str]=Field(default_factory=lambda:["status:read"])
@@ -3401,7 +3752,7 @@ def admin_tokens(request:Request):
 def admin_token_create(payload:APITokenCreate,request:Request):
     actor=require_local_admin(request)
     require_mutation(request)
-    allowed={"status:read","accounts:read","protocols:read","nodes:read"}
+    allowed={"status:read","accounts:read","protocols:read","nodes:read","commerce:provision","commerce:service"}
     scopes=[x for x in payload.scopes if x in allowed]
     if not scopes:
         raise HTTPException(400,"at least one valid scope is required")
