@@ -19,7 +19,7 @@ def test_host_smoke_honors_explicit_stealth_softfail():
     source=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
     assert 'MAKIA_UAT_STEALTH_SOFTFAIL:-0' in source
     assert "Stealth config retained; stunnel4 was already inactive before update" in source
-    assert 'bad "Stealth configured but stunnel4 inactive"' in source
+    assert 'bad "Stealth enabled but stunnel4 inactive"' in source
 
 
 def test_host_smoke_prints_failure_summary():
