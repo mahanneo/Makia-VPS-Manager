@@ -32,3 +32,24 @@ def test_doctor_distinguishes_disabled_from_broken_stealth():
     source=(ROOT/"scripts/doctor.sh").read_text(encoding="utf-8")
     assert "configured + ENABLED=1 but service inactive" in source
     assert "config retained but service is disabled/inactive" in source
+
+
+def test_rollback_snapshot_covers_cli_and_protocol_state():
+    source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    for required in [
+        "usr/local/sbin/makia-upgrade",
+        "usr/local/sbin/makia-doctor",
+        "usr/local/sbin/makia-uat-smoke",
+        "etc/wireguard/wg0.conf",
+        "etc/openvpn/server",
+        "etc/stunnel/makia-openvpn.conf",
+        "etc/default/stunnel4",
+    ]:
+        assert required in source
+
+def test_rollback_restarts_previously_active_core_protocols():
+    source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'systemctl restart xray' in source
+    assert 'systemctl restart wg-quick@wg0' in source
+    assert 'systemctl restart openvpn-server@server' in source
+    assert 'systemctl restart stunnel4' in source
