@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           docker exec makia-clean bash -lc '
-            test "$(cat /opt/makia-vps-manager/VERSION)" = "1.4.2"
+            test "$(cat /opt/makia-vps-manager/VERSION)" = "1.5.0"
             systemctl is-active --quiet makia-vps-manager
             systemctl is-active --quiet nginx
             systemctl is-active --quiet xray
