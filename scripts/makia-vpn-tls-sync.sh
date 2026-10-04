@@ -29,4 +29,10 @@ if grep -q "WSTUNNEL_CERT=$LINEAGE/fullchain.pem" /etc/makia-vps-manager/wstunne
   systemctl restart makia-wstunnel
 fi
 
+# Browser Gateway reads the Let's Encrypt lineage directly. A restart makes the
+# renewed certificate effective for new secure-proxy connections.
+if systemctl is-active --quiet makia-browser-gateway 2>/dev/null; then
+  systemctl restart makia-browser-gateway
+fi
+
 echo "Makia VPN TLS sync: renewed services for $DOMAIN."
