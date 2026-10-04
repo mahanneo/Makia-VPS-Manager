@@ -101,7 +101,6 @@ async function handle(message){
   if(action==="status")return status();
   if(action==="connect"){
     const mode=message.mode==="device"?"device":"browser";
-    await proxyClear();
     const result=await native({
       action:"connect",kind:message.kind,id:Number(message.id),mode
     });
@@ -110,22 +109,23 @@ async function handle(message){
       await applyBrowserProxy(result.proxy_port);
       await enableWebRtcLeakProtection();
     }else{
+      await proxyClear();
       await clearWebRtcLeakProtection();
     }
     await badge({connected:true});
     return result;
   }
   if(action==="disconnect"){
+    const result=await native({action:"disconnect"});
     await proxyClear();
     await clearWebRtcLeakProtection();
-    const result=await native({action:"disconnect"});
     await badge({connected:false});
     return result;
   }
   if(action==="logout"){
+    try{await native({action:"disconnect"})}catch(_e){}
     await proxyClear();
     await clearWebRtcLeakProtection();
-    try{await native({action:"disconnect"})}catch(_e){}
     const result=await native({action:"logout"});
     await badge({connected:false});
     return result;
@@ -144,7 +144,7 @@ async function restore(){
     if(s.connected&&s.scope==="browser"&&s.proxy_port){
       await applyBrowserProxy(s.proxy_port);
       await enableWebRtcLeakProtection();
-    }else if(!s.connected){
+    }else{
       await proxyClear();
       await clearWebRtcLeakProtection();
     }
