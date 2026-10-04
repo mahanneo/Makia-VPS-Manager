@@ -11,8 +11,7 @@ on:
       - ".github/workflows/android-connector.yml"
   push:
     branches:
-      - "feature/native-client-connector-v1.4.0"
-      - "release/v1.4.0-uat1"
+      - "main"
     paths:
       - "client/android/**"
       - "app/client_connector.py"
@@ -89,11 +88,11 @@ jobs:
         run: |
           python makia/client/android/patch_sfa.py upstream/sing-box-for-android makia/client/android/MakiaEntryActivity.kt
           grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
-          grep -q '^VERSION_NAME=1.4.0$' upstream/sing-box-for-android/version.properties
-          grep -q '^VERSION_CODE=10400$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_NAME=1.5.1$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10501$' upstream/sing-box-for-android/version.properties
           grep -q 'android:scheme="makia"' upstream/sing-box-for-android/app/src/main/AndroidManifest.xml
 
-      - name: Build installable Android debug APK
+      - name: Build installable Android UAT APK
         shell: bash
         working-directory: upstream/sing-box-for-android
         run: |
@@ -120,6 +119,8 @@ jobs:
             echo "ref=$GITHUB_REF"
             echo "run_id=$GITHUB_RUN_ID"
             echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+            echo "makia_version=1.5.1"
+            echo "signing=debug-uat"
           } > package-android/BUILD-INFO.txt
           python - <<'PY'
           from pathlib import Path
@@ -138,7 +139,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Android-Connector-1.4.0-UAT
+          name: Makia-Android-Connector-1.5.1-UAT
           path: package-android/
           if-no-files-found: error
           retention-days: 90
