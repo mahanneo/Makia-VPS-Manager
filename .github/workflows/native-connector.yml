@@ -32,7 +32,7 @@ jobs:
           node --check app/static/client.js
           node --check client/browser-extension/background.js
           node --check client/browser-extension/popup.js
-          python -c "import json; m=json.load(open('client/browser-extension/manifest.json',encoding='utf-8')); assert m['manifest_version']==3; assert set(m['permissions'])=={'nativeMessaging','proxy'}; assert 'host_permissions' not in m"
+          python -c "import json; m=json.load(open('client/browser-extension/manifest.json',encoding='utf-8')); assert m['manifest_version']==3; assert set(m['permissions'])=={'nativeMessaging','proxy','privacy'}; assert 'host_permissions' not in m"
       - name: Build connector exe
         shell: pwsh
         run: |
