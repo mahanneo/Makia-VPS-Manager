@@ -1,4 +1,5 @@
 name: Upgrade From 1.3.0 Smoke
+# Production parity gate: exact 1.3.0 -> candidate with retained inactive Stealth.
 
 on:
   pull_request:
