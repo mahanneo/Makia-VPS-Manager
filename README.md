@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.5.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.5.1</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.4 UAT](docs/UAT-1.4.0.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.5.1 UAT](docs/UAT-1.5.1.md)**
 
 ---
 
@@ -51,7 +51,7 @@ Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 wh
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## Makia Client 1.5.0
+## Makia Client 1.5.1
 
 ### Pure Browser Gateway
 
@@ -60,8 +60,8 @@ Chrome/Edge users can connect without installing any Windows executable. The Man
 End users can open the same authenticated Client URL on Android, iPhone/iPad, Windows or macOS. The portal shows only the signed-in account's quota, expiry, device state and assigned access profiles.
 
 - **Windows:** one-click Full Device Direct Connect through the Makia Client Connector.
-- **Chrome / Edge:** Makia Browser VPN extension routes only browser traffic through the non-elevated native host and local loopback proxy; VPN credentials never enter extension storage.
-- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; OpenVPN remains import-based in 1.4.0.
+- **Chrome / Edge:** Makia Browser VPN connects directly to the authenticated TLS Browser Gateway on the VPS; no Windows EXE, Registry entry or Native Messaging host is required.
+- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; the CI artifact is explicitly UAT/debug-signed until a persistent private release-signing key is configured.
 - **iPhone / iPad:** install the PWA from Safari with Add to Home Screen and use the platform-aware Open/Import flow. Native in-app iOS tunnelling is not claimed until an Apple-signed Network Extension build completes real-device UAT.
 - Native launch tickets are one-time, device-bound and short-lived; VPN secrets are not embedded in the `makia://` URL.
 - The Client Portal remains disabled by default until the operator completes host UAT/canary.
@@ -208,7 +208,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.5.0.md](docs/UAT-1.5.0.md)** for the browser-extension patch release and **[docs/UAT-1.4.0.md](docs/UAT-1.4.0.md)** for the original client-platform gate.
+See **[docs/UAT-1.5.1.md](docs/UAT-1.5.1.md)** for the current release gate and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
 
 ## Runtime layout
 
