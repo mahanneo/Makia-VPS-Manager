@@ -143,10 +143,64 @@ if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; th
   if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
     if systemctl is-active --quiet stunnel4; then
       ok "Stealth TLS/Stunnel" "active"
-    elif grep -Eq '^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/default/stunnel4 2>/dev/null; then
-      fail "Stealth TLS/Stunnel" "configured + ENABLED=1 but service inactive"
+    elif grep -Eq '^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*
+else
+  fail "Stunnel tooling" "not installed"
+fi
+
+if command -v ipsec >/dev/null 2>&1; then
+  ok "IKEv2 tooling" "strongSwan installed"
+  if grep -q '# BEGIN MAKIA IKEV2' /etc/ipsec.conf 2>/dev/null; then
+    if systemctl is-active --quiet strongswan-starter || systemctl is-active --quiet strongswan; then ok "IKEv2 runtime" "active"; else fail "IKEv2 runtime" "configured but inactive"; fi
+    if ss -H -lun 2>/dev/null | grep -Eq ':(500|4500)([[:space:]]|$)'; then ok "IKEv2 listeners" "UDP/500 or UDP/4500 active"; else fail "IKEv2 listeners" "missing UDP/500 and UDP/4500"; fi
+  else
+    warn "IKEv2 runtime" "tooling ready, not configured"
+  fi
+else
+  fail "IKEv2 tooling" "strongSwan missing; run makia-upgrade"
+fi
+
+if command -v wstunnel >/dev/null 2>&1; then
+  ok "WStunnel tooling" "$(wstunnel --version 2>/dev/null | head -n1)"
+  if [[ -f /etc/makia-vps-manager/wstunnel.env ]]; then check_service makia-wstunnel "WStunnel runtime" yes; else warn "WStunnel runtime" "tooling ready, not configured"; fi
+else
+  fail "WStunnel tooling" "missing; run makia-upgrade"
+fi
+
+if [[ -f /etc/makia-vps-manager/mtproxy.env ]]; then
+  if [[ -x /opt/makia-mtproxy/mtg ]]; then
+    MTG_VERSION="$(/opt/makia-mtproxy/mtg --version 2>/dev/null | head -n1 || true)"
+    ok "Telegram MTProxy tooling" "${MTG_VERSION:-installed}"
+    check_service makia-mtproxy "Telegram MTProxy runtime" yes
+  else
+    fail "Telegram MTProxy" "configured but /opt/makia-mtproxy/mtg is missing"
+  fi
+else
+  warn "Telegram MTProxy" "optional; not configured"
+fi
+
+if [[ -f /etc/unbound/unbound.conf.d/makia.conf ]]; then
+  if command -v unbound-checkconf >/dev/null 2>&1 && unbound-checkconf >/tmp/makia-unbound-check.log 2>&1; then
+    ok "Makia DNS config" "valid"
+  else
+    fail "Makia DNS config" "$(tail -n 2 /tmp/makia-unbound-check.log 2>/dev/null | tr '\n' ' ')"
+  fi
+  check_service unbound "Makia DNS resolver" yes
+  if command -v dig >/dev/null 2>&1 && dig @127.0.0.1 example.com +short +time=2 +tries=1 | grep -q .; then
+    ok "Makia DNS query" "localhost resolver answered"
+  else
+    fail "Makia DNS query" "local resolver did not answer"
+  fi
+else
+  warn "Makia DNS" "optional; not configured"
+fi
+
+printf '\nSummary: %d PASS · %d WARN · %d FAIL\n\n' "$PASS" "$WARN" "$FAIL"
+[[ "$FAIL" -eq 0 ]]
+ /etc/default/stunnel4 2>/dev/null; then
+      warn "Stealth TLS/Stunnel" "optional config is ENABLED=1 but service is inactive; core VPNs are unaffected"
     else
-      warn "Stealth TLS/Stunnel" "config retained but service is disabled/inactive"
+      warn "Stealth TLS/Stunnel" "optional config retained but service is disabled/inactive"
     fi
   else
     warn "Stealth TLS/Stunnel" "not configured"
