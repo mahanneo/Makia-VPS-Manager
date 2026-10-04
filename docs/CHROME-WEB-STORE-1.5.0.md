@@ -9,6 +9,7 @@ Recommended visibility: **Unlisted** until production UAT is complete.
 - `proxy`: routes Chrome HTTP/HTTPS traffic through the selected Makia Browser Gateway.
 - `storage`: stores panel URL, Client session state and local connection state.
 - `webRequest` + `webRequestAuthProvider`: supplies short-lived authentication only when Chrome receives a proxy authentication challenge.
+- `privacy`: while connected, sets WebRTC to `disable_non_proxied_udp` and disables network prediction to reduce direct-IP/DNS leakage; both settings are cleared on disconnect.
 - `<all_urls>`: required because Browser VPN applies to browser web requests. Makia does not inspect or store visited URLs in the extension.
 
 The extension no longer requests `nativeMessaging`.
