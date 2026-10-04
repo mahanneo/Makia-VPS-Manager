@@ -47,7 +47,7 @@ baseline_rc=$?
 set -e
 echo "baseline installer exit=$baseline_rc"
 
-docker exec "$CONTAINER" bash -lc '
+docker exec -e BASELINE_VERSION="$BASELINE_VERSION" "$CONTAINER" bash -lc '
   set -Eeuo pipefail
   test "$(cat /opt/makia-vps-manager/VERSION)" = "$BASELINE_VERSION"
   systemctl enable --now nginx
