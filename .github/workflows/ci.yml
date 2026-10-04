@@ -34,7 +34,7 @@ jobs:
       - name: Unit tests
         run: pytest -q
       - name: Bash syntax
-        run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh
+        run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh tests/upgrade_v130_smoke.sh
       - name: WStunnel installer smoke
         run: |
           WSTUNNEL_DEST=/tmp/wstunnel-test bash scripts/install-wstunnel.sh
