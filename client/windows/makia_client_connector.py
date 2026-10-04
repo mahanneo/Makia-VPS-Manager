@@ -387,6 +387,7 @@ def main():
     ap.add_argument("--status",action="store_true")
     ap.add_argument("--native-host",action="store_true")
     ap.add_argument("--browser-disconnect",action="store_true")
+    ap.add_argument("--parent-window",default="")
     args=ap.parse_args()
     browser_host_binary=Path(sys.executable).stem.lower()=="makiabrowserhost"
     try:
