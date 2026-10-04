@@ -35,6 +35,7 @@ check_service nginx "Nginx"
 check_service makia-policy-enforcer "SSH policy enforcer"
 check_service makia-metrics-sampler "Metrics sampler"
 check_service makia-protocol-traffic "Protocol traffic collector"
+check_service makia-browser-gateway "Browser Gateway"
 check_service fail2ban "Fail2ban"
 
 TMP_HEALTH="$(mktemp)"
