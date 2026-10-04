@@ -49,9 +49,21 @@ def test_gateway_proxy_session_lifecycle_and_usage(tmp_path, monkeypatch):
     assert browser_gateway_store.add_usage(validated["id"],123,456)
     assert client_store.account_usage_bytes(account_id)==579
 
+    refreshed=browser_gateway_store.issue(session,900)
+    assert refreshed["username"]!=issued["username"]
+    assert browser_gateway_store.validate(
+        issued["username"],issued["password"],"203.0.113.20"
+    ), "previous short-lived credential must remain valid during refresh overlap"
+    assert browser_gateway_store.validate(
+        refreshed["username"],refreshed["password"],"203.0.113.20"
+    )
+
     client_store.revoke_session(token)
     assert browser_gateway_store.validate(
         issued["username"],issued["password"],"203.0.113.20"
+    ) is None
+    assert browser_gateway_store.validate(
+        refreshed["username"],refreshed["password"],"203.0.113.20"
     ) is None
 
 
