@@ -386,12 +386,16 @@ def main():
     ap.add_argument("--disconnect",action="store_true")
     ap.add_argument("--status",action="store_true")
     ap.add_argument("--native-host",action="store_true")
+    ap.add_argument("--browser-disconnect",action="store_true")
     args=ap.parse_args()
+    browser_host_binary=Path(sys.executable).stem.lower()=="makiabrowserhost"
     try:
-        if args.native_host:
+        if args.native_host or browser_host_binary:
             native_write(handle_native_message(native_read()))
             return 0
-        if args.disconnect:
+        if args.browser_disconnect:
+            result=stop_current("browser")
+        elif args.disconnect:
             result=stop_current("device")
         elif args.status:
             result=json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {"connected":False}
@@ -404,7 +408,7 @@ def main():
     except Exception as exc:
         message=str(exc)
         log(type(exc).__name__+": "+message)
-        if args.native_host:
+        if args.native_host or browser_host_binary:
             try:
                 native_write({"ok":False,"error":message})
             except Exception:
