@@ -1,4 +1,4 @@
-# Makia Client Connector 1.4.2 installer.
+# Makia Client Connector 1.5.0 installer.
 # Machine scope is preferred so Chrome/Edge can resolve the Native Messaging
 # host regardless of UAC/user-registry context. User-scope fallback remains
 # available for locked-down PCs.
@@ -127,7 +127,7 @@ if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaCl
 }
 
 $state = @{
-  version = "1.4.2"
+  version = "1.5.0"
   scope = $Scope
   extension_id = $extensionId
   native_host = $browserHost
@@ -137,7 +137,7 @@ $state = @{
 [System.IO.File]::WriteAllText((Join-Path $target "install-state.json"),$state,(New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ""
-Write-Host "Makia Client Connector 1.4.2 installed successfully." -ForegroundColor Green
+Write-Host "Makia Client Connector 1.5.0 installed successfully." -ForegroundColor Green
 Write-Host "Scope: $Scope"
 Write-Host "Full-device connector: $connector"
 Write-Host "Browser native host: $browserHost"
