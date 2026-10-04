@@ -1,4 +1,4 @@
-name: Android Connector Build
+name: Android Connector UAT Build
 
 on:
   pull_request:
@@ -9,6 +9,7 @@ on:
       - "app/static/client.js"
       - "app/templates/client_app.html"
       - ".github/workflows/android-connector.yml"
+      - "VERSION"
   push:
     branches:
       - "main"
@@ -19,6 +20,7 @@ on:
       - "app/static/client.js"
       - "app/templates/client_app.html"
       - ".github/workflows/android-connector.yml"
+      - "VERSION"
   workflow_dispatch:
 
 concurrency:
