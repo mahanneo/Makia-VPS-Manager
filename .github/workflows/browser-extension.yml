@@ -1,0 +1,90 @@
+name: Browser Extension Build
+
+on:
+  pull_request:
+    paths:
+      - "client/browser-extension/**"
+      - "app/browser_gateway.py"
+      - "app/browser_gateway_store.py"
+      - "app/client_portal.py"
+      - "app/client_store.py"
+      - "scripts/browser-gateway-sync.sh"
+      - "systemd/makia-browser-gateway.service"
+      - "tests/test_browser_gateway.py"
+      - "tests/test_browser_extension_contract.py"
+      - ".github/workflows/browser-extension.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-extension:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Validate pure-browser contract
+        run: |
+          python -m py_compile app/browser_gateway.py app/browser_gateway_store.py app/client_portal.py app/client_store.py
+          node --check client/browser-extension/background.js
+          node --check client/browser-extension/popup.js
+          pytest -q tests/test_browser_gateway.py tests/test_browser_extension_contract.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("client/browser-extension/manifest.json")
+          m=json.loads(p.read_text(encoding="utf-8"))
+          assert m["manifest_version"]==3
+          assert m["version"]=="1.5.0"
+          permissions=set(m["permissions"])
+          assert "nativeMessaging" not in permissions
+          assert {"proxy","webRequest","webRequestAuthProvider","storage","alarms"} <= permissions
+          assert m["host_permissions"]==["<all_urls>"]
+          print("Pure-browser Manifest V3 contract PASS")
+          PY
+
+      - name: Build Chrome Edge Web Store ZIP
+        run: |
+          mkdir -p dist
+          python - <<'PY'
+          import hashlib, zipfile
+          from pathlib import Path
+          root=Path("client/browser-extension")
+          out=Path("dist/Makia-Browser-VPN-Chrome-Edge-1.5.0.zip")
+          allowed={".json",".js",".html",".css",".png",".svg",".webp"}
+          files=[p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in allowed]
+          assert any(p.name=="manifest.json" for p in files)
+          with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+              for p in sorted(files):
+                  z.write(p,p.relative_to(root).as_posix())
+          data=out.read_bytes()
+          digest=hashlib.sha256(data).hexdigest()
+          Path("dist/SHA256SUMS.txt").write_text(f"{digest}  {out.name}\n",encoding="ascii")
+          Path("dist/BUILD-INFO.txt").write_text(
+              "commit=${GITHUB_SHA}\nversion=1.5.0\nmode=pure-browser\n",
+              encoding="ascii",
+          )
+          print(digest,out)
+          PY
+          unzip -l dist/Makia-Browser-VPN-Chrome-Edge-1.5.0.zip
+          unzip -p dist/Makia-Browser-VPN-Chrome-Edge-1.5.0.zip manifest.json | grep -q '"version": "1.5.0"'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Browser-VPN-Chrome-Edge-1.5.0
+          path: dist/
+          if-no-files-found: error
