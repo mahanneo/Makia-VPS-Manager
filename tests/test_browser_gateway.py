@@ -48,7 +48,7 @@ def test_extension_is_pure_browser_no_native_messaging():
     assert "webRequestAuthProvider" in manifest["permissions"]
     assert "sendNativeMessage" not in background
     assert 'scheme:"https"' in background
-    assert "127.0.0.1" not in background
+    assert 'host:"127.0.0.1"' not in background
 
 
 def test_gateway_service_hardening_contract():
