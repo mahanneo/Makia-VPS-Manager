@@ -339,9 +339,10 @@ else
 fi
 
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+  STUNNEL_ENABLED="$(sed -n 's/^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*\([01]\)[[:space:]]*$/\1/p' /etc/default/stunnel4 2>/dev/null | tail -n1)"
   if systemctl is-active --quiet stunnel4; then
     ok "Stealth TLS/Stunnel runtime active"
-  elif grep -Eq '^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*$' /etc/default/stunnel4 2>/dev/null; then
+  elif [[ "$STUNNEL_ENABLED" == "1" ]]; then
     if [[ "${MAKIA_UAT_STEALTH_SOFTFAIL:-0}" == "1" ]]; then
       warn "Stealth config retained; stunnel4 was already inactive before update"
     else
