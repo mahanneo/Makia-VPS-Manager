@@ -35,7 +35,7 @@ $manifest = @{
   type = "stdio"
   allowed_origins = @("chrome-extension://$extensionId/")
 } | ConvertTo-Json -Depth 4
-Set-Content -Path $hostManifest -Value $manifest -Encoding UTF8
+[System.IO.File]::WriteAllText($hostManifest,$manifest,(New-Object System.Text.UTF8Encoding($false)))
 
 foreach ($key in @(
   "HKCU:\Software\Google\Chrome\NativeMessagingHosts\$hostName",
