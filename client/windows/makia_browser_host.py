@@ -21,6 +21,12 @@ PROFILE=ROOT/"profile.json"
 LOG=ROOT/"browser-host.log"
 MAX_MESSAGE=256*1024
 
+# Chromium Native Messaging on Windows requires raw binary stdio framing.
+if os.name=="nt":
+    import msvcrt
+    msvcrt.setmode(sys.stdin.fileno(),os.O_BINARY)
+    msvcrt.setmode(sys.stdout.fileno(),os.O_BINARY)
+
 
 class DATA_BLOB(ctypes.Structure):
     _fields_=[("cbData",wintypes.DWORD),("pbData",ctypes.POINTER(ctypes.c_byte))]
