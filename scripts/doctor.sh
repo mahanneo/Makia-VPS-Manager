@@ -202,5 +202,34 @@ else
   warn "Makia DNS" "optional; not configured"
 fi
 
+BG_JSON="$(cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" -m app.browser_gateway --check-config 2>/dev/null || true)"
+if [[ -n "$BG_JSON" ]]; then
+  readarray -t BG_PARTS < <(python3 - "$BG_JSON" <<'PY'
+import json,sys
+try: d=json.loads(sys.argv[1])
+except Exception: d={}
+print("1" if d.get("ok") else "0")
+print(d.get("host") or "")
+print(int(d.get("port") or 0))
+print(d.get("error") or "")
+PY
+)
+  BG_OK="${BG_PARTS[0]:-0}"
+  BG_HOST="${BG_PARTS[1]:-}"
+  BG_PORT="${BG_PARTS[2]:-0}"
+  BG_ERROR="${BG_PARTS[3]:-}"
+  if [[ "$BG_OK" == "1" ]]; then
+    if systemctl is-active --quiet makia-browser-gateway 2>/dev/null && ss -H -ltn 2>/dev/null | grep -Eq ":${BG_PORT}([[:space:]]|$)"; then
+      ok "Browser Gateway" "active · https://${BG_HOST}:${BG_PORT}"
+    else
+      fail "Browser Gateway" "HTTPS prerequisites ready but service/listener is inactive"
+    fi
+  else
+    warn "Browser Gateway" "${BG_ERROR:-HTTPS domain/certificate not ready}"
+  fi
+else
+  warn "Browser Gateway" "configuration probe unavailable"
+fi
+
 printf '\nSummary: %d PASS · %d WARN · %d FAIL\n\n' "$PASS" "$WARN" "$FAIL"
 [[ "$FAIL" -eq 0 ]]
