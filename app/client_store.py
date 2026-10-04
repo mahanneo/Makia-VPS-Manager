@@ -1067,7 +1067,7 @@ def issue_browser_proxy_token(session, ttl_seconds=1800):
     if not ok:
         raise PermissionError(reason)
     now_ts=int(time.time())
-    ttl=max(300,min(int(ttl_seconds or 1800),3600))
+    ttl=max(300,min(int(ttl_seconds or 1800),12*60*60))
     token="bp_"+secrets.token_urlsafe(36)
     with connect() as con:
         con.execute(
