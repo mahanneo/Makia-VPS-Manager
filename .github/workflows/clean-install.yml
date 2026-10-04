@@ -40,7 +40,7 @@ jobs:
           FROM ubuntu:${{ matrix.ubuntu }}
           ENV DEBIAN_FRONTEND=noninteractive container=docker
           RUN apt-get update \
-           && apt-get install -y systemd systemd-sysv dbus curl ca-certificates \
+           && apt-get install -y systemd systemd-sysv dbus curl ca-certificates openssl \
            && apt-get clean \
            && rm -rf /var/lib/apt/lists/*
           STOPSIGNAL SIGRTMIN+3
@@ -90,6 +90,12 @@ jobs:
             makia-doctor
             makia-uat-smoke
           '
+
+      - name: Pure Browser Gateway TLS proxy smoke
+        shell: bash
+        run: |
+          docker cp tests/browser_gateway_smoke.sh makia-clean:/tmp/browser_gateway_smoke.sh
+          docker exec makia-clean bash /tmp/browser_gateway_smoke.sh
 
       - name: Verify installer rerun preserves admin credential
         shell: bash
