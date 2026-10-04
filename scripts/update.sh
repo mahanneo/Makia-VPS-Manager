@@ -210,6 +210,7 @@ for item in \
   "etc/systemd/system/makia-policy-enforcer.service" \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
+  "etc/systemd/system/makia-browser-gateway.service" \
   "etc/systemd/system/makia-scheduled-backup.service" \
   "etc/systemd/system/makia-scheduled-backup.timer" \
   "etc/systemd/system/makia-ops-monitor.service" \
@@ -411,6 +412,7 @@ install -m 0644 "$SRC/systemd/makia-vps-manager.service" /etc/systemd/system/mak
 install -m 0644 "$SRC/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+install -m 0644 "$SRC/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
@@ -686,10 +688,12 @@ systemctl enable --now makia-policy-enforcer
 systemctl restart makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
+systemctl enable --now makia-browser-gateway
 systemctl enable --now makia-scheduled-backup.timer
 systemctl enable --now makia-ops-monitor.timer
 systemctl restart makia-metrics-sampler
 systemctl restart makia-protocol-traffic
+systemctl restart makia-browser-gateway
 systemctl enable --now fail2ban
 systemctl restart fail2ban
 systemctl reload nginx
