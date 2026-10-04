@@ -93,7 +93,7 @@ def _parse_basic(value):
         return None,None
     if ":" not in decoded:
         return None,None
-    return decoded.split(":",1)
+    return tuple(decoded.split(":",1))
 
 
 def _split_authority(value,default_port):
