@@ -19,11 +19,15 @@ async function api(path, options={}) {
   return data;
 }
 
-async function clearProxyState() {
-  try { await chrome.proxy.settings.clear({scope:"regular"}); } catch (_) {}
+async function clearProxyState(force=false) {
+  const ownedState = await chrome.storage.local.get(["makiaProxyOwned"]);
+  if (force || ownedState.makiaProxyOwned) {
+    try { await chrome.proxy.settings.clear({scope:"regular"}); } catch (_) {}
+  }
   try { await chrome.storage.session.remove(["proxyUsername","proxyPassword"]); } catch (_) {}
   await chrome.storage.local.set({
     connected:false,
+    makiaProxyOwned:false,
     gatewayHost:"",
     gatewayPort:0,
     credentialExpiresAt:0,
@@ -35,6 +39,10 @@ async function clearProxyState() {
 async function setSecureProxy(gateway) {
   if (!gateway || gateway.scheme !== "https" || !gateway.host || !gateway.port) {
     throw new Error("Invalid Makia Browser Gateway configuration");
+  }
+  const current = await chrome.proxy.settings.get({incognito:false});
+  if (["not_controllable","controlled_by_other_extensions"].includes(String(current.levelOfControl || ""))) {
+    throw new Error("Chrome proxy settings are controlled by another policy or extension");
   }
   await chrome.proxy.settings.set({
     value:{
@@ -58,6 +66,7 @@ async function setSecureProxy(gateway) {
     },
     scope:"regular"
   });
+  await chrome.storage.local.set({makiaProxyOwned:true});
 }
 
 async function issueGatewaySession() {
