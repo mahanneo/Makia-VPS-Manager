@@ -40,6 +40,7 @@ WireGuard and OpenVPN are intentionally Device VPN only in 1.4.0.
 Manifest V3 permissions:
 - nativeMessaging
 - proxy
+- privacy (only to prevent non-proxied WebRTC UDP while Browser Only is active)
 
 Not requested:
 - cookies
