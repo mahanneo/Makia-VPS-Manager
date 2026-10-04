@@ -78,6 +78,24 @@ Installer registers the per-user `makia://` URL protocol.
 13. Backup -> restore -> repeat one direct-connect smoke.
 14. Limited canary only after all checks pass.
 
+## Chrome / Edge Browser Extension
+
+Makia 1.4.0 also builds a Manifest V3 Chromium extension and a non-elevated MakiaBrowserHost.exe.
+
+- Browser Only starts a loopback-only SOCKS5 endpoint through sing-box and applies it only to the current Chrome/Edge browser with the proxy permission.
+- Device VPN delegates to the existing elevated MakiaClientConnector.exe and keeps the full-tunnel behavior.
+- Pairing uses a five-minute, one-time code generated inside the authenticated Client Portal.
+- The extension never receives VPN delivery secrets or the long-lived Client session token.
+- The Native Host protects its Client session token with Windows DPAPI.
+- Native Messaging allows only exact extension IDs; there is no wildcard origin and no generic command bridge.
+
+GitHub Actions artifacts:
+
+- Makia-Client-Connector-Windows-x64
+- Makia-Browser-Extension-Chromium-1.4.0
+
+See docs/BROWSER-EXTENSION-V1.4.0.md for the full handoff and client/browser-extension/INSTALL.md for UAT installation.
+
 ## Android
 
 The Android connector is built from pinned official SagerNet sources and uses Android `VpnService`.
