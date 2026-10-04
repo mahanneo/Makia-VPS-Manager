@@ -4,7 +4,7 @@ set -Eeuo pipefail
 APP=/opt/makia-vps-manager
 DOMAIN=localhost
 CERT_DIR=/etc/letsencrypt/live/$DOMAIN
-PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9444}"
 
 cleanup(){
   (
