@@ -43,7 +43,7 @@ def test_gateway_default_destination_ports_are_web_only():
 def test_extension_is_pure_browser_no_native_messaging():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
-    assert manifest["version"]=="1.5.0"
+    assert manifest["version"]=="1.5.1"
     assert "nativeMessaging" not in manifest["permissions"]
     assert "webRequestAuthProvider" in manifest["permissions"]
     assert "sendNativeMessage" not in background
