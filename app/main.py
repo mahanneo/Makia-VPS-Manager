@@ -3849,8 +3849,9 @@ def general_settings_put(payload:GeneralSettings,request:Request):
     set_setting("panel_domain",domain)
     set_setting("theme",theme)
     set_setting("density",density)
-    audit(actor,"general_settings_update",domain or "none",f"language={language}; theme={theme}; density={density}",ip(request))
-    return {"ok":True,"language":language,"panel_domain":domain,"theme":theme,"density":density}
+    gateway_sync=panel_ops.sync_browser_gateway()
+    audit(actor,"general_settings_update",domain or "none",f"language={language}; theme={theme}; density={density}; browser_gateway={gateway_sync.get('status')}",ip(request))
+    return {"ok":True,"language":language,"panel_domain":domain,"theme":theme,"density":density,"browser_gateway":gateway_sync}
 
 
 class OperatorSettings(BaseModel):
@@ -3971,7 +3972,8 @@ def domain_apply(payload:DomainApply,request:Request):
     try: result=panel_ops.apply_domain(payload.domain)
     except panel_ops.PanelOperationError as e: raise HTTPException(400,str(e))
     set_setting("panel_domain",result["domain"])
-    audit(actor,"domain_apply",result["domain"],ip=ip(request))
+    result["browser_gateway"]=panel_ops.sync_browser_gateway()
+    audit(actor,"domain_apply",result["domain"],detail=f"browser_gateway={result['browser_gateway'].get('status')}",ip=ip(request))
     return result
 
 class CertificateIssue(BaseModel):
@@ -3984,7 +3986,8 @@ def certificate_issue(payload:CertificateIssue,request:Request):
     try: result=panel_ops.issue_certificate(payload.domain,payload.email)
     except panel_ops.PanelOperationError as e: raise HTTPException(400,str(e))
     set_setting("panel_domain",result["domain"])
-    audit(actor,"certificate_issue",result["domain"],ip=ip(request))
+    result["browser_gateway"]=panel_ops.sync_browser_gateway()
+    audit(actor,"certificate_issue",result["domain"],detail=f"browser_gateway={result['browser_gateway'].get('status')}",ip=ip(request))
     return result
 
 @app.get("/api/admin/2fa/status")
