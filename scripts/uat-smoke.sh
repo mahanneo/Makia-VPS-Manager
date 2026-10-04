@@ -145,6 +145,54 @@ else
   sed -n '1,12p' /tmp/makia-client-platform-smoke.txt || true
 fi
 
+BG_JSON="$(cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" -m app.browser_gateway --check-config 2>/dev/null || true)"
+if [[ -n "$BG_JSON" ]]; then
+  readarray -t BG_PARTS < <(python3 - "$BG_JSON" <<'PY'
+import json,sys
+try:
+    data=json.loads(sys.argv[1])
+except Exception:
+    data={}
+print("1" if data.get("ok") else "0")
+print(data.get("host") or "")
+print(int(data.get("port") or 0))
+print(data.get("error") or "")
+PY
+)
+  BG_OK="${BG_PARTS[0]:-0}"
+  BG_HOST="${BG_PARTS[1]:-}"
+  BG_PORT="${BG_PARTS[2]:-0}"
+  BG_ERROR="${BG_PARTS[3]:-}"
+  if [[ "$BG_OK" == "1" ]]; then
+    if systemctl is-active --quiet makia-browser-gateway && ss -H -ltn 2>/dev/null | grep -Eq ":${BG_PORT}([[:space:]]|$)"; then
+      ok "Browser Gateway service + TCP listener"
+      if BG_HOST="$BG_HOST" BG_PORT="$BG_PORT" python3 - <<'PY'
+import os,socket,ssl
+host=os.environ["BG_HOST"]
+port=int(os.environ["BG_PORT"])
+ctx=ssl.create_default_context()
+with socket.create_connection(("127.0.0.1",port),timeout=5) as raw:
+    with ctx.wrap_socket(raw,server_hostname=host) as tls:
+        cert=tls.getpeercert()
+        assert cert, "gateway certificate missing"
+        assert tls.version(), "TLS version unavailable"
+print("browser gateway TLS PASS")
+PY
+      then
+        ok "Browser Gateway TLS certificate handshake"
+      else
+        bad "Browser Gateway TLS certificate handshake"
+      fi
+    else
+      bad "Browser Gateway HTTPS configuration is ready but runtime is inactive"
+    fi
+  else
+    warn "Browser Gateway deferred: ${BG_ERROR:-HTTPS domain/certificate not ready}"
+  fi
+else
+  warn "Browser Gateway configuration probe unavailable"
+fi
+
 if ( cd "$APP" && "$APP/.venv/bin/python" -c 'import app.main; print(app.main.APP_NAME, app.main.VERSION)' ) >/tmp/makia-import.txt; then
   ok "Application import"
 else
