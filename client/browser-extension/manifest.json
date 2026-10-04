@@ -9,9 +9,17 @@
     "proxy",
     "webRequest",
     "webRequestAuthProvider",
-    "alarms"
+    "alarms",
+    "privacy"
   ],
-  "host_permissions": ["<all_urls>"],
-  "background": {"service_worker": "background.js"},
-  "action": {"default_title": "Makia Browser VPN", "default_popup": "popup.html"}
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Makia Browser VPN",
+    "default_popup": "popup.html"
+  }
 }
