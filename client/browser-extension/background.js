@@ -14,6 +14,10 @@ function native(message){
   });
 }
 
+function proxyGet(){
+  return new Promise(resolve=>chrome.proxy.settings.get({incognito:false},resolve));
+}
+
 function proxySet(details){
   return new Promise((resolve,reject)=>{
     chrome.proxy.settings.set(details,()=>{
@@ -23,7 +27,9 @@ function proxySet(details){
   });
 }
 
-function proxyClear(){
+async function proxyClear(){
+  const current=await proxyGet();
+  if(current.levelOfControl!=="controlled_by_this_extension")return;
   return new Promise((resolve,reject)=>{
     chrome.proxy.settings.clear({scope:"regular"},()=>{
       const last=chrome.runtime.lastError;
@@ -35,6 +41,10 @@ function proxyClear(){
 async function applyBrowserProxy(port){
   const p=Number(port||0);
   if(!Number.isInteger(p)||p<1024||p>65535)throw new Error("Invalid local proxy port");
+  const current=await proxyGet();
+  if(!["controllable_by_this_extension","controlled_by_this_extension"].includes(current.levelOfControl)){
+    throw new Error("Browser proxy is controlled by another extension or policy");
+  }
   await proxySet({
     value:{
       mode:"fixed_servers",
@@ -67,11 +77,13 @@ function privacyClear(api){
 
 async function enableWebRtcLeakProtection(){
   const api=chrome.privacy&&chrome.privacy.network&&chrome.privacy.network.webRTCIPHandlingPolicy;
-  if(!api)return;
+  if(!api)throw new Error("Browser WebRTC privacy control is unavailable");
   const current=await privacyGet(api);
-  if(["controllable_by_this_extension","controlled_by_this_extension"].includes(current.levelOfControl)){
-    await privacySet(api,"disable_non_proxied_udp");
+  if(current.value==="disable_non_proxied_udp")return;
+  if(!["controllable_by_this_extension","controlled_by_this_extension"].includes(current.levelOfControl)){
+    throw new Error("WebRTC leak protection is controlled by another extension or policy");
   }
+  await privacySet(api,"disable_non_proxied_udp");
 }
 
 async function clearWebRtcLeakProtection(){
@@ -105,9 +117,16 @@ async function handle(message){
       action:"connect",kind:message.kind,id:Number(message.id),mode
     });
     if(mode==="browser"){
-      if(!result.proxy_port)throw new Error("Local Browser Only proxy did not start");
-      await applyBrowserProxy(result.proxy_port);
-      await enableWebRtcLeakProtection();
+      try{
+        if(!result.proxy_port)throw new Error("Local Browser Only proxy did not start");
+        await enableWebRtcLeakProtection();
+        await applyBrowserProxy(result.proxy_port);
+      }catch(error){
+        try{await native({action:"disconnect"})}catch(_e){}
+        try{await proxyClear()}catch(_e){}
+        try{await clearWebRtcLeakProtection()}catch(_e){}
+        throw error;
+      }
     }else{
       await proxyClear();
       await clearWebRtcLeakProtection();
