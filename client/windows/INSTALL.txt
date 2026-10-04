@@ -1,15 +1,35 @@
-Makia Client Connector 1.4.0 — Windows UAT
+Makia Client Connector 1.4.0 — Windows + Chrome/Edge UAT
 
-Recommended install:
+Recommended Windows install:
 1. Extract the GitHub artifact ZIP once.
 2. Double-click Install-Makia.cmd.
-3. Windows may show a UAC prompt when the connector starts because TUN mode requires elevated privileges.
-4. Return to Makia Client PWA and press Direct Connect again.
+3. Windows installs MakiaClientConnector.exe, MakiaBrowserHost.exe and the pinned sing-box runtime under the current user's LocalAppData.
+4. The installer registers makia:// and the Chrome/Edge Native Messaging host.
+5. Windows may show a UAC prompt when Device VPN starts because TUN/WireGuard operations require elevation.
+
+Chrome / Edge extension UAT:
+1. Open chrome://extensions or edge://extensions.
+2. Enable Developer mode.
+3. Choose Load unpacked.
+4. Select the BrowserExtension folder from this package.
+5. Login to Makia Client Portal.
+6. Select "اتصال افزونه Chrome / Edge" and create a one-time Pair Code.
+7. Open the Makia VPN extension, enter the panel HTTPS origin + Pair Code and pair it.
+8. Use Browser Only for browser traffic only, or Device VPN for the full Windows tunnel.
+
+Browser Only supports VLESS, VMess, Trojan, Hysteria2, Shadowsocks/Outline and SSH.
+WireGuard and OpenVPN require Device VPN mode.
+
+UAT unpacked extension ID:
+kifidlpkeejegkcolpjfipmjllldakik
 
 If Direct Connect fails, read:
 %LOCALAPPDATA%\Makia\Connector\connector.log
 
+If the browser bridge fails, read:
+%LOCALAPPDATA%\Makia\BrowserHost\browser-host.log
+
 Uninstall:
 Double-click Uninstall-Makia.cmd.
 
-This RC does not modify VPS credentials or restart production services.
+This RC does not modify VPS credentials or restart production VPN services merely because the browser extension is installed.
