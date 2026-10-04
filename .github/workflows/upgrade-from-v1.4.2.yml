@@ -1,0 +1,45 @@
+name: Upgrade From 1.4.2 Smoke
+
+on:
+  pull_request:
+    paths:
+      - "scripts/update.sh"
+      - "scripts/uat-smoke.sh"
+      - "scripts/doctor.sh"
+      - "scripts/browser-gateway-sync.sh"
+      - "upgrade.sh"
+      - "tests/upgrade_v130_smoke.sh"
+      - "app/**"
+      - "systemd/**"
+      - "VERSION"
+      - ".github/workflows/upgrade-from-v1.4.2.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: upgrade-v142-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade-v142:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v5
+
+      - name: Checkout exact production baseline 1.4.2
+        uses: actions/checkout@v5
+        with:
+          ref: 7ccf57f50dc864eb20e7cf615d3fc0376524bfd0
+          path: baseline-v142
+
+      - name: Bash syntax
+        run: |
+          bash -n tests/upgrade_v130_smoke.sh
+          bash -n scripts/browser-gateway-sync.sh
+          bash -n scripts/update.sh
+          bash -n scripts/doctor.sh
+          bash -n scripts/uat-smoke.sh
+
+      - name: Production upgrade smoke
+        run: bash tests/upgrade_v130_smoke.sh "${GITHUB_SHA}" baseline-v142 1.4.2
