@@ -19,7 +19,47 @@ async function api(path, options={}) {
   return data;
 }
 
+async function applyPrivacyGuards() {
+  const rtc = chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy;
+  const prediction = chrome.privacy && chrome.privacy.network && chrome.privacy.network.networkPredictionEnabled;
+
+  if (rtc) {
+    const current = await rtc.get({});
+    const level = String(current.levelOfControl || "");
+    if (current.value !== "disable_non_proxied_udp") {
+      if (["not_controllable","controlled_by_other_extensions"].includes(level)) {
+        throw new Error("Chrome WebRTC privacy policy prevents Makia from blocking non-proxied UDP");
+      }
+      await rtc.set({value:"disable_non_proxied_udp"});
+      await chrome.storage.local.set({makiaWebRtcOwned:true});
+    }
+  }
+
+  if (prediction) {
+    const current = await prediction.get({});
+    const level = String(current.levelOfControl || "");
+    if (current.value !== false && !["not_controllable","controlled_by_other_extensions"].includes(level)) {
+      await prediction.set({value:false});
+      await chrome.storage.local.set({makiaPredictionOwned:true});
+    }
+  }
+}
+
+async function clearPrivacyGuards() {
+  const state = await chrome.storage.local.get(["makiaWebRtcOwned","makiaPredictionOwned"]);
+  const rtc = chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy;
+  const prediction = chrome.privacy && chrome.privacy.network && chrome.privacy.network.networkPredictionEnabled;
+  if (state.makiaWebRtcOwned && rtc) {
+    try { await rtc.clear({}); } catch (_) {}
+  }
+  if (state.makiaPredictionOwned && prediction) {
+    try { await prediction.clear({}); } catch (_) {}
+  }
+  await chrome.storage.local.set({makiaWebRtcOwned:false,makiaPredictionOwned:false});
+}
+
 async function clearProxyState(force=false) {
+  await clearPrivacyGuards();
   const ownedState = await chrome.storage.local.get(["makiaProxyOwned"]);
   if (force || ownedState.makiaProxyOwned) {
     try { await chrome.proxy.settings.clear({scope:"regular"}); } catch (_) {}
@@ -89,8 +129,10 @@ async function issueGatewaySession() {
     proxyError:""
   });
   try {
+    await applyPrivacyGuards();
     await setSecureProxy(data.gateway);
   } catch (err) {
+    await clearPrivacyGuards();
     await chrome.storage.session.remove(["proxyUsername","proxyPassword"]);
     await chrome.storage.local.set({
       connected:false,
