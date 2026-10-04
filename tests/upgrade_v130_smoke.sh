@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 CANDIDATE_SHA="${1:?candidate SHA required}"
 BASELINE_DIR="${2:?baseline directory required}"
+BASELINE_VERSION="${3:-1.3.0}"
 CONTAINER="makia-upgrade-v130"
 IMAGE="makia-upgrade-v130"
 
@@ -48,14 +49,14 @@ echo "baseline installer exit=$baseline_rc"
 
 docker exec "$CONTAINER" bash -lc '
   set -Eeuo pipefail
-  test "$(cat /opt/makia-vps-manager/VERSION)" = "1.3.0"
+  test "$(cat /opt/makia-vps-manager/VERSION)" = "$BASELINE_VERSION"
   systemctl enable --now nginx
   cd /opt/makia-vps-manager
   MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python -c "from app.security import ensure_secret; ensure_secret()"
   systemctl restart makia-vps-manager
   healthy=0
   for _ in {1..20}; do
-    if curl -fsS --max-time 2 http://127.0.0.1:8787/healthz | grep -q "1.3.0"; then healthy=1; break; fi
+    if curl -fsS --max-time 2 http://127.0.0.1:8787/healthz | grep -q "$BASELINE_VERSION"; then healthy=1; break; fi
     sleep 1
   done
   test "$healthy" = "1"
@@ -83,8 +84,8 @@ docker exec -e MAKIA_REF="$CANDIDATE_SHA" -e MAKIA_FORCE_MAIN=0 \
 
 docker exec "$CONTAINER" bash -lc '
   set -Eeuo pipefail
-  test "$(cat /opt/makia-vps-manager/VERSION)" = "1.4.2"
-  curl -fsS http://127.0.0.1:8787/healthz | grep -q "1.4.2"
+  test "$(cat /opt/makia-vps-manager/VERSION)" = "1.5.0"
+  curl -fsS http://127.0.0.1:8787/healthz | grep -q "1.5.0"
   systemctl is-active --quiet makia-vps-manager
   systemctl is-active --quiet nginx
   systemctl is-active --quiet xray
@@ -100,4 +101,4 @@ docker exec -e MAKIA_DATA_DIR=/opt/makia-vps-manager/data "$CONTAINER" \
   /opt/makia-vps-manager/.venv/bin/python /tmp/upgrade_identity_probe.py >/tmp/makia-post-identity.json
 cmp -s /tmp/makia-pre-identity.json /tmp/makia-post-identity.json
 
-echo "UPGRADE 1.3.0 -> 1.4.2 SMOKE: PASS"
+echo "UPGRADE $BASELINE_VERSION -> 1.5.0 SMOKE: PASS"
