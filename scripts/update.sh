@@ -694,7 +694,7 @@ systemctl enable --now makia-ops-monitor.timer
 systemctl restart makia-metrics-sampler
 systemctl restart makia-protocol-traffic
 systemctl restart makia-browser-gateway
-BROWSER_GATEWAY_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+BROWSER_GATEWAY_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9444}"
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
   ufw allow "${BROWSER_GATEWAY_PORT}/tcp" comment 'Makia Browser Gateway' >/dev/null 2>&1 || true
 fi
