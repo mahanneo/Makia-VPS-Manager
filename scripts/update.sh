@@ -9,7 +9,7 @@ if [[ -r "$ENV_FILE" ]]; then
   while IFS='=' read -r key value; do
     [[ -z "$key" || "$key" == \#* ]] && continue
     case "$key" in
-      MAKIA_SUPPORT_TELEGRAM|MAKIA_SUPPORT_WEBHOOK_URL|MAKIA_SUPPORT_WEBHOOK_TOKEN|MAKIA_RELEASE_ARCHIVE_URL|MAKIA_RELEASE_BEARER_TOKEN|MAKIA_ADMIN_ALLOWED_CIDRS)
+      MAKIA_SUPPORT_TELEGRAM|MAKIA_SUPPORT_WEBHOOK_URL|MAKIA_SUPPORT_WEBHOOK_TOKEN|MAKIA_RELEASE_ARCHIVE_URL|MAKIA_RELEASE_BEARER_TOKEN|MAKIA_ADMIN_ALLOWED_CIDRS|MAKIA_BROWSER_GATEWAY_ENABLED|MAKIA_BROWSER_GATEWAY_HOST|MAKIA_BROWSER_GATEWAY_PORT|MAKIA_BROWSER_GATEWAY_BIND|MAKIA_BROWSER_GATEWAY_CERT|MAKIA_BROWSER_GATEWAY_KEY|MAKIA_BROWSER_GATEWAY_MAX_CONNECTIONS)
         printf -v "$key" '%s' "$value"
         export "$key"
         ;;
@@ -78,11 +78,16 @@ on_exit(){
     echo
     echo "Update failed. Restoring previous Makia runtime..."
     set +e
+    systemctl disable --now makia-browser-gateway 2>/dev/null || true
     systemctl stop makia-vps-manager 2>/dev/null
     rm -rf "$APP/app"
     tar -xzf "$RELEASE_BACKUP" -C /
     if [[ -f "$APP/requirements.txt" && -x "$APP/.venv/bin/pip" ]]; then
       "$APP/.venv/bin/pip" install -r "$APP/requirements.txt" >/dev/null 2>&1
+    fi
+    if [[ "${BROWSER_GATEWAY_WAS_INSTALLED:-0}" -eq 0 ]]; then
+      rm -f /etc/systemd/system/makia-browser-gateway.service
+      rm -f /usr/local/sbin/makia-browser-gateway-sync
     fi
     systemctl daemon-reload
     nginx -t >/dev/null 2>&1 && systemctl reload nginx
@@ -90,6 +95,10 @@ on_exit(){
     systemctl restart makia-policy-enforcer 2>/dev/null
     systemctl restart makia-metrics-sampler 2>/dev/null
     systemctl restart makia-protocol-traffic 2>/dev/null
+    if [[ "${BROWSER_GATEWAY_WAS_INSTALLED:-0}" -eq 1 && "${BROWSER_GATEWAY_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now makia-browser-gateway 2>/dev/null
+      systemctl restart makia-browser-gateway 2>/dev/null
+    fi
     if [[ "${XRAY_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl restart xray 2>/dev/null
     fi
@@ -167,6 +176,13 @@ if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
 fi
 
+BROWSER_GATEWAY_WAS_INSTALLED=0
+BROWSER_GATEWAY_WAS_ACTIVE=0
+if [[ -f /etc/systemd/system/makia-browser-gateway.service ]]; then
+  BROWSER_GATEWAY_WAS_INSTALLED=1
+  systemctl is-active --quiet makia-browser-gateway 2>/dev/null && BROWSER_GATEWAY_WAS_ACTIVE=1 || true
+fi
+
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="/var/backups/makia-vps-manager/makia-data-${STAMP_DATA}.tar.gz"
 BACKUP_TMP="$(mktemp -d)"
@@ -210,6 +226,7 @@ for item in \
   "etc/systemd/system/makia-policy-enforcer.service" \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
+  "etc/systemd/system/makia-browser-gateway.service" \
   "etc/systemd/system/makia-scheduled-backup.service" \
   "etc/systemd/system/makia-scheduled-backup.timer" \
   "etc/systemd/system/makia-ops-monitor.service" \
@@ -233,6 +250,7 @@ for item in \
   "usr/local/sbin/makia-install-mtproxy" \
   "usr/local/sbin/makia-refresh-mtproxy" \
   "usr/local/sbin/makia-install-dns" \
+  "usr/local/sbin/makia-browser-gateway-sync" \
   "etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync" \
   "etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync" \
   "usr/local/etc/xray/config.json" \
@@ -411,6 +429,7 @@ install -m 0644 "$SRC/systemd/makia-vps-manager.service" /etc/systemd/system/mak
 install -m 0644 "$SRC/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+install -m 0644 "$SRC/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
@@ -443,6 +462,7 @@ install_verified_shell "$SRC/scripts/install-outline.sh" /usr/local/sbin/makia-i
 install_verified_shell "$SRC/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
 install_verified_shell "$SRC/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
 install_verified_shell "$SRC/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
+install_verified_shell "$SRC/scripts/browser-gateway-sync.sh" /usr/local/sbin/makia-browser-gateway-sync
 echo "Preparing optional Telegram/DNS tooling for panel-managed configuration..."
 if ! /usr/local/sbin/makia-install-mtproxy --install-only; then
   echo "WARNING: MTProxy tooling preparation failed; panel will show the root repair/install command."
@@ -715,6 +735,9 @@ if [[ -z "$EXPECTED_VERSION" || "$RUNNING_VERSION" != "$EXPECTED_VERSION" ]]; th
 fi
 echo "Running backend version verified: $RUNNING_VERSION"
 
+echo "Activating Makia Browser Gateway when HTTPS prerequisites are ready..."
+/usr/local/sbin/makia-browser-gateway-sync
+
 echo
 echo "Re-checking persistent network-service state before final acceptance..."
 assert_preserved_file "$MTPROXY_ENV_PATH" "$MTPROXY_ENV_ACCEPTED_SHA" "MTProxy accepted state" || exit 8
@@ -726,6 +749,7 @@ echo "Verifying installed critical shell artifacts before host smoke..."
 ensure_installed_shell_integrity "$SRC/scripts/update.sh" /usr/local/sbin/makia-update
 ensure_installed_shell_integrity "$SRC/scripts/doctor.sh" /usr/local/sbin/makia-doctor
 ensure_installed_shell_integrity "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
+ensure_installed_shell_integrity "$SRC/scripts/browser-gateway-sync.sh" /usr/local/sbin/makia-browser-gateway-sync
 
 echo "Running post-update Makia host smoke gate..."
 UAT_ENV=(env)
