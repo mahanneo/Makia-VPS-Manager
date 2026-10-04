@@ -42,7 +42,7 @@ function currentMode(){
 
 function browserSupported(item){
   const engine=String(item.engine||"").toLowerCase();
-  return !["wireguard","openvpn"].includes(engine);
+  return ["xray","outline","ssh","vless","vmess","trojan","hysteria2","hy2","shadowsocks"].includes(engine);
 }
 
 function renderState(){
