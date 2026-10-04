@@ -353,6 +353,8 @@ class Gateway:
                 await _tunnel(reader,writer,remote_reader,remote_writer,meter)
             except asyncio.IncompleteReadError:
                 pass
+            except QuotaExceeded:
+                LOG.info("browser VPN quota ended for %s",peer_ip)
             except (asyncio.LimitOverrunError,ProxyError,ValueError) as exc:
                 LOG.info("proxy request rejected from %s: %s",peer_ip,str(exc))
                 try:
@@ -360,8 +362,6 @@ class Gateway:
                     await writer.drain()
                 except Exception:
                     pass
-            except QuotaExceeded:
-                LOG.info("browser VPN quota ended for %s",peer_ip)
             except Exception:
                 LOG.exception("browser gateway connection failure from %s",peer_ip)
             finally:
