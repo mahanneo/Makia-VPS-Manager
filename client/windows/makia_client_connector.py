@@ -286,7 +286,7 @@ def connect_delivery(d,dry_run=False):
     STATE.write_text(json.dumps(state),encoding="utf-8")
     return {
         "ok":True,"mode":"sing-box","protocol":outbound["type"],"connected":True,
-        "connection_mode":connection_mode,"proxy_port":proxy_port,
+        "connection_mode":"device",
     }
 
 def handle_uri(uri,dry_run=False):
