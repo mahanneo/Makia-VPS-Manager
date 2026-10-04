@@ -68,6 +68,7 @@ jobs:
         run: |
           docker cp baseline-v130 makia-upgrade:/tmp/makia-v130
           docker exec \
+            -e MAKIA_REF="3a2b5eb8f33063eb41f04c073e159ade18a28d8c" \
             -e MAKIA_INITIAL_ADMIN_PASSWORD="UpgradeBaseline!130" \
             makia-upgrade bash -lc 'bash /tmp/makia-v130/install.sh'
           docker exec makia-upgrade bash -lc 'test "$(cat /opt/makia-vps-manager/VERSION)" = "1.3.0"'
