@@ -49,3 +49,10 @@ def test_windows_installer_has_machine_and_user_native_host_registration():
 def test_browser_repair_tools_are_packaged_sources():
     assert (ROOT/"client/windows/Repair-Makia-Browser.cmd").is_file()
     assert (ROOT/"client/windows/Check-Makia-Browser.ps1").is_file()
+
+
+def test_proxy_auth_is_scoped_to_exact_gateway_challenger():
+    background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    assert "details.challenger" in background
+    assert "challengerHost !== expectedHost" in background
+    assert "challengerPort !== expectedPort" in background
