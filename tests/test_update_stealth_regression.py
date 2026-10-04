@@ -15,11 +15,10 @@ def test_update_softfails_only_preexisting_inactive_stealth():
     assert 'if [[ "$STUNNEL_WAS_CONFIGURED" -eq 1 && "$STUNNEL_WAS_ACTIVE" -eq 0 ]]' in source
     assert "MAKIA_UAT_STEALTH_SOFTFAIL=1" in source
 
-def test_host_smoke_honors_explicit_stealth_softfail():
+def test_host_smoke_treats_inactive_stealth_as_optional_warning():
     source=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
-    assert 'MAKIA_UAT_STEALTH_SOFTFAIL:-0' in source
-    assert "Stealth config retained; stunnel4 was already inactive before update" in source
-    assert 'bad "Stealth enabled but stunnel4 inactive"' in source
+    assert "Stealth optional config is enabled but stunnel4 is inactive" in source
+    assert 'bad "Stealth enabled but stunnel4 inactive"' not in source
 
 
 def test_host_smoke_prints_failure_summary():
@@ -28,10 +27,11 @@ def test_host_smoke_prints_failure_summary():
     assert 'FAILURES+=("$1")' in source
     assert "Failure summary (%d):" in source
 
-def test_doctor_distinguishes_disabled_from_broken_stealth():
+def test_doctor_keeps_optional_inactive_stealth_out_of_fail_count():
     source=(ROOT/"scripts/doctor.sh").read_text(encoding="utf-8")
-    assert "configured + ENABLED=1 but service inactive" in source
-    assert "config retained but service is disabled/inactive" in source
+    assert "optional config is ENABLED=1 but service is inactive; core VPNs are unaffected" in source
+    assert "optional config retained but service is disabled/inactive" in source
+    assert 'fail "Stealth TLS/Stunnel"' not in source
 
 
 def test_rollback_snapshot_covers_cli_and_protocol_state():
