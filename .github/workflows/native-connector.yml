@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "client/windows/**"
-      - "client/browser-extension/**"
       - "app/client_connector.py"
       - "app/client_portal.py"
       - "app/static/client.js"
@@ -31,8 +30,6 @@ jobs:
           python -m py_compile client/windows/makia_client_connector.py client/windows/test_connector.py app/client_connector.py app/client_portal.py
           python -m unittest client.windows.test_connector
           node --check app/static/client.js
-          node --check client/browser-extension/background.js
-          node --check client/browser-extension/popup.js
 
       - name: Build full-device and browser host executables
         shell: pwsh
@@ -63,7 +60,6 @@ jobs:
           Copy-Item client\windows\INSTALL.txt package\INSTALL.txt
           Copy-Item client\windows\Check-Makia-Browser.ps1 package\Check-Makia-Browser.ps1
           Copy-Item client\windows\Repair-Makia-Browser.cmd package\Repair-Makia-Browser.cmd
-          Copy-Item -Recurse client\browser-extension package\browser-extension
 
       - name: Smoke package and real installer
         shell: pwsh
@@ -73,10 +69,6 @@ jobs:
           if (!(Test-Path package\MakiaBrowserHost.exe)) { throw "browser native host missing" }
           if (!(Test-Path package\sing-box.exe)) { throw "sing-box missing" }
           package\sing-box.exe version
-
-          $manifest=Get-Content package\browser-extension\manifest.json -Raw | ConvertFrom-Json
-          if ($manifest.version -ne "1.4.2") { throw "browser extension version mismatch" }
-          if ($manifest.permissions -notcontains "nativeMessaging" -or $manifest.permissions -notcontains "proxy") { throw "browser extension permissions missing" }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-installer-smoke"
@@ -151,6 +143,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.4.2
+          name: Makia-Full-Device-Connector-Windows-x64-1.5.0
           path: package/
           if-no-files-found: error
