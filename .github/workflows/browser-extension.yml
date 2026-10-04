@@ -54,7 +54,7 @@ jobs:
           assert m["version"]=="1.5.0"
           permissions=set(m["permissions"])
           assert "nativeMessaging" not in permissions
-          assert {"proxy","webRequest","webRequestAuthProvider","storage","alarms"} <= permissions
+          assert {"proxy","webRequest","webRequestAuthProvider","storage","alarms","privacy"} <= permissions
           assert m["host_permissions"]==["<all_urls>"]
           print("Pure-browser Manifest V3 contract PASS")
           PY
