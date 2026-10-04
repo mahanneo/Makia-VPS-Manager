@@ -75,7 +75,7 @@ jobs:
           package\sing-box.exe version
 
           $manifest=Get-Content package\browser-extension\manifest.json -Raw | ConvertFrom-Json
-          if ($manifest.version -ne "1.4.2") { throw "browser extension version mismatch" }
+          if ($manifest.version -ne "1.5.0") { throw "browser extension version mismatch" }
           if ($manifest.permissions -notcontains "nativeMessaging" -or $manifest.permissions -notcontains "proxy") { throw "browser extension permissions missing" }
 
           $oldLocal=$env:LOCALAPPDATA
@@ -151,6 +151,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.4.2
+          name: Makia-Client-Connector-Windows-x64-1.5.0
           path: package/
           if-no-files-found: error
