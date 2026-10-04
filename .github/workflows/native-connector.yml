@@ -3,7 +3,7 @@ name: Native Connector Build
 on:
   pull_request:
     paths:
-      - "client/windows/**"
+      - "client/windows/**"\n      - "client/browser-extension/**"
       - "app/client_connector.py"
       - "app/client_portal.py"
       - "app/static/client.js"
@@ -33,6 +33,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check "pyinstaller==6.16.0"
           pyinstaller --noconfirm --clean --onefile --name MakiaClientConnector --uac-admin client/windows/makia_client_connector.py
+          pyinstaller --noconfirm --clean --onefile --name MakiaBrowserHost client/windows/makia_client_connector.py
       - name: Fetch pinned sing-box 1.14.2
         shell: pwsh
         run: |
@@ -68,6 +69,13 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 execution failed" }
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
             if (!(Test-Path $installed)) { throw "installed connector missing" }
+            $browser=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaBrowserHost.exe"
+            if (!(Test-Path $browser)) { throw "installed browser host missing" }
+            $chromeHost=(Get-Item "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.makia.browser_host").GetValue("")
+            $edgeHost=(Get-Item "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host").GetValue("")
+            if (!(Test-Path $chromeHost) -or $chromeHost -ne $edgeHost) { throw "native messaging registration invalid" }
+            $host=Get-Content $chromeHost -Raw | ConvertFrom-Json
+            if ($host.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "extension id mismatch" }
             $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
             if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
               throw "makia:// registry command invalid: $registered"
