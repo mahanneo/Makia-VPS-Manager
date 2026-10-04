@@ -328,6 +328,28 @@ jobs:
           grep -q 'v0.26 Protocol graphics' app/static/app.css
           grep -q 'makia-shell-v140' app/static/sw.js
 
+      - name: Pure Browser Gateway 1.5.0 contract
+        run: |
+          test -f app/browser_gateway.py
+          test -f systemd/makia-browser-gateway.service
+          test -f tests/browser_gateway_smoke.sh
+          test -f docs/BROWSER-GATEWAY-1.5.0.md
+          test -f docs/CHROME-WEB-STORE-1.5.0.md
+          grep -q 'makia-browser-gateway.service' scripts/install.sh
+          grep -q 'makia-browser-gateway.service' scripts/update.sh
+          grep -q 'makia-browser-gateway' scripts/uninstall.sh
+          grep -q 'makia-browser-gateway' scripts/doctor.sh
+          grep -q 'makia-browser-gateway' scripts/uat-smoke.sh
+          grep -q 'client_browser_tokens' app/client_store.py
+          grep -q 'client_browser_usage' app/client_store.py
+          grep -q '/client/extension/browser-gateway/credential' app/client_portal.py
+          grep -q 'webRequestAuthProvider' client/browser-extension/manifest.json
+          ! grep -q 'nativeMessaging' client/browser-extension/manifest.json
+          ! grep -q 'sendNativeMessage' client/browser-extension/background.js
+          grep -q 'singleProxy:{scheme:"https"' client/browser-extension/background.js
+          grep -q 'Browser Extension Build' .github/workflows/browser-extension.yml
+          python -m pytest -q tests/test_browser_gateway.py tests/test_browser_extension_contract.py
+
       - name: Connection modes contract
         run: |
           grep -q '0.26.0-rc2' docs/UAT-0.26.0-RC2.md
