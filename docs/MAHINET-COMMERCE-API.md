@@ -13,13 +13,13 @@ Create a dedicated API token with only the scopes MahiNet needs.
 
 Set `MAKIA_COMMERCE_ALLOWED_CIDRS` in `/etc/makia-vps-manager/makia.env`.
 
-Example for a same-host deployment after confirming the real reverse-proxy source address:
+The safe default is loopback-only:
 
 ```text
-MAKIA_COMMERCE_ALLOWED_CIDRS=127.0.0.1/32,172.16.0.0/12,212.100.171.183/32
+MAKIA_COMMERCE_ALLOWED_CIDRS=127.0.0.1/32,::1/128
 ```
 
-Use the narrowest CIDR(s) proven by host UAT.
+Keep that default when MahiNet and Makia run on the same VPS. If MahiNet is moved to another trusted host, replace it with only the exact source CIDR proven by host UAT. Do not allow whole private-address ranges by default.
 
 ## Provision
 
@@ -52,10 +52,12 @@ Supported managed lifecycle operations are limited to what Makia can actually en
 
 - scoped bearer token
 - explicit CIDR allowlist
-- mandatory idempotency key for mutations
+- mandatory, token-scoped idempotency key for mutations
+- atomic pending/complete/failed idempotency state
+- encrypted idempotent response storage (credentials/configs are not stored as plaintext replay JSON)
 - Makia audit events
 - existing protocol validation and artifact storage
 - no root shell or generic command execution API
 - cleanup on partial create failure
 
-Keep this API disabled from MahiNet until real-host UAT has passed.
+Keep this API disabled from MahiNet until real-host UAT has passed. For same-host production, prefer a direct loopback backend call where practical; if a local reverse proxy is used, forwarded client addresses are trusted only from a loopback peer.
