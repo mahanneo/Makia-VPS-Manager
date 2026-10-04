@@ -2,9 +2,10 @@ import json
 import os
 import time
 import urllib.parse
+import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -618,4 +619,75 @@ def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
         "expires_at":ticket["expires_at"],
         "controller":origin,
         "mode":"browser",
+    })
+
+
+def _browser_gateway_public_config():
+    host=str(os.getenv("MAKIA_BROWSER_GATEWAY_HOST","") or get_setting("panel_domain","") or "").strip().lower()
+    port=int(os.getenv("MAKIA_BROWSER_GATEWAY_PORT","9443") or 9443)
+    if not host:
+        raise HTTPException(status_code=503,detail="Browser Gateway requires a configured panel domain")
+    cert=Path(f"/etc/letsencrypt/live/{host}/fullchain.pem")
+    key=Path(f"/etc/letsencrypt/live/{host}/privkey.pem")
+    if not cert.is_file() or not key.is_file():
+        raise HTTPException(status_code=503,detail="Browser Gateway requires a valid Let's Encrypt certificate")
+    active=False
+    try:
+        active=subprocess.run(
+            ["systemctl","is-active","--quiet","makia-browser-gateway"],
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=2,check=False,
+        ).returncode==0
+    except Exception:
+        active=False
+    return {
+        "host":host,
+        "port":port,
+        "scheme":"https",
+        "service_active":active,
+    }
+
+
+@router.get("/client/extension/browser-gateway")
+def client_extension_browser_gateway_status(request:Request):
+    session,_=_extension_bearer(request)
+    cfg=_browser_gateway_public_config()
+    snapshot=client_store.account_snapshot(session["account_id"]) or {}
+    return _extension_response(request,{
+        "available":bool(cfg["service_active"]),
+        "gateway":cfg,
+        "account":{
+            "used_bytes":int(snapshot.get("used_bytes") or 0),
+            "quota_bytes":int(snapshot.get("quota_bytes") or 0),
+            "expire_at":int(snapshot.get("expire_at") or 0),
+        },
+    })
+
+
+@router.post("/client/extension/browser-gateway/credential")
+def client_extension_browser_gateway_credential(request:Request):
+    session,_=_extension_bearer(request)
+    cfg=_browser_gateway_public_config()
+    if not cfg["service_active"]:
+        raise HTTPException(status_code=503,detail="Browser Gateway service is not active")
+    try:
+        credential=client_store.issue_browser_proxy_token(session,1800)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    audit(
+        "client:"+session["username"],
+        "browser_gateway_credential",
+        target=str(session["device_id"]),
+        detail=f"{cfg['host']}:{cfg['port']}",
+        ip=_ip(request),
+    )
+    return _extension_response(request,{
+        "proxy":{
+            "scheme":cfg["scheme"],
+            "host":cfg["host"],
+            "port":cfg["port"],
+            "username":credential["username"],
+            "password":credential["password"],
+        },
+        "expires_at":credential["expires_at"],
+        "mode":"browser-gateway",
     })
