@@ -184,3 +184,39 @@ def test_android_signed_release_workflow_contract():
     ]:
         assert marker in workflow
     assert 'release/v1.4.0-uat1' in workflow
+
+
+
+def test_windows_connector_connect_delivery_runtime_contract(tmp_path,monkeypatch):
+    c=_connector_module()
+    monkeypatch.setattr(c,"ROOT",tmp_path)
+    monkeypatch.setattr(c,"STATE",tmp_path/"state.json")
+    monkeypatch.setattr(c,"PROFILE",tmp_path/"active.json")
+    monkeypatch.setattr(c,"LOG",tmp_path/"connector.log")
+    delivery={
+        "engine":"xray",
+        "share_link":"vless://00000000-0000-0000-0000-000000000001@example.test:443?security=tls&sni=example.test",
+    }
+
+    device=c.connect_delivery(delivery,dry_run=True)
+    assert device["mode"]=="sing-box"
+    assert device["scope"]=="device"
+
+    browser=c.connect_delivery(delivery,browser_only=True,dry_run=True)
+    assert browser["mode"]=="sing-box"
+    assert browser["scope"]=="browser"
+    assert 1024 <= int(browser["proxy_port"]) <= 65535
+    cfg=json.loads((tmp_path/"active.json").read_text(encoding="utf-8"))
+    assert cfg["inbounds"][0]["type"]=="mixed"
+    assert cfg["inbounds"][0]["listen"]=="127.0.0.1"
+    assert cfg["inbounds"][0]["listen_port"]==browser["proxy_port"]
+
+
+def test_windows_connector_browser_mode_rejects_native_only_protocols(tmp_path,monkeypatch):
+    c=_connector_module()
+    monkeypatch.setattr(c,"ROOT",tmp_path)
+    monkeypatch.setattr(c,"STATE",tmp_path/"state.json")
+    monkeypatch.setattr(c,"PROFILE",tmp_path/"active.json")
+    monkeypatch.setattr(c,"LOG",tmp_path/"connector.log")
+    with pytest.raises(RuntimeError,match="Device VPN"):
+        c.connect_delivery({"engine":"wireguard","share_link":"[Interface]"},browser_only=True,dry_run=True)
