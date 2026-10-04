@@ -72,3 +72,14 @@ def test_browser_host_and_connector_contract_is_narrow():
     assert "Makia-Browser-Extension-Chromium-1.4.0" in workflow
     assert "NativeMessagingHosts" in installer
     assert "kifidlpkeejegkcolpjfipmjllldakik" in installer
+
+
+
+def test_new_browser_pair_code_invalidates_previous_unredeemed_code(client_db):
+    account_id=client_store.create_account("browser03","browser-pass-004",device_limit=1)
+    device,_=client_store.register_or_get_device(account_id,label="Windows Edge",platform="windows")
+    first=client_browser.issue_pair_code(account_id,device["id"])
+    second=client_browser.issue_pair_code(account_id,device["id"])
+    with pytest.raises(PermissionError):
+        client_browser.redeem_pair_code(first["code"],"127.0.0.1")
+    assert client_browser.redeem_pair_code(second["code"],"127.0.0.1")["account_id"]==account_id
