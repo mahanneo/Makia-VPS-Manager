@@ -45,11 +45,14 @@ def test_browser_pair_code_rejects_revoked_device(client_db):
 def test_browser_extension_manifest_is_narrow_and_manifest_v3():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert set(manifest["permissions"])=={"nativeMessaging","proxy"}
+    assert set(manifest["permissions"])=={"nativeMessaging","proxy","privacy"}
     assert "host_permissions" not in manifest
     assert "content_scripts" not in manifest
     assert manifest["background"]["service_worker"]=="background.js"
     assert manifest["key"]
+    background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    assert "disable_non_proxied_udp" in background
+    assert "clearWebRtcLeakProtection" in background
     assert (ROOT/"client/browser-extension/icons/makia.png").is_file()
 
 
