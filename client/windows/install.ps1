@@ -53,7 +53,8 @@ $nativeManifest = [ordered]@{
   type = "stdio"
   allowed_origins = $origins
 }
-$nativeManifest | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 $manifestPath
+$manifestJson = $nativeManifest | ConvertTo-Json -Depth 4
+[System.IO.File]::WriteAllText($manifestPath,$manifestJson,(New-Object System.Text.UTF8Encoding($false)))
 
 foreach ($registryPath in @(
   "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.makia.client.browser",
