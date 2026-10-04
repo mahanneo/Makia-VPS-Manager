@@ -56,3 +56,13 @@ def test_proxy_auth_is_scoped_to_exact_gateway_challenger():
     assert "details.challenger" in background
     assert "challengerHost !== expectedHost" in background
     assert "challengerPort !== expectedPort" in background
+
+
+def test_browser_extension_enables_webrtc_and_dns_leak_protection():
+    manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
+    background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    assert "privacy" in manifest["permissions"]
+    assert "disable_non_proxied_udp" in background
+    assert "networkPredictionEnabled.set" in background
+    assert "networkPredictionEnabled.clear" in background
+    assert "webRTCIPHandlingPolicy.clear" in background
