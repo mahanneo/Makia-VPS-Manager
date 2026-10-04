@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Makia VPN",
+  "version": "1.4.0",
+  "description": "Secure Chrome/Edge companion for Makia Browser Only proxy and Windows Device VPN.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsAztj79wvIkwVshQ5vyriK52Znkkn5jccGdyClqEuBvQezdvuNiaLWGF7d9T4k/2jICWVPJP4OsH8xkfjvN7SK2chjji2m+6oVVE4o37T/XCTR6GLKilvkpWFUFQ1QeQCqkG9h8IFy4HZaELCNfxQy4BOkX9H8lM5EvQoE5vPiVRkLj3xDKi53j7ALcAdUCkElrzLnZblnjMGKvHWwU7vVrPAdkmyRkaMXcOg+qH/UChsGa0ATLrn0igYIcPE6k8mJop0R17uwdZGt3yiWSewjXJ8Ioda1FzYlzabm7HQVNhBHAGghqAmsStCYysZIP2hUdc6ocRv2KLsXm2Bqd0lQIDAQAB",
+  "permissions": ["nativeMessaging", "proxy"],
+  "action": {
+    "default_title": "Makia VPN",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/makia.png",
+      "32": "icons/makia.png"
+    }
+  },
+  "icons": {
+    "16": "icons/makia.png",
+    "32": "icons/makia.png",
+    "48": "icons/makia.png",
+    "128": "icons/makia.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

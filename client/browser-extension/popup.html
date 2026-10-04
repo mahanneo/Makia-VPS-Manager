@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Makia VPN</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="brand">
+      <img src="icons/makia.png" alt="">
+      <div><strong>MAKIA VPN</strong><small>Chrome / Edge</small></div>
+      <span id="dot" class="dot"></span>
+    </header>
+
+    <section id="pairView" class="card" hidden>
+      <h1>اتصال افزونه</h1>
+      <p>در Makia Client کد Pair مرورگر را بسازید و اینجا وارد کنید.</p>
+      <label>آدرس پنل
+        <input id="controller" dir="ltr" placeholder="https://panel.example.com" autocomplete="url">
+      </label>
+      <label>Pair Code
+        <input id="pairCode" dir="ltr" placeholder="mbp_..." autocomplete="one-time-code">
+      </label>
+      <button id="pairBtn" class="primary">Pair Extension</button>
+      <p class="hint">توکن حساب داخل افزونه ذخیره نمی‌شود؛ Native Host آن را با Windows DPAPI نگه می‌دارد.</p>
+    </section>
+
+    <section id="mainView" hidden>
+      <div class="card summary">
+        <div><span>حساب</span><strong id="accountName">—</strong></div>
+        <div><span>پلن</span><strong id="planName">—</strong></div>
+        <div><span>مصرف</span><strong id="usage">—</strong></div>
+        <div><span>اعتبار</span><strong id="expiry">—</strong></div>
+      </div>
+
+      <div class="mode card">
+        <label><input type="radio" name="mode" value="browser" checked> Browser Only</label>
+        <label><input type="radio" name="mode" value="device"> Device VPN</label>
+        <small>Browser Only فقط Chrome/Edge را از Makia عبور می‌دهد. Device VPN کل Windows را Tunnel می‌کند و ممکن است UAC بخواهد.</small>
+      </div>
+
+      <section class="card">
+        <div class="sectionHead"><h2>دسترسی‌ها</h2><button id="refreshBtn" class="ghost">↻</button></div>
+        <div id="accessList" class="list"><p class="muted">در حال دریافت…</p></div>
+      </section>
+
+      <section class="card statusCard">
+        <span id="statusText">Disconnected</span>
+        <button id="disconnectBtn" class="danger" disabled>Disconnect</button>
+      </section>
+
+      <footer>
+        <button id="logoutBtn" class="ghost">خروج از افزونه</button>
+      </footer>
+    </section>
+
+    <p id="error" class="error" hidden></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
