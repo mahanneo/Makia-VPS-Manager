@@ -48,6 +48,7 @@ If HTTPS prerequisites are not ready, Makia installation/update succeeds and the
 The extension uses Manifest V3:
 - `chrome.proxy` for browser-only proxy settings;
 - `webRequestAuthProvider` for authenticated proxy challenges;
+- `chrome.privacy` guards to disable non-proxied WebRTC UDP and speculative network prediction while connected;
 - no `nativeMessaging` permission;
 - no Windows service or local executable dependency.
 
