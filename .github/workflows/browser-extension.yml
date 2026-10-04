@@ -25,6 +25,8 @@ concurrency:
 jobs:
   browser-extension:
     runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: .
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
