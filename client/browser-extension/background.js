@@ -29,8 +29,13 @@ function nativeMessage(message) {
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => clearBrowserProxy().catch(() => {}));
-chrome.runtime.onStartup.addListener(() => clearBrowserProxy().catch(() => {}));
+async function resetBrowserTunnel() {
+  await clearBrowserProxy();
+  try { await nativeMessage({action: "disconnect", mode: "browser"}); } catch (_) {}
+}
+
+chrome.runtime.onInstalled.addListener(() => resetBrowserTunnel().catch(() => {}));
+chrome.runtime.onStartup.addListener(() => resetBrowserTunnel().catch(() => {}));
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
