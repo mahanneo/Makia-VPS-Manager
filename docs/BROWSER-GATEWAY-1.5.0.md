@@ -10,7 +10,7 @@ The extension uses the Chrome proxy API with an HTTPS proxy and Manifest V3 prox
 
 ## Security model
 
-- Browser Gateway listens on TCP/9443 by default.
+- Browser Gateway listens on TCP/9444 by default.
 - TLS uses the existing Let's Encrypt certificate for the configured Makia panel domain.
 - Extension login uses the existing Client Platform account/device/session controls.
 - Connect returns a random short-lived proxy credential bound to the active Client session and device.
@@ -25,13 +25,13 @@ The extension uses the Chrome proxy API with an HTTPS proxy and Manifest V3 prox
 
 1. Configure a public panel domain such as p.example.com.
 2. Issue a valid Let's Encrypt certificate from the Makia panel.
-3. TCP/9443 must be reachable from users. If UFW is active, Makia adds an allow rule during install/update. Cloud/provider firewalls must also allow TCP/9443.
+3. TCP/9444 must be reachable from users. If UFW is active, Makia adds an allow rule during install/update. Cloud/provider firewalls must also allow TCP/9444.
 4. Client Portal must be enabled.
 5. Create Client Platform accounts as usual.
 
 Optional environment overrides:
 
-- MAKIA_BROWSER_GATEWAY_PORT=9443
+- MAKIA_BROWSER_GATEWAY_PORT=9444
 - MAKIA_BROWSER_GATEWAY_HOST=p.example.com
 - MAKIA_BROWSER_GATEWAY_ALLOWED_PORTS=80,443
 - MAKIA_BROWSER_GATEWAY_MAX_CONNECTIONS=32
