@@ -116,6 +116,27 @@ Install the CI-built Windows package and verify:
 - connector error dialog/log works;
 - DNS and public IP follow the selected tunnel where expected.
 
+## Chrome / Edge Browser Extension
+
+On a disposable Windows Client account:
+
+1. Install the exact-SHA Windows Actions artifact.
+2. Load the exact-SHA BrowserExtension directory as an unpacked extension in Chrome.
+3. Create a Pair Code from the authenticated Makia Client Portal and pair once.
+4. Verify the same Pair Code cannot be redeemed a second time.
+5. Verify Browser Only changes the browser public IP/DNS path while a non-browser application remains outside that proxy.
+6. Verify VLESS, VMess, Trojan, Hysteria2, Shadowsocks/Outline and SSH where provisioned.
+7. Verify WireGuard and OpenVPN cannot be selected in Browser Only mode.
+8. Verify Disconnect clears the Chrome proxy and stops only the disposable local sing-box process.
+9. Verify Device VPN requests UAC and routes the whole Windows device using the existing connector.
+10. Repeat the Browser Only and Device VPN checks in Microsoft Edge.
+11. Rotate the disposable Client password and confirm the paired Native Host session is rejected.
+12. Pair again, revoke the disposable device from Makia and confirm the extension session is rejected.
+13. Run Uninstall-Makia.cmd and confirm both Chrome and Edge Native Messaging registrations are removed.
+14. Confirm existing production users and credentials were unchanged throughout.
+
+Do not publish the extension to a public store until the exact Store IDs have been added to the Native Messaging allowlist and Store-install UAT has passed.
+
 ## Android Direct Connect
 
 On a disposable Android device:
