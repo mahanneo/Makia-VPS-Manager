@@ -67,7 +67,7 @@ async function handle(message){
   if(action==="status")return status();
   if(action==="connect"){
     const mode=message.mode==="device"?"device":"browser";
-    if(mode==="device")await proxyClear();
+    await proxyClear();
     const result=await native({
       action:"connect",kind:message.kind,id:Number(message.id),mode
     });
