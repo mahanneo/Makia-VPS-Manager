@@ -90,6 +90,19 @@ on_exit(){
     systemctl restart makia-policy-enforcer 2>/dev/null
     systemctl restart makia-metrics-sampler 2>/dev/null
     systemctl restart makia-protocol-traffic 2>/dev/null
+    if [[ "${XRAY_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl restart xray 2>/dev/null
+    fi
+    if [[ "${WG_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl restart wg-quick@wg0 2>/dev/null
+    fi
+    if [[ "${OVPN_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl restart openvpn-server@server 2>/dev/null
+    fi
+    if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now stunnel4 2>/dev/null
+      systemctl restart stunnel4 2>/dev/null
+    fi
     if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
       systemctl enable --now makia-mtproxy 2>/dev/null
       systemctl restart makia-mtproxy 2>/dev/null
@@ -202,6 +215,35 @@ for item in \
   "etc/systemd/system/makia-ops-monitor.service" \
   "etc/systemd/system/makia-ops-monitor.timer" \
   "etc/systemd/system/makia-mtproxy.service" \
+  "etc/systemd/system/makia-wstunnel.service" \
+  "etc/systemd/system/makia-ikev2-network.service" \
+  "usr/local/sbin/makia-update" \
+  "usr/local/sbin/makia-upgrade" \
+  "usr/local/sbin/makia-backup" \
+  "usr/local/sbin/makia-uninstall" \
+  "usr/local/sbin/makia-doctor" \
+  "usr/local/sbin/makia-uat-smoke" \
+  "usr/local/sbin/makia-restore-portable" \
+  "usr/local/sbin/makia-run-migration-restore" \
+  "usr/local/sbin/makia-reset-admin" \
+  "usr/local/sbin/makia-owner-config" \
+  "usr/local/sbin/makia-ikev2-network" \
+  "usr/local/sbin/makia-install-wstunnel" \
+  "usr/local/sbin/makia-install-outline" \
+  "usr/local/sbin/makia-install-mtproxy" \
+  "usr/local/sbin/makia-refresh-mtproxy" \
+  "usr/local/sbin/makia-install-dns" \
+  "etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync" \
+  "etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync" \
+  "usr/local/etc/xray/config.json" \
+  "etc/xray/config.json" \
+  "etc/wireguard/wg0.conf" \
+  "etc/openvpn/server" \
+  "etc/stunnel/makia-openvpn.conf" \
+  "etc/default/stunnel4" \
+  "etc/ipsec.conf" \
+  "etc/ipsec.secrets" \
+  "etc/makia-vps-manager/wstunnel.env" \
   "etc/makia-vps-manager/mtproxy.env" \
   "etc/makia-vps-manager/mtproxy.toml" \
   "etc/makia-vps-manager/dns.json" \
