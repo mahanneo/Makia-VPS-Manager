@@ -55,6 +55,12 @@ def issue_pair_code(account_id,device_id,ttl=PAIR_TTL):
             (now-3600,),
         )
         con.execute(
+            """UPDATE client_browser_pair_tickets
+               SET redeemed_at=?
+               WHERE account_id=? AND device_id=? AND redeemed_at=0""",
+            (now,int(account_id),int(device_id)),
+        )
+        con.execute(
             """INSERT INTO client_browser_pair_tickets(
                  token_hash,account_id,device_id,created_at,expires_at,redeemed_at
                ) VALUES(?,?,?,?,?,0)""",
