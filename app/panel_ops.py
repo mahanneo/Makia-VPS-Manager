@@ -75,6 +75,17 @@ def _certbot_nginx_plugin_ready():
     return p.returncode==0 and bool(re.search(r"(?mi)^\*\s+nginx\b",p.stdout or ""))
 
 
+def sync_browser_gateway():
+    helper=shutil.which("makia-browser-gateway-sync") or "/usr/local/sbin/makia-browser-gateway-sync"
+    if not Path(helper).is_file():
+        return {"ok":False,"status":"helper_missing","detail":"Browser Gateway sync helper is not installed"}
+    try:
+        output=_run([helper],timeout=35)
+        return {"ok":True,"status":"ready_or_deferred","detail":output[-1200:]}
+    except PanelOperationError as exc:
+        return {"ok":False,"status":"failed","detail":str(exc)[:1200]}
+
+
 def _listen_ports():
     ports=set()
     if not shutil.which("ss"):
