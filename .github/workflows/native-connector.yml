@@ -70,7 +70,7 @@ jobs:
           Copy-Item client\windows\Uninstall-Makia.cmd package\Uninstall-Makia.cmd
           Copy-Item client\windows\INSTALL.txt package\INSTALL.txt
 
-      - name: Smoke real installer
+      - name: Smoke package and real installer
         shell: pwsh
         run: |
           package\MakiaClientConnector.exe --status
