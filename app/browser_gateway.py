@@ -186,6 +186,7 @@ async def _serve_tunnel(client_reader,client_writer,target_reader,target_writer,
 
 async def _handle(reader,writer):
     account_id=0
+    counted_active=False
     try:
         raw=await _read_headers(reader)
         method,target,version,headers,auth_header=_parse_request(raw)
@@ -203,6 +204,7 @@ async def _handle(reader,writer):
             await writer.drain()
             return
         _active[account_id]=current+1
+        counted_active=True
 
         account=client_store.get_account(account_id)
         used=client_store.account_usage_bytes(account_id)
@@ -262,7 +264,7 @@ async def _handle(reader,writer):
         except Exception:
             pass
     finally:
-        if account_id:
+        if account_id and counted_active:
             _active[account_id]=max(0,_active.get(account_id,1)-1)
             if not _active[account_id]:
                 _active.pop(account_id,None)
@@ -275,7 +277,7 @@ async def _handle(reader,writer):
 
 
 def _tls_material():
-    domain=str(get_setting("panel_domain","") or "").strip().lower()
+    domain=str(os.getenv("MAKIA_BROWSER_GATEWAY_HOST","") or get_setting("panel_domain","") or "").strip().lower()
     if not domain:
         return None
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
