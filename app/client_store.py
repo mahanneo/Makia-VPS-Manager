@@ -817,9 +817,14 @@ def set_account_password(account_id,password):
             "UPDATE client_accounts SET password_hash=?,updated_at=? WHERE id=?",
             (hash_password(str(password)),now_iso(),int(account_id)),
         )
+        now_ts=int(time.time())
         con.execute(
             "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
-            (int(time.time()),int(account_id)),
+            (now_ts,int(account_id)),
+        )
+        con.execute(
+            "UPDATE browser_proxy_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+            (now_ts,int(account_id)),
         )
 
 
@@ -890,6 +895,7 @@ def delete_account(account_id):
         ).fetchone()
         if protocol_hold or artifact_hold:
             raise PermissionError("restore the Client account policy before deleting this account")
+        con.execute("DELETE FROM browser_proxy_sessions WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_sessions WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_usage_baselines WHERE account_id=?",(account_id,))
@@ -933,13 +939,22 @@ def revoke_all_devices(account_id):
             "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
             (now_ts,account_id),
         )
+        con.execute(
+            "UPDATE browser_proxy_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+            (now_ts,account_id),
+        )
 
 
 def revoke_all_sessions(account_id):
+    now_ts=int(time.time())
     with connect() as con:
         con.execute(
             "UPDATE client_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
-            (int(time.time()),int(account_id)),
+            (now_ts,int(account_id)),
+        )
+        con.execute(
+            "UPDATE browser_proxy_sessions SET revoked_at=? WHERE account_id=? AND revoked_at=0",
+            (now_ts,int(account_id)),
         )
 
 
@@ -967,6 +982,10 @@ def reset_account_usage(account_id):
         con.execute(
             "UPDATE client_artifact_usage SET used_bytes=0,updated_at=? WHERE account_id=?",
             (ts,account_id),
+        )
+        con.execute(
+            "UPDATE browser_proxy_sessions SET bytes_up=0,bytes_down=0 WHERE account_id=?",
+            (account_id,),
         )
     return {"ok":True,"used_bytes":0}
 
