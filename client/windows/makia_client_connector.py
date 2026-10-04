@@ -180,48 +180,76 @@ def start_process(cmd):
 def connect_delivery(d,browser_only=False,dry_run=False):
     if not isinstance(d,dict):
         raise RuntimeError("Invalid connector delivery payload")
-    engine=str(d.get("engine") or "").lower();share=str(d.get("share_link") or "")
-    stop_current();ROOT.mkdir(parents=True,exist_ok=True)
+    engine=str(d.get("engine") or "").lower()
+    share=str(d.get("share_link") or "")
     if browser_only and engine in {"wireguard","openvpn"}:
         raise RuntimeError("WireGuard and OpenVPN require Device VPN mode")
+    ROOT.mkdir(parents=True,exist_ok=True)
+
     if engine=="wireguard":
         raw=base64.b64decode(d.get("native_base64") or "") if d.get("native_base64") else share.encode()
+        if not raw:
+            raise RuntimeError("WireGuard profile missing")
         name=re.sub(r"[^A-Za-z0-9_-]+","-",Path(d.get("native_filename") or "makia.conf").stem)[:40] or "makia"
-        path=ROOT/(name+".conf");path.write_bytes(raw)
+        path=ROOT/(name+".conf")
+        path.write_bytes(raw)
         exe=find_binary(["wireguard.exe"])
         if dry_run:return {"mode":"wireguard","binary":bool(exe),"profile":str(path),"scope":"device"}
         if not exe:raise RuntimeError("WireGuard for Windows is not installed")
+        stop_current()
         cp=subprocess.run([exe,"/installtunnelservice",str(path)],capture_output=True,text=True,timeout=30,check=False)
         if cp.returncode!=0:raise RuntimeError((cp.stderr or cp.stdout or "WireGuard failed")[-500:])
         STATE.write_text(json.dumps({"mode":"wireguard","tunnel":name,"scope":"device"}),encoding="utf-8")
         return {"mode":"wireguard","connected":True,"scope":"device"}
+
     if engine=="openvpn":
         raw=base64.b64decode(d.get("native_base64") or "")
-        if not raw:raise RuntimeError("OpenVPN profile missing")
-        path=ROOT/"makia.ovpn";path.write_bytes(raw)
+        if not raw:
+            raise RuntimeError("OpenVPN profile missing")
+        path=ROOT/"makia.ovpn"
+        path.write_bytes(raw)
         exe=find_binary(["openvpn.exe"])
         if dry_run:return {"mode":"openvpn","binary":bool(exe),"profile":str(path),"scope":"device"}
         if not exe:raise RuntimeError("OpenVPN Connect/OpenVPN binary is not installed")
+        stop_current()
         pid=start_process([exe,"--config",str(path)])
         STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":"openvpn","scope":"device"}),encoding="utf-8")
         return {"mode":"openvpn","connected":True,"scope":"device"}
+
     if not share:
         raise RuntimeError("Connector delivery does not contain a supported share link")
     outbound=outbound_from_share(share)
     proxy_port=free_loopback_port() if browser_only else 0
     cfg=singbox_browser_config(outbound,proxy_port) if browser_only else singbox_config(outbound)
-    PROFILE.write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding="utf-8")
+    candidate=ROOT/"candidate.json"
+    candidate.write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding="utf-8")
     exe=find_binary(["sing-box.exe"])
     if dry_run:
+        PROFILE.write_text(candidate.read_text(encoding="utf-8"),encoding="utf-8")
+        try:candidate.unlink()
+        except OSError:pass
         out={"mode":"sing-box","binary":bool(exe),"outbound":outbound["type"],"profile":str(PROFILE),"scope":"browser" if browser_only else "device"}
         if browser_only:out["proxy_port"]=proxy_port
         return out
-    if not exe:raise RuntimeError("Makia sing-box runtime is missing")
-    check=subprocess.run([exe,"check","-c",str(PROFILE)],capture_output=True,text=True,timeout=15,check=False)
-    if check.returncode!=0:raise RuntimeError((check.stderr or check.stdout or "sing-box config rejected")[-800:])
+    if not exe:
+        try:candidate.unlink()
+        except OSError:pass
+        raise RuntimeError("Makia sing-box runtime is missing")
+    check=subprocess.run([exe,"check","-c",str(candidate)],capture_output=True,text=True,timeout=15,check=False)
+    if check.returncode!=0:
+        try:candidate.unlink()
+        except OSError:pass
+        raise RuntimeError((check.stderr or check.stdout or "sing-box config rejected")[-800:])
+
+    # Only stop the current tunnel after the replacement profile has parsed and
+    # passed sing-box validation. This keeps server switching fail-safe.
+    stop_current()
+    os.replace(candidate,PROFILE)
     pid=start_process([exe,"run","-c",str(PROFILE)])
     time.sleep(1)
     if subprocess.run(["tasklist","/FI",f"PID eq {pid}"],capture_output=True,text=True,timeout=5).stdout.find(str(pid))<0:
+        try:PROFILE.unlink()
+        except OSError:pass
         raise RuntimeError("sing-box exited during startup")
     scope="browser" if browser_only else "device"
     state={"mode":"process","pid":pid,"engine":outbound["type"],"scope":scope}
