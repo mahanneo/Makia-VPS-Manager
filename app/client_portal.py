@@ -441,10 +441,7 @@ async def client_connector_redeem(request:Request):
 def client_browser_pair_ticket(request:Request):
     session=_require_mutation(request)
     try:
-        pair=client_browser.issue_pair_code(session["account_id"],session["device_id"])
         controller=_public_origin(request)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403,detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=503,detail=str(exc))
     parsed=urllib.parse.urlparse(controller)
@@ -453,6 +450,10 @@ def client_browser_pair_ticket(request:Request):
             status_code=503,
             detail="Browser Extension pairing requires a public HTTPS origin; configure MAKIA_PUBLIC_BASE_URL",
         )
+    try:
+        pair=client_browser.issue_pair_code(session["account_id"],session["device_id"])
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
     audit(
         "client:"+session["username"],"client_browser_pair_ticket",
         target=str(session["device_id"]),detail=f"ttl={pair['ttl']}",ip=_ip(request),
