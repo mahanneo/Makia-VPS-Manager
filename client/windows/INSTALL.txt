@@ -1,15 +1,25 @@
-Makia Client Connector 1.4.0 — Windows UAT
+Makia Client Connector 1.4.1 — Windows + Browser VPN UAT
 
 Recommended install:
 1. Extract the GitHub artifact ZIP once.
 2. Double-click Install-Makia.cmd.
-3. Windows may show a UAC prompt when the connector starts because TUN mode requires elevated privileges.
-4. Return to Makia Client PWA and press Direct Connect again.
+3. For Chrome open chrome://extensions, enable Developer mode and choose Load unpacked.
+4. Select the browser-extension folder included in this package.
+5. For Edge use edge://extensions and the same browser-extension folder.
+6. Pin Makia Browser VPN and enter your HTTPS Makia panel URL + Client credentials.
+7. Choose a supported profile and press Connect.
 
-If Direct Connect fails, read:
+Browser VPN routes only Chrome/Edge traffic through a local 127.0.0.1 SOCKS5 proxy.
+WireGuard and OpenVPN remain Full Device / Import only.
+
+Full Device Direct Connect:
+- Return to the Makia Client Portal and use Direct Connect.
+- Windows may show UAC because TUN mode requires elevation.
+
+Logs:
 %LOCALAPPDATA%\Makia\Connector\connector.log
 
 Uninstall:
 Double-click Uninstall-Makia.cmd.
 
-This RC does not modify VPS credentials or restart production services.
+This package does not rotate VPS credentials and does not restart production VPN services.
