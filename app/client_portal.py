@@ -472,20 +472,33 @@ def client_service_worker(request:Request):
 # The extension uses opaque Client sessions and one-time connector tickets; VPN
 # credentials are never returned to extension JavaScript.
 MAKIA_BROWSER_EXTENSION_ID="jgpmmenelldgfmjfnonhjaaaccfeniji"
-MAKIA_BROWSER_EXTENSION_ORIGIN="chrome-extension://"+MAKIA_BROWSER_EXTENSION_ID
+
+def _browser_extension_ids():
+    raw=str(os.getenv("MAKIA_BROWSER_EXTENSION_IDS",MAKIA_BROWSER_EXTENSION_ID) or "")
+    values=[]
+    for item in raw.split(","):
+        item=item.strip().lower()
+        if re.fullmatch(r"[a-p]{32}",item) and item not in values:
+            values.append(item)
+    if MAKIA_BROWSER_EXTENSION_ID not in values:
+        values.append(MAKIA_BROWSER_EXTENSION_ID)
+    return values
+
+def _browser_extension_origins():
+    return {"chrome-extension://"+item for item in _browser_extension_ids()}
 
 def _extension_headers(request):
     if request.headers.get("x-makia-extension")!="1":
         raise HTTPException(status_code=403,detail="invalid Makia extension request")
     origin=(request.headers.get("origin") or "").rstrip("/")
-    if origin and origin!=MAKIA_BROWSER_EXTENSION_ORIGIN:
+    if origin and origin not in _browser_extension_origins():
         raise HTTPException(status_code=403,detail="invalid extension origin")
 
 def _extension_response(request,payload,status_code=200):
     response=JSONResponse(payload,status_code=status_code)
     origin=(request.headers.get("origin") or "").rstrip("/")
-    if origin==MAKIA_BROWSER_EXTENSION_ORIGIN:
-        response.headers["Access-Control-Allow-Origin"]=MAKIA_BROWSER_EXTENSION_ORIGIN
+    if origin in _browser_extension_origins():
+        response.headers["Access-Control-Allow-Origin"]=origin
         response.headers["Vary"]="Origin"
     response.headers["Cache-Control"]="no-store"
     return _client_security_headers(response)
@@ -504,10 +517,10 @@ def _extension_bearer(request):
 @router.options("/client/extension/{rest:path}")
 def client_extension_options(rest:str,request:Request):
     origin=(request.headers.get("origin") or "").rstrip("/")
-    if origin!=MAKIA_BROWSER_EXTENSION_ORIGIN:
+    if origin not in _browser_extension_origins():
         raise HTTPException(status_code=403,detail="invalid extension origin")
     response=Response(status_code=204)
-    response.headers["Access-Control-Allow-Origin"]=MAKIA_BROWSER_EXTENSION_ORIGIN
+    response.headers["Access-Control-Allow-Origin"]=origin
     response.headers["Access-Control-Allow-Headers"]="authorization,content-type,x-makia-extension"
     response.headers["Access-Control-Allow-Methods"]="GET,POST,OPTIONS"
     response.headers["Access-Control-Max-Age"]="600"
@@ -559,7 +572,8 @@ async def client_extension_login(request:Request):
         "expires_at":expires_at,
         "device_key":new_device_key or "",
         "account":snapshot,
-        "extension_id":MAKIA_BROWSER_EXTENSION_ID,
+        "extension_id":origin.split("://",1)[1] if (origin:=(request.headers.get("origin") or "").rstrip("/")) in _browser_extension_origins() else MAKIA_BROWSER_EXTENSION_ID,
+        "allowed_extension_ids":_browser_extension_ids(),
     })
 
 @router.post("/client/extension/logout")
