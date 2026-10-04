@@ -44,7 +44,7 @@ def redeem(controller,ticket):
     req=urllib.request.Request(
         controller.rstrip("/")+"/client/connector/redeem",
         data=data,
-        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.4.2"},
+        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.5.0"},
         method="POST",
     )
     with urllib.request.urlopen(req,timeout=15) as r:
