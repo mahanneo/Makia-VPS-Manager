@@ -81,7 +81,6 @@ async function issueGatewaySession() {
     proxyUsername:String(data.proxy.username),
     proxyPassword:String(data.proxy.password)
   });
-  await setSecureProxy(data.gateway);
   await chrome.storage.local.set({
     connected:true,
     gatewayHost:String(data.gateway.host),
@@ -89,6 +88,18 @@ async function issueGatewaySession() {
     credentialExpiresAt:Number(data.proxy.expires_at || 0),
     proxyError:""
   });
+  try {
+    await setSecureProxy(data.gateway);
+  } catch (err) {
+    await chrome.storage.session.remove(["proxyUsername","proxyPassword"]);
+    await chrome.storage.local.set({
+      connected:false,
+      gatewayHost:"",
+      gatewayPort:0,
+      credentialExpiresAt:0
+    });
+    throw err;
+  }
   await chrome.alarms.create(REFRESH_ALARM,{periodInMinutes:10});
   return data;
 }
