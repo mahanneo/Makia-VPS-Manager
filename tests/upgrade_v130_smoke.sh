@@ -38,6 +38,7 @@ for _ in {1..30}; do
 done
 
 docker cp "$BASELINE_DIR" "$CONTAINER":/tmp/makia-v130
+docker cp tests/upgrade_identity_probe.py "$CONTAINER":/tmp/upgrade_identity_probe.py
 set +e
 docker exec -e MAKIA_INITIAL_ADMIN_PASSWORD="UpgradeBaselineOnly-130" \
   "$CONTAINER" bash -lc 'bash /tmp/makia-v130/scripts/install.sh'
@@ -46,6 +47,7 @@ set -e
 echo "baseline installer exit=$baseline_rc"
 
 docker exec "$CONTAINER" bash -lc '
+  set -Eeuo pipefail
   test "$(cat /opt/makia-vps-manager/VERSION)" = "1.3.0"
   systemctl enable --now nginx
   cd /opt/makia-vps-manager
@@ -63,6 +65,7 @@ docker exec "$CONTAINER" bash -lc '
 '
 
 docker exec "$CONTAINER" bash -lc '
+  set -Eeuo pipefail
   install -d -m 0755 /etc/stunnel
   printf "%s\n" "pid = /run/stunnel4/makia-openvpn.pid" "[makia-openvpn]" "accept = 9443" "connect = 127.0.0.1:8443" >/etc/stunnel/makia-openvpn.conf
   touch /etc/default/stunnel4
@@ -70,17 +73,16 @@ docker exec "$CONTAINER" bash -lc '
   echo "ENABLED=0" >> /etc/default/stunnel4
   systemctl stop stunnel4 2>/dev/null || true
   ! systemctl is-active --quiet stunnel4
-
-  cd /opt/makia-vps-manager
-  MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python -c "from app.db import connect; c=connect(); r=c.execute(\"SELECT password_hash FROM admins WHERE username='admin'\").fetchone(); assert r and r[0]; print(r[0]); c.close()" >/root/pre-admin.hash
-  awk -F= "/^[[:space:]]*PrivateKey[[:space:]]*=/{gsub(/[[:space:]]/,\"\",\$2); print \$2}" /etc/wireguard/wg0.conf >/root/pre-wg-private
-  sha256sum /etc/openvpn/server/server.conf | awk "{print \$1}" >/root/pre-ovpn-config
 '
+
+docker exec -e MAKIA_DATA_DIR=/opt/makia-vps-manager/data "$CONTAINER" \
+  /opt/makia-vps-manager/.venv/bin/python /tmp/upgrade_identity_probe.py >/tmp/makia-pre-identity.json
 
 docker exec -e MAKIA_REF="$CANDIDATE_SHA" -e MAKIA_FORCE_MAIN=0 \
   "$CONTAINER" bash -lc 'makia-upgrade'
 
 docker exec "$CONTAINER" bash -lc '
+  set -Eeuo pipefail
   test "$(cat /opt/makia-vps-manager/VERSION)" = "1.4.1"
   curl -fsS http://127.0.0.1:8787/healthz | grep -q "1.4.1"
   systemctl is-active --quiet makia-vps-manager
@@ -88,20 +90,14 @@ docker exec "$CONTAINER" bash -lc '
   systemctl is-active --quiet xray
   systemctl is-active --quiet wg-quick@wg0
   systemctl is-active --quiet openvpn-server@server
-
-  cd /opt/makia-vps-manager
-  MAKIA_DATA_DIR=/opt/makia-vps-manager/data .venv/bin/python -c "from app.db import connect; c=connect(); r=c.execute(\"SELECT password_hash FROM admins WHERE username='admin'\").fetchone(); assert r and r[0]; print(r[0]); c.close()" >/root/post-admin.hash
-  cmp -s /root/pre-admin.hash /root/post-admin.hash
-  awk -F= "/^[[:space:]]*PrivateKey[[:space:]]*=/{gsub(/[[:space:]]/,\"\",\$2); print \$2}" /etc/wireguard/wg0.conf >/root/post-wg-private
-  cmp -s /root/pre-wg-private /root/post-wg-private
-  sha256sum /etc/openvpn/server/server.conf | awk "{print \$1}" >/root/post-ovpn-config
-  cmp -s /root/pre-ovpn-config /root/post-ovpn-config
-
   ! systemctl is-active --quiet stunnel4
   grep -Eq "^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*0[[:space:]]*$" /etc/default/stunnel4
-
   makia-doctor
   makia-uat-smoke
 '
+
+docker exec -e MAKIA_DATA_DIR=/opt/makia-vps-manager/data "$CONTAINER" \
+  /opt/makia-vps-manager/.venv/bin/python /tmp/upgrade_identity_probe.py >/tmp/makia-post-identity.json
+cmp -s /tmp/makia-pre-identity.json /tmp/makia-post-identity.json
 
 echo "UPGRADE 1.3.0 -> 1.4.1 SMOKE: PASS"
