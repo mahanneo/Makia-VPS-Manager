@@ -1,32 +1,57 @@
-# Makia Client Connector per-user installer; registers makia:// without touching VPS services.
+# Makia Client Connector per-user installer.
 param([string]$SourceDir = $PSScriptRoot)
 
 $ErrorActionPreference = "Stop"
 $target = Join-Path $env:LOCALAPPDATA "Makia\Connector\bin"
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 
-foreach ($name in @("MakiaClientConnector.exe","sing-box.exe")) {
+foreach ($name in @("MakiaClientConnector.exe","MakiaBrowserHost.exe","sing-box.exe")) {
   $src = Join-Path $SourceDir $name
   if (!(Test-Path $src)) { throw "Missing $name in package" }
   Copy-Item -Force $src (Join-Path $target $name)
 }
 
-$exe = Join-Path $target "MakiaClientConnector.exe"
+$connector = Join-Path $target "MakiaClientConnector.exe"
+$browserHost = Join-Path $target "MakiaBrowserHost.exe"
+
+# makia:// protocol for Full Device Direct Connect.
 $base = "HKCU:\Software\Classes\makia"
 New-Item -Force -Path $base | Out-Null
 Set-Item -Path $base -Value "URL:Makia Client Connector"
 New-ItemProperty -Path $base -Name "URL Protocol" -Value "" -PropertyType String -Force | Out-Null
 New-Item -Force -Path "$base\DefaultIcon" | Out-Null
-Set-Item -Path "$base\DefaultIcon" -Value ('"' + $exe + '",0')
+Set-Item -Path "$base\DefaultIcon" -Value ('"' + $connector + '",0')
 New-Item -Force -Path "$base\shell\open\command" | Out-Null
-Set-Item -Path "$base\shell\open\command" -Value ('"' + $exe + '" "%1"')
+Set-Item -Path "$base\shell\open\command" -Value ('"' + $connector + '" "%1"')
 
-if (!(Test-Path $exe)) { throw "Connector executable was not installed" }
+# Chrome/Edge Native Messaging host for browser-only VPN.
+$hostName = "com.makia.browser_host"
+$extensionId = "jgpmmenelldgfmjfnonhjaaaccfeniji"
+$hostManifest = Join-Path $target "$hostName.json"
+$manifest = @{
+  name = $hostName
+  description = "Makia Browser VPN Native Host"
+  path = $browserHost
+  type = "stdio"
+  allowed_origins = @("chrome-extension://$extensionId/")
+} | ConvertTo-Json -Depth 4
+Set-Content -Path $hostManifest -Value $manifest -Encoding UTF8
+
+foreach ($key in @(
+  "HKCU:\Software\Google\Chrome\NativeMessagingHosts\$hostName",
+  "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\$hostName"
+)) {
+  New-Item -Force -Path $key | Out-Null
+  Set-Item -Path $key -Value $hostManifest
+}
+
+if (!(Test-Path $connector) -or !(Test-Path $browserHost)) { throw "Makia connector installation failed" }
 $registered = (Get-Item "$base\shell\open\command").GetValue("")
 if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe")) {
   throw "makia:// registration failed"
 }
 
-Write-Host "Makia Client Connector installed successfully."
-Write-Host "Installed at: $target"
-Write-Host "Direct Connect is registered as makia://"
+Write-Host "Makia Client Connector 1.4.1 installed successfully."
+Write-Host "Full-device connector: $connector"
+Write-Host "Browser native host: $browserHost"
+Write-Host "Chrome/Edge native messaging host registered for extension $extensionId"
