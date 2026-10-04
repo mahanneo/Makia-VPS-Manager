@@ -39,7 +39,14 @@ chrome.webRequest.onAuthRequired.addListener(
     }
     chrome.storage.session.get(["proxyAuth","proxyEndpoint"]).then(saved => {
       const auth=saved.proxyAuth || {};
-      if (!auth.username || !auth.password) {
+      const endpoint=saved.proxyEndpoint || {};
+      const challenger=details.challenger || {};
+      const challengerHost=String(challenger.host || "").toLowerCase();
+      const challengerPort=Number(challenger.port || 0);
+      const expectedHost=String(endpoint.host || "").toLowerCase();
+      const expectedPort=Number(endpoint.port || 0);
+      if (!auth.username || !auth.password || !expectedHost || !expectedPort ||
+          challengerHost !== expectedHost || challengerPort !== expectedPort) {
         callback({cancel:true});
         return;
       }
