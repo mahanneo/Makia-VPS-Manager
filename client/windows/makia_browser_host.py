@@ -182,14 +182,40 @@ def _connector_exe():
     return str(exe)
 
 
-def run_elevated(args):
+def wait_connector_state(scope=None,connected=True,timeout=12):
+    deadline=time.time()+max(1,float(timeout))
+    last=None
+    while time.time()<deadline:
+        last=connector_state()
+        if connected:
+            if last.get("connected") and (not scope or last.get("scope")==scope):
+                return last
+        elif not last.get("connected"):
+            return last
+        time.sleep(0.25)
+    return last or {"connected":False,"scope":""}
+
+
+def run_elevated(args,expect_scope=None,expect_disconnect=False):
     if os.name!="nt":
         raise RuntimeError("Device VPN is supported on Windows")
     params=subprocess.list2cmdline([str(x) for x in args])
     rc=ctypes.windll.shell32.ShellExecuteW(None,"runas",_connector_exe(),params,None,1)
     if int(rc)<=32:
         raise RuntimeError("Unable to start elevated Makia Connector")
-    return {"starting":True,"scope":"device","uac":True}
+    state=wait_connector_state(
+        scope=expect_scope,
+        connected=not expect_disconnect,
+        timeout=15,
+    )
+    if expect_disconnect:
+        if state.get("connected"):
+            raise RuntimeError("Makia Connector did not stop the active tunnel")
+        return {"connected":False,"scope":"","uac":True}
+    if not state.get("connected") or (expect_scope and state.get("scope")!=expect_scope):
+        raise RuntimeError("Makia Connector did not confirm the requested tunnel")
+    state["uac"]=True
+    return state
 
 
 def connect_access(kind,delivery_id,mode):
@@ -210,7 +236,7 @@ def connect_access(kind,delivery_id,mode):
         result=connector.handle_uri(launch,browser_only=True)
         result["scope"]="browser"
         return result
-    return run_elevated([launch])
+    return run_elevated([launch],expect_scope="device")
 
 
 def disconnect():
@@ -221,7 +247,7 @@ def disconnect():
         result=connector.stop_current()
         result["connected"]=False
         return result
-    return run_elevated(["--disconnect"])
+    return run_elevated(["--disconnect"],expect_disconnect=True)
 
 
 def logout():
