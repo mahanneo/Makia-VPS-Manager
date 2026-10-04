@@ -278,7 +278,7 @@ def _tls_material():
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
     if not cert.is_file() or not key.is_file():
         return None
-    return domain,cert,key
+    return domain,cert,key,cert.resolve(),key.resolve()
 
 
 async def run():
@@ -295,7 +295,7 @@ async def run():
                 server=None
             current=signature
             if material:
-                domain,cert,key=material
+                domain,cert,key,cert_real,key_real=material
                 ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 ctx.minimum_version=ssl.TLSVersion.TLSv1_2
                 ctx.load_cert_chain(str(cert),str(key))
