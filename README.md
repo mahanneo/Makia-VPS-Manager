@@ -56,6 +56,7 @@ WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engi
 End users can open the same authenticated Client URL on Android, iPhone/iPad, Windows or macOS. The portal shows only the signed-in account's quota, expiry, device state and assigned access profiles.
 
 - **Windows:** one-click Direct Connect through the Makia Client Connector.
+- **Chrome / Edge on Windows:** Makia VPN extension with Browser Only proxy mode or full Device VPN through the secure Native Messaging bridge.
 - **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; OpenVPN remains import-based in 1.4.0.
 - **iPhone / iPad:** install the PWA from Safari with Add to Home Screen and use the platform-aware Open/Import flow. Native in-app iOS tunnelling is not claimed until an Apple-signed Network Extension build completes real-device UAT.
 - Native launch tickets are one-time, device-bound and short-lived; VPN secrets are not embedded in the `makia://` URL.
