@@ -42,7 +42,7 @@ from app.db import get_setting
 print((get_setting("panel_domain","") or "").strip())
 PY
 )"
-BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9444}"
 if [[ -n "$BROWSER_DOMAIN" && -s "/etc/letsencrypt/live/$BROWSER_DOMAIN/fullchain.pem" ]]; then
   if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:|\])${BROWSER_PORT}$"; then
     ok "Browser Gateway listener" "TLS proxy :$BROWSER_PORT"
