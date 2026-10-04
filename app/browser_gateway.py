@@ -15,7 +15,7 @@ from app import client_store
 from app.db import get_setting
 
 APP=Path("/opt/makia-vps-manager")
-DEFAULT_PORT=int(os.getenv("MAKIA_BROWSER_GATEWAY_PORT","9443"))
+DEFAULT_PORT=int(os.getenv("MAKIA_BROWSER_GATEWAY_PORT","9444"))
 ALLOWED_PORTS={
     int(p.strip()) for p in os.getenv("MAKIA_BROWSER_GATEWAY_ALLOWED_PORTS","80,443").split(",")
     if p.strip().isdigit()
