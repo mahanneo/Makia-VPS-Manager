@@ -153,6 +153,10 @@ MAKIA_ADMIN_ALLOWED_CIDRS=${MAKIA_ADMIN_ALLOWED_CIDRS:-}
 MAKIA_CLIENT_PORTAL_ENABLED=${MAKIA_CLIENT_PORTAL_ENABLED:-auto}
 MAKIA_PUBLIC_BASE_URL=${MAKIA_PUBLIC_BASE_URL:-}
 MAKIA_ANDROID_CONNECTOR_URL=${MAKIA_ANDROID_CONNECTOR_URL:-}
+MAKIA_BROWSER_GATEWAY_ENABLED=${MAKIA_BROWSER_GATEWAY_ENABLED:-1}
+MAKIA_BROWSER_GATEWAY_HOST=${MAKIA_BROWSER_GATEWAY_HOST:-}
+MAKIA_BROWSER_GATEWAY_PORT=${MAKIA_BROWSER_GATEWAY_PORT:-8445}
+MAKIA_BROWSER_GATEWAY_BIND=${MAKIA_BROWSER_GATEWAY_BIND:-0.0.0.0}
 EOF
   chmod 0600 /etc/makia-vps-manager/makia.env
 fi
@@ -178,6 +182,7 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-vps-manager.service" /etc/systemd/sys
 install -m 0644 "$SOURCE_DIR/systemd/makia-policy-enforcer.service" /etc/systemd/system/makia-policy-enforcer.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
@@ -208,6 +213,7 @@ install -m 0755 "$SOURCE_DIR/scripts/install-outline.sh" /usr/local/sbin/makia-i
 install -m 0755 "$SOURCE_DIR/scripts/install-mtproxy.sh" /usr/local/sbin/makia-install-mtproxy
 install -m 0755 "$SOURCE_DIR/scripts/refresh-mtproxy.sh" /usr/local/sbin/makia-refresh-mtproxy
 install -m 0755 "$SOURCE_DIR/scripts/install-dns.sh" /usr/local/sbin/makia-install-dns
+install -m 0755 "$SOURCE_DIR/scripts/browser-gateway-sync.sh" /usr/local/sbin/makia-browser-gateway-sync
 echo "Preparing optional Telegram/DNS tooling for panel-managed configuration..."
 if ! /usr/local/sbin/makia-install-mtproxy --install-only; then
   echo "WARNING: MTProxy tooling preparation failed; panel will show the root repair/install command."
@@ -242,6 +248,7 @@ systemctl enable --now makia-vps-manager
 systemctl enable --now makia-policy-enforcer
 systemctl enable --now makia-metrics-sampler
 systemctl enable --now makia-protocol-traffic
+/usr/local/sbin/makia-browser-gateway-sync
 systemctl enable --now makia-scheduled-backup.timer
 systemctl enable --now makia-ops-monitor.timer
 
