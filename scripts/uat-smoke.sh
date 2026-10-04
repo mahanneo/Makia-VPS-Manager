@@ -123,6 +123,7 @@ required={
     "client_accounts","client_devices","client_sessions",
     "client_protocol_bindings","client_artifact_bindings",
     "client_usage_baselines","client_artifact_usage","client_artifact_policy_state",
+    "browser_proxy_sessions",
 }
 with connect() as con:
     tables={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
