@@ -74,9 +74,16 @@ def issue(client_session, ttl_seconds=PROXY_SESSION_TTL):
         con.execute(
             """UPDATE browser_proxy_sessions
                SET revoked_at=?
-               WHERE device_id=? AND revoked_at=0""",
-            (now_ts,device_id),
+               WHERE device_id=? AND revoked_at=0 AND expires_at<=?""",
+            (now_ts,device_id,now_ts),
         )
+        active=con.execute(
+            """SELECT COUNT(*) AS n FROM browser_proxy_sessions
+               WHERE device_id=? AND revoked_at=0 AND expires_at>?""",
+            (device_id,now_ts),
+        ).fetchone()
+        if int(active["n"] or 0)>=6:
+            raise PermissionError("too many active browser gateway sessions; retry after the oldest session expires")
         con.execute(
             """INSERT INTO browser_proxy_sessions(
                  client_session_id,account_id,device_id,proxy_username,secret_hash,
