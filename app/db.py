@@ -182,15 +182,27 @@ def init_db():
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_notification_events_created_at ON notification_events(created_at);
-        CREATE TABLE IF NOT EXISTS commerce_requests (
-          idempotency_key TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS commerce_idempotency (
+          token_id INTEGER NOT NULL,
           route TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL,
           request_hash TEXT NOT NULL,
-          response_json TEXT NOT NULL,
-          created_at TEXT NOT NULL
+          status TEXT NOT NULL DEFAULT 'pending',
+          response_enc TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(token_id,route,idempotency_key)
         );
-        CREATE INDEX IF NOT EXISTS idx_commerce_requests_created_at ON commerce_requests(created_at);
+        CREATE INDEX IF NOT EXISTS idx_commerce_idempotency_created_at ON commerce_idempotency(created_at);
         ''')
+        # A short-lived draft used commerce_requests.response_json for replay data.
+        # If that table exists on a pre-UAT host, scrub any plaintext response payloads.
+        legacy_commerce=con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='commerce_requests'"
+        ).fetchone()
+        if legacy_commerce and "response_json" in _columns(con,"commerce_requests"):
+            con.execute("UPDATE commerce_requests SET response_json='' WHERE response_json<>''")
+
         # Migration-safe columns for future profile growth.
         _add_column(con, "account_profiles", "plan TEXT NOT NULL DEFAULT ''")
         _add_column(con, "account_profiles", "note TEXT NOT NULL DEFAULT ''")
