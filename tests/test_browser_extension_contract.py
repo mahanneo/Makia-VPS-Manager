@@ -10,7 +10,7 @@ def test_browser_extension_manifest_contract():
     assert manifest["version"]=="1.5.0"
     permissions=set(manifest["permissions"])
     assert "nativeMessaging" not in permissions
-    assert {"storage","proxy","webRequest","webRequestAuthProvider","alarms"} <= permissions
+    assert {"storage","proxy","webRequest","webRequestAuthProvider","alarms","privacy"} <= permissions
     assert manifest["host_permissions"]==["<all_urls>"]
     assert '"key"' in (ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8")
 
@@ -24,6 +24,8 @@ def test_extension_is_pure_browser_and_uses_secure_proxy_gateway():
     assert "/client/extension/browser-session" in background
     assert "chrome.webRequest.onAuthRequired" in background
     assert "chrome.storage.session" in background
+    assert "disable_non_proxied_udp" in background
+    assert "networkPredictionEnabled" in background
     assert "proxyUsername" in background and "proxyPassword" in background
     assert "/client/extension/browser-status" in popup
     assert "/client/extension/connect/" not in popup
