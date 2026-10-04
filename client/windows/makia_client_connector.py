@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, base64, ctypes, json, os, re, signal, subprocess, sys, tempfile, time
+import argparse, base64, ctypes, json, os, re, signal, socket, subprocess, sys, tempfile, time
 import urllib.parse, urllib.request
 from pathlib import Path
 
@@ -125,6 +125,22 @@ def singbox_config(outbound):
       "route":{"auto_detect_interface":True,"final":"proxy"}
     }
 
+def free_loopback_port():
+    with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1",0))
+        return int(sock.getsockname()[1])
+
+def singbox_browser_config(outbound,port):
+    return {
+      "log":{"level":"info","timestamp":True},
+      "inbounds":[{
+          "type":"mixed","tag":"browser-in","listen":"127.0.0.1",
+          "listen_port":int(port),"set_system_proxy":False
+      }],
+      "outbounds":[outbound,{"type":"direct","tag":"direct"}],
+      "route":{"auto_detect_interface":True,"final":"proxy"}
+    }
+
 def find_binary(names):
     here=Path(sys.executable).resolve().parent
     candidates=[]
@@ -161,34 +177,45 @@ def start_process(cmd):
     p=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags)
     return p.pid
 
-def connect_delivery(dry_run=False):
+def connect_delivery(d,browser_only=False,dry_run=False):
+    if not isinstance(d,dict):
+        raise RuntimeError("Invalid connector delivery payload")
     engine=str(d.get("engine") or "").lower();share=str(d.get("share_link") or "")
     stop_current();ROOT.mkdir(parents=True,exist_ok=True)
+    if browser_only and engine in {"wireguard","openvpn"}:
+        raise RuntimeError("WireGuard and OpenVPN require Device VPN mode")
     if engine=="wireguard":
         raw=base64.b64decode(d.get("native_base64") or "") if d.get("native_base64") else share.encode()
         name=re.sub(r"[^A-Za-z0-9_-]+","-",Path(d.get("native_filename") or "makia.conf").stem)[:40] or "makia"
         path=ROOT/(name+".conf");path.write_bytes(raw)
         exe=find_binary(["wireguard.exe"])
-        if dry_run:return {"mode":"wireguard","binary":bool(exe),"profile":str(path)}
+        if dry_run:return {"mode":"wireguard","binary":bool(exe),"profile":str(path),"scope":"device"}
         if not exe:raise RuntimeError("WireGuard for Windows is not installed")
         cp=subprocess.run([exe,"/installtunnelservice",str(path)],capture_output=True,text=True,timeout=30,check=False)
         if cp.returncode!=0:raise RuntimeError((cp.stderr or cp.stdout or "WireGuard failed")[-500:])
-        STATE.write_text(json.dumps({"mode":"wireguard","tunnel":name}),encoding="utf-8")
-        return {"mode":"wireguard","connected":True}
+        STATE.write_text(json.dumps({"mode":"wireguard","tunnel":name,"scope":"device"}),encoding="utf-8")
+        return {"mode":"wireguard","connected":True,"scope":"device"}
     if engine=="openvpn":
         raw=base64.b64decode(d.get("native_base64") or "")
         if not raw:raise RuntimeError("OpenVPN profile missing")
         path=ROOT/"makia.ovpn";path.write_bytes(raw)
         exe=find_binary(["openvpn.exe"])
-        if dry_run:return {"mode":"openvpn","binary":bool(exe),"profile":str(path)}
+        if dry_run:return {"mode":"openvpn","binary":bool(exe),"profile":str(path),"scope":"device"}
         if not exe:raise RuntimeError("OpenVPN Connect/OpenVPN binary is not installed")
         pid=start_process([exe,"--config",str(path)])
-        STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":"openvpn"}),encoding="utf-8")
-        return {"mode":"openvpn","connected":True}
+        STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":"openvpn","scope":"device"}),encoding="utf-8")
+        return {"mode":"openvpn","connected":True,"scope":"device"}
+    if not share:
+        raise RuntimeError("Connector delivery does not contain a supported share link")
     outbound=outbound_from_share(share)
-    cfg=singbox_config(outbound);PROFILE.write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding="utf-8")
+    proxy_port=free_loopback_port() if browser_only else 0
+    cfg=singbox_browser_config(outbound,proxy_port) if browser_only else singbox_config(outbound)
+    PROFILE.write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding="utf-8")
     exe=find_binary(["sing-box.exe"])
-    if dry_run:return {"mode":"sing-box","binary":bool(exe),"outbound":outbound["type"],"profile":str(PROFILE)}
+    if dry_run:
+        out={"mode":"sing-box","binary":bool(exe),"outbound":outbound["type"],"profile":str(PROFILE),"scope":"browser" if browser_only else "device"}
+        if browser_only:out["proxy_port"]=proxy_port
+        return out
     if not exe:raise RuntimeError("Makia sing-box runtime is missing")
     check=subprocess.run([exe,"check","-c",str(PROFILE)],capture_output=True,text=True,timeout=15,check=False)
     if check.returncode!=0:raise RuntimeError((check.stderr or check.stdout or "sing-box config rejected")[-800:])
@@ -196,10 +223,15 @@ def connect_delivery(dry_run=False):
     time.sleep(1)
     if subprocess.run(["tasklist","/FI",f"PID eq {pid}"],capture_output=True,text=True,timeout=5).stdout.find(str(pid))<0:
         raise RuntimeError("sing-box exited during startup")
-    STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":outbound["type"]}),encoding="utf-8")
-    return {"mode":"sing-box","protocol":outbound["type"],"connected":True}
+    scope="browser" if browser_only else "device"
+    state={"mode":"process","pid":pid,"engine":outbound["type"],"scope":scope}
+    if browser_only:state["proxy_port"]=proxy_port
+    STATE.write_text(json.dumps(state),encoding="utf-8")
+    result={"mode":"sing-box","protocol":outbound["type"],"connected":True,"scope":scope}
+    if browser_only:result["proxy_port"]=proxy_port
+    return result
 
-def handle_uri(uri,dry_run=False):
+def handle_uri(uri,dry_run=False,browser_only=False):
     u=urllib.parse.urlparse(uri)
     if u.scheme.lower()!="makia":raise RuntimeError("Invalid Makia URI")
     action=(u.netloc or u.path.strip("/")).lower()
@@ -208,7 +240,7 @@ def handle_uri(uri,dry_run=False):
     q=urllib.parse.parse_qs(u.query);controller=(q.get("controller") or [""])[0];ticket=(q.get("ticket") or [""])[0]
     if not ticket:raise RuntimeError("Missing connector ticket")
     delivery=redeem(controller,ticket)
-    return connect_delivery(delivery,dry_run=dry_run)
+    return connect_delivery(delivery,browser_only=browser_only,dry_run=dry_run)
 
 def main():
     ap=argparse.ArgumentParser(prog="MakiaClientConnector")
