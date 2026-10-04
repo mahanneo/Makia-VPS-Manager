@@ -182,13 +182,19 @@ def _connector_exe():
     return str(exe)
 
 
-def wait_connector_state(scope=None,connected=True,timeout=12):
+def wait_connector_state(scope=None,connected=True,timeout=12,changed_after=None):
     deadline=time.time()+max(1,float(timeout))
     last=None
     while time.time()<deadline:
         last=connector_state()
         if connected:
-            if last.get("connected") and (not scope or last.get("scope")==scope):
+            state_changed=True
+            if changed_after is not None:
+                try:
+                    state_changed=connector.STATE.stat().st_mtime_ns!=changed_after
+                except OSError:
+                    state_changed=False
+            if state_changed and last.get("connected") and (not scope or last.get("scope")==scope):
                 return last
         elif not last.get("connected"):
             return last
@@ -200,6 +206,10 @@ def run_elevated(args,expect_scope=None,expect_disconnect=False):
     if os.name!="nt":
         raise RuntimeError("Device VPN is supported on Windows")
     params=subprocess.list2cmdline([str(x) for x in args])
+    try:
+        before_mtime=connector.STATE.stat().st_mtime_ns
+    except OSError:
+        before_mtime=0
     rc=ctypes.windll.shell32.ShellExecuteW(None,"runas",_connector_exe(),params,None,1)
     if int(rc)<=32:
         raise RuntimeError("Unable to start elevated Makia Connector")
@@ -207,6 +217,7 @@ def run_elevated(args,expect_scope=None,expect_disconnect=False):
         scope=expect_scope,
         connected=not expect_disconnect,
         timeout=15,
+        changed_after=None if expect_disconnect else before_mtime,
     )
     if expect_disconnect:
         if state.get("connected"):
