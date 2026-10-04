@@ -90,8 +90,8 @@ jobs:
             $chromeHost=(Get-Item "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.makia.browser_host").GetValue("")
             $edgeHost=(Get-Item "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.makia.browser_host").GetValue("")
             if (!(Test-Path $chromeHost) -or $chromeHost -ne $edgeHost) { throw "native messaging registration invalid" }
-            $host=Get-Content $chromeHost -Raw | ConvertFrom-Json
-            if ($host.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "extension id mismatch" }
+            $hostConfig=Get-Content $chromeHost -Raw | ConvertFrom-Json
+            if ($hostConfig.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "extension id mismatch" }
 
             $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
             if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
