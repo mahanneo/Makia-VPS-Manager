@@ -3,7 +3,7 @@ name: Upgrade From 1.3.0 Smoke
 on:
   push:
     branches:
-      - "hotfix/browser-host-stealth-v1.4.2"
+      - "main"
   pull_request:
     paths:
       - "scripts/update.sh"
