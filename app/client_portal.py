@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import client_store, client_connector
+from . import client_store, client_connector, client_browser
 from .config import APP_NAME, VERSION
 from .db import audit, clear_login_failures, login_rate_state, record_login_failure, get_setting
 
@@ -145,6 +145,53 @@ def _require_mutation(request):
     if fetch_site and fetch_site not in {"same-origin","none"}:
         raise HTTPException(status_code=403,detail="cross-site client request blocked")
     return session
+
+
+def _browser_session(request):
+    auth=(request.headers.get("authorization") or "").strip()
+    if not auth.lower().startswith("bearer "):
+        return None,None
+    parts=auth.split(None,1)
+    token=parts[1].strip() if len(parts)==2 else ""
+    if not token or len(token)>256:
+        return None,None
+    return client_store.session_by_token(token,_ip(request)),token
+
+
+def _require_browser_session(request):
+    session,token=_browser_session(request)
+    if not session:
+        raise HTTPException(status_code=401,detail="browser extension authentication required")
+    return session,token
+
+
+def _connector_launch(request,session,kind,delivery_id):
+    try:
+        if kind=="protocol":
+            client_store.protocol_delivery(session["account_id"],delivery_id)
+        elif kind=="artifact":
+            client_store.artifact_delivery(session["account_id"],delivery_id)
+        else:
+            raise ValueError("unsupported delivery kind")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404,detail=str(exc))
+    ticket=client_connector.issue_ticket(
+        session["account_id"],session["device_id"],kind,delivery_id
+    )
+    try:
+        origin=_public_origin(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc))
+    parsed_origin=urllib.parse.urlparse(origin)
+    if parsed_origin.scheme!="https" and parsed_origin.hostname not in {"127.0.0.1","localhost"}:
+        raise HTTPException(
+            status_code=503,
+            detail="Direct Connect requires a public HTTPS origin; configure MAKIA_PUBLIC_BASE_URL",
+        )
+    launch="makia://connect?controller="+urllib.parse.quote(origin,safe="")+"&ticket="+urllib.parse.quote(ticket["ticket"],safe="")
+    return launch,ticket
 
 
 def _client_security_headers(response):
@@ -355,31 +402,7 @@ def client_artifact_delivery(artifact_id:int,request:Request):
 def client_connector_ticket(delivery_kind:str,delivery_id:int,request:Request):
     session=_require_mutation(request)
     kind=str(delivery_kind or "").lower()
-    try:
-        if kind=="protocol":
-            client_store.protocol_delivery(session["account_id"],delivery_id)
-        elif kind=="artifact":
-            client_store.artifact_delivery(session["account_id"],delivery_id)
-        else:
-            raise ValueError("unsupported delivery kind")
-    except PermissionError as exc:
-        raise HTTPException(status_code=403,detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=404,detail=str(exc))
-    ticket=client_connector.issue_ticket(
-        session["account_id"],session["device_id"],kind,delivery_id
-    )
-    try:
-        origin=_public_origin(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=503,detail=str(exc))
-    parsed_origin=urllib.parse.urlparse(origin)
-    if parsed_origin.scheme!="https" and parsed_origin.hostname not in {"127.0.0.1","localhost"}:
-        raise HTTPException(
-            status_code=503,
-            detail="Direct Connect requires a public HTTPS origin; configure MAKIA_PUBLIC_BASE_URL",
-        )
-    launch="makia://connect?controller="+urllib.parse.quote(origin,safe="")+"&ticket="+urllib.parse.quote(ticket["ticket"],safe="")
+    launch,ticket=_connector_launch(request,session,kind,delivery_id)
     audit(
         "client:"+session["username"],"client_connector_ticket",
         target=f"{kind}:{delivery_id}",detail=f"ttl={ticket['ttl']}",ip=_ip(request),
@@ -412,6 +435,99 @@ async def client_connector_redeem(request:Request):
         ip=_ip(request),
     )
     return _no_store(JSONResponse(payload["delivery"]))
+
+
+@router.post("/client/api/browser/pair-ticket")
+def client_browser_pair_ticket(request:Request):
+    session=_require_mutation(request)
+    try:
+        pair=client_browser.issue_pair_code(session["account_id"],session["device_id"])
+        controller=_public_origin(request)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=503,detail=str(exc))
+    parsed=urllib.parse.urlparse(controller)
+    if parsed.scheme!="https" and parsed.hostname not in {"127.0.0.1","localhost"}:
+        raise HTTPException(
+            status_code=503,
+            detail="Browser Extension pairing requires a public HTTPS origin; configure MAKIA_PUBLIC_BASE_URL",
+        )
+    audit(
+        "client:"+session["username"],"client_browser_pair_ticket",
+        target=str(session["device_id"]),detail=f"ttl={pair['ttl']}",ip=_ip(request),
+    )
+    return _no_store(JSONResponse({
+        "code":pair["code"],"expires_at":pair["expires_at"],
+        "ttl":pair["ttl"],"controller":controller,
+    }))
+
+
+@router.post("/client/browser/redeem")
+async def client_browser_redeem(request:Request):
+    _require_enabled()
+    try:
+        body=await request.json()
+    except Exception:
+        raise HTTPException(status_code=400,detail="invalid browser pairing request")
+    code=str((body or {}).get("code") or "").strip()
+    if not code or len(code)>128:
+        raise HTTPException(status_code=400,detail="browser pairing code required")
+    try:
+        result=client_browser.redeem_pair_code(code,_ip(request))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403,detail=str(exc))
+    account=client_store.get_account(result["account_id"]) or {}
+    audit(
+        "client:"+str(account.get("username") or result["account_id"]),
+        "client_browser_pair_redeem",
+        target=str(result["device_id"]),detail="native_host",ip=_ip(request),
+    )
+    return _no_store(JSONResponse(result))
+
+
+@router.get("/client/browser/me")
+def client_browser_me(request:Request):
+    session,_token=_require_browser_session(request)
+    snapshot=client_store.account_snapshot(session["account_id"])
+    if not snapshot:
+        raise HTTPException(status_code=404,detail="account not found")
+    snapshot["current_device_id"]=session["device_id"]
+    snapshot["session_expires_at"]=session["expires_at"]
+    return _no_store(JSONResponse(snapshot))
+
+
+@router.get("/client/browser/protocols")
+def client_browser_protocols(request:Request):
+    session,_token=_require_browser_session(request)
+    return _no_store(JSONResponse({
+        "items":client_store.client_access_list(session["account_id"])
+    }))
+
+
+@router.post("/client/browser/connect/{delivery_kind}/{delivery_id}/ticket")
+def client_browser_connect_ticket(delivery_kind:str,delivery_id:int,request:Request):
+    session,_token=_require_browser_session(request)
+    kind=str(delivery_kind or "").lower()
+    launch,ticket=_connector_launch(request,session,kind,delivery_id)
+    audit(
+        "client:"+session["username"],"client_browser_connector_ticket",
+        target=f"{kind}:{delivery_id}",detail=f"ttl={ticket['ttl']}",ip=_ip(request),
+    )
+    return _no_store(JSONResponse({
+        "launch_url":launch,"expires_at":ticket["expires_at"],"ttl":ticket["ttl"],
+    }))
+
+
+@router.post("/client/browser/logout")
+def client_browser_logout(request:Request):
+    session,token=_require_browser_session(request)
+    client_store.revoke_session(token)
+    audit(
+        "client:"+session["username"],"client_browser_logout",
+        target=str(session["device_id"]),ip=_ip(request),
+    )
+    return _no_store(JSONResponse({"ok":True}))
 
 
 @router.get("/client/api/devices")
