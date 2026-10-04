@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib
 import pyotp, qrcode
 import qrcode.image.svg
@@ -3411,48 +3411,150 @@ class CommerceServiceActionRequest(BaseModel):
 
 def _commerce_source_ip(request:Request):
     direct=(request.client.host if request.client else "").strip()
-    if direct in {"127.0.0.1","::1"}:
-        forwarded=(request.headers.get("x-real-ip") or "").strip()
+    try:
+        direct_ip=ipaddress.ip_address(direct)
+    except ValueError:
+        raise HTTPException(403,"commerce source address is invalid")
+    # Forwarded client addresses are trusted only when the immediate peer is
+    # the local reverse proxy. Direct remote callers cannot spoof these headers.
+    if direct_ip.is_loopback:
+        forwarded=(request.headers.get("x-forwarded-for") or "").split(",",1)[0].strip()
+        if not forwarded:
+            forwarded=(request.headers.get("x-real-ip") or "").strip()
         if forwarded:
-            return forwarded
-    return direct
+            try:
+                return str(ipaddress.ip_address(forwarded))
+            except ValueError:
+                raise HTTPException(403,"commerce forwarded source address is invalid")
+    return str(direct_ip)
 
 def _commerce_require(request:Request,scope:str):
     identity=require_api_scope(request,scope)
-    raw=(os.getenv("MAKIA_COMMERCE_ALLOWED_CIDRS") or "127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16").strip()
+    raw=(os.getenv("MAKIA_COMMERCE_ALLOWED_CIDRS") or "127.0.0.1/32,::1/128").strip()
     try:
         source=ipaddress.ip_address(_commerce_source_ip(request))
         nets=[ipaddress.ip_network(x.strip(),strict=False) for x in raw.split(",") if x.strip()]
     except ValueError:
-        raise HTTPException(403,"commerce source address is invalid")
+        raise HTTPException(503,"commerce network allowlist is invalid")
     if not nets or not any(source in n for n in nets):
+        audit(_commerce_actor(identity),"commerce_source_denied",scope,str(source),str(source))
         raise HTTPException(403,"commerce source is not allowed")
     return identity
 
 def _commerce_model_dict(payload):
     return payload.model_dump() if hasattr(payload,"model_dump") else payload.dict()
 
-def _commerce_idempotency(request:Request,route:str,payload):
+def _commerce_idempotency_replay(row,req_hash):
+    if str(row["request_hash"])!=str(req_hash):
+        raise HTTPException(409,"idempotency key was already used for a different request")
+    status=str(row["status"] or "")
+    if status=="complete":
+        token=str(row["response_enc"] or "")
+        if not token:
+            raise HTTPException(500,"stored idempotent response is unavailable")
+        try:
+            response=access_ops.open_payload(token).get("response")
+        except Exception:
+            raise HTTPException(500,"stored idempotent response is unreadable")
+        if not isinstance(response,dict):
+            raise HTTPException(500,"stored idempotent response is invalid")
+        return response
+    if status=="pending":
+        raise HTTPException(409,"matching commerce request is already in progress")
+    if status=="failed":
+        raise HTTPException(409,"previous matching commerce request failed; use a new Idempotency-Key")
+    raise HTTPException(409,"matching commerce request is not replayable")
+
+def _commerce_idempotency(request:Request,identity,route:str,payload):
     key=(request.headers.get("idempotency-key") or "").strip()
-    if len(key)<8 or len(key)>200:
-        raise HTTPException(400,"Idempotency-Key is required (8..200 characters)")
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}",key):
+        raise HTTPException(400,"valid Idempotency-Key header required")
     body=_commerce_model_dict(payload)
     req_hash=hashlib.sha256(json.dumps(body,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()
+    token_id=int((identity or {}).get("id") or 0)
+    if token_id<=0:
+        raise HTTPException(403,"commerce API token identity is invalid")
+
     with connect() as con:
-        row=con.execute("SELECT * FROM commerce_requests WHERE idempotency_key=?",(key,)).fetchone()
+        row=con.execute(
+            "SELECT * FROM commerce_idempotency WHERE token_id=? AND route=? AND idempotency_key=?",
+            (token_id,route,key)
+        ).fetchone()
     if row:
-        if row["route"]!=route or row["request_hash"]!=req_hash:
-            raise HTTPException(409,"idempotency key was already used for a different request")
-        try:return key,req_hash,json.loads(row["response_json"])
-        except Exception:return key,req_hash,None
+        return key,req_hash,_commerce_idempotency_replay(row,req_hash)
+
+    ts=datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        cur=con.execute(
+            """INSERT OR IGNORE INTO commerce_idempotency
+               (token_id,route,idempotency_key,request_hash,status,response_enc,created_at,updated_at)
+               VALUES(?,?,?,?,?,'',?,?)""",
+            (token_id,route,key,req_hash,"pending",ts,ts)
+        )
+        claimed=(cur.rowcount==1)
+        if not claimed:
+            row=con.execute(
+                "SELECT * FROM commerce_idempotency WHERE token_id=? AND route=? AND idempotency_key=?",
+                (token_id,route,key)
+            ).fetchone()
+    if not claimed:
+        if not row:
+            raise HTTPException(409,"commerce idempotency claim failed")
+        return key,req_hash,_commerce_idempotency_replay(row,req_hash)
+
+    request.state.commerce_idempotency={
+        "token_id":token_id,
+        "route":route,
+        "idempotency_key":key,
+        "request_hash":req_hash,
+    }
     return key,req_hash,None
 
-def _commerce_idempotency_store(key,route,req_hash,response):
+def _commerce_idempotency_store(request:Request,response:dict):
+    ctx=getattr(request.state,"commerce_idempotency",None)
+    if not ctx:
+        return
+    response_enc=access_ops.seal_payload({"response":response})
+    ts=datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        cur=con.execute(
+            """UPDATE commerce_idempotency
+               SET status='complete',response_enc=?,updated_at=?
+               WHERE token_id=? AND route=? AND idempotency_key=? AND request_hash=? AND status='pending'""",
+            (
+                response_enc,ts,ctx["token_id"],ctx["route"],ctx["idempotency_key"],
+                ctx["request_hash"]
+            )
+        )
+    if cur.rowcount!=1:
+        raise HTTPException(409,"commerce idempotency claim is no longer pending")
+    request.state.commerce_idempotency=None
+
+def _commerce_idempotency_fail(request:Request):
+    ctx=getattr(request.state,"commerce_idempotency",None)
+    if not ctx:
+        return
     with connect() as con:
         con.execute(
-            "INSERT OR IGNORE INTO commerce_requests(idempotency_key,route,request_hash,response_json,created_at) VALUES(?,?,?,?,?)",
-            (key,route,req_hash,json.dumps(response,ensure_ascii=False,separators=(",",":")),datetime.now(timezone.utc).isoformat())
+            """UPDATE commerce_idempotency SET status='failed',updated_at=?
+               WHERE token_id=? AND route=? AND idempotency_key=? AND request_hash=? AND status='pending'""",
+            (
+                datetime.now(timezone.utc).isoformat(),ctx["token_id"],ctx["route"],
+                ctx["idempotency_key"],ctx["request_hash"]
+            )
         )
+    request.state.commerce_idempotency=None
+
+@app.middleware("http")
+async def commerce_idempotency_failure_guard(request:Request,call_next):
+    try:
+        response=await call_next(request)
+    except Exception:
+        _commerce_idempotency_fail(request)
+        raise
+    if response.status_code>=400:
+        _commerce_idempotency_fail(request)
+    return response
 
 def _commerce_expiry_text(expire_at):
     value=int(expire_at or 0)
@@ -3464,7 +3566,7 @@ def _commerce_actor(identity):
 @app.post("/api/v1/commerce/provision")
 def api_v1_commerce_provision(payload:CommerceProvisionRequest,request:Request):
     identity=_commerce_require(request,"commerce:provision")
-    idem,req_hash,cached=_commerce_idempotency(request,"provision",payload)
+    idem,req_hash,cached=_commerce_idempotency(request,identity,"provision",payload)
     if cached is not None:return cached
     actor=_commerce_actor(identity)
     profile=str(payload.profile or "").strip()
@@ -3573,13 +3675,13 @@ def api_v1_commerce_provision(payload:CommerceProvisionRequest,request:Request):
     else:
         raise HTTPException(422,"unsupported commerce profile; use xray:<inbound_tag>, outline, wireguard or openvpn")
     audit(actor,"commerce_provision",payload.external_id,f"profile={profile}; ref={response.get('provision_ref')}",ip=_commerce_source_ip(request))
-    _commerce_idempotency_store(idem,"provision",req_hash,response)
+    _commerce_idempotency_store(request,response)
     return response
 
 @app.post("/api/v1/commerce/service-action")
 def api_v1_commerce_service_action(payload:CommerceServiceActionRequest,request:Request):
     identity=_commerce_require(request,"commerce:service")
-    idem,req_hash,cached=_commerce_idempotency(request,"service-action",payload)
+    idem,req_hash,cached=_commerce_idempotency(request,identity,"service-action",payload)
     if cached is not None:return cached
     actor=_commerce_actor(identity)
     action=str(payload.action or "").lower().strip()
@@ -3633,7 +3735,7 @@ def api_v1_commerce_service_action(payload:CommerceServiceActionRequest,request:
     else:
         raise HTTPException(422,"unsupported provision_ref kind")
     audit(actor,"commerce_service_action",payload.external_id,f"action={action}; ref={payload.provision_ref}",ip=_commerce_source_ip(request))
-    _commerce_idempotency_store(idem,"service-action",req_hash,response)
+    _commerce_idempotency_store(request,response)
     return response
 
 
