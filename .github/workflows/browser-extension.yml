@@ -1,0 +1,76 @@
+name: Browser Extension Build
+
+on:
+  pull_request:
+    paths:
+      - "client/browser-extension/**"
+      - "app/browser_gateway.py"
+      - "app/client_portal.py"
+      - "app/client_store.py"
+      - "systemd/makia-browser-gateway.service"
+      - ".github/workflows/browser-extension.yml"
+      - "VERSION"
+  push:
+    branches: ["main"]
+    paths:
+      - "client/browser-extension/**"
+      - "app/browser_gateway.py"
+      - "app/client_portal.py"
+      - "app/client_store.py"
+      - "systemd/makia-browser-gateway.service"
+      - ".github/workflows/browser-extension.yml"
+      - "VERSION"
+  workflow_dispatch:
+
+concurrency:
+  group: browser-extension-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate extension and gateway
+        shell: bash
+        run: |
+          python3 -m py_compile app/browser_gateway.py app/client_store.py app/client_portal.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path("client/browser-extension/manifest.json").read_text())
+          assert m["manifest_version"]==3
+          assert m["version"]=="1.5.0"
+          assert "nativeMessaging" not in m["permissions"]
+          assert "proxy" in m["permissions"]
+          assert "webRequest" in m["permissions"]
+          assert "webRequestAuthProvider" in m["permissions"]
+          assert m["host_permissions"]==["<all_urls>"]
+          assert m["optional_host_permissions"]==["https://*/*"]
+          PY
+          node --check client/browser-extension/background.js
+          node --check client/browser-extension/popup.js
+          ! grep -R --line-number "sendNativeMessage\|nativeMessaging\|MakiaBrowserHost" client/browser-extension
+
+      - name: Build Chrome Web Store ready package
+        shell: bash
+        run: |
+          rm -rf dist-browser
+          mkdir -p dist-browser/Makia-Browser-VPN-1.5.0
+          cp -a client/browser-extension/. dist-browser/Makia-Browser-VPN-1.5.0/
+          (
+            cd dist-browser/Makia-Browser-VPN-1.5.0
+            zip -qr ../Makia-Browser-VPN-1.5.0.zip .
+          )
+          sha256sum dist-browser/Makia-Browser-VPN-1.5.0.zip | tee dist-browser/SHA256SUMS.txt
+          printf 'version=1.5.0\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Browser-VPN-1.5.0
+          path: |
+            dist-browser/Makia-Browser-VPN-1.5.0.zip
+            dist-browser/SHA256SUMS.txt
+            dist-browser/BUILD-INFO.txt
+          if-no-files-found: error
