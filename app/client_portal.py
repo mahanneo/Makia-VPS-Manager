@@ -670,7 +670,7 @@ def client_extension_browser_gateway_credential(request:Request):
     if not cfg["service_active"]:
         raise HTTPException(status_code=503,detail="Browser Gateway service is not active")
     try:
-        credential=client_store.issue_browser_proxy_token(session,1800)
+        credential=client_store.issue_browser_proxy_token(session,CLIENT_SESSION_TTL)
     except PermissionError as exc:
         raise HTTPException(status_code=403,detail=str(exc))
     audit(
