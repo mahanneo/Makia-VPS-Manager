@@ -65,6 +65,7 @@ def test_browser_host_and_connector_contract_is_narrow():
         assert action in host
     assert "subprocess.list2cmdline" in host
     assert "ShellExecuteW" in host
+    assert "msvcrt.setmode" in host
     assert "def singbox_browser_config" in connector
     assert "browser_only=False" in connector
     assert "MakiaBrowserHost.exe" in workflow
