@@ -61,6 +61,8 @@ jobs:
           Copy-Item client\windows\Install-Makia.cmd package\Install-Makia.cmd
           Copy-Item client\windows\Uninstall-Makia.cmd package\Uninstall-Makia.cmd
           Copy-Item client\windows\INSTALL.txt package\INSTALL.txt
+          Copy-Item client\windows\Check-Makia-Browser.ps1 package\Check-Makia-Browser.ps1
+          Copy-Item client\windows\Repair-Makia-Browser.cmd package\Repair-Makia-Browser.cmd
           Copy-Item -Recurse client\browser-extension package\browser-extension
 
       - name: Smoke package and real installer
@@ -73,13 +75,13 @@ jobs:
           package\sing-box.exe version
 
           $manifest=Get-Content package\browser-extension\manifest.json -Raw | ConvertFrom-Json
-          if ($manifest.version -ne "1.4.1") { throw "browser extension version mismatch" }
+          if ($manifest.version -ne "1.4.2") { throw "browser extension version mismatch" }
           if ($manifest.permissions -notcontains "nativeMessaging" -or $manifest.permissions -notcontains "proxy") { throw "browser extension permissions missing" }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-installer-smoke"
           try {
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -Scope User
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 execution failed" }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
@@ -92,6 +94,10 @@ jobs:
             if (!(Test-Path $chromeHost) -or $chromeHost -ne $edgeHost) { throw "native messaging registration invalid" }
             $hostConfig=Get-Content $chromeHost -Raw | ConvertFrom-Json
             if ($hostConfig.allowed_origins[0] -ne "chrome-extension://jgpmmenelldgfmjfnonhjaaaccfeniji/") { throw "extension id mismatch" }
+            $probe=(& $browser --self-test | ConvertFrom-Json)
+            if (!$probe.ok -or !$probe.sing_box) { throw "browser native host self-test failed" }
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\Check-Makia-Browser.ps1 -Quiet
+            if ($LASTEXITCODE -ne 0) { throw "browser registration diagnostic failed" }
 
             $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
             if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
@@ -124,6 +130,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.4.1
+          name: Makia-Client-Connector-Windows-x64-1.4.2
           path: package/
           if-no-files-found: error
