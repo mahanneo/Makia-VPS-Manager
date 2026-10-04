@@ -3,9 +3,10 @@ set -Eeuo pipefail
 
 APP=/opt/makia-vps-manager
 FAIL=0
+FAILURES=()
 
 ok(){ printf '✓ %s\n' "$1"; }
-bad(){ printf '✗ %s\n' "$1"; FAIL=1; }
+bad(){ printf '✗ %s\n' "$1"; FAIL=1; FAILURES+=("$1"); }
 warn(){ printf '⚠ %s\n' "$1"; }
 xray_bad(){ bad "$1"; }
 ovpn_bad(){ bad "$1"; }
@@ -365,5 +366,9 @@ if [[ "$FAIL" -eq 0 ]]; then
   printf 'HOST SMOKE: PASS\n'
 else
   printf 'HOST SMOKE: FAIL\n'
+  printf 'Failure summary (%d):\n' "${#FAILURES[@]}"
+  for item in "${FAILURES[@]}"; do
+    printf '  - %s\n' "$item"
+  done
 fi
 exit "$FAIL"
