@@ -67,3 +67,11 @@ def test_client_store_has_browser_token_and_usage_tables():
     assert "def browser_proxy_auth" in source
     assert "def add_browser_usage" in source
     assert "client_browser_usage" in source.split("def account_usage_bytes",1)[1].split("def ",1)[0]
+
+
+def test_extension_api_supports_store_id_allowlist():
+    source=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    assert "MAKIA_BROWSER_EXTENSION_IDS" in source
+    assert "def _browser_extension_ids" in source
+    assert "def _browser_extension_origin" in source
+    assert 're.fullmatch(r"[a-p]{32}"' in source
