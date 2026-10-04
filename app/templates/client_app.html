@@ -69,6 +69,9 @@
       <div id="installGuide" class="mc-guide">
         <strong>در حال آماده‌سازی راهنما…</strong>
       </div>
+      <div class="mc-dialog-actions">
+        <button class="mc-primary" id="browserPair" type="button">اتصال افزونه Chrome / Edge</button>
+      </div>
     </section>
 
     <section class="mc-section">
@@ -96,6 +99,22 @@
       <p>QR، لینک و فایل کانفیگ در کش PWA ذخیره نمی‌شوند و با خروج یا ترک صفحه از حافظه رابط کاربری پاک می‌شوند. برای WireGuard و OpenVPN از Import فایل/QR و برای Xray، Outline و SSH از کلاینت سازگار دستگاه استفاده کنید.</p>
     </section>
   </main>
+
+  <dialog id="browserPairDialog" class="mc-dialog">
+    <div class="mc-dialog-head">
+      <div><span class="mc-eyebrow">BROWSER EXTENSION</span><h3>اتصال افزونه Makia VPN</h3></div>
+      <button class="mc-icon-btn" id="closeBrowserPair" type="button" aria-label="بستن">×</button>
+    </div>
+    <p class="mc-muted">این کد فقط یک‌بار و حداکثر ۵ دقیقه معتبر است. آن را فقط داخل افزونه رسمی Makia VPN روی همین دستگاه وارد کنید.</p>
+    <label class="mc-card-label" for="browserPairController">آدرس پنل</label>
+    <textarea id="browserPairController" readonly dir="ltr" spellcheck="false"></textarea>
+    <label class="mc-card-label" for="browserPairCode">Pair Code</label>
+    <textarea id="browserPairCode" readonly dir="ltr" spellcheck="false"></textarea>
+    <p id="browserPairExpiry" class="mc-muted"></p>
+    <div class="mc-dialog-actions">
+      <button class="mc-primary" id="copyBrowserPair" type="button">کپی Pair Code</button>
+    </div>
+  </dialog>
 
   <dialog id="installDialog" class="mc-dialog mc-install-dialog">
     <div class="mc-dialog-head">
