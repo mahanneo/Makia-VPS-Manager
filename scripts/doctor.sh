@@ -36,6 +36,22 @@ check_service makia-policy-enforcer "SSH policy enforcer"
 check_service makia-metrics-sampler "Metrics sampler"
 check_service makia-protocol-traffic "Protocol traffic collector"
 check_service makia-browser-gateway "Browser Gateway"
+BROWSER_DOMAIN="$(
+  cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app.db import get_setting
+print((get_setting("panel_domain","") or "").strip())
+PY
+)"
+BROWSER_PORT="${MAKIA_BROWSER_GATEWAY_PORT:-9443}"
+if [[ -n "$BROWSER_DOMAIN" && -s "/etc/letsencrypt/live/$BROWSER_DOMAIN/fullchain.pem" ]]; then
+  if ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:|\])${BROWSER_PORT}$"; then
+    ok "Browser Gateway listener" "TLS proxy :$BROWSER_PORT"
+  else
+    fail "Browser Gateway listener" "panel domain/certificate ready but TCP/$BROWSER_PORT is not listening"
+  fi
+else
+  warn "Browser Gateway listener" "waiting for configured panel domain + certificate"
+fi
 check_service fail2ban "Fail2ban"
 
 TMP_HEALTH="$(mktemp)"
