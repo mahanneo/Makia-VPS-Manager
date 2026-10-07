@@ -621,6 +621,7 @@ def artifact_delivery(account_id,artifact_id):
         native=native.encode("utf-8")
     native_b64=base64.b64encode(bytes(native)).decode("ascii") if isinstance(native,(bytes,bytearray)) else ""
     qr_svg=""
+    transport_config=payload.get("transport") if isinstance(payload.get("transport"),dict) else {}
     kind=str(artifact.get("kind") or "").lower()
     if kind in {"wireguard","outline","xray","ssh"} and primary:
         try:
@@ -636,6 +637,7 @@ def artifact_delivery(account_id,artifact_id):
         "native_filename":filename,
         "native_base64":native_b64,
         "qr":qr_svg,
+        "transport_config":transport_config,
         "source":"artifact",
     }
 
