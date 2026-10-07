@@ -45,7 +45,7 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 | Xray / V2Ray | ✅ | Share Link، QR، Subscription، Portal | حجم، انقضا، IP Policy، تمدید، Diagnostics |
 | WireGuard | ✅ | Config، QR، Portal | فعال/غیرفعال، Reissue، Diagnostics |
 | OpenVPN | ✅ | فایل OVPN، Portal | Revoke، Transport/Runtime Diagnostics |
-| WStunnel 443 / OpenVPN WSS | ✅ | بسته WStunnel + OVPN، Client Platform، اتصال مستقیم Windows | انقضا/حجم/غیرفعال‌سازی حساب، محدودیت اتصال همزمان، Accounting ترافیک، Revoke مستقل Certificate، Diagnostics مسیر و Runtime |
+| WStunnel 443 / OpenVPN WSS | ✅ | بسته WStunnel + OVPN، Client Platform، اتصال مستقیم Windows/Android | انقضا/حجم/غیرفعال‌سازی حساب، محدودیت اتصال همزمان، Accounting ترافیک، Revoke مستقل Certificate، Diagnostics مسیر و Runtime |
 | Outline | ✅ | Access Key واقعی `ss://`، QR، Portal، ZIP رمزدار | حجم، انقضا، تمدید، Reissue، Traffic، Diagnostics، حذف |
 
 در Xray مسیرهای Guided برای پروتکل‌های پشتیبانی‌شده مانند VLESS، VMess، Trojan، Shadowsocks و Hysteria2 وجود دارند و تنظیمات Advanced قبل از Apply توسط Core اعتبارسنجی می‌شوند.
@@ -58,7 +58,7 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 
 - **Windows:** اتصال Full Device مستقیم با Makia Client Connector؛ در Mode جدید WStunnel 443، Makia ابتدا تونل WebSocket/TLS روی HTTPS/443 و سپس OpenVPN را اجرا می‌کند.
 - **Chrome / Edge:** افزونه Makia Browser VPN مستقیماً به Browser Gateway امن روی VPS وصل می‌شود و به EXE، Registry یا Native Messaging نیاز ندارد.
-- **Android:** Makia Android Connector برای پروتکل‌های پشتیبانی‌شده از Android VpnService استفاده می‌کند؛ Artifact خودکار فعلی صریحاً UAT/debug-signed است تا زمانی که کلید خصوصی Release Signing پایدار در GitHub Secrets تنظیم شود.
+- **Android:** Makia Android Connector برای پروتکل‌های پشتیبانی‌شده از Android VpnService استفاده می‌کند و روی ARM64 اتصال Full Device مستقیم WStunnel 443 را پشتیبانی می‌کند؛ Build امضاشده Release از Buildهای CI/UAT جداگانه Gate می‌شود.
 - **iPhone / iPad:** کاربر در Safari وارد می‌شود، Makia را با Add to Home Screen نصب می‌کند و از جریان Open/Import متناسب با iOS استفاده می‌کند. VPN Native داخل خود Makia در iOS تا زمان ساخت Apple-signed با Network Extension و UAT روی دستگاه واقعی ادعا نمی‌شود.
 - Ticket اتصال Native یک‌بارمصرف، وابسته به Device و کوتاه‌عمر است و Secret اصلی داخل لینک `makia://` قرار نمی‌گیرد.
 - Client Portal تا پایان UAT/Canary واقعی روی Host به‌صورت پیش‌فرض غیرفعال می‌ماند.
