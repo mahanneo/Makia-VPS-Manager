@@ -25,7 +25,9 @@ OVPN_EASYRSA=OVPN_DIR/"easy-rsa"
 IKEV2_CONF=Path("/etc/ipsec.conf")
 IKEV2_SECRETS=Path("/etc/ipsec.secrets")
 IKEV2_ENV=Path("/etc/makia-vps-manager/ikev2.env")
-STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
+STUNNEL_MAKIA_CONF=Path("/etc/makia-vps-manager/stunnel-openvpn.conf")
+LEGACY_STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
+STUNNEL_MAKIA_SERVICE="makia-stealth"
 WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
 WSTUNNEL_SERVICE="makia-wstunnel"
 OVPN_WSTUNNEL_ENV=Path("/etc/makia-vps-manager/openvpn-wstunnel.env")
@@ -540,18 +542,21 @@ def ikev2_status():
 
 def stealth_status():
     installed=_installed("stunnel4") or _installed("stunnel")
-    active=_active("stunnel4")
+    config_path=STUNNEL_MAKIA_CONF if STUNNEL_MAKIA_CONF.exists() else LEGACY_STUNNEL_MAKIA_CONF
+    configured=config_path.exists()
+    active=_active(STUNNEL_MAKIA_SERVICE) or (config_path==LEGACY_STUNNEL_MAKIA_CONF and _active("stunnel4"))
     listen_port=None
     backend_port=None
-    configured=STUNNEL_MAKIA_CONF.exists()
     if configured:
-        text=STUNNEL_MAKIA_CONF.read_text(encoding="utf-8",errors="ignore")
+        text=config_path.read_text(encoding="utf-8",errors="ignore")
         m=re.search(r"(?m)^\s*accept\s*=\s*(?:[^:]+:)?(\d+)\s*$",text)
         if m: listen_port=int(m.group(1))
         m=re.search(r"(?m)^\s*connect\s*=\s*(?:[^:]+:)?(\d+)\s*$",text)
         if m: backend_port=int(m.group(1))
     return {
         "installed":installed,"configured":configured,"service_active":active,
+        "service":STUNNEL_MAKIA_SERVICE if STUNNEL_MAKIA_CONF.exists() else ("stunnel4" if LEGACY_STUNNEL_MAKIA_CONF.exists() else STUNNEL_MAKIA_SERVICE),
+        "config":str(config_path) if configured else str(STUNNEL_MAKIA_CONF),
         "port":listen_port,"backend_port":backend_port,
         "listener":_listener_present(listen_port,"tcp") if listen_port else False,
     }
@@ -738,32 +743,40 @@ def bootstrap_stealth(domain, listen_port=9443):
     if not (_installed("stunnel4") or _installed("stunnel")):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
-    listen_port=_validate_port(listen_port)
+    requested_port=_validate_port(listen_port)
+    existing=stealth_status()
+
     fallback=_openvpn_named_runtime("makia-tcp")
     if not fallback.get("service_active") or not fallback.get("listener"):
         backend_port=_select_available_port_excluding(
-            8443,"tcp",(10443,11940,12443),exclude_ports={listen_port}
+            8443,"tcp",(10443,11940,12443,13443,14443),exclude_ports={requested_port}
         )
         fallback=ensure_openvpn_tcp_fallback(backend_port)["status"]
     backend_port=int(fallback.get("port") or 0)
+
+    if existing.get("service_active") and existing.get("listener") and existing.get("port"):
+        listen_port=int(existing["port"])
+    else:
+        listen_port=requested_port
+        if _port_transport_in_use(listen_port,"tcp"):
+            listen_port=_select_available_port_excluding(
+                listen_port,"tcp",(9443,10443,11443,12443,13443,14443),
+                exclude_ports={backend_port},
+            )
     if listen_port==backend_port:
-        raise ProtocolError(
-            f"Stealth public TCP/{listen_port} conflicts with the active OpenVPN TCP backend. "
-            "Choose a different public Stealth port; Makia will not move an active TCP backend silently."
+        listen_port=_select_available_port_excluding(
+            9443,"tcp",(10443,11443,12443,13443,14443),
+            exclude_ports={backend_port},
         )
-    existing=stealth_status()
-    if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
-        owner=_port_owner_label(listen_port,"tcp")
-        suggestion=_suggest_free_port("tcp",(9443,10443,11443,12443),exclude_ports={backend_port})
-        hint=f"; try TCP/{suggestion}" if suggestion else ""
-        raise ProtocolError(f"TCP/{listen_port} is already owned by {owner}{hint}")
+
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
     if not cert.exists() or not key.exists():
         raise ProtocolError("Stealth requires a valid HTTPS/Let's Encrypt certificate first")
+
     STUNNEL_MAKIA_CONF.parent.mkdir(parents=True,exist_ok=True)
     STUNNEL_MAKIA_CONF.write_text(
-        "foreground = no\n"
+        "foreground = yes\n"
         "client = no\n"
         "sslVersionMin = TLSv1.2\n"
         f"cert = {cert}\nkey = {key}\n\n"
@@ -772,20 +785,26 @@ def bootstrap_stealth(domain, listen_port=9443):
         f"connect = 127.0.0.1:{backend_port}\n",
         encoding="utf-8",
     )
-    defaults=Path("/etc/default/stunnel4")
-    if defaults.exists():
-        text=defaults.read_text(encoding="utf-8",errors="ignore")
-        if re.search(r"(?m)^\s*ENABLED=",text):
-            text=re.sub(r"(?m)^\s*ENABLED=.*$","ENABLED=1",text)
-        else:
-            text+="\nENABLED=1\n"
-        defaults.write_text(text,encoding="utf-8")
-    _run(["systemctl","enable","--now","stunnel4"],timeout=30)
-    _run(["systemctl","restart","stunnel4"],timeout=30)
+    os.chmod(STUNNEL_MAKIA_CONF,0o600)
+
+    if LEGACY_STUNNEL_MAKIA_CONF.exists():
+        try:
+            legacy_backup=_backup_dir()/f"makia-openvpn.conf.legacy-{int(time.time())}-{secrets.token_hex(3)}.bak"
+            shutil.copy2(LEGACY_STUNNEL_MAKIA_CONF,legacy_backup)
+            LEGACY_STUNNEL_MAKIA_CONF.unlink()
+            if _active("stunnel4"):
+                subprocess.run(["systemctl","reload-or-restart","stunnel4"],text=True,capture_output=True,timeout=20,check=False)
+        except OSError:
+            pass
+
+    _run(["systemctl","daemon-reload"],timeout=20)
+    subprocess.run(["systemctl","reset-failed",STUNNEL_MAKIA_SERVICE],text=True,capture_output=True,timeout=10,check=False)
+    _run(["systemctl","enable","--now",STUNNEL_MAKIA_SERVICE],timeout=30)
+    _run(["systemctl","restart",STUNNEL_MAKIA_SERVICE],timeout=30)
     _ufw_allow_if_active(listen_port,"tcp","OpenVPN Stealth")
     status=stealth_status()
     if not status.get("listener"):
-        raise ProtocolError("Stunnel did not expose the requested TCP listener")
+        raise ProtocolError("Makia Stealth service started but did not expose its managed TCP listener")
     client=(
         "client = yes\n"
         "foreground = yes\n"
@@ -796,7 +815,12 @@ def bootstrap_stealth(domain, listen_port=9443):
         "accept = 127.0.0.1:11940\n"
         f"connect = {domain}:{listen_port}\n"
     )
-    return {"ok":True,"status":status,"domain":domain,"client_stunnel_config":client,"openvpn_local_endpoint":"127.0.0.1:11940"}
+    return {
+        "ok":True,"status":status,"domain":domain,
+        "requested_port":requested_port,"allocated_port":listen_port,
+        "client_stunnel_config":client,
+        "openvpn_local_endpoint":"127.0.0.1:11940",
+    }
 
 
 def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
@@ -807,15 +831,25 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
     if not wg.get("service_active") or not wg.get("port"):
         raise ProtocolError("WStunnel mode requires an active WireGuard server")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
-    listen_port=_validate_port(listen_port)
+    requested_port=_validate_port(listen_port)
     existing=wstunnel_status()
-    if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
-        raise ProtocolError(f"TCP/{listen_port} is already in use")
+
+    if existing.get("service_active") and existing.get("listener") and existing.get("port"):
+        listen_port=int(existing["port"])
+    else:
+        listen_port=requested_port
+        if _port_transport_in_use(listen_port,"tcp"):
+            listen_port=_select_available_port_excluding(
+                listen_port,"tcp",(8444,10444,11444,12444,13444,14444)
+            )
+
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
     if not cert.exists() or not key.exists():
         raise ProtocolError("WStunnel WSS requires a valid HTTPS/Let's Encrypt certificate first")
-    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(18).replace("-","").replace("_","")
+
+    existing_prefix=str(existing.get("path_prefix") or "")
+    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or existing_prefix or "")) or secrets.token_urlsafe(18).replace("-","").replace("_","")
     if len(prefix)<12:
         raise ProtocolError("WStunnel path prefix must be at least 12 characters")
     WSTUNNEL_ENV.parent.mkdir(parents=True,exist_ok=True)
@@ -829,6 +863,7 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
     )
     os.chmod(WSTUNNEL_ENV,0o600)
     _run(["systemctl","daemon-reload"],timeout=20)
+    subprocess.run(["systemctl","reset-failed",WSTUNNEL_SERVICE],text=True,capture_output=True,timeout=10,check=False)
     _run(["systemctl","enable","--now",WSTUNNEL_SERVICE],timeout=30)
     _run(["systemctl","restart",WSTUNNEL_SERVICE],timeout=30)
     _ufw_allow_if_active(listen_port,"tcp","WStunnel WSS")
@@ -843,6 +878,7 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
     )
     return {
         "ok":True,"status":status,"domain":domain,"client_command":command,
+        "requested_port":requested_port,"allocated_port":listen_port,
         "wireguard_endpoint":f"127.0.0.1:{local_port}",
         "note":"Run the WStunnel client first, then use a WireGuard profile whose Endpoint points to the local UDP endpoint.",
     }
@@ -1081,8 +1117,8 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         raise ProtocolError("WStunnel 443 mobile mode requires an active Makia WireGuard server")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     public_port=_validate_port(public_port)
-    bridge_port=_validate_port(bridge_port)
-    backend_port=_validate_port(backend_port)
+    requested_bridge_port=_validate_port(bridge_port)
+    requested_backend_port=_validate_port(backend_port)
     if public_port!=443:
         raise ProtocolError("Makia OpenVPN WStunnel is intentionally published through HTTPS TCP/443")
     if not _active("nginx"):
@@ -1093,13 +1129,31 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         raise ProtocolError("WStunnel 443 requires a valid Let's Encrypt certificate for the selected domain")
 
     existing=openvpn_wstunnel_status()
-    if _port_transport_in_use(bridge_port,"tcp") and int(existing.get("bridge_port") or 0)!=bridge_port:
-        suggestion=_suggest_free_port("tcp",(10445,11445,12445,13445),exclude_ports={backend_port})
-        hint=f"; try loopback bridge TCP/{suggestion}" if suggestion else ""
-        raise ProtocolError(f"WStunnel loopback bridge TCP/{bridge_port} is already in use{hint}")
+    current_backend=_openvpn_named_runtime("makia-ws")
+
+    if current_backend.get("service_active") and current_backend.get("listener") and current_backend.get("port"):
+        backend_port=int(current_backend["port"])
+    else:
+        backend_port=requested_backend_port
+        if _port_transport_in_use(backend_port,"tcp"):
+            backend_port=_select_available_port_excluding(
+                backend_port,"tcp",(11940,12940,13940,14940,15940,16940),
+                exclude_ports={requested_bridge_port},
+            )
+
+    if existing.get("service_active") and existing.get("listener") and existing.get("bridge_port"):
+        bridge_port=int(existing["bridge_port"])
+    else:
+        bridge_port=requested_bridge_port
+        if bridge_port==backend_port or _port_transport_in_use(bridge_port,"tcp"):
+            bridge_port=_select_available_port_excluding(
+                bridge_port,"tcp",(10445,11445,12445,13445,14445,15445),
+                exclude_ports={backend_port},
+            )
 
     backend=ensure_openvpn_wstunnel_backend(backend_port)
-    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
+    existing_prefix=str(existing.get("path_prefix") or "")
+    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or existing_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
     if len(prefix)<16:
         raise ProtocolError("WStunnel path prefix must be at least 16 characters")
 
@@ -1158,6 +1212,10 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         "status":status,
         "domain":domain,
         "public_port":public_port,
+        "requested_bridge_port":requested_bridge_port,
+        "requested_backend_port":requested_backend_port,
+        "allocated_bridge_port":bridge_port,
+        "allocated_backend_port":backend_port,
         "backend":backend,
         "nginx_backup":nginx_backup,
         "client_local_port":local_port,
