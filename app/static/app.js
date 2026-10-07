@@ -1251,15 +1251,22 @@ async function ensureOpenVPNTCPFallback(){
 
 async function setupStealth(){
   const domain=prompt('Stealth TLS domain',window.PANEL_DOMAIN||'');if(!domain)return;
-  const port=Number(prompt('Public Stealth TLS port (443 only if HTTPS is not using it)','9443'));if(!port)return;
-  try{const r=await api('/api/protocols/stealth/bootstrap',{method:'POST',body:JSON.stringify({domain,port})});configModal('Stealth TLS client',r.client_stunnel_config,'makia-stealth-stunnel.conf');toast('Stealth listener ready')}catch(e){alert('Stealth: '+e.message)}
+  const suggested=Number(window.__protocolModes?.port_plan?.suggested?.stealth||9443);
+  const port=Number(prompt('Preferred Stealth TLS port (Makia will auto-select another safe port on conflict)',String(suggested)));if(!port)return;
+  try{
+    const r=await api('/api/protocols/stealth/bootstrap',{method:'POST',body:JSON.stringify({domain,port})});
+    const note=Number(r.allocated_port||port)!==port?'\n\nPort conflict avoided automatically: TCP/'+r.allocated_port:'';
+    configModal('Stealth TLS client',r.client_stunnel_config+note,'makia-stealth-stunnel.conf');
+    toast('Stealth listener ready on TCP/'+Number(r.allocated_port||port));
+    await protocols();
+  }catch(e){alert('Stealth: '+e.message)}
 }
 async function setupOpenVPNWStunnel(){
   const domain=prompt('OpenVPN WStunnel 443 domain',window.PANEL_DOMAIN||location.hostname);if(!domain)return;
   if(!confirm('OpenVPN از طریق WebSocket/TLS روی HTTPS TCP/443 فعال شود؟ Nginx همان پورت 443 را نگه می‌دارد و Makia فقط یک مسیر WebSocket امن اضافه می‌کند.'))return;
   try{
     const r=await api('/api/protocols/openvpn/wstunnel/bootstrap',{method:'POST',body:JSON.stringify({domain,public_port:443,bridge_port:10445,backend_port:11940,path_prefix:''})});
-    configModal('OpenVPN WStunnel 443',r.client_command+'\n\nPublic: wss://'+domain+':443\nOpenVPN backend: loopback/'+r.status.target_port,'makia-openvpn-wstunnel.txt');
+    configModal('OpenVPN WStunnel 443',r.client_command+'\n\nPublic: wss://'+domain+':443\nBridge: loopback/'+r.allocated_bridge_port+'\nOpenVPN backend: loopback/'+r.allocated_backend_port,'makia-openvpn-wstunnel.txt');
     toast('OpenVPN WStunnel 443 ready');
     await protocols();
   }catch(e){alert('OpenVPN WStunnel 443: '+e.message)}
@@ -1276,8 +1283,14 @@ async function createOpenVPNWStunnelProfile(name){
 
 async function setupWStunnel(){
   const domain=prompt('WStunnel WSS domain',window.PANEL_DOMAIN||'');if(!domain)return;
-  const port=Number(prompt('Public WStunnel TCP port','8444'));if(!port)return;
-  try{const r=await api('/api/protocols/wstunnel/bootstrap',{method:'POST',body:JSON.stringify({domain,port,path_prefix:''})});configModal('WStunnel client command',r.client_command+'\n\nWireGuard Endpoint: '+r.wireguard_endpoint,'makia-wstunnel-client.txt');toast('WStunnel listener ready')}catch(e){alert('WStunnel: '+e.message)}
+  const suggested=Number(window.__protocolModes?.port_plan?.suggested?.wstunnel||8444);
+  const port=Number(prompt('Preferred WStunnel TCP port (Makia will auto-select another safe port on conflict)',String(suggested)));if(!port)return;
+  try{
+    const r=await api('/api/protocols/wstunnel/bootstrap',{method:'POST',body:JSON.stringify({domain,port,path_prefix:''})});
+    configModal('WStunnel client command',r.client_command+'\n\nWireGuard Endpoint: '+r.wireguard_endpoint+'\nPublic TCP: '+r.allocated_port,'makia-wstunnel-client.txt');
+    toast('WStunnel listener ready on TCP/'+Number(r.allocated_port||port));
+    await protocols();
+  }catch(e){alert('WStunnel: '+e.message)}
 }
 
 async function installProtocol(component){if(!confirm('Install '+component+' and required packages?'))return;try{await api('/api/protocols/install',{method:'POST',body:JSON.stringify({component})});toast(component+' installed');await protocols()}catch(e){alert(e.message)}}
