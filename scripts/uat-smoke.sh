@@ -364,13 +364,12 @@ else
 fi
 
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
-  STUNNEL_ENABLED="$(sed -n 's/^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*\([01]\)[[:space:]]*$/\1/p' /etc/default/stunnel4 2>/dev/null | tail -n1)"
-  if systemctl is-active --quiet stunnel4; then
-    ok "Stealth TLS/Stunnel runtime active"
-  elif [[ "$STUNNEL_ENABLED" == "1" ]]; then
-    warn "Stealth optional config is enabled but stunnel4 is inactive; core VPN runtimes remain healthy"
+  if systemctl is-active --quiet makia-stealth; then
+    ok "Stealth TLS/Stunnel Makia runtime active"
+  elif systemctl is-active --quiet stunnel4; then
+    warn "Stealth legacy global stunnel4 runtime active; Configure / Repair migrates ownership"
   else
-    warn "Stealth optional config retained but disabled/inactive"
+    warn "Stealth optional config retained but Makia runtime inactive"
   fi
 else
   ok "Stealth mode not configured"
