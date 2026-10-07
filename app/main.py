@@ -227,7 +227,7 @@ def operator_settings_snapshot():
             "xray_expire_days":_setting_int("default_xray_expire_days",30,0,3650),
             "xray_ip_limit":_setting_int("default_xray_ip_limit",1,1,50),
             "xray_reset_days":_setting_int("default_xray_reset_days",30,0,3650),
-            "wireguard_dns":get_setting("default_wireguard_dns","1.1.1.1"),
+            "wireguard_dns":get_setting("default_wireguard_dns","1.1.1.1, 8.8.8.8"),
             "wireguard_port":_setting_int("default_wireguard_port",443,1,65535),
             "wireguard_mtu":_setting_int("default_wireguard_mtu",1280,576,1500),
             "wireguard_keepalive":_setting_int("default_wireguard_keepalive",15,0,3600),
@@ -1011,7 +1011,7 @@ def dns_configure(payload:DNSConfigure,request:Request):
 class IKEv2Bootstrap(BaseModel):
     domain:str=Field(min_length=3,max_length=253)
     cidr:str=Field(default="10.77.0.0/24",max_length=64)
-    dns:str=Field(default="1.1.1.1",max_length=64)
+    dns:str=Field(default="1.1.1.1, 8.8.8.8",max_length=64)
 
 @app.post("/api/protocols/ikev2/bootstrap")
 def ikev2_bootstrap(payload:IKEv2Bootstrap,request:Request):
@@ -1691,6 +1691,32 @@ def wireguard_repair(request:Request):
         audit(actor,"wireguard_repair_failed","wg0",str(e)[:500],ip(request))
         raise HTTPException(400,str(e))
     audit(actor,"wireguard_repair","wg0",f"backup={result.get('backup')}",ip(request))
+    return result
+
+
+@app.post("/api/protocols/wireguard/restricted-network-profile")
+def wireguard_restricted_network_profile(request:Request):
+    actor=require_capability(request,"wireguard",True)
+    try:
+        result=protocol_ops.apply_wireguard_restricted_network_profile()
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"wireguard_restricted_profile_failed","wg0",str(e)[:500],ip(request))
+        raise HTTPException(400,str(e))
+    diagnostics=result.get("diagnostics") or {}
+    # Persist safe defaults for newly issued profiles.  Never change the live
+    # listen port here: doing so would invalidate existing client profiles.
+    set_setting("default_wireguard_port",int(diagnostics.get("port") or 443))
+    set_setting("default_wireguard_mtu",1280)
+    set_setting("default_wireguard_keepalive",15)
+    set_setting("default_wireguard_allowed_ips","0.0.0.0/0")
+    set_setting("default_wireguard_dns","1.1.1.1, 8.8.8.8")
+    audit(
+        actor,
+        "wireguard_restricted_profile",
+        "wg0",
+        f"port={diagnostics.get('port')}; mtu=1280; mss_in={diagnostics.get('mss_clamp_in')}; mss_out={diagnostics.get('mss_clamp_out')}",
+        ip(request),
+    )
     return result
 
 class WireGuardPeerState(BaseModel):
@@ -3958,7 +3984,7 @@ class OperatorSettings(BaseModel):
     xray_expire_days:int=Field(default=30,ge=0,le=3650)
     xray_ip_limit:int=Field(default=1,ge=1,le=50)
     xray_reset_days:int=Field(default=30,ge=0,le=3650)
-    wireguard_dns:str=Field(default="1.1.1.1",max_length=64)
+    wireguard_dns:str=Field(default="1.1.1.1, 8.8.8.8",max_length=64)
     wireguard_port:int=Field(default=443,ge=1,le=65535)
     wireguard_mtu:int=Field(default=1280,ge=576,le=1500)
     wireguard_keepalive:int=Field(default=15,ge=0,le=3600)
@@ -4028,7 +4054,7 @@ def operator_settings_put(payload:OperatorSettings,request:Request):
         "default_xray_expire_days":payload.xray_expire_days,
         "default_xray_ip_limit":payload.xray_ip_limit,
         "default_xray_reset_days":payload.xray_reset_days,
-        "default_wireguard_dns":payload.wireguard_dns.strip() or "1.1.1.1",
+        "default_wireguard_dns":payload.wireguard_dns.strip() or "1.1.1.1, 8.8.8.8",
         "default_wireguard_port":payload.wireguard_port,
         "default_wireguard_mtu":payload.wireguard_mtu,
         "default_wireguard_keepalive":payload.wireguard_keepalive,
