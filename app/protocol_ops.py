@@ -1581,12 +1581,15 @@ def bootstrap_wireguard(port=51820, cidr="10.66.66.1/24", iface="wg0", mtu=0):
         f"ListenPort = {int(port)}\n"
         f"PrivateKey = {private}\n"
         +(f"MTU = {mtu}\n" if mtu else "")
-        +f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; iptables -t nat -C POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE\n"
-        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; iptables -t nat -D POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
+        +f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; iptables -t nat -C POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE; iptables -t mangle -C FORWARD -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -t mangle -I FORWARD 1 -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu; iptables -t mangle -C FORWARD -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -t mangle -I FORWARD 1 -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu\n"
+        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; iptables -t nat -D POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || true; iptables -t mangle -D FORWARD -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true; iptables -t mangle -D FORWARD -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true\n",
         encoding="utf-8"
     )
     os.chmod(conf,0o600)
-    Path("/etc/sysctl.d/99-makia-wireguard.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    (sysctl_dir/"99-makia-wireguard.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    (sysctl_dir/"99-makia-network-performance.conf").write_text(_wireguard_performance_sysctl_text(),encoding="utf-8")
     _run(["sysctl","--system"],timeout=30)
     _run(["systemctl","enable","--now",f"wg-quick@{iface}"],timeout=30)
     firewall=_ufw_allow_if_active(port,"udp","WireGuard")
@@ -1970,6 +1973,7 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "recent_handshakes":recent,
         "external_udp_verified":False,
         "external_udp_note":"برای اثبات دسترسی UDP باید Handshake واقعی از Client خارج VPS دیده شود؛ Diagnostics سمت سرور نمی‌تواند فیلترینگ اپراتور/کشور یا فایروال بالادست را به‌تنهایی رد کند.",
+        "performance":wireguard_performance_status(iface),
         "warnings":warnings,
     }
 
