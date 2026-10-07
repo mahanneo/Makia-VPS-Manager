@@ -886,6 +886,7 @@ def openvpn_wstunnel_status():
     except Exception:
         pass
     backend=_openvpn_named_runtime("makia-ws")
+    route_present=bool(prefix and OVPN_WSTUNNEL_NGINX_BEGIN in nginx_text and f"/{prefix}" in nginx_text)
     return {
         "installed":bool(shutil.which("wstunnel")),
         "configured":OVPN_WSTUNNEL_ENV.exists(),
@@ -896,7 +897,7 @@ def openvpn_wstunnel_status():
         "domain":data.get("OVPN_WSTUNNEL_DOMAIN",""),
         "path_prefix":prefix,
         "listener":_tcp_listener(bridge_port,loopback_only=True),
-        "nginx_location":bool(prefix and OVPN_WSTUNNEL_NGINX_BEGIN in nginx_text and ("/"+prefix) in nginx_text),
+        "nginx_location":route_present,
         "backend":backend,
         "ready":bool(
             OVPN_WSTUNNEL_ENV.exists()
@@ -905,7 +906,7 @@ def openvpn_wstunnel_status():
             and backend.get("service_active")
             and backend.get("listener")
             and prefix
-            and OVPN_WSTUNNEL_NGINX_BEGIN in nginx_text
+            and route_present
         ),
     }
 
@@ -944,7 +945,7 @@ def _configure_openvpn_wstunnel_nginx(path_prefix,bridge_port):
         raise ProtocolError("Makia Nginx site is not installed")
     original=OVPN_WSTUNNEL_NGINX.read_text(encoding="utf-8",errors="ignore")
     cleaned=re.sub(
-        rf"(?ms)^\s*{re.escape(OVPN_WSTUNNEL_NGINX_BEGIN)}.*?{re.escape(OVPN_WSTUNNEL_NGINX_END)}\s*\n?",
+        rf"(?ms)^[ \t]*{re.escape(OVPN_WSTUNNEL_NGINX_BEGIN)}.*?{re.escape(OVPN_WSTUNNEL_NGINX_END)}[ \t]*\n?",
         "",
         original,
     )
@@ -2946,6 +2947,7 @@ def connection_port_plan():
     tcp=_openvpn_named_runtime("makia-tcp")
     st=stealth_status()
     ws=wstunnel_status()
+    ovws=openvpn_wstunnel_status()
     rows=[]
     for service,port in [
         ("HTTPS",443),
@@ -2980,7 +2982,13 @@ def connection_port_plan():
         },
         "blockers":{"openvpn_tcp":tcp_blockers,"stealth":stealth_blockers},
         "https_tcp_443_reserved":bool(_port_transport_in_use(443,"tcp")),
-        "note":"TCP/443 has one owner. UDP/443 may coexist because TCP and UDP are independent transports.",
+        "wstunnel_openvpn_shared_https":{
+            "configured":bool(ovws.get("configured")),
+            "ready":bool(ovws.get("ready")),
+            "port":443,
+            "owner":"Nginx HTTPS path route",
+        },
+        "note":"Raw TCP listeners cannot share TCP/443. OpenVPN WStunnel 443 is different: Nginx remains the only 443 listener and routes one secret WebSocket path internally. UDP/443 remains independent.",
     }
 
 def _select_available_port(preferred, proto, fallbacks=()):
