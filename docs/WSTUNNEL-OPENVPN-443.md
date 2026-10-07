@@ -104,9 +104,15 @@ The Makia Windows package bundles the pinned WStunnel runtime. Direct Connect:
 
 Run the `wstunnel-client-command.txt` command first, then import/open the delivered `.ovpn` file in a compatible OpenVPN client. Keep WStunnel running for the lifetime of the VPN session.
 
-## Android / iOS
+## Android
 
-Makia 1.6.1 does not claim native Direct Connect for this transport on Android/iOS. The Client Portal can deliver the package, but automatic mobile integration requires an OpenVPN core plus WStunnel lifecycle integration in the native mobile client.
+Makia 1.6.1 supports **Full Device Direct Connect** for WStunnel 443 on Android ARM64 through the Makia Android Connector. The connector bundles the pinned Wstunnel runtime; the user does not need to install Wstunnel separately.
+
+The connection is issued through the authenticated Makia Client Platform and uses WSS/TLS over public TCP/443 while retaining the account/device/session policy controls.
+
+## iOS / iPadOS
+
+Makia 1.6.1 does not claim a native Wstunnel Network Extension on iOS. iOS remains on the PWA/Profile/Import flow until an Apple-signed native tunnel implementation completes real-device UAT.
 
 ## Diagnostics
 
