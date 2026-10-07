@@ -400,7 +400,7 @@ def main():
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator(".provision-drawer").wait_for()
             page.screenshot(path='/tmp/makia-new-access.png',full_page=True)
-            assert page.locator(".wizard-protocol").count()==5
+            assert page.locator(".wizard-protocol").count()==6
             assert page.locator('.wizard-protocol[data-kind="outline"]').count()==1
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
             page.locator("#wizEndpointMode").select_option("ip")
