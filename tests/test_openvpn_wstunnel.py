@@ -61,3 +61,80 @@ def test_client_delivery_contains_structured_transport_config():
     assert 'engine in {"openvpn_wstunnel","openvpn-wstunnel"}' in connector
     assert "--tls-verify-certificate" in connector
     assert 'remote_host!="127.0.0.1"' in connector
+
+
+def test_wstunnel_identity_is_separate_and_deterministic():
+    a=protocol_ops._openvpn_wstunnel_identity("alice")
+    b=protocol_ops._openvpn_wstunnel_identity("alice")
+    c=protocol_ops._openvpn_wstunnel_identity("alice2")
+    assert a==b
+    assert a!=c
+    assert a.startswith("mwst-")
+    assert len(a)<=48
+
+
+def test_regular_openvpn_listing_hides_wstunnel_internal_identities(tmp_path,monkeypatch):
+    easy=tmp_path/"easy-rsa"
+    issued=easy/"pki"/"issued"
+    issued.mkdir(parents=True)
+    for name in ("server","normal-user","mwst-alice-12345678"):
+        (issued/f"{name}.crt").write_text("cert",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_EASYRSA",easy)
+    rows=protocol_ops.list_openvpn_clients()
+    assert [x["name"] for x in rows]==["normal-user"]
+
+
+def test_wstunnel_status_requires_exact_managed_path(tmp_path,monkeypatch):
+    env=tmp_path/"openvpn-wstunnel.env"
+    nginx=tmp_path/"makia-nginx"
+    env.write_text(
+        "OVPN_WSTUNNEL_DOMAIN=vpn.example.com\n"
+        "OVPN_WSTUNNEL_PUBLIC_PORT=443\n"
+        "OVPN_WSTUNNEL_BRIDGE_PORT=10445\n"
+        "OVPN_WSTUNNEL_TARGET_PORT=11940\n"
+        "OVPN_WSTUNNEL_PATH_PREFIX=secretprefix123456\n",
+        encoding="utf-8",
+    )
+    nginx.write_text(
+        protocol_ops.OVPN_WSTUNNEL_NGINX_BEGIN+"\nlocation /wrongprefix {}\n"+
+        protocol_ops.OVPN_WSTUNNEL_NGINX_END+"\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"OVPN_WSTUNNEL_ENV",env)
+    monkeypatch.setattr(protocol_ops,"OVPN_WSTUNNEL_NGINX",nginx)
+    monkeypatch.setattr(protocol_ops.shutil,"which",lambda x:"/usr/bin/wstunnel" if x=="wstunnel" else None)
+    monkeypatch.setattr(protocol_ops,"_active",lambda svc:True)
+    monkeypatch.setattr(protocol_ops,"_tcp_listener",lambda port,loopback_only=False:True)
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem:{"service_active":True,"listener":True})
+    assert protocol_ops.openvpn_wstunnel_status()["ready"] is False
+    nginx.write_text(
+        protocol_ops.OVPN_WSTUNNEL_NGINX_BEGIN+"\nlocation /secretprefix123456 {}\n"+
+        protocol_ops.OVPN_WSTUNNEL_NGINX_END+"\n",
+        encoding="utf-8",
+    )
+    assert protocol_ops.openvpn_wstunnel_status()["ready"] is True
+
+
+def test_nginx_wstunnel_block_is_idempotent(tmp_path,monkeypatch):
+    site=tmp_path/"makia-vps-manager"
+    backup=tmp_path/"backups"
+    backup.mkdir()
+    site.write_text(
+        "server {\n"
+        "  listen 443 ssl;\n"
+        "  server_name vpn.example.com;\n"
+        "  location / { proxy_pass http://127.0.0.1:8787; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(protocol_ops,"OVPN_WSTUNNEL_NGINX",site)
+    monkeypatch.setattr(protocol_ops,"_backup_dir",lambda:backup)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**k:"")
+    protocol_ops._configure_openvpn_wstunnel_nginx("secretprefix123456",10445)
+    first=site.read_text(encoding="utf-8")
+    assert first.count(protocol_ops.OVPN_WSTUNNEL_NGINX_BEGIN)==1
+    assert "proxy_pass http://127.0.0.1:10445;" in first
+    assert "location ^~ /secretprefix123456" in first
+    protocol_ops._configure_openvpn_wstunnel_nginx("secretprefix123456",10445)
+    second=site.read_text(encoding="utf-8")
+    assert second.count(protocol_ops.OVPN_WSTUNNEL_NGINX_BEGIN)==1
