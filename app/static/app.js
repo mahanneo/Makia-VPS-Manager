@@ -1772,6 +1772,7 @@ async function openWireGuardDiagnostics(target=''){
         '<div><span>MTU</span><b class="'+(Number(d.mtu||0)===1280?'ok-text':'warn-text')+'">'+(Number(d.mtu||0)||'AUTO')+'</b></div>',
         '<div><span>TCP MSS clamp</span><b class="'+(d.mss_clamp_in!==false&&d.mss_clamp_out!==false?'ok-text':'warn-text')+'">'+(d.mss_clamp_in!==false&&d.mss_clamp_out!==false?'READY':'NEEDS TUNING')+'</b></div>',
         '<div><span>Restricted profile</span><b class="'+(d.restricted_network_ready?'ok-text':'warn-text')+'">'+(d.restricted_network_ready?'READY':'OPTIONAL TUNING')+'</b></div>',
+        '<div><span>Network performance</span><b class="'+(d.performance?.tuned?'ok-text':'warn-text')+'">'+(d.performance?.tuned?'TUNED':'DEFAULT')+'</b><em>'+htmlEsc((d.performance?.congestion_control||'')+(d.performance?.qdisc?(' / '+d.performance.qdisc):''))+'</em></div>',
         '<div><span>Endpoint</span><b class="'+(d.endpoint_ok?'ok-text':'bad-text')+'">'+htmlEsc(d.endpoint||'-')+'</b></div>',
       '</div>',
       '<div class="domain-resolution-grid"><div><span>A / IPv4</span><code>'+htmlEsc((d.resolved_ipv4||[]).join(', ')||'none')+'</code></div><div><span>AAAA / IPv6</span><code>'+htmlEsc((d.resolved_ipv6||[]).join(', ')||'none')+'</code></div><div><span>VPS IPv4</span><code>'+htmlEsc((d.local_ipv4||[]).join(', ')||'unknown')+'</code></div><div><span>VPS IPv6</span><code>'+htmlEsc((d.local_ipv6||[]).join(', ')||'unknown')+'</code></div></div>',
@@ -1796,8 +1797,12 @@ async function updateWireGuardEndpoint(key,current){
   }catch(e){alert('WireGuard Endpoint: '+e.message)}
 }
 async function repairWireGuardRuntime(){
-  if(!confirm('Makia از wg0.conf بکاپ می‌گیرد، IP forwarding، NAT و Forward rules را اصلاح می‌کند و WireGuard را Restart می‌کند. ادامه؟'))return;
-  try{const r=await api('/api/protocols/wireguard/repair',{method:'POST'});toast(r?.diagnostics?.runtime_ok?'WireGuard repaired and healthy':'WireGuard repair completed');await openWireGuardDiagnostics()}catch(e){alert('WireGuard repair: '+e.message)}
+  if(!confirm('Makia از wg0.conf و تنظیمات شبکه بکاپ می‌گیرد، IP forwarding/NAT/MSS را اصلاح می‌کند، بافرهای شبکه و MTU probing را برای throughput بهتر تنظیم می‌کند و WireGuard را بدون تغییر Key/Peer/Port Restart می‌کند. ادامه؟'))return;
+  try{
+    const r=await api('/api/protocols/wireguard/repair',{method:'POST'});
+    toast(r?.diagnostics?.runtime_ok?(r?.performance?.tuned?'WireGuard repaired + optimized':'WireGuard repaired and healthy'):'WireGuard repair completed');
+    await openWireGuardDiagnostics()
+  }catch(e){alert('WireGuard repair: '+e.message)}
 }
 async function applyWireGuardRestrictedProfile(){
   if(!confirm('این Preset از wg0.conf بکاپ می‌گیرد، MTU سرور را روی 1280 می‌گذارد، TCP MSS clamping را برای جلوگیری از گیرکردن HTTPS فعال می‌کند و WireGuard را Restart می‌کند. Key/Peer/Address و Port فعلی کاربران تغییر نمی‌کند. ادامه؟'))return;
@@ -1806,7 +1811,8 @@ async function applyWireGuardRestrictedProfile(){
     const d=r?.diagnostics||{};
     const notes=(r?.notes||[]).join('\n');
     toast(d.restricted_network_ready?'WireGuard restricted-network profile ready':'WireGuard compatibility tuning applied');
-    alert('WireGuard compatibility applied\n\nUDP/'+Number(d.port||0)+' · MTU '+Number(d.mtu||0)+'\nMSS clamp IN: '+(d.mss_clamp_in===false?'FAIL':'OK')+'\nMSS clamp OUT: '+(d.mss_clamp_out===false?'FAIL':'OK')+(notes?'\n\n'+notes:''));
+    const perf=r?.performance||{};
+    alert('WireGuard compatibility applied\n\nUDP/'+Number(d.port||0)+' · MTU '+Number(d.mtu||0)+'\nMSS clamp IN: '+(d.mss_clamp_in===false?'FAIL':'OK')+'\nMSS clamp OUT: '+(d.mss_clamp_out===false?'FAIL':'OK')+'\nNetwork tuning: '+(perf.tuned?'READY':'DEFAULT')+(perf.congestion_control?(' · '+perf.congestion_control):'')+(notes?'\n\n'+notes:''));
     await settings();
   }catch(e){alert('WireGuard compatibility: '+e.message)}
 }
