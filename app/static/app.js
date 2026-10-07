@@ -652,11 +652,17 @@ function validateWizardStep(){
   if(s.step===2){
     if(!s.name)return 'نام کاربر/Client لازم است.';
     if(s.protocol==='ssh'&&(!s.password||s.password.length<4))return 'Password/PIN حداقل ۴ کاراکتر باشد.';
+    if(s.protocol==='openvpn_wstunnel'&&(!s.password||s.password.length<8))return 'رمز ورود WStunnel باید حداقل ۸ کاراکتر باشد.';
     if(!s.endpoint)return 'دامنه یا IP عمومی لازم است.';
     const isIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s.endpoint);
     if(s.endpointMode==='ip'&&!isIp)return 'در حالت IP، آدرس IPv4 عمومی را وارد کن.';
     if(s.endpointMode==='domain'&&(isIp||!/^([a-z0-9-]+\.)+[a-z0-9-]+\.?$/i.test(s.endpoint)))return 'در حالت دامنه، یک hostname معتبر وارد کن.';
     if(s.protocol==='xray'&&(!s.port||s.port<1||s.port>65535))return 'Port معتبر وارد کن.';
+  }
+  if(s.step===3&&s.protocol==='openvpn_wstunnel'){
+    if(Number(s.devices||1)<1||Number(s.devices||1)>20)return 'Device Limit باید بین ۱ تا ۲۰ باشد.';
+    if(Number(s.sessions||1)<1||Number(s.sessions||1)>20)return 'Concurrent Limit باید بین ۱ تا ۲۰ باشد.';
+    if(Number(s.sessions||1)>Number(s.devices||1))return 'Concurrent Limit نمی‌تواند از Device Limit بیشتر باشد.';
   }
   if(s.step===3&&s.protocol==='xray'){
     normalizeXrayProfile(s,false);
