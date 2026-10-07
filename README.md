@@ -45,7 +45,7 @@ These are **starting presets, not a connectivity guarantee**. ISP filtering, mob
 | Xray / V2Ray | ✅ | share link, QR, subscription, client page | quota, expiry, IP policy, renew, diagnostics |
 | WireGuard | ✅ | native config, QR, client page | enable/disable, reissue, diagnostics |
 | OpenVPN | ✅ | .ovpn download, client page | revoke, transport/runtime diagnostics |
-| WStunnel 443 / OpenVPN WSS | ✅ | WStunnel + OVPN package, Client Platform, Windows Direct Connect | account expiry/quota/disable, concurrent-session enforcement, traffic accounting, isolated certificate revoke, runtime/route diagnostics |
+| WStunnel 443 / OpenVPN WSS | ✅ | WStunnel + OVPN package, Client Platform, Windows/Android Direct Connect | account expiry/quota/disable, concurrent-session enforcement, traffic accounting, isolated certificate revoke, runtime/route diagnostics |
 | Outline | ✅ | real `ss://` key, QR, client page, protected ZIP | quota, expiry, renew/reissue, traffic, diagnostics, revoke |
 
 Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 where supported by the bundled Xray Core/runtime contract. Advanced Xray configuration is validated before apply and uses rollback on failure.
@@ -62,7 +62,7 @@ End users can open the same authenticated Client URL on Android, iPhone/iPad, Wi
 
 - **Windows:** one-click Full Device Direct Connect through the Makia Client Connector, including OpenVPN-over-WStunnel/TLS on HTTPS TCP/443 when that mode is configured.
 - **Chrome / Edge:** Makia Browser VPN connects directly to the authenticated TLS Browser Gateway on the VPS; no Windows EXE, Registry entry or Native Messaging host is required.
-- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; the CI artifact is explicitly UAT/debug-signed until a persistent private release-signing key is configured.
+- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles and supports WStunnel 443 Full Device Direct Connect on ARM64; signed release packaging remains separately gated from CI/UAT builds.
 - **iPhone / iPad:** install the PWA from Safari with Add to Home Screen and use the platform-aware Open/Import flow. Native in-app iOS tunnelling is not claimed until an Apple-signed Network Extension build completes real-device UAT.
 - Native launch tickets are one-time, device-bound and short-lived; VPN secrets are not embedded in the `makia://` URL.
 - The Client Portal remains disabled by default until the operator completes host UAT/canary.
