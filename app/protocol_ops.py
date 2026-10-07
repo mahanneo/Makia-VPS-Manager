@@ -734,58 +734,141 @@ def remove_ikev2_user(name):
     return {"ok":True,"name":name}
 
 
+def _stunnel_reserved_accept_ports(exclude_path=None):
+    """Return TCP accept ports declared by other stunnel configs.
+
+    Ubuntu's stunnel4 wrapper may load every *.conf under /etc/stunnel.  A
+    stale/foreign config can therefore collide even when no socket is
+    currently listening.  We never rewrite those files; we only avoid their
+    declared ports.
+    """
+    reserved=set()
+    root=Path("/etc/stunnel")
+    if not root.exists():
+        return reserved
+    excluded=Path(exclude_path).resolve() if exclude_path else None
+    for conf in root.glob("*.conf"):
+        try:
+            if excluded and conf.resolve()==excluded:
+                continue
+            text=conf.read_text(encoding="utf-8",errors="ignore")
+        except OSError:
+            continue
+        for m in re.finditer(r"(?m)^\s*accept\s*=\s*(?:[^:\s]+:)?(\d+)\s*$",text):
+            try: reserved.add(int(m.group(1)))
+            except ValueError: pass
+    return reserved
+
+
+def _choose_managed_tcp_port(preferred, fallbacks=(), exclude_ports=None, allow_current=None):
+    """Choose a collision-free TCP port without moving a healthy owner silently."""
+    excluded={int(x) for x in (exclude_ports or set()) if x}
+    allowed={int(x) for x in (allow_current or set()) if x}
+    candidates=[]
+    for value in (preferred,*fallbacks):
+        try: value=_validate_port(value)
+        except Exception: continue
+        if value in candidates or value in excluded:
+            continue
+        candidates.append(value)
+    for port in candidates:
+        if port in allowed:
+            return port
+        if not _port_transport_in_use(port,"tcp"):
+            return port
+    raise ProtocolError("no collision-free TCP port is available in the managed candidate set")
+
+
 def bootstrap_stealth(domain, listen_port=9443):
     if not (_installed("stunnel4") or _installed("stunnel")):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
-    listen_port=_validate_port(listen_port)
+    requested_port=_validate_port(listen_port)
+    existing=stealth_status()
+    current_port=int(existing.get("port") or 0)
+    reserved=_stunnel_reserved_accept_ports(STUNNEL_MAKIA_CONF)
+    # Keep an already-working Makia listener. Otherwise choose a free public
+    # port automatically instead of surfacing a raw bind/systemd error.
+    allowed={current_port} if existing.get("service_active") and current_port else set()
+    public_candidates=(9443,10443,11443,12443,13443,14443)
+    if requested_port in reserved and requested_port not in allowed:
+        requested_port=next((p for p in public_candidates if p not in reserved),requested_port)
+    listen_port=_choose_managed_tcp_port(
+        requested_port,public_candidates,
+        exclude_ports=reserved,
+        allow_current=allowed,
+    )
+
     fallback=_openvpn_named_runtime("makia-tcp")
     if not fallback.get("service_active") or not fallback.get("listener"):
         backend_port=_select_available_port_excluding(
-            8443,"tcp",(10443,11940,12443),exclude_ports={listen_port}
+            8443,"tcp",(10443,11940,12443,13440,14440),
+            exclude_ports={listen_port,*reserved}
         )
         fallback=ensure_openvpn_tcp_fallback(backend_port)["status"]
     backend_port=int(fallback.get("port") or 0)
+    if not backend_port or not fallback.get("listener"):
+        raise ProtocolError("Stealth OpenVPN TCP backend is not ready")
     if listen_port==backend_port:
-        raise ProtocolError(
-            f"Stealth public TCP/{listen_port} conflicts with the active OpenVPN TCP backend. "
-            "Choose a different public Stealth port; Makia will not move an active TCP backend silently."
-        )
-    existing=stealth_status()
-    if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
-        owner=_port_owner_label(listen_port,"tcp")
-        suggestion=_suggest_free_port("tcp",(9443,10443,11443,12443),exclude_ports={backend_port})
-        hint=f"; try TCP/{suggestion}" if suggestion else ""
-        raise ProtocolError(f"TCP/{listen_port} is already owned by {owner}{hint}")
+        raise ProtocolError("Stealth public port conflicts with its OpenVPN TCP backend")
+
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
     if not cert.exists() or not key.exists():
         raise ProtocolError("Stealth requires a valid HTTPS/Let's Encrypt certificate first")
+
     STUNNEL_MAKIA_CONF.parent.mkdir(parents=True,exist_ok=True)
-    STUNNEL_MAKIA_CONF.write_text(
+    previous=STUNNEL_MAKIA_CONF.read_bytes() if STUNNEL_MAKIA_CONF.exists() else None
+    new_conf=(
         "foreground = no\n"
         "client = no\n"
         "sslVersionMin = TLSv1.2\n"
         f"cert = {cert}\nkey = {key}\n\n"
         "[makia-openvpn]\n"
         f"accept = 0.0.0.0:{listen_port}\n"
-        f"connect = 127.0.0.1:{backend_port}\n",
-        encoding="utf-8",
+        f"connect = 127.0.0.1:{backend_port}\n"
     )
-    defaults=Path("/etc/default/stunnel4")
-    if defaults.exists():
-        text=defaults.read_text(encoding="utf-8",errors="ignore")
-        if re.search(r"(?m)^\s*ENABLED=",text):
-            text=re.sub(r"(?m)^\s*ENABLED=.*$","ENABLED=1",text)
-        else:
-            text+="\nENABLED=1\n"
-        defaults.write_text(text,encoding="utf-8")
-    _run(["systemctl","enable","--now","stunnel4"],timeout=30)
-    _run(["systemctl","restart","stunnel4"],timeout=30)
+    tmp=STUNNEL_MAKIA_CONF.with_suffix(".conf.tmp")
+    try:
+        tmp.write_text(new_conf,encoding="utf-8")
+        os.chmod(tmp,0o600)
+        os.replace(tmp,STUNNEL_MAKIA_CONF)
+        defaults=Path("/etc/default/stunnel4")
+        if defaults.exists():
+            text=defaults.read_text(encoding="utf-8",errors="ignore")
+            if re.search(r"(?m)^\s*ENABLED=",text):
+                text=re.sub(r"(?m)^\s*ENABLED=.*$","ENABLED=1",text)
+            else:
+                text+="\nENABLED=1\n"
+            defaults.write_text(text,encoding="utf-8")
+        _run(["systemctl","enable","--now","stunnel4"],timeout=30)
+        _run(["systemctl","restart","stunnel4"],timeout=30)
+        status=stealth_status()
+        if not status.get("listener"):
+            raise ProtocolError("Stunnel started but the managed TLS listener is missing")
+    except Exception as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+            if previous is None:
+                STUNNEL_MAKIA_CONF.unlink(missing_ok=True)
+            else:
+                STUNNEL_MAKIA_CONF.write_bytes(previous)
+            subprocess.run(["systemctl","restart","stunnel4"],text=True,capture_output=True,timeout=20,check=False)
+        except Exception:
+            pass
+        detail=str(exc)
+        try:
+            j=subprocess.run(
+                ["journalctl","-u","stunnel4","-n","12","--no-pager","-o","cat"],
+                text=True,capture_output=True,timeout=8,check=False,
+            )
+            tail=" | ".join(x.strip() for x in (j.stdout or "").splitlines()[-4:] if x.strip())
+            if tail: detail=f"{detail}; {tail}"
+        except Exception:
+            pass
+        raise ProtocolError("Stealth/Stunnel setup failed: "+detail[:1000]) from exc
+
     _ufw_allow_if_active(listen_port,"tcp","OpenVPN Stealth")
-    status=stealth_status()
-    if not status.get("listener"):
-        raise ProtocolError("Stunnel did not expose the requested TCP listener")
     client=(
         "client = yes\n"
         "foreground = yes\n"
@@ -796,7 +879,13 @@ def bootstrap_stealth(domain, listen_port=9443):
         "accept = 127.0.0.1:11940\n"
         f"connect = {domain}:{listen_port}\n"
     )
-    return {"ok":True,"status":status,"domain":domain,"client_stunnel_config":client,"openvpn_local_endpoint":"127.0.0.1:11940"}
+    return {
+        "ok":True,"status":status,"domain":domain,
+        "requested_port":int(_validate_port(listen_port)),
+        "selected_port":listen_port,
+        "client_stunnel_config":client,
+        "openvpn_local_endpoint":"127.0.0.1:11940",
+    }
 
 
 def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
@@ -1093,10 +1182,22 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         raise ProtocolError("WStunnel 443 requires a valid Let's Encrypt certificate for the selected domain")
 
     existing=openvpn_wstunnel_status()
-    if _port_transport_in_use(bridge_port,"tcp") and int(existing.get("bridge_port") or 0)!=bridge_port:
-        suggestion=_suggest_free_port("tcp",(10445,11445,12445,13445),exclude_ports={backend_port})
-        hint=f"; try loopback bridge TCP/{suggestion}" if suggestion else ""
-        raise ProtocolError(f"WStunnel loopback bridge TCP/{bridge_port} is already in use{hint}")
+    current_bridge=int(existing.get("bridge_port") or 0)
+    current_backend=int(existing.get("target_port") or 0)
+    bridge_allowed={current_bridge} if existing.get("service_active") and current_bridge else set()
+    backend_runtime=existing.get("backend") or {}
+    backend_allowed={current_backend} if backend_runtime.get("service_active") and backend_runtime.get("listener") and current_backend else set()
+
+    backend_port=_choose_managed_tcp_port(
+        backend_port,(12940,13940,14940,15940,16940),
+        exclude_ports={bridge_port},
+        allow_current=backend_allowed,
+    )
+    bridge_port=_choose_managed_tcp_port(
+        bridge_port,(11445,12445,13445,14445,15445),
+        exclude_ports={backend_port},
+        allow_current=bridge_allowed,
+    )
 
     backend=ensure_openvpn_wstunnel_backend(backend_port)
     prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
