@@ -53,7 +53,7 @@ jobs:
           pytest -q tests/test_rc8_operations.py tests/test_rc9_hardening.py tests/test_rc11_outline_runtime.py tests/test_v1_release_gate.py tests/test_xray_iran_presets.py
           grep -Fxq '1.6.1' VERSION
           grep -q 'VERSION = "1.6.1"' app/config.py
-          grep -q 'makia-shell-v160' app/static/sw.js
+          grep -q 'makia-shell-v161' app/static/sw.js
           test -f docs/UAT-1.6.1.md
           test -f app/static/makia-brand.png
           test -f docs/assets/makia-brand.png
@@ -95,7 +95,7 @@ jobs:
           grep -q 'makia_client_session' app/client_portal.py
           grep -q 'client_openvpn_policy_enable' app/client_admin.py
           grep -q 'client_policy_openvpn_suspend' app/client_policy.py
-          grep -q 'makia-client-v160-mobile-login' app/static/client-sw.js
+          grep -q 'makia-client-v161-wstunnel' app/static/client-sw.js
           test -f app/static/client-login.js
           pytest -q tests/test_client_platform.py
 
@@ -245,7 +245,7 @@ jobs:
           grep -q 'body\[data-theme="glass"\]' app/static/app.css
           grep -q 'glass-status-hero' app/static/app.js
           grep -q 'Glass Aurora' app/static/app.js
-          grep -q "const CACHE='makia-shell-v160'" app/static/sw.js
+          grep -q "const CACHE='makia-shell-v161'" app/static/sw.js
           grep -q '/api/protocols/openvpn/diagnostics' app/main.py
           grep -q '/api/protocols/openvpn/repair' app/main.py
           grep -q 'openvpn_endpoint_diagnostics' app/protocol_ops.py
@@ -284,7 +284,7 @@ jobs:
           grep -q 'OpenVPN server config missing' scripts/uat-smoke.sh
           grep -q 'WireGuard wg0 config missing' scripts/uat-smoke.sh
           grep -q 'Stunnel tooling missing' scripts/uat-smoke.sh
-          grep -q 'makia-shell-v160' app/static/sw.js
+          grep -q 'makia-shell-v161' app/static/sw.js
           grep -q 'certbot python3-certbot-nginx' scripts/install.sh
           grep -q 'apt-get install -y fail2ban certbot python3-certbot-nginx' scripts/update.sh
           ! grep -q 'apt-get.*certbot' app/panel_ops.py
@@ -326,15 +326,15 @@ jobs:
           grep -q 'security-posture-grid' app/static/app.js
           grep -q 'visual-steps' app/templates/client_guide.html
           grep -q 'v0.26 Protocol graphics' app/static/app.css
-          grep -q 'makia-shell-v160' app/static/sw.js
+          grep -q 'makia-shell-v161' app/static/sw.js
 
-      - name: Pure Browser Gateway 1.6.0 contract
+      - name: Pure Browser Gateway 1.6.1 contract
         run: |
           test -f app/browser_gateway.py
           test -f systemd/makia-browser-gateway.service
           test -f tests/browser_gateway_smoke.sh
-          test -f docs/BROWSER-GATEWAY-1.6.0.md
-          test -f docs/CHROME-WEB-STORE-1.6.0.md
+          test -f docs/BROWSER-GATEWAY-1.6.1.md
+          test -f docs/CHROME-WEB-STORE-1.6.1.md
           grep -q 'makia-browser-gateway.service' scripts/install.sh
           grep -q 'makia-browser-gateway.service' scripts/update.sh
           grep -q 'makia-browser-gateway' scripts/uninstall.sh
