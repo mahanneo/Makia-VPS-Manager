@@ -94,7 +94,7 @@ class MakiaEntryActivity : ComponentActivity() {
         connection.readTimeout = 15000
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
-        connection.setRequestProperty("User-Agent", "MakiaAndroidConnector/1.4")
+        connection.setRequestProperty("User-Agent", "MakiaAndroidConnector/1.6.0")
         val body = JSONObject().put("ticket", ticket).toString().toByteArray()
         connection.outputStream.use { it.write(body) }
         val code = connection.responseCode
