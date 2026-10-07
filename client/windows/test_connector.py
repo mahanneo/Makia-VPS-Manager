@@ -43,5 +43,46 @@ class ConnectorTests(unittest.TestCase):
         self.assertNotIn("--native-host",source)
 
 
+    def test_openvpn_wstunnel_dry_run_requires_structured_loopback_transport(self):
+        raw=b"client\nproto tcp4-client\nremote 127.0.0.1 11941\n"
+        delivery={
+            "engine":"openvpn_wstunnel",
+            "native_base64":__import__("base64").b64encode(raw).decode(),
+            "native_filename":"alice-wstunnel.ovpn",
+            "transport_config":{
+                "server":"vpn.example.com",
+                "port":443,
+                "path_prefix":"abcdefghijklmnopqrstuvwx",
+                "local_host":"127.0.0.1",
+                "local_port":11941,
+                "remote_host":"127.0.0.1",
+                "remote_port":11940,
+                "tls_verify":True,
+            },
+        }
+        result=mod.connect_delivery(delivery,dry_run=True)
+        self.assertEqual(result["mode"],"openvpn-wstunnel")
+        self.assertEqual(result["server"],"vpn.example.com")
+        self.assertEqual(result["port"],443)
+        self.assertTrue(Path(result["profile"]).is_file())
+
+    def test_openvpn_wstunnel_rejects_non_loopback_backend(self):
+        raw=b"client\n"
+        delivery={
+            "engine":"openvpn_wstunnel",
+            "native_base64":__import__("base64").b64encode(raw).decode(),
+            "transport_config":{
+                "server":"vpn.example.com",
+                "port":443,
+                "path_prefix":"abcdefghijklmnopqrstuvwx",
+                "local_port":11941,
+                "remote_host":"10.0.0.8",
+                "remote_port":11940,
+            },
+        }
+        with self.assertRaisesRegex(RuntimeError,"loopback"):
+            mod.connect_delivery(delivery,dry_run=True)
+
+
 if __name__=="__main__":
     unittest.main()
