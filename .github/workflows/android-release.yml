@@ -6,7 +6,7 @@ on:
       source_ref:
         description: "Git ref to build (use the UAT-approved release commit/branch)"
         required: true
-        default: "release/v1.4.0-uat1"
+        default: "main"
 
 permissions:
   contents: read
@@ -71,8 +71,8 @@ jobs:
         run: |
           python makia/client/android/patch_sfa.py upstream/sing-box-for-android makia/client/android/MakiaEntryActivity.kt
           grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
-          grep -q '^VERSION_NAME=1.4.0$' upstream/sing-box-for-android/version.properties
-          grep -q '^VERSION_CODE=10400$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_NAME=1.6.0$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10600$' upstream/sing-box-for-android/version.properties
       - name: Install persistent release signing identity
         shell: bash
         env:
@@ -108,15 +108,15 @@ jobs:
           universal=$(find "$out" -maxdepth 1 -type f -name '*-universal*.apk' | head -n 1)
           test -n "$universal"
           mkdir -p package-android-release
-          cp "$universal" package-android-release/Makia-Android-Connector-1.4.0.apk
+          cp "$universal" package-android-release/Makia-Android-Connector-1.6.0.apk
           apksigner="$ANDROID_HOME/build-tools/37.1.0/apksigner"
-          "$apksigner" verify --verbose --print-certs package-android-release/Makia-Android-Connector-1.4.0.apk | tee package-android-release/SIGNATURE.txt
-          unzip -l package-android-release/Makia-Android-Connector-1.4.0.apk | grep -q 'lib/arm64-v8a/libbox.so'
-          (cd package-android-release && sha256sum Makia-Android-Connector-1.4.0.apk > SHA256SUMS.txt)
+          "$apksigner" verify --verbose --print-certs package-android-release/Makia-Android-Connector-1.6.0.apk | tee package-android-release/SIGNATURE.txt
+          unzip -l package-android-release/Makia-Android-Connector-1.6.0.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          (cd package-android-release && sha256sum Makia-Android-Connector-1.6.0.apk > SHA256SUMS.txt)
           cat package-android-release/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Android-Connector-1.4.0-Signed
+          name: Makia-Android-Connector-1.6.0-Signed
           path: package-android-release/
           if-no-files-found: error
           retention-days: 90
