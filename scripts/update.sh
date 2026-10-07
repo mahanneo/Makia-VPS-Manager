@@ -217,6 +217,7 @@ for item in \
   "etc/systemd/system/makia-ops-monitor.timer" \
   "etc/systemd/system/makia-mtproxy.service" \
   "etc/systemd/system/makia-wstunnel.service" \
+  "etc/systemd/system/makia-openvpn-wstunnel.service" \
   "etc/systemd/system/makia-ikev2-network.service" \
   "usr/local/sbin/makia-update" \
   "usr/local/sbin/makia-upgrade" \
@@ -245,6 +246,8 @@ for item in \
   "etc/ipsec.conf" \
   "etc/ipsec.secrets" \
   "etc/makia-vps-manager/wstunnel.env" \
+  "etc/makia-vps-manager/openvpn-wstunnel.env" \
+  "etc/openvpn/server/makia-ws.conf" \
   "etc/makia-vps-manager/mtproxy.env" \
   "etc/makia-vps-manager/mtproxy.toml" \
   "etc/makia-vps-manager/dns.json" \
@@ -414,6 +417,7 @@ install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
 install -m 0644 "$SRC/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
+install -m 0644 "$SRC/systemd/makia-openvpn-wstunnel.service" /etc/systemd/system/makia-openvpn-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
