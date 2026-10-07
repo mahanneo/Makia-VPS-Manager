@@ -44,7 +44,7 @@ jobs:
           from pathlib import Path
           m=json.loads(Path("client/browser-extension/manifest.json").read_text())
           assert m["manifest_version"]==3
-          assert m["version"]=="1.5.1"
+          assert m["version"]=="1.6.0"
           assert "nativeMessaging" not in m["permissions"]
           assert "proxy" in m["permissions"]
           assert "webRequest" in m["permissions"]
@@ -61,20 +61,20 @@ jobs:
         shell: bash
         run: |
           rm -rf dist-browser
-          mkdir -p dist-browser/Makia-Browser-VPN-1.5.1
-          cp -a client/browser-extension/. dist-browser/Makia-Browser-VPN-1.5.1/
+          mkdir -p dist-browser/Makia-Browser-VPN-1.6.0
+          cp -a client/browser-extension/. dist-browser/Makia-Browser-VPN-1.6.0/
           (
-            cd dist-browser/Makia-Browser-VPN-1.5.1
-            zip -qr ../Makia-Browser-VPN-1.5.1.zip .
+            cd dist-browser/Makia-Browser-VPN-1.6.0
+            zip -qr ../Makia-Browser-VPN-1.6.0.zip .
           )
-          sha256sum dist-browser/Makia-Browser-VPN-1.5.1.zip | tee dist-browser/SHA256SUMS.txt
-          printf 'version=1.5.1\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO.txt
+          sha256sum dist-browser/Makia-Browser-VPN-1.6.0.zip | tee dist-browser/SHA256SUMS.txt
+          printf 'version=1.6.0\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Browser-VPN-1.5.1
+          name: Makia-Browser-VPN-1.6.0
           path: |
-            dist-browser/Makia-Browser-VPN-1.5.1.zip
+            dist-browser/Makia-Browser-VPN-1.6.0.zip
             dist-browser/SHA256SUMS.txt
             dist-browser/BUILD-INFO.txt
           if-no-files-found: error
@@ -85,8 +85,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.5.1 >/dev/null 2>&1; then
-            gh release upload v1.5.1               dist-browser/Makia-Browser-VPN-1.5.1.zip               dist-browser/SHA256SUMS.txt               dist-browser/BUILD-INFO.txt --clobber
+          if gh release view v1.6.0 >/dev/null 2>&1; then
+            gh release upload v1.6.0               dist-browser/Makia-Browser-VPN-1.6.0.zip               dist-browser/SHA256SUMS.txt               dist-browser/BUILD-INFO.txt --clobber
           else
-            gh release create v1.5.1               --target "$GITHUB_SHA"               --title "Makia 1.5.1 — Stable Closure"               --notes "Pure Chrome/Edge Browser VPN release. Browser-only users do not need a Windows executable. See docs/BROWSER-GATEWAY-1.5.1.md and docs/CHROME-WEB-STORE-1.5.1.md."               dist-browser/Makia-Browser-VPN-1.5.1.zip               dist-browser/SHA256SUMS.txt               dist-browser/BUILD-INFO.txt
+            gh release create v1.6.0               --target "$GITHUB_SHA"               --title "Makia 1.6.0 — Stable Closure"               --notes "Pure Chrome/Edge Browser VPN release. Browser-only users do not need a Windows executable. See docs/BROWSER-GATEWAY-1.6.0.md and docs/CHROME-WEB-STORE-1.6.0.md."               dist-browser/Makia-Browser-VPN-1.6.0.zip               dist-browser/SHA256SUMS.txt               dist-browser/BUILD-INFO.txt
           fi
