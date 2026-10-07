@@ -64,6 +64,35 @@ https://YOUR-PANEL-DOMAIN/help/connect
 - Makia Profile را روی `udp4` یا `tcp4-client` می‌سازد تا رکورد AAAA اشتباه باعث انتخاب IPv6 نشود.
 - SSL/HTTPS پنل با Certificate داخلی OpenVPN یکی نیست؛ OpenVPN از CA/PKI خودش استفاده می‌کند.
 
+## WStunnel 443 — OpenVPN over WebSocket/TLS
+
+این Mode برای شبکه‌هایی است که HTTPS/TCP443 بهتر از VPN خام عبور می‌کند. ترافیک OpenVPN داخل WebSocket/TLS روی همان پورت عمومی 443 پنل Makia حمل می‌شود.
+
+### Windows — اتصال مستقیم Makia
+
+1. آخرین **Makia Windows Full Device Connector** را نصب کنید.
+2. OpenVPN runtime/client را روی Windows نصب داشته باشید.
+3. وارد Client Portal Makia شوید.
+4. پروفایل **WStunnel 443** را انتخاب کنید.
+5. روی **اتصال مستقیم** بزنید.
+6. Makia ابتدا WStunnel محلی را اجرا می‌کند و بعد OpenVPN را روی همان تونل بالا می‌آورد.
+7. برای قطع، از Disconnect خود Makia استفاده کنید تا هر دو Process بسته شوند.
+
+### اتصال دستی
+
+بسته WStunnel شامل فایل `.ovpn` و فایل `wstunnel-client-command.txt` است.
+
+1. فرمان WStunnel را اجرا کنید.
+2. صبر کنید Local endpoint آماده شود.
+3. فایل `.ovpn` را با OpenVPN اجرا/Import کنید.
+4. تا پایان VPN، WStunnel باید باز بماند.
+
+### Android / iPhone
+
+در Makia 1.6.0 برای این Mode اتصال Native خودکار روی Android/iOS ادعا نمی‌شود. بسته دستی قابل دریافت است، اما برای اتصال باید از Clientهایی استفاده شود که OpenVPN و WStunnel را با این ساختار پشتیبانی کنند.
+
+**نکته امنیتی:** مسیر WebSocket و فایل OVPN اختصاصی‌اند. آن‌ها را برای شخص دیگری ارسال نکنید.
+
 ## SSH / NPV Tunnel / NapsternetV
 
 ### NPV
