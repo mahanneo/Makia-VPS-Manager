@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.6.0] - 2026-10-07
+
+### OpenVPN WStunnel 443
+- Added a new **OpenVPN over WebSocket/TLS** mode on HTTPS TCP/443, separate from the existing WireGuard-over-WSS WStunnel mode.
+- Nginx remains the sole public TCP/443 listener; Makia adds a managed high-entropy WebSocket path and routes it to a loopback-only WStunnel bridge.
+- Added a dedicated loopback OpenVPN TCP backend and destination-restricted WStunnel service.
+- Added isolated per-user WStunnel OpenVPN certificate identities and encrypted delivery artifacts.
+- Added Client Platform binding, Access Center export/revoke, protected package and manual connection delivery.
+- Added Windows Direct Connect orchestration: pinned WStunnel runtime starts first, then OpenVPN starts against the local tunnel endpoint; disconnect terminates both processes.
+- Retained the older **WStunnel WG** mode as a separate connection mode instead of silently changing its behavior.
+- Android/iOS do not claim native Direct Connect for OpenVPN WStunnel in this release; manual package delivery remains available.
+
+### Safety / operations
+- Added Nginx config backup, validation and rollback before activating the managed WebSocket path.
+- Added Doctor and Host Smoke checks for the WStunnel transport, OpenVPN backend and Nginx route.
+- Extended Full Migration backup/restore and uninstall handling for the new service/runtime.
+- Added repository contracts for TLS/443 path sharing, destination restriction, per-user certificate isolation and pinned Windows WStunnel packaging.
+
+
 ## [1.4.0] - 2026-09-30
 
 ### Client Platform / Direct Connect
