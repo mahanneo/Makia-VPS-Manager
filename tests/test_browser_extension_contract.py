@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_browser_extension_manifest_contract():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert manifest["version"]=="1.6.0"
+    assert manifest["version"]=="1.6.1"
     assert "nativeMessaging" not in manifest["permissions"]
     assert "webRequest" in manifest["permissions"]
     assert "webRequestAuthProvider" in manifest["permissions"]

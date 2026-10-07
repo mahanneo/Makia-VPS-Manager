@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>نسخه ۱.۶.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+  <strong>نسخه ۱.۶.۱</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
-**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۶.۰](docs/UAT-1.6.0.md)**
+**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۶.۱](docs/UAT-1.6.1.md)**
 
 ---
 
@@ -52,7 +52,7 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 
 در WireGuard/OpenVPN، Makia قابلیتی را که Engine واقعاً enforce نمی‌کند به‌صورت Fake نمایش نمی‌دهد.
 
-## Makia Client نسخه ۱.۶.۰
+## Makia Client نسخه ۱.۶.۱
 
 کاربر نهایی یک آدرس HTTPS واحد از Makia می‌گیرد و با نام کاربری و رمز خودش وارد می‌شود. داخل Client Portal فقط حجم، تاریخ انقضا، وضعیت دستگاه‌ها و دسترسی‌های همان حساب نمایش داده می‌شود.
 
@@ -192,7 +192,7 @@ CI نسخه ۱ شامل Python compile/import، Pytest، DB/Migration، JavaScri
 
 موارد وابسته به محیط مانند Firewall/NAT، DNS propagation، Docker/Shadowbox واقعی، اتصال Client واقعی و SCP واقعی باید روی Host مقصد تست شوند.
 
-جزئیات نسخه جاری در **[docs/UAT-1.6.0.md](docs/UAT-1.6.0.md)** و معماری WStunnel در **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** و وضعیت کلاینت‌ها در **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** ثبت شده است.
+جزئیات نسخه جاری در **[docs/UAT-1.6.1.md](docs/UAT-1.6.1.md)** و معماری WStunnel در **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** و وضعیت کلاینت‌ها در **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** ثبت شده است.
 
 ## مجوز
 

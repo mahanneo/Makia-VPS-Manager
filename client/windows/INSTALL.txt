@@ -1,4 +1,4 @@
-Makia Windows Full Device Connector 1.6.0
+Makia Windows Full Device Connector 1.6.1
 
 Purpose:
 This package is only for full-device VPN on Windows.

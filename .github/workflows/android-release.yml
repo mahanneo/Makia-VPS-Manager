@@ -99,8 +99,8 @@ jobs:
         run: |
           python makia/client/android/patch_sfa.py upstream/sing-box-for-android makia/client/android/MakiaEntryActivity.kt
           grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
-          grep -q '^VERSION_NAME=1.6.0$' upstream/sing-box-for-android/version.properties
-          grep -q '^VERSION_CODE=10600$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_NAME=1.6.1$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10601$' upstream/sing-box-for-android/version.properties
       - name: Install persistent release signing identity
         shell: bash
         env:
@@ -136,16 +136,16 @@ jobs:
           universal=$(find "$out" -maxdepth 1 -type f -name '*-universal*.apk' | head -n 1)
           test -n "$universal"
           mkdir -p package-android-release
-          cp "$universal" package-android-release/Makia-Android-Connector-1.6.0.apk
+          cp "$universal" package-android-release/Makia-Android-Connector-1.6.1.apk
           apksigner="$ANDROID_HOME/build-tools/37.1.0/apksigner"
-          "$apksigner" verify --verbose --print-certs package-android-release/Makia-Android-Connector-1.6.0.apk | tee package-android-release/SIGNATURE.txt
-          unzip -l package-android-release/Makia-Android-Connector-1.6.0.apk | grep -q 'lib/arm64-v8a/libbox.so'
-          unzip -l package-android-release/Makia-Android-Connector-1.6.0.apk | grep -q 'lib/arm64-v8a/libwstunnel.so'
-          (cd package-android-release && sha256sum Makia-Android-Connector-1.6.0.apk > SHA256SUMS.txt)
+          "$apksigner" verify --verbose --print-certs package-android-release/Makia-Android-Connector-1.6.1.apk | tee package-android-release/SIGNATURE.txt
+          unzip -l package-android-release/Makia-Android-Connector-1.6.1.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          unzip -l package-android-release/Makia-Android-Connector-1.6.1.apk | grep -q 'lib/arm64-v8a/libwstunnel.so'
+          (cd package-android-release && sha256sum Makia-Android-Connector-1.6.1.apk > SHA256SUMS.txt)
           cat package-android-release/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Android-Connector-1.6.0-Signed
+          name: Makia-Android-Connector-1.6.1-Signed
           path: package-android-release/
           if-no-files-found: error
           retention-days: 90
@@ -158,10 +158,10 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$(cat VERSION)"
-          apk="../package-android-release/Makia-Android-Connector-1.6.0.apk"
+          apk="../package-android-release/Makia-Android-Connector-1.6.1.apk"
           sums="../package-android-release/SHA256SUMS.txt"
           sig="../package-android-release/SIGNATURE.txt"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "${GITHUB_SHA}"               --title "Makia 1.6.0 — WStunnel 443"               --notes "Makia 1.6.0 adds managed WStunnel 443 with Windows and Android Full Device Direct Connect. Nginx remains the sole public TCP/443 listener."
+            gh release create "$tag" --target "${GITHUB_SHA}"               --title "Makia 1.6.1 — WStunnel 443 Stable Hotfix"               --notes "Makia 1.6.1 promotes the tested WStunnel 443 release with service-readiness and updater-regression fixes. Existing users and credentials are preserved; Nginx remains the sole public TCP/443 listener." || true
           fi
           gh release upload "$tag" "$apk" "$sums" "$sig" --clobber

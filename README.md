@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.6.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.6.1</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.0 UAT](docs/UAT-1.6.0.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.1 UAT](docs/UAT-1.6.1.md)**
 
 ---
 
@@ -52,7 +52,7 @@ Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 wh
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## Makia Client 1.6.0
+## Makia Client 1.6.1
 
 ### Pure Browser Gateway
 
@@ -209,7 +209,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.6.0.md](docs/UAT-1.6.0.md)** for the current release gate and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
+See **[docs/UAT-1.6.1.md](docs/UAT-1.6.1.md)** for the current release gate and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
 
 ## Runtime layout
 
