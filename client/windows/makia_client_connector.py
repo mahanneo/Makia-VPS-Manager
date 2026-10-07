@@ -188,12 +188,27 @@ def singbox_config(outbound):
 def find_binary(names):
     here=Path(sys.executable).resolve().parent
     candidates=[]
+    program_files=[os.environ.get("ProgramFiles",""),os.environ.get("ProgramFiles(x86)","")]
     for n in names:
         candidates += [here/n,ROOT/n]
         for folder in os.environ.get("PATH","").split(os.pathsep):
             if folder:
                 candidates.append(Path(folder)/n)
+        lname=str(n).lower()
+        for base in program_files:
+            if not base:
+                continue
+            root=Path(base)
+            if lname=="openvpn.exe":
+                candidates.append(root/"OpenVPN"/"bin"/"openvpn.exe")
+            elif lname=="wireguard.exe":
+                candidates.append(root/"WireGuard"/"wireguard.exe")
+    seen=set()
     for p in candidates:
+        key=str(p).lower()
+        if key in seen:
+            continue
+        seen.add(key)
         if p.is_file():
             return str(p)
     return None
