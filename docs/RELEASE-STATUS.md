@@ -1,6 +1,6 @@
 # Makia Release Status
 
-Current stable line: **1.6.1**
+Current stable line: **1.6.2**
 
 | Surface | Repository gate | Distribution state | Production claim |
 | --- | --- | --- | --- |
