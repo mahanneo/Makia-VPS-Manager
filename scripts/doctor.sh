@@ -157,13 +157,18 @@ fi
 
 if command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1; then
   ok "Stunnel tooling" "installed"
-  if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
-    if systemctl is-active --quiet stunnel4; then
-      ok "Stealth TLS/Stunnel" "active"
-    elif grep -Eq "^[[:space:]]*ENABLED[[:space:]]*=[[:space:]]*1[[:space:]]*$" /etc/default/stunnel4 2>/dev/null; then
-      warn "Stealth TLS/Stunnel" "optional config is ENABLED=1 but service is inactive; core VPNs are unaffected"
+  if [[ -f /etc/makia-vps-manager/stunnel-openvpn.conf ]]; then
+    if systemctl is-active --quiet makia-stealth; then
+      STEALTH_PORT="$(awk -F: '/^[[:space:]]*accept[[:space:]]*=/{gsub(/[[:space:]]/,"",$NF); print $NF; exit}' /etc/makia-vps-manager/stunnel-openvpn.conf 2>/dev/null || true)"
+      ok "Stealth TLS/Stunnel" "Makia service active${STEALTH_PORT:+ on TCP/$STEALTH_PORT}"
     else
-      warn "Stealth TLS/Stunnel" "optional config retained but service is disabled/inactive"
+      fail "Stealth TLS/Stunnel" "Makia config exists but makia-stealth is inactive; use Configure / Repair Stealth"
+    fi
+  elif [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+    if systemctl is-active --quiet stunnel4; then
+      warn "Stealth TLS/Stunnel" "legacy stunnel4 runtime active; Configure / Repair will migrate it to makia-stealth"
+    else
+      warn "Stealth TLS/Stunnel" "legacy Makia config retained but inactive; Configure / Repair will migrate it"
     fi
   else
     warn "Stealth TLS/Stunnel" "not configured"
