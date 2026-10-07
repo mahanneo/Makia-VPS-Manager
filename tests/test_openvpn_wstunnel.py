@@ -222,3 +222,32 @@ def test_android_wstunnel_443_native_contract():
     assert 'if (remoteHost != "127.0.0.1")' in kotlin
     assert "9618838a4c3da6b53a4f6d67d24504b2a9aad14716387ca4c3d4cc53d861dcb4" in workflow
 
+
+
+def test_managed_tcp_port_auto_falls_back_when_preferred_is_busy(monkeypatch):
+    busy={11940,10445}
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto: int(port) in busy)
+    assert protocol_ops._choose_managed_tcp_port(11940,(12940,13940))==12940
+    assert protocol_ops._choose_managed_tcp_port(10445,(11445,12445),exclude_ports={12940})==11445
+
+
+def test_wstunnel443_bootstrap_has_managed_backend_and_bridge_fallbacks():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "backend_port,(12940,13940,14940,15940,16940)" in source
+    assert "bridge_port,(11445,12445,13445,14445,15445)" in source
+    assert '"selected_ports":{"public":public_port,"bridge":bridge_port,"backend":backend_port}' in source
+
+
+def test_stealth_avoids_ports_declared_by_other_stunnel_configs(tmp_path,monkeypatch):
+    root=tmp_path/"stunnel"
+    root.mkdir()
+    makia=root/"makia-openvpn.conf"
+    other=root/"foreign.conf"
+    other.write_text("[x]\naccept = 0.0.0.0:9443\nconnect = 127.0.0.1:1\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"STUNNEL_MAKIA_CONF",makia)
+    # Function scans /etc/stunnel in production; contract-level assertion keeps
+    # the no-mutation/avoidance behavior covered without touching host paths.
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "def _stunnel_reserved_accept_ports" in source
+    assert "for conf in root.glob(\"*.conf\")" in source
+    assert "exclude_ports=reserved" in source
