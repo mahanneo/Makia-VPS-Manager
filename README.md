@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.5.1</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.6.0</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.5.1 UAT](docs/UAT-1.5.1.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.0 UAT](docs/UAT-1.6.0.md)**
 
 ---
 
@@ -45,13 +45,14 @@ These are **starting presets, not a connectivity guarantee**. ISP filtering, mob
 | Xray / V2Ray | ✅ | share link, QR, subscription, client page | quota, expiry, IP policy, renew, diagnostics |
 | WireGuard | ✅ | native config, QR, client page | enable/disable, reissue, diagnostics |
 | OpenVPN | ✅ | .ovpn download, client page | revoke, transport/runtime diagnostics |
+| WStunnel 443 / OpenVPN WSS | ✅ | WStunnel + OVPN package, Client Platform, Windows Direct Connect | isolated certificate revoke, runtime/route diagnostics |
 | Outline | ✅ | real `ss://` key, QR, client page, protected ZIP | quota, expiry, renew/reissue, traffic, diagnostics, revoke |
 
 Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 where supported by the bundled Xray Core/runtime contract. Advanced Xray configuration is validated before apply and uses rollback on failure.
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## Makia Client 1.5.1
+## Makia Client 1.6.0
 
 ### Pure Browser Gateway
 
@@ -59,7 +60,7 @@ Chrome/Edge users can connect without installing any Windows executable. The Man
 
 End users can open the same authenticated Client URL on Android, iPhone/iPad, Windows or macOS. The portal shows only the signed-in account's quota, expiry, device state and assigned access profiles.
 
-- **Windows:** one-click Full Device Direct Connect through the Makia Client Connector.
+- **Windows:** one-click Full Device Direct Connect through the Makia Client Connector, including OpenVPN-over-WStunnel/TLS on HTTPS TCP/443 when that mode is configured.
 - **Chrome / Edge:** Makia Browser VPN connects directly to the authenticated TLS Browser Gateway on the VPS; no Windows EXE, Registry entry or Native Messaging host is required.
 - **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; the CI artifact is explicitly UAT/debug-signed until a persistent private release-signing key is configured.
 - **iPhone / iPad:** install the PWA from Safari with Add to Home Screen and use the platform-aware Open/Import flow. Native in-app iOS tunnelling is not claimed until an Apple-signed Network Extension build completes real-device UAT.
@@ -208,7 +209,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.5.1.md](docs/UAT-1.5.1.md)** for the current release gate and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
+See **[docs/UAT-1.6.0.md](docs/UAT-1.6.0.md)** for the current release gate and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
 
 ## Runtime layout
 
