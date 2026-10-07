@@ -81,6 +81,10 @@ def register_client_admin(app,require_user,require_mutation,require_local_admin,
             ovpn_policy=protocol_ops.openvpn_policy_status()
         except Exception as exc:
             ovpn_policy={"installed":False,"configured":False,"ready":False,"conflict":str(exc)[:300]}
+        try:
+            wstunnel_policy=protocol_ops.openvpn_wstunnel_policy_status()
+        except Exception as exc:
+            wstunnel_policy={"configured":False,"ready":False,"socket":False,"error":str(exc)[:300]}
         return {
             "enabled":enabled,
             "enable_source":source,
@@ -105,6 +109,15 @@ def register_client_admin(app,require_user,require_mutation,require_local_admin,
                     "policy_ready":bool(ovpn_policy.get("ready")),
                     "policy_configured":bool(ovpn_policy.get("configured")),
                     "policy_conflict":str(ovpn_policy.get("conflict") or ""),
+                },
+                "openvpn_wstunnel":{
+                    "expiry":bool(wstunnel_policy.get("ready")),
+                    "quota":bool(wstunnel_policy.get("ready")),
+                    "device":True,
+                    "concurrent":bool(wstunnel_policy.get("ready")),
+                    "mode":"hard" if wstunnel_policy.get("ready") else "setup_required",
+                    "policy_ready":bool(wstunnel_policy.get("ready")),
+                    "policy_configured":bool(wstunnel_policy.get("configured")),
                 },
             },
             "openvpn_policy":ovpn_policy,

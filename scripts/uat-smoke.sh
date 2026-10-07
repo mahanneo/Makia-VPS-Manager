@@ -297,6 +297,7 @@ fi
 if [[ -f /etc/makia-vps-manager/openvpn-wstunnel.env ]]; then
   systemctl is-active --quiet makia-openvpn-wstunnel && ok "OpenVPN WStunnel 443 runtime active" || bad "OpenVPN WStunnel 443 transport inactive"
   systemctl is-active --quiet openvpn-server@makia-ws && ok "OpenVPN WStunnel backend active" || bad "OpenVPN WStunnel backend inactive"
+  [[ -S /run/makia-openvpn-wstunnel-management.sock ]] && ok "OpenVPN WStunnel policy socket ready" || bad "OpenVPN WStunnel policy socket missing"
   grep -q "BEGIN MAKIA OPENVPN WSTUNNEL" /etc/nginx/sites-available/makia-vps-manager 2>/dev/null && ok "OpenVPN WStunnel Nginx route present" || bad "OpenVPN WStunnel Nginx route missing"
 else
   ok "OpenVPN WStunnel 443 not configured"

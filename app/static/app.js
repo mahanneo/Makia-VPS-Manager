@@ -424,6 +424,7 @@ function wizardProtocolReady(kind){
   if(kind==='xray')return Boolean(s.xray?.installed);
   if(kind==='wireguard')return Boolean(s.wireguard?.installed&&s.wireguard?.config);
   if(kind==='openvpn')return Boolean(s.openvpn?.installed&&s.openvpn?.config);
+  if(kind==='openvpn_wstunnel')return Boolean(s.openvpn_wstunnel?.ready);
   if(kind==='outline')return Boolean(s.outline?.installed&&s.outline?.api_ok);
   return false;
 }
@@ -438,11 +439,14 @@ function renderProvisionWizard(){
       ['xray','Xray / V2Ray','پروفایل‌های چندگانه و مدیریت پیشرفته','VLESS · VMess · Trojan · Hysteria2'],
       ['wireguard','WireGuard','تونل Native سریع','Peer · QR · Handshake · Traffic'],
       ['openvpn','OpenVPN','PKI با TCP/UDP قابل تنظیم','Certificate · OVPN · TCP/UDP'],
+      ['openvpn_wstunnel','WStunnel 443','OpenVPN داخل WebSocket/TLS','HTTPS/443 · Restricted networks'],
       ['outline','Outline','Shadowsocks مدیریت‌شده','Access Key · QR · Data Limit']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
-      return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':'protocol-setup')+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+protocolGlyph(x[0])+'</span><div class="protocol-card-copy"><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
+      const setupAction=x[0]==='openvpn_wstunnel'?'openvpn-wstunnel-setup':'protocol-setup';
+      const glyph=x[0]==='openvpn_wstunnel'?'wstunnel':x[0];
+      return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':setupAction)+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+protocolGlyph(glyph)+'</span><div class="protocol-card-copy"><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
     }).join('')+'</div>';
   }else if(s.step===2){
     body=wizardIdentityFields(s);
@@ -451,7 +455,7 @@ function renderProvisionWizard(){
   }else{
     body=wizardReview(s);
   }
-  const protocolLabel=s.protocol?({ssh:'SSH',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',outline:'Outline'}[s.protocol]||s.protocol):'انتخاب پروتکل';
+  const protocolLabel=s.protocol?({ssh:'SSH',xray:'Xray / V2Ray',wireguard:'WireGuard',openvpn:'OpenVPN',openvpn_wstunnel:'WStunnel 443',outline:'Outline'}[s.protocol]||s.protocol):'انتخاب پروتکل';
   const footer=s.step===1
     ? '<button class="ghost" data-action="modal-close">انصراف</button>'
     : '<button class="ghost" data-action="wizard-prev">مرحله قبل</button>'+(s.step<4?'<button class="primary" data-action="wizard-next">ادامه ←</button>':'<button class="primary action-lg" data-action="wizard-create">ساخت دسترسی</button>');
@@ -480,6 +484,11 @@ function wizardIdentityFields(s){
     wizardEndpointFields(s),
     '<label>Port<input id="wizPort" type="number" min="1" max="65535" value="'+Number(s.port)+'"></label></div>',
     '<div class="pro-info-card"><div><b>Preset هوشمند</b><span>'+htmlEsc(s.xrayProtocol.toUpperCase())+' · '+htmlEsc(s.transport.toUpperCase())+' · '+htmlEsc(s.security.toUpperCase())+'</span></div><small>در مرحله بعد در صورت نیاز Transport، TLS/REALITY، حجم و IP Limit را تغییر بده.</small></div>'
+  ].join('');
+  if(s.protocol==='openvpn_wstunnel') return [
+    '<div class="wizard-section-title"><span class="pro-kicker">WSTUNNEL 443</span><h4>دسترسی مقاوم روی HTTPS/443</h4><p>برای این کاربر Certificate مستقل OpenVPN ساخته می‌شود و Transport از مسیر WSS روی Nginx/443 عبور می‌کند.</p></div>',
+    '<div class="wizard-form two"><label>نام Client<input id="wizName" value="'+htmlEsc(s.name)+'"></label><label>Public endpoint<input value="'+htmlEsc(s.endpoint)+'" readonly></label></div>',
+    '<div class="wizard-note"><b>Policy owner</b><span>پس از ساخت، این Artifact را به Client Account همان کاربر Bind کن تا Expiry، Quota، Device Limit و Concurrent Limit روی همان Subscription اعمال شوند.</span></div>'
   ].join('');
   if(s.protocol==='wireguard') return [
     '<div class="wizard-section-title"><span class="pro-kicker">WIREGUARD PEER</span><h4>Peer جدید</h4><p>برای هر دستگاه یک Peer مستقل بساز؛ تنظیمات شبکه پیش‌فرض برای اکثر کلاینت‌ها کافی است.</p></div>',
@@ -573,6 +582,7 @@ function wizardPolicyFields(s){
       '<div class="toolbar"><button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button><button class="ghost" data-action="xray-advanced">Advanced JSON — همه فیلدهای Core</button></div>'
     ].join('');
   }
+  if(s.protocol==='openvpn_wstunnel') return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>WStunnel 443 آماده است</h4><p>Certificate و بسته WStunnel/OpenVPN ساخته می‌شود. Policyهای کاربر از Client Platform و Binding همان Artifact اعمال می‌شوند.</p></div>';
   const labels={wireguard:'WireGuard',openvpn:'OpenVPN'};
   return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>'+htmlEsc(labels[s.protocol]||s.protocol)+' آماده است</h4><p>تنظیمات سرور و Client آماده‌اند. مرحله بعد خلاصه نهایی و بسته تحویل را نشان می‌دهد.</p></div>';
 }
@@ -671,6 +681,9 @@ async function createProvisionedAccess(){
       kind='xray';key=String(r.client_id);
     }else if(s.protocol==='wireguard'){
       r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,dns:s.dns,mtu:s.wgMtu,keepalive:s.wgKeepalive,allowed_ips:s.wgAllowedIps})});key=s.name;
+    }else if(s.protocol==='openvpn_wstunnel'){
+      r=await api('/api/protocols/openvpn/wstunnel/clients',{method:'POST',body:JSON.stringify({name:s.name,local_port:11941})});
+      kind='openvpn_wstunnel';key=s.name;
     }else{
       r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
     }

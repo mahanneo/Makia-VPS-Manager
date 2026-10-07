@@ -172,3 +172,21 @@ def test_management_client_kill_uses_cid_and_selected_socket(tmp_path,monkeypatc
     assert out["disconnected"] is True
     assert seen["command"]=="client-kill 17"
     assert seen["socket"]==socket_path
+
+
+def test_nginx_wstunnel_route_has_abuse_guards():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "limit_req_zone $binary_remote_addr zone=makia_wstunnel_req:10m rate=30r/s;" in source
+    assert "limit_conn_zone $binary_remote_addr zone=makia_wstunnel_conn:10m;" in source
+    assert "limit_req zone=makia_wstunnel_req burst=60 nodelay;" in source
+    assert "limit_conn makia_wstunnel_conn 128;" in source
+    assert "proxy_connect_timeout 5s;" in source
+
+
+def test_access_wizard_offers_wstunnel_443_without_parallel_browser_gateway():
+    source=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert "['openvpn_wstunnel','WStunnel 443'" in source
+    assert "wizardProtocolReady(kind)" in source
+    assert "s.openvpn_wstunnel?.ready" in source
+    assert "/api/protocols/openvpn/wstunnel/clients" in source
+    assert "Policy owner" in source

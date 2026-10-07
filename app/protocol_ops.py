@@ -35,6 +35,8 @@ OVPN_WSTUNNEL_BACKEND_SERVICE="openvpn-server@makia-ws"
 OVPN_WSTUNNEL_NGINX=Path("/etc/nginx/sites-available/makia-vps-manager")
 OVPN_WSTUNNEL_NGINX_BEGIN="# BEGIN MAKIA OPENVPN WSTUNNEL"
 OVPN_WSTUNNEL_NGINX_END="# END MAKIA OPENVPN WSTUNNEL"
+OVPN_WSTUNNEL_LIMITS_BEGIN="# BEGIN MAKIA OPENVPN WSTUNNEL LIMITS"
+OVPN_WSTUNNEL_LIMITS_END="# END MAKIA OPENVPN WSTUNNEL LIMITS"
 OVPN_TCP_FALLBACK_CONF=OVPN_DIR/"server/makia-tcp.conf"
 OVPN_TCP_FALLBACK_SERVICE="openvpn-server@makia-tcp"
 OVPN_CLIENT_POLICY_DIR=OVPN_DIR/"server/makia-client-policy"
@@ -950,6 +952,18 @@ def _configure_openvpn_wstunnel_nginx(path_prefix,bridge_port):
         "",
         original,
     )
+    cleaned=re.sub(
+        rf"(?ms)^[ \t]*{re.escape(OVPN_WSTUNNEL_LIMITS_BEGIN)}.*?{re.escape(OVPN_WSTUNNEL_LIMITS_END)}[ \t]*\n?",
+        "",
+        cleaned,
+    )
+    limits=(
+        OVPN_WSTUNNEL_LIMITS_BEGIN+"\n"
+        "limit_req_zone $binary_remote_addr zone=makia_wstunnel_req:10m rate=30r/s;\n"
+        "limit_conn_zone $binary_remote_addr zone=makia_wstunnel_conn:10m;\n"
+        +OVPN_WSTUNNEL_LIMITS_END+"\n"
+    )
+    cleaned=limits+cleaned.lstrip()
     start,end=_nginx_tls_server_block(cleaned)
     location=(
         "\n    "+OVPN_WSTUNNEL_NGINX_BEGIN+"\n"
@@ -962,6 +976,9 @@ def _configure_openvpn_wstunnel_nginx(path_prefix,bridge_port):
         "        proxy_set_header X-Real-IP $remote_addr;\n"
         "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n"
         "        proxy_set_header X-Forwarded-Proto $scheme;\n"
+        "        limit_req zone=makia_wstunnel_req burst=60 nodelay;\n"
+        "        limit_conn makia_wstunnel_conn 128;\n"
+        "        proxy_connect_timeout 5s;\n"
         "        proxy_read_timeout 3600s;\n"
         "        proxy_send_timeout 3600s;\n"
         "        proxy_buffering off;\n"

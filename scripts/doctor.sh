@@ -194,6 +194,7 @@ fi
 if [[ -f /etc/makia-vps-manager/openvpn-wstunnel.env ]]; then
   check_service makia-openvpn-wstunnel "OpenVPN WStunnel 443" yes
   check_service openvpn-server@makia-ws "OpenVPN WStunnel backend" yes
+  if [[ -S /run/makia-openvpn-wstunnel-management.sock ]]; then ok "OpenVPN WStunnel policy socket" "root-only Unix management socket ready"; else fail "OpenVPN WStunnel policy socket" "management socket missing"; fi
   if grep -q "BEGIN MAKIA OPENVPN WSTUNNEL" /etc/nginx/sites-available/makia-vps-manager 2>/dev/null; then
     ok "OpenVPN WStunnel Nginx route" "HTTPS/443 shared path active"
   else
