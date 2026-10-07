@@ -37,6 +37,10 @@ Nginx remains the sole public listener on TCP/443. The new mode does not try to 
 - The dedicated OpenVPN backend listens only on `127.0.0.1`.
 - OpenVPN still performs its own certificate authentication and `tls-crypt`.
 - Each Makia WStunnel user receives a separate certificate identity prefixed internally with `mwst-`.
+- A root-only Unix OpenVPN management socket is used for accounting, policy disconnects and concurrent-session enforcement; it is not exposed over TCP.
+- Client Platform account enable/disable, expiry and quota are hard-enforced on the WStunnel OpenVPN identity when the artifact is bound to that account.
+- Traffic is sampled per OpenVPN session and aggregated into the Client account, avoiding counter-reset errors when concurrent sessions reconnect independently.
+- Nginx applies per-IP request and concurrent-connection limits to the secret WStunnel path.
 - Revoking a WStunnel user does not revoke an ordinary OpenVPN profile with the same display name.
 - No raw OpenVPN WStunnel backend port is opened in UFW.
 
@@ -76,6 +80,8 @@ Makia stores an encrypted `openvpn_wstunnel` delivery artifact containing:
 - WStunnel client command;
 - connection guide;
 - structured transport metadata for Makia Windows Direct Connect.
+
+Bind the artifact to the intended **Client Platform account** to apply that account's enable/disable state, expiry, traffic quota and concurrent-session policy. The Client Platform device limit protects authenticated portal/native ticket registration. A downloaded static OVPN/WStunnel package is still a portable credential; strict hardware binding would require issuing a separate certificate per physical device and is not claimed in 1.6.0.
 
 The artifact can be bound to a Client Platform account.
 

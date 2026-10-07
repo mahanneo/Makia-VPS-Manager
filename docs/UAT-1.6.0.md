@@ -9,6 +9,10 @@ Release focus: **OpenVPN over WebSocket/TLS on HTTPS TCP/443**, while preserving
 - Nginx remains the only public TCP/443 listener. OpenVPN WStunnel shares HTTPS/443 through a managed secret WebSocket path; it does not bind a second public 443 socket.
 - The WStunnel backend is loopback-only and destination-restricted to the dedicated loopback OpenVPN backend.
 - Every WStunnel OpenVPN user receives an isolated certificate identity that can be revoked without revoking a same-named ordinary OpenVPN profile.
+- WStunnel Client Platform bindings enforce account enable/disable, expiry and quota on the dedicated OpenVPN backend; concurrent sessions are enforced through the root-only Unix OpenVPN management socket.
+- WStunnel traffic accounting tracks each concurrent OpenVPN session independently before aggregating usage, so one reconnect/disconnect cannot reset another session's counter.
+- Client Platform device/session registration limits remain part of the authenticated Makia client flow; an exported static OVPN package is a credential and must not be described as hardware-bound.
+- The public WStunnel path has per-IP Nginx request/connection abuse guards in addition to the unguessable path and per-user OpenVPN certificate.
 - Full Migration must preserve the Nginx route, WStunnel env, dedicated OpenVPN backend and systemd unit.
 
 ## Repository gates
@@ -21,6 +25,8 @@ Required on the exact candidate SHA:
 - Ubuntu 22.04 Clean Install: PASS
 - Ubuntu 24.04 Clean Install: PASS
 - Upgrade from 1.3.0: PASS
+- Upgrade from exact stable 1.5.1 (`13c45ed90e32db39dc2dd10e0a3964fb193fa9d6`): PASS
+- Existing-user/identity preservation across the 1.5.1 upgrade: PASS
 - Windows Full Device Connector Build: PASS
 - Android Connector regression Build: PASS
 - Browser Extension Build: PASS
@@ -43,12 +49,14 @@ Before enabling the mode on a production VPS:
    - `makia-openvpn-wstunnel` active;
    - `openvpn-server@makia-ws` active;
    - loopback bridge/backend listeners are not public.
-8. Create one disposable WStunnel user.
-9. Windows: install the current Makia Windows package plus OpenVPN runtime, then use Direct Connect.
-10. Verify public IP, DNS and reconnect over a restrictive network.
-11. Revoke the disposable WStunnel access and verify reconnect fails.
-12. Verify ordinary OpenVPN/WireGuard/Xray/Outline users remain unchanged.
-13. Create a Full Migration bundle and perform restore proof on a disposable replacement host when practical.
+8. Create one disposable Client Platform account and one WStunnel access, then bind that artifact to the account.
+9. Set a small test quota, short expiry window and concurrent limit; confirm usage appears and excess concurrent sessions are disconnected.
+10. Disable the account and verify the active WStunnel session is disconnected and reconnect is denied; re-enable it and verify access returns without issuing a new certificate.
+11. Windows: install the current Makia Windows package plus OpenVPN runtime, then use Direct Connect.
+12. Verify public IP, DNS and reconnect over a restrictive network.
+13. Revoke the disposable WStunnel access and verify reconnect fails permanently.
+14. Verify ordinary OpenVPN/WireGuard/Xray/Outline users remain unchanged.
+15. Create a Full Migration bundle and perform restore proof on a disposable replacement host when practical.
 
 ## Mobile scope
 

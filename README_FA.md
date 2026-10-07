@@ -45,7 +45,7 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 | Xray / V2Ray | ✅ | Share Link، QR، Subscription، Portal | حجم، انقضا، IP Policy، تمدید، Diagnostics |
 | WireGuard | ✅ | Config، QR، Portal | فعال/غیرفعال، Reissue، Diagnostics |
 | OpenVPN | ✅ | فایل OVPN، Portal | Revoke، Transport/Runtime Diagnostics |
-| WStunnel 443 / OpenVPN WSS | ✅ | بسته WStunnel + OVPN، Client Platform، اتصال مستقیم Windows | Revoke مستقل Certificate، Diagnostics مسیر و Runtime |
+| WStunnel 443 / OpenVPN WSS | ✅ | بسته WStunnel + OVPN، Client Platform، اتصال مستقیم Windows | انقضا/حجم/غیرفعال‌سازی حساب، محدودیت اتصال همزمان، Accounting ترافیک، Revoke مستقل Certificate، Diagnostics مسیر و Runtime |
 | Outline | ✅ | Access Key واقعی `ss://`، QR، Portal، ZIP رمزدار | حجم، انقضا، تمدید، Reissue، Traffic، Diagnostics، حذف |
 
 در Xray مسیرهای Guided برای پروتکل‌های پشتیبانی‌شده مانند VLESS، VMess، Trojan، Shadowsocks و Hysteria2 وجود دارند و تنظیمات Advanced قبل از Apply توسط Core اعتبارسنجی می‌شوند.

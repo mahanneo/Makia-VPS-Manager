@@ -45,7 +45,7 @@ These are **starting presets, not a connectivity guarantee**. ISP filtering, mob
 | Xray / V2Ray | ✅ | share link, QR, subscription, client page | quota, expiry, IP policy, renew, diagnostics |
 | WireGuard | ✅ | native config, QR, client page | enable/disable, reissue, diagnostics |
 | OpenVPN | ✅ | .ovpn download, client page | revoke, transport/runtime diagnostics |
-| WStunnel 443 / OpenVPN WSS | ✅ | WStunnel + OVPN package, Client Platform, Windows Direct Connect | isolated certificate revoke, runtime/route diagnostics |
+| WStunnel 443 / OpenVPN WSS | ✅ | WStunnel + OVPN package, Client Platform, Windows Direct Connect | account expiry/quota/disable, concurrent-session enforcement, traffic accounting, isolated certificate revoke, runtime/route diagnostics |
 | Outline | ✅ | real `ss://` key, QR, client page, protected ZIP | quota, expiry, renew/reissue, traffic, diagnostics, revoke |
 
 Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 where supported by the bundled Xray Core/runtime contract. Advanced Xray configuration is validated before apply and uses rollback on failure.
