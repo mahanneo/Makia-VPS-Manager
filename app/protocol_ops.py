@@ -784,6 +784,7 @@ def bootstrap_stealth(domain, listen_port=9443):
         raise ProtocolError("Stunnel tooling is not installed; run sudo makia-upgrade first")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     requested_port=_validate_port(listen_port)
+    original_requested_port=requested_port
     existing=stealth_status()
     current_port=int(existing.get("port") or 0)
     reserved=_stunnel_reserved_accept_ports(STUNNEL_MAKIA_CONF)
@@ -881,7 +882,7 @@ def bootstrap_stealth(domain, listen_port=9443):
     )
     return {
         "ok":True,"status":status,"domain":domain,
-        "requested_port":int(_validate_port(listen_port)),
+        "requested_port":original_requested_port,
         "selected_port":listen_port,
         "client_stunnel_config":client,
         "openvpn_local_endpoint":"127.0.0.1:11940",
