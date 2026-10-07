@@ -99,9 +99,9 @@ on_exit(){
     if [[ "${OVPN_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl restart openvpn-server@server 2>/dev/null
     fi
-    if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl enable --now stunnel4 2>/dev/null
-      systemctl restart stunnel4 2>/dev/null
+    if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 && -n "${STUNNEL_RUNTIME_SERVICE:-}" ]]; then
+      systemctl enable --now "$STUNNEL_RUNTIME_SERVICE" 2>/dev/null
+      systemctl restart "$STUNNEL_RUNTIME_SERVICE" 2>/dev/null
     fi
     if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl enable --now makia-wstunnel 2>/dev/null
@@ -186,8 +186,14 @@ fi
 
 STUNNEL_WAS_CONFIGURED=0
 STUNNEL_WAS_ACTIVE=0
-if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+STUNNEL_RUNTIME_SERVICE=""
+if [[ -f /etc/makia-vps-manager/stunnel-openvpn.conf ]]; then
   STUNNEL_WAS_CONFIGURED=1
+  STUNNEL_RUNTIME_SERVICE="makia-stealth"
+  systemctl is-active --quiet makia-stealth 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
+elif [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
+  STUNNEL_WAS_CONFIGURED=1
+  STUNNEL_RUNTIME_SERVICE="stunnel4"
   systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
 fi
 
@@ -249,6 +255,7 @@ for item in \
   "etc/systemd/system/makia-metrics-sampler.service" \
   "etc/systemd/system/makia-protocol-traffic.service" \
   "etc/systemd/system/makia-browser-gateway.service" \
+  "etc/systemd/system/makia-stealth.service" \
   "etc/systemd/system/makia-scheduled-backup.service" \
   "etc/systemd/system/makia-scheduled-backup.timer" \
   "etc/systemd/system/makia-ops-monitor.service" \
@@ -280,6 +287,7 @@ for item in \
   "etc/wireguard/wg0.conf" \
   "etc/openvpn/server" \
   "etc/stunnel/makia-openvpn.conf" \
+  "etc/makia-vps-manager/stunnel-openvpn.conf" \
   "etc/default/stunnel4" \
   "etc/ipsec.conf" \
   "etc/ipsec.secrets" \
@@ -454,6 +462,7 @@ install -m 0644 "$SRC/systemd/makia-policy-enforcer.service" /etc/systemd/system
 install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system/makia-metrics-sampler.service
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
 install -m 0644 "$SRC/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
+install -m 0644 "$SRC/systemd/makia-stealth.service" /etc/systemd/system/makia-stealth.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-openvpn-wstunnel.service" /etc/systemd/system/makia-openvpn-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
@@ -717,7 +726,7 @@ else
     echo "WireGuard was active before update but is no longer active; updater will roll back." >&2
     exit 7
   fi
-  if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet stunnel4; then
+  if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 && -n "$STUNNEL_RUNTIME_SERVICE" ]] && ! systemctl is-active --quiet "$STUNNEL_RUNTIME_SERVICE"; then
     echo "Stealth/Stunnel was active before update but is no longer active; updater will roll back." >&2
     exit 9
   fi
