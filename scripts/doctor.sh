@@ -146,7 +146,7 @@ if command -v openvpn >/dev/null 2>&1; then
     if [[ -n "$OVPN_PORT" ]] && ss -H -lntu 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
       ok "OpenVPN runtime" "active + listener :$OVPN_PORT"
     else
-      fail "OpenVPN runtime" "service active but listener missing"
+      fail "OpenVPN runtime" "primary listener missing on ${OVPN_PORT:-unknown}; this affects classic OpenVPN only and does not block WStunnel 443 (separate makia-ws backend)"
     fi
   else
     fail "OpenVPN runtime" "server config/service missing"
