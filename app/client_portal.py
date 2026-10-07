@@ -74,7 +74,13 @@ def _default_device_label(platform):
 def _android_connector_url():
     raw=str(os.getenv("MAKIA_ANDROID_CONNECTOR_URL","")).strip()
     if not raw:
-        return ""
+        # Stable releases publish the signed Android connector as a GitHub
+        # release asset. This keeps the Client PWA download button usable
+        # after a normal panel upgrade without an extra owner-side setting.
+        raw=(
+            "https://github.com/mahanneo/Makia-VPS-Manager/releases/download/"
+            f"v{VERSION}/Makia-Android-Connector-{VERSION}.apk"
+        )
     parsed=urllib.parse.urlparse(raw)
     if parsed.scheme!="https" or not parsed.netloc:
         return ""
