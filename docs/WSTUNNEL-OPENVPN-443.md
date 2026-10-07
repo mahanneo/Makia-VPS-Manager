@@ -2,9 +2,9 @@
 
 ## What it is
 
-Makia 1.6.x provides two WStunnel modes; the current stable line is 1.6.1:
+Makia 1.6.x provides two WStunnel modes; the current stable line is 1.6.2:
 
-- **WStunnel 443 / OpenVPN over WebSocket/TLS** — introduced in 1.6.0 and stabilized in 1.6.1.
+- **WStunnel 443 / OpenVPN over WebSocket/TLS** — introduced in 1.6.0 and stabilized in 1.6.2.
 - **WStunnel WG / WireGuard over WSS** — the older Makia mode, retained separately.
 
 The new mode follows the same transport idea commonly called **OpenVPN over WebSocket**: OpenVPN traffic is carried inside a WebSocket/TLS connection that looks like ordinary HTTPS transport on TCP/443. It is not a claim of compatibility with any third-party proprietary client.
@@ -81,7 +81,7 @@ Makia stores an encrypted `openvpn_wstunnel` delivery artifact containing:
 - connection guide;
 - structured transport metadata for Makia Windows Direct Connect.
 
-Bind the artifact to the intended **Client Platform account** to apply that account's enable/disable state, expiry, traffic quota and concurrent-session policy. The Client Platform device limit protects authenticated portal/native ticket registration. A downloaded static OVPN/WStunnel package is still a portable credential; strict hardware binding would require issuing a separate certificate per physical device and is not claimed in 1.6.1.
+Bind the artifact to the intended **Client Platform account** to apply that account's enable/disable state, expiry, traffic quota and concurrent-session policy. The Client Platform device limit protects authenticated portal/native ticket registration. A downloaded static OVPN/WStunnel package is still a portable credential; strict hardware binding would require issuing a separate certificate per physical device and is not claimed in 1.6.2.
 
 The artifact can be bound to a Client Platform account.
 
@@ -89,7 +89,7 @@ The artifact can be bound to a Client Platform account.
 
 Requirements:
 
-- Makia Windows Full Device Connector 1.6.1;
+- Makia Windows Full Device Connector 1.6.2;
 - OpenVPN executable/client runtime installed on Windows.
 
 The Makia Windows package bundles the pinned WStunnel runtime. Direct Connect:
@@ -106,7 +106,7 @@ Run the `wstunnel-client-command.txt` command first, then import/open the delive
 
 ## Android / iOS
 
-Makia 1.6.1 does not claim native Direct Connect for this transport on Android/iOS. The Client Portal can deliver the package, but automatic mobile integration requires an OpenVPN core plus WStunnel lifecycle integration in the native mobile client.
+Makia 1.6.2 does not claim native Direct Connect for this transport on Android/iOS. The Client Portal can deliver the package, but automatic mobile integration requires an OpenVPN core plus WStunnel lifecycle integration in the native mobile client.
 
 ## Diagnostics
 
