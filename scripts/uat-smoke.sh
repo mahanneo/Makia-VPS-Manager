@@ -220,10 +220,14 @@ if [[ -f /etc/openvpn/server/server.conf ]]; then
     ovpn_bad "OpenVPN runtime inactive"
     journalctl -u openvpn-server@server -n 12 --no-pager || true
   fi
-  if [[ -n "$OVPN_PORT" ]] && ss -H -lntu 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
-    ok "OpenVPN listener on port $OVPN_PORT"
+  OVPN_SS_FLAG="-lun"
+  [[ "$OVPN_PROTO" == tcp* ]] && OVPN_SS_FLAG="-ltn"
+  if [[ -n "$OVPN_PORT" ]] && ss -H "$OVPN_SS_FLAG" 2>/dev/null | grep -Eq ":${OVPN_PORT}([[:space:]]|$)"; then
+    ok "OpenVPN listener on $OVPN_PROTO/$OVPN_PORT"
+  elif [[ "${MAKIA_UAT_OPENVPN_LISTENER_SOFTFAIL:-0}" == "1" ]]; then
+    warn "OpenVPN primary listener missing on $OVPN_PROTO/$OVPN_PORT (pre-existing state retained; WStunnel 443 uses its separate makia-ws backend)"
   else
-    ovpn_bad "OpenVPN listener missing"
+    ovpn_bad "OpenVPN listener missing on $OVPN_PROTO/$OVPN_PORT"
   fi
 else
   ovpn_bad "OpenVPN server config missing"
