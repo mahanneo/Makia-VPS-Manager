@@ -328,13 +328,13 @@ jobs:
           grep -q 'v0.26 Protocol graphics' app/static/app.css
           grep -q 'makia-shell-v160' app/static/sw.js
 
-      - name: Pure Browser Gateway 1.6.0 contract
+      - name: Pure Browser Gateway 1.6.1 contract
         run: |
           test -f app/browser_gateway.py
           test -f systemd/makia-browser-gateway.service
           test -f tests/browser_gateway_smoke.sh
-          test -f docs/BROWSER-GATEWAY-1.6.0.md
-          test -f docs/CHROME-WEB-STORE-1.6.0.md
+          test -f docs/BROWSER-GATEWAY-1.6.1.md
+          test -f docs/CHROME-WEB-STORE-1.6.1.md
           grep -q 'makia-browser-gateway.service' scripts/install.sh
           grep -q 'makia-browser-gateway.service' scripts/update.sh
           grep -q 'makia-browser-gateway' scripts/uninstall.sh
