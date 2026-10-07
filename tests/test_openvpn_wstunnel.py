@@ -138,3 +138,37 @@ def test_nginx_wstunnel_block_is_idempotent(tmp_path,monkeypatch):
     protocol_ops._configure_openvpn_wstunnel_nginx("secretprefix123456",10445)
     second=site.read_text(encoding="utf-8")
     assert second.count(protocol_ops.OVPN_WSTUNNEL_NGINX_BEGIN)==1
+
+
+def test_wstunnel_backend_has_dedicated_root_only_management_socket_and_duplicate_cn():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert 'OVPN_WSTUNNEL_MANAGEMENT_SOCKET=Path("/run/makia-openvpn-wstunnel-management.sock")' in source
+    assert 'management {OVPN_WSTUNNEL_MANAGEMENT_SOCKET} unix' in source
+    assert '"management-client-user root\\nmanagement-client-group root\\n"' in source
+    assert '"duplicate-cn\\n"' in source
+
+
+def test_wstunnel_policy_uses_dedicated_management_runtime():
+    source=(ROOT/"app/client_policy.py").read_text(encoding="utf-8")
+    assert "openvpn_wstunnel_management_status()" in source
+    assert 'kind not in {"wireguard","ssh","openvpn","openvpn_wstunnel"}' in source
+    assert "set_openvpn_wstunnel_client_policy_enabled" in source
+    assert "client_policy_wstunnel_concurrent_limit" in source
+    store=(ROOT/"app/client_store.py").read_text(encoding="utf-8")
+    assert '"accounting_supported":kind in {"wireguard","openvpn_wstunnel"}' in store
+    assert '"expiry + quota + concurrent" if kind=="openvpn_wstunnel"' in store
+
+
+def test_management_client_kill_uses_cid_and_selected_socket(tmp_path,monkeypatch):
+    socket_path=tmp_path/"mgmt.sock"
+    socket_path.touch()
+    seen={}
+    def fake(command,until_end=False,socket_path=None):
+        seen["command"]=command
+        seen["socket"]=socket_path
+        return "SUCCESS: client-kill command succeeded"
+    monkeypatch.setattr(protocol_ops,"_openvpn_management_command",fake)
+    out=protocol_ops.openvpn_management_client_kill(17,socket_path)
+    assert out["disconnected"] is True
+    assert seen["command"]=="client-kill 17"
+    assert seen["socket"]==socket_path

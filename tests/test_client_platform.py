@@ -558,3 +558,49 @@ def test_client_pwa_rc_has_cross_platform_install_and_browser_security_contract(
     assert '"lang":"fa"' in portal
     assert '"dir":"rtl"' in portal
     assert '"id":"/client/"' in portal
+
+
+def test_wstunnel_artifact_delivery_respects_account_expiry_and_quota(client_db):
+    account_id=client_store.create_account(
+        "ws-policy","ws-policy-pass-001",quota_bytes=100,expire_at=int(time.time())+3600
+    )
+    payload=access_ops.openvpn_wstunnel_payload(
+        "ws-one","client\nremote 127.0.0.1 11941\n",
+        {
+            "server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop",
+            "local_port":11941,"remote_port":11940,
+        },
+    )
+    artifact_id=artifact_save(
+        "openvpn_wstunnel","ws-one","ws-one","wstunnel-openvpn",payload,
+        {"client_identity":"mwst-ws-one-12345678"},
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    delivered=client_store.artifact_delivery(account_id,artifact_id)
+    assert delivered["engine"]=="openvpn_wstunnel"
+    client_store.add_artifact_counter_sample(account_id,artifact_id,10)
+    client_store.add_artifact_counter_sample(account_id,artifact_id,120)
+    with pytest.raises(PermissionError,match="quota"):
+        client_store.artifact_delivery(account_id,artifact_id)
+
+
+def test_wstunnel_access_list_exposes_accounting_and_hard_policy(client_db):
+    account_id=client_store.create_account(
+        "ws-list","ws-list-pass-001",quota_bytes=5000,device_limit=3,concurrent_device_limit=2
+    )
+    payload=access_ops.openvpn_wstunnel_payload(
+        "ws-list","client\n",
+        {
+            "server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop",
+            "local_port":11941,"remote_port":11940,
+        },
+    )
+    artifact_id=artifact_save(
+        "openvpn_wstunnel","ws-list","ws-list","wstunnel-openvpn",payload,
+        {"client_identity":"mwst-ws-list-12345678"},
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    item=next(x for x in client_store.client_access_list(account_id) if x["engine"]=="openvpn_wstunnel")
+    assert item["accounting_supported"] is True
+    assert item["enforcement_level"]=="hard"
+    assert item["quota_bytes"]==5000

@@ -576,7 +576,7 @@ def main():
             page.locator(".protocol-modes-panel").wait_for()
             page.locator('[data-action="change-protocol"]').click()
             page.locator(".change-protocol-modal").wait_for()
-            assert page.locator(".change-protocol-row").count()==6
+            assert page.locator(".change-protocol-row").count()==7
             switcher_text=page.locator(".change-protocol-modal").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in switcher_text

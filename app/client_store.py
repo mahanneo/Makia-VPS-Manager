@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import secrets
 import time
 from datetime import datetime, timezone
@@ -567,7 +568,8 @@ def list_artifact_bindings(account_id):
     with connect() as con:
         rows=con.execute(
             """SELECT b.id AS binding_id,b.label,b.priority,b.enabled AS binding_enabled,
-                      a.id AS artifact_id,a.kind,a.external_key,a.display_name,a.protocol,a.native_filename
+                      a.id AS artifact_id,a.kind,a.external_key,a.display_name,a.protocol,a.native_filename,
+                      a.metadata_json
                FROM client_artifact_bindings b
                JOIN access_artifacts a ON a.id=b.artifact_id
                WHERE b.account_id=? AND b.enabled=1
@@ -600,6 +602,10 @@ def unbind_access_artifact(account_id,artifact_id):
 
 
 def artifact_delivery(account_id,artifact_id):
+    account=get_account(account_id)
+    ok,reason=account_available(account)
+    if not ok:
+        raise PermissionError("client account "+str(reason))
     allowed=None
     for item in list_artifact_bindings(account_id):
         if int(item["artifact_id"])==int(artifact_id):
@@ -655,25 +661,32 @@ def client_access_list(account_id):
         item["enforcement_text"]="expiry + quota" if engine in {"xray","outline"} else "delivery only"
         item["account_used_bytes"]=protocol_usage_for_account(account_id,item["protocol_client_id"])
         items.append(item)
+    account=get_account(account_id) or {}
+    account_ok,_account_reason=account_available(account)
+    account_quota=int(account.get("quota_bytes") or 0)
     for item in list_artifact_bindings(account_id):
+        kind=str(item.get("kind") or "").lower()
+        used=artifact_usage_bytes(account_id,item["artifact_id"])
+        hard=kind in {"wireguard","ssh","openvpn_wstunnel"}
         items.append({
             "binding_id":item["binding_id"],
             "label":item.get("label") or item.get("display_name") or "",
             "name":item.get("display_name") or "",
             "engine":item.get("kind") or "",
             "protocol":item.get("protocol") or item.get("kind") or "",
-            "available":True,
+            "available":bool(account_ok),
             "source":"artifact",
             "delivery_id":int(item["artifact_id"]),
             "delivery_kind":"artifact",
             "native_filename":item.get("native_filename") or "",
-            "used_bytes":0,
-            "quota_bytes":0,
-            "accounting_supported":str(item.get("kind") or "").lower()=="wireguard",
-            "enforcement_level":"hard" if str(item.get("kind") or "").lower() in {"wireguard","ssh"} else "delivery",
+            "used_bytes":used,
+            "quota_bytes":account_quota,
+            "accounting_supported":kind in {"wireguard","openvpn_wstunnel"},
+            "enforcement_level":"hard" if hard else "delivery",
             "enforcement_text":(
-                "expiry + quota" if str(item.get("kind") or "").lower()=="wireguard"
-                else "expiry + device/session" if str(item.get("kind") or "").lower()=="ssh"
+                "expiry + quota" if kind=="wireguard"
+                else "expiry + device/session" if kind=="ssh"
+                else "expiry + quota + concurrent" if kind=="openvpn_wstunnel"
                 else "delivery only"
             ),
         })
@@ -968,6 +981,23 @@ def reset_account_usage(account_id):
             (ts,account_id),
         )
     return {"ok":True,"used_bytes":0}
+
+
+def artifact_usage_bytes(account_id,artifact_id):
+    with connect() as con:
+        row=con.execute(
+            "SELECT used_bytes FROM client_artifact_usage WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        ).fetchone()
+        return int(row["used_bytes"] or 0) if row else 0
+
+
+def artifact_client_identity(binding):
+    try:
+        meta=json.loads(binding.get("metadata_json") or "{}")
+    except (TypeError,ValueError):
+        meta={}
+    return str(meta.get("client_identity") or binding.get("external_key") or "").strip()
 
 
 def add_artifact_counter_sample(account_id,artifact_id,counter):

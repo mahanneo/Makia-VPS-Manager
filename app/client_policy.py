@@ -148,6 +148,11 @@ def enforce_host_artifacts(now_ts=None):
     except Exception as exc:
         ovpn_runtime={"available":False,"clients":{},"error":str(exc)[:300]}
     ovpn_clients=ovpn_runtime.get("clients") or {}
+    try:
+        ovpn_ws_runtime=protocol_ops.openvpn_wstunnel_management_status()
+    except Exception as exc:
+        ovpn_ws_runtime={"available":False,"clients":{},"error":str(exc)[:300]}
+    ovpn_ws_clients=ovpn_ws_runtime.get("clients") or {}
     result={"checked":0,"samples":0,"suspended":0,"restored":0,"disconnected":0,"errors":0}
 
     # Sample WireGuard/OpenVPN transfer counters before evaluating aggregate quota.
@@ -187,13 +192,31 @@ def enforce_host_artifacts(now_ts=None):
                     result["errors"]+=1
                     audit("system","client_policy_openvpn_sample_failed",name,str(exc)[:300])
 
+    if ovpn_ws_runtime.get("available"):
+        for account_id,account in accounts.items():
+            for binding in client_store.list_artifact_bindings(account_id):
+                if str(binding.get("kind") or "").lower()!="openvpn_wstunnel":
+                    continue
+                identity=client_store.artifact_client_identity(binding)
+                runtime=ovpn_ws_clients.get(identity)
+                if not runtime:
+                    continue
+                try:
+                    client_store.add_artifact_counter_sample(
+                        account_id,binding["artifact_id"],int(runtime.get("total") or 0)
+                    )
+                    result["samples"]+=1
+                except Exception as exc:
+                    result["errors"]+=1
+                    audit("system","client_policy_wstunnel_sample_failed",identity,str(exc)[:300])
+
     # Re-read accounts because quota usage may have changed after runtime sampling.
     accounts={int(a["id"]):a for a in client_store.list_accounts()}
     for account_id,account in accounts.items():
         reason=_reason(account,now_ts)
         for binding in client_store.list_artifact_bindings(account_id):
             kind=str(binding.get("kind") or "").lower()
-            if kind not in {"wireguard","ssh","openvpn"}:
+            if kind not in {"wireguard","ssh","openvpn","openvpn_wstunnel"}:
                 continue
             result["checked"]+=1
             artifact_id=int(binding["artifact_id"])
@@ -279,6 +302,49 @@ def enforce_host_artifacts(now_ts=None):
                             f"account={account['username']}"
                         )
                         result["restored"]+=1
+
+                elif kind=="openvpn_wstunnel":
+                    identity=client_store.artifact_client_identity(binding)
+                    if not identity:
+                        continue
+                    policy_status=protocol_ops.openvpn_wstunnel_policy_status()
+                    if not policy_status.get("configured"):
+                        continue
+                    if reason:
+                        if not managed:
+                            changed=protocol_ops.set_openvpn_wstunnel_client_policy_enabled(identity,False)
+                            client_store.set_artifact_policy_state(
+                                account_id,artifact_id,_managed_reason(reason)
+                            )
+                            audit(
+                                "system","client_policy_wstunnel_suspend",identity,
+                                f"account={account['username']}; reason={reason}"
+                            )
+                            result["suspended"]+=1
+                            if changed.get("disconnected"):
+                                result["disconnected"]+=1
+                    else:
+                        if managed.startswith(CLIENT_REASON_PREFIX):
+                            protocol_ops.set_openvpn_wstunnel_client_policy_enabled(identity,True)
+                            client_store.set_artifact_policy_state(account_id,artifact_id,"")
+                            audit(
+                                "system","client_policy_wstunnel_restore",identity,
+                                f"account={account['username']}"
+                            )
+                            result["restored"]+=1
+                        runtime=ovpn_ws_clients.get(identity) or {}
+                        client_ids=[cid for cid in (runtime.get("client_ids") or []) if str(cid).isdigit()]
+                        limit=max(1,int(account.get("concurrent_device_limit") or 1))
+                        for cid in client_ids[limit:]:
+                            killed=protocol_ops.openvpn_management_client_kill(
+                                int(cid),protocol_ops.OVPN_WSTUNNEL_MANAGEMENT_SOCKET
+                            )
+                            if killed.get("disconnected"):
+                                result["disconnected"]+=1
+                                audit(
+                                    "system","client_policy_wstunnel_concurrent_limit",identity,
+                                    f"account={account['username']}; client_id={cid}; limit={limit}"
+                                )
             except Exception as exc:
                 result["errors"]+=1
                 audit("system","client_policy_artifact_error",name,f"account={account['username']}; kind={kind}; {str(exc)[:300]}")

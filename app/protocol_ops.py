@@ -39,6 +39,7 @@ OVPN_TCP_FALLBACK_CONF=OVPN_DIR/"server/makia-tcp.conf"
 OVPN_TCP_FALLBACK_SERVICE="openvpn-server@makia-tcp"
 OVPN_CLIENT_POLICY_DIR=OVPN_DIR/"server/makia-client-policy"
 OVPN_MANAGEMENT_SOCKET=Path("/run/makia-openvpn-management.sock")
+OVPN_WSTUNNEL_MANAGEMENT_SOCKET=Path("/run/makia-openvpn-wstunnel-management.sock")
 OVPN_POLICY_MARKER="# Managed by Makia Client Platform"
 
 
@@ -1017,6 +1018,9 @@ def ensure_openvpn_wstunnel_backend(port=11940):
             f"ca {server_dir/'ca.crt'}\ncert {server_dir/'server.crt'}\nkey {server_dir/'server.key'}\n"
             f"dh {server_dir/'dh.pem'}\ncrl-verify {server_dir/'crl.pem'}\ntls-crypt {server_dir/'ta.key'}\n"
             f"client-config-dir {OVPN_CLIENT_POLICY_DIR}\n"
+            f"management {OVPN_WSTUNNEL_MANAGEMENT_SOCKET} unix\n"
+            "management-client-user root\nmanagement-client-group root\n"
+            "duplicate-cn\n"
             'push "redirect-gateway def1 bypass-dhcp"\n'
             'push "dhcp-option DNS 1.1.1.1"\npush "dhcp-option DNS 8.8.8.8"\n'
             "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
@@ -2597,13 +2601,14 @@ def enable_openvpn_policy_runtime():
         raise ProtocolError(str(exc)) from exc
 
 
-def _openvpn_management_command(command,until_end=False):
-    if not OVPN_MANAGEMENT_SOCKET.exists():
+def _openvpn_management_command(command,until_end=False,socket_path=None):
+    socket_path=Path(socket_path or OVPN_MANAGEMENT_SOCKET)
+    if not socket_path.exists():
         raise ProtocolError("OpenVPN management socket is not available")
     s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     s.settimeout(3.0)
     try:
-        s.connect(str(OVPN_MANAGEMENT_SOCKET))
+        s.connect(str(socket_path))
         try:s.recv(4096)
         except socket.timeout:pass
         s.sendall((str(command).strip()+"\n").encode("utf-8"))
@@ -2669,19 +2674,31 @@ def openvpn_management_status():
         return {"available":False,"clients":{},"error":str(exc)[:300]}
 
 
-def openvpn_management_kill(name):
+def openvpn_management_kill(name,socket_path=None):
     name=_validate_openvpn_client_name(name)
-    response=_openvpn_management_command(f"kill {name}",until_end=False)
+    response=_openvpn_management_command(f"kill {name}",until_end=False,socket_path=socket_path)
     if "ERROR:" in response:
         raise ProtocolError(response.strip()[:500])
     return {"name":name,"disconnected":"SUCCESS:" in response}
 
 
-def set_openvpn_client_policy_enabled(name,enabled):
+def openvpn_management_client_kill(client_id,socket_path=None):
+    try:
+        client_id=int(client_id)
+    except (TypeError,ValueError):
+        raise ProtocolError("invalid OpenVPN client id")
+    if client_id<0:
+        raise ProtocolError("invalid OpenVPN client id")
+    response=_openvpn_management_command(f"client-kill {client_id}",until_end=False,socket_path=socket_path)
+    if "ERROR:" in response:
+        raise ProtocolError(response.strip()[:500])
+    return {"client_id":client_id,"disconnected":"SUCCESS:" in response}
+
+
+def _set_openvpn_ccd_enabled(name,enabled,management_socket=None,runtime_ready=False):
     name=_validate_openvpn_client_name(name)
-    status=openvpn_policy_status()
-    if not status.get("configured"):
-        raise ProtocolError("OpenVPN Client policy runtime is not configured")
+    OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
+    os.chmod(OVPN_CLIENT_POLICY_DIR,0o755)
     path=OVPN_CLIENT_POLICY_DIR/name
     marker=OVPN_POLICY_MARKER+"\n"
     if enabled:
@@ -2701,10 +2718,72 @@ def set_openvpn_client_policy_enabled(name,enabled):
         os.chmod(tmp,0o644)
         os.replace(tmp,path)
     disconnected=False
-    if status.get("ready"):
-        try:disconnected=bool(openvpn_management_kill(name).get("disconnected"))
+    if runtime_ready and management_socket:
+        try:disconnected=bool(openvpn_management_kill(name,management_socket).get("disconnected"))
         except ProtocolError:disconnected=False
     return {"name":name,"enabled":False,"disconnected":disconnected}
+
+
+def set_openvpn_client_policy_enabled(name,enabled):
+    status=openvpn_policy_status()
+    if not status.get("configured"):
+        raise ProtocolError("OpenVPN Client policy runtime is not configured")
+    return _set_openvpn_ccd_enabled(
+        name,enabled,
+        management_socket=OVPN_MANAGEMENT_SOCKET,
+        runtime_ready=bool(status.get("ready")),
+    )
+
+
+def openvpn_wstunnel_policy_status():
+    if not OVPN_WSTUNNEL_BACKEND_CONF.exists():
+        return {
+            "configured":False,"ready":False,"socket":False,
+            "management_socket":str(OVPN_WSTUNNEL_MANAGEMENT_SOCKET),
+        }
+    text=OVPN_WSTUNNEL_BACKEND_CONF.read_text(encoding="utf-8",errors="ignore")
+    expected=[
+        f"client-config-dir {OVPN_CLIENT_POLICY_DIR}",
+        f"management {OVPN_WSTUNNEL_MANAGEMENT_SOCKET} unix",
+        "management-client-user root",
+        "management-client-group root",
+    ]
+    configured=all(item in text for item in expected)
+    socket_ready=OVPN_WSTUNNEL_MANAGEMENT_SOCKET.exists()
+    return {
+        "configured":configured,
+        "ready":bool(
+            configured and socket_ready
+            and _active(OVPN_WSTUNNEL_BACKEND_SERVICE)
+            and _openvpn_named_runtime("makia-ws").get("listener")
+        ),
+        "socket":socket_ready,
+        "management_socket":str(OVPN_WSTUNNEL_MANAGEMENT_SOCKET),
+    }
+
+
+def openvpn_wstunnel_management_status():
+    status=openvpn_wstunnel_policy_status()
+    if not status.get("ready"):
+        return {"available":False,"clients":{},"error":"WStunnel OpenVPN policy runtime not ready"}
+    try:
+        text=_openvpn_management_command(
+            "status 3",until_end=True,socket_path=OVPN_WSTUNNEL_MANAGEMENT_SOCKET
+        )
+        return {"available":True,"clients":_parse_openvpn_management_status(text),"error":""}
+    except ProtocolError as exc:
+        return {"available":False,"clients":{},"error":str(exc)[:300]}
+
+
+def set_openvpn_wstunnel_client_policy_enabled(name,enabled):
+    status=openvpn_wstunnel_policy_status()
+    if not status.get("configured"):
+        raise ProtocolError("WStunnel OpenVPN policy runtime is not configured")
+    return _set_openvpn_ccd_enabled(
+        name,enabled,
+        management_socket=OVPN_WSTUNNEL_MANAGEMENT_SOCKET,
+        runtime_ready=bool(status.get("ready")),
+    )
 
 
 def _openvpn_remote_block(endpoint,port):
