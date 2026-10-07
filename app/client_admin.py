@@ -229,7 +229,7 @@ def register_client_admin(app,require_user,require_mutation,require_local_admin,
     @app.get("/api/client-platform/artifacts")
     def client_platform_artifacts(request:Request):
         require_user(request)
-        allowed={"ssh","wireguard","openvpn","xray","outline"}
+        allowed={"ssh","wireguard","openvpn","openvpn_wstunnel","xray","outline"}
         owners=client_store.artifact_binding_owners()
         items=[]
         for item in list_access_artifacts():
