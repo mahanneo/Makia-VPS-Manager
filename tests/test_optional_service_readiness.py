@@ -60,7 +60,7 @@ def test_optional_service_status_exposes_setup_contract(monkeypatch):
         stderr=""
     monkeypatch.setattr(system_ops.shutil,"which",lambda name:"/bin/systemctl")
     monkeypatch.setattr(system_ops.subprocess,"run",lambda *args,**kwargs:Result())
-    state=system_ops.service_status("stunnel4")
+    state=system_ops.service_status("makia-stealth")
     assert state["state"]=="not-configured"
     assert state["configured"] is False
     assert state["setup_action"]=="stealth-setup"
