@@ -1,0 +1,22 @@
+[Unit]
+Description=Makia Stealth TLS transport
+After=network-online.target openvpn-server@makia-tcp.service
+Wants=network-online.target
+Requires=openvpn-server@makia-tcp.service
+ConditionPathExists=/etc/stunnel/makia-openvpn.conf
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/stunnel4 /etc/stunnel/makia-openvpn.conf
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/stunnel /etc/letsencrypt /etc/ssl
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
