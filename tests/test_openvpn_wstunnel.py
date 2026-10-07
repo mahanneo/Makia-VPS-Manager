@@ -189,7 +189,8 @@ def test_access_wizard_offers_wstunnel_443_without_parallel_browser_gateway():
     assert "wizardProtocolReady(kind)" in source
     assert "s.openvpn_wstunnel?.ready" in source
     assert "/api/protocols/openvpn/wstunnel/clients" in source
-    assert "Policy owner" in source
+    assert "Concurrent Connection Limit" in source
+    assert "/artifact-bindings" in source
 
 
 def test_openvpn_management_status_preserves_per_session_counters():
