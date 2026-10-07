@@ -1182,6 +1182,7 @@ def protocol_modes():
     ike=ikev2_status()
     st=stealth_status()
     ws=wstunnel_status()
+    ovws=openvpn_wstunnel_status()
     tcp=_openvpn_named_runtime("makia-tcp")
     return {
         "modes":[
@@ -1190,7 +1191,8 @@ def protocol_modes():
             {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
             {"id":"tcp","label":"TCP","ports":[tcp.get("port")] if tcp.get("port") else ([ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else []),"transport":"OpenVPN TCP fallback","ready":bool((tcp.get("service_active") and tcp.get("listener")) or (ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp"))),"status":tcp if tcp.get("config") else ov},
             {"id":"stealth","label":"Stealth","ports":[st.get("port")] if st.get("port") else [],"transport":"OpenVPN over TLS/Stunnel","ready":bool(st.get("service_active") and st.get("listener")),"status":st},
-            {"id":"wstunnel","label":"WStunnel","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
+            {"id":"wstunnel-openvpn","label":"WStunnel 443","ports":[443],"transport":"OpenVPN over WebSocket/TLS","ready":bool(ovws.get("ready")),"status":ovws},
+            {"id":"wstunnel","label":"WStunnel WG","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
         ],
         "constraints":{
             "openvpn_primary_transport_switch":True,
@@ -1225,6 +1227,7 @@ def catalog():
         "ikev2":ike,
         "stealth":stealth,
         "wstunnel":ws,
+        "openvpn_wstunnel":openvpn_wstunnel_status(),
         "ssh":ssh,
         "capabilities":[
             {"id":"vless","engine":"xray","available":x["installed"]},
@@ -1242,6 +1245,7 @@ def catalog():
             {"id":"stunnel","engine":"stunnel","available":st["installed"],"mode":"service"},
             {"id":"ikev2","engine":"strongswan","available":ike["installed"],"mode":"guided"},
             {"id":"stealth","engine":"stunnel","available":st["installed"],"mode":"guided"},
+            {"id":"wstunnel-openvpn","engine":"wstunnel","available":ws["installed"] and ovpn["installed"],"mode":"guided"},
             {"id":"wstunnel","engine":"wstunnel","available":ws["installed"],"mode":"guided"},
             {"id":"tuic","engine":"external","available":False,"mode":"unavailable"},
             {"id":"amneziawg","engine":"external","available":False,"mode":"unavailable"},
