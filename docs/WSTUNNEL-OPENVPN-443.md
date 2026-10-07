@@ -2,9 +2,9 @@
 
 ## What it is
 
-Makia 1.6.1 adds a second WStunnel mode:
+Makia 1.6.x provides two WStunnel modes; the current stable line is 1.6.1:
 
-- **WStunnel 443 / OpenVPN over WebSocket/TLS** — new in 1.6.1.
+- **WStunnel 443 / OpenVPN over WebSocket/TLS** — introduced in 1.6.0 and stabilized in 1.6.1.
 - **WStunnel WG / WireGuard over WSS** — the older Makia mode, retained separately.
 
 The new mode follows the same transport idea commonly called **OpenVPN over WebSocket**: OpenVPN traffic is carried inside a WebSocket/TLS connection that looks like ordinary HTTPS transport on TCP/443. It is not a claim of compatibility with any third-party proprietary client.
