@@ -1770,12 +1770,13 @@ async function openWireGuardDiagnostics(target=''){
         '<div><span>IP Forward</span><b class="'+(d.ip_forward?'ok-text':'bad-text')+'">'+(d.ip_forward?'ON':'OFF')+'</b></div>',
         '<div><span>NAT</span><b class="'+(d.nat===true?'ok-text':'bad-text')+'">'+(d.nat===true?'READY':'UNKNOWN / MISSING')+'</b></div>',
         '<div><span>Endpoint</span><b class="'+(d.endpoint_ok?'ok-text':'bad-text')+'">'+htmlEsc(d.endpoint||'-')+'</b></div>',
+        '<div><span>Network tuning</span><b class="'+(d.performance?.tuned?'ok-text':'warn-text')+'">'+(d.performance?.tuned?'OPTIMIZED':'DEFAULT')+'</b><em>'+htmlEsc((d.performance?.congestion_control||'')+(d.performance?.qdisc?(' / '+d.performance.qdisc):''))+'</em></div>',
       '</div>',
       '<div class="domain-resolution-grid"><div><span>A / IPv4</span><code>'+htmlEsc((d.resolved_ipv4||[]).join(', ')||'none')+'</code></div><div><span>AAAA / IPv6</span><code>'+htmlEsc((d.resolved_ipv6||[]).join(', ')||'none')+'</code></div><div><span>VPS IPv4</span><code>'+htmlEsc((d.local_ipv4||[]).join(', ')||'unknown')+'</code></div><div><span>VPS IPv6</span><code>'+htmlEsc((d.local_ipv6||[]).join(', ')||'unknown')+'</code></div></div>',
       warnings?'<div class="diagnostic-hints">'+warnings+'</div>':'<div class="wizard-note success-note"><b>WireGuard runtime ready</b><span>Forwarding، NAT، UDP listener و Endpoint بررسی شدند.</span></div>',
       '<div class="journal-head"><b>Peer Handshakes</b><span>'+Number(d.recent_handshakes||0)+' recent</span></div><div class="wg-peer-list">'+(peers||'<div class="empty compact">Peer runtime ثبت نشده است.</div>')+'</div>',
       '<div class="wizard-note"><b>Domain note</b><span>دامنه باید DNS-only و مستقیم باشد. اگر AAAA با IPv6 عملیاتی VPS مطابقت ندارد، زیر دامنه A-only بسازید. تنظیم دامنه پنل فایل‌های قبلی کلاینت را تغییر نمی‌دهد؛ از Access Center > Endpoint خروجی و QR جدید بگیرید و در دستگاه دوباره Import کنید.</span></div>',
-      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="primary" data-action="wireguard-repair">Repair & Restart</button></div>',
+      '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="primary" data-action="wireguard-repair">Repair & Optimize WireGuard</button></div>',
       '</div></div>'
     ].join('');
   }catch(e){alert('WireGuard diagnostics: '+e.message)}
@@ -1793,8 +1794,12 @@ async function updateWireGuardEndpoint(key,current){
   }catch(e){alert('WireGuard Endpoint: '+e.message)}
 }
 async function repairWireGuardRuntime(){
-  if(!confirm('Makia از wg0.conf بکاپ می‌گیرد، IP forwarding، NAT و Forward rules را اصلاح می‌کند و WireGuard را Restart می‌کند. ادامه؟'))return;
-  try{const r=await api('/api/protocols/wireguard/repair',{method:'POST'});toast(r?.diagnostics?.runtime_ok?'WireGuard repaired and healthy':'WireGuard repair completed');await openWireGuardDiagnostics()}catch(e){alert('WireGuard repair: '+e.message)}
+  if(!confirm('Makia از wg0.conf بکاپ می‌گیرد، NAT/Forwarding و MSS را اصلاح می‌کند، بافرهای شبکه و MTU probing را برای throughput بهتر تنظیم می‌کند و WireGuard را بدون تغییر Key/Peer/Port Restart می‌کند. ادامه؟'))return;
+  try{
+    const r=await api('/api/protocols/wireguard/repair',{method:'POST'});
+    toast(r?.diagnostics?.runtime_ok?(r?.performance?.tuned?'WireGuard repaired + optimized':'WireGuard repaired and healthy'):'WireGuard repair completed');
+    await openWireGuardDiagnostics()
+  }catch(e){alert('WireGuard repair: '+e.message)}
 }
 async function openEndpointMatrix(){
   const initial=window.PANEL_DOMAIN||location.hostname;
@@ -2137,7 +2142,7 @@ async function settings(renderToken=window.__viewRenderToken){
   }else if(tab==='vpn'){
     body=[
       '<section class="settings-section-head"><div><div class="eyebrow">PROVISIONING DEFAULTS</div><h2>WireGuard / OpenVPN Defaults</h2><p>تنظیمات پیش‌فرض Client برای Engineهای واقعی نصب‌شده روی Host.</p></div></section>',
-      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>WireGuard compatibility</b><span>Real client/server defaults</span></div><button class="soft" data-action="wg-compat-preset">Compatibility preset</button></div><div class="settings-form-grid"><label>DNS<input id="opWgDns" value="'+htmlEsc(defs.wireguard_dns||'1.1.1.1')+'"></label><label>UDP Listen Port<input id="opWgPort" type="number" min="1" max="65535" value="'+Number(defs.wireguard_port||443)+'"></label><label>MTU<input id="opWgMtu" type="number" min="576" max="1500" value="'+Number(defs.wireguard_mtu||1280)+'"></label><label>Keepalive seconds<input id="opWgKeepalive" type="number" min="0" max="3600" value="'+Number(defs.wireguard_keepalive??15)+'"></label><label>Allowed IPs<input id="opWgAllowedIps" value="'+htmlEsc(defs.wireguard_allowed_ips||'0.0.0.0/0')+'"></label><label>Tunnel CIDR<input id="opWgCidr" value="'+htmlEsc(defs.wireguard_cidr||'10.66.66.1/24')+'"></label></div><div class="wizard-note"><b>Important</b><span>Port 443/UDP و MTU پایین‌تر فقط سازگاری NAT/MTU را بهتر می‌کنند. اگر WireGuard protocol-level blocking وجود داشته باشد، از Xray/REALITY استفاده کن. برای مهاجرت بدون تعویض config کاربران، Endpoint را دامنه ثابت پنل قرار بده.</span></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>WireGuard compatibility</b><span>Real client/server defaults</span></div><div class="toolbar"><button class="soft" data-action="wg-compat-preset">Compatibility preset</button><button class="soft" data-action="wg-performance-preset">Performance preset</button></div></div><div class="settings-form-grid"><label>DNS<input id="opWgDns" value="'+htmlEsc(defs.wireguard_dns||'1.1.1.1')+'"></label><label>UDP Listen Port<input id="opWgPort" type="number" min="1" max="65535" value="'+Number(defs.wireguard_port||443)+'"></label><label>MTU<input id="opWgMtu" type="number" min="576" max="1500" value="'+Number(defs.wireguard_mtu||1280)+'"></label><label>Keepalive seconds<input id="opWgKeepalive" type="number" min="0" max="3600" value="'+Number(defs.wireguard_keepalive??15)+'"></label><label>Allowed IPs<input id="opWgAllowedIps" value="'+htmlEsc(defs.wireguard_allowed_ips||'0.0.0.0/0')+'"></label><label>Tunnel CIDR<input id="opWgCidr" value="'+htmlEsc(defs.wireguard_cidr||'10.66.66.1/24')+'"></label></div><div class="wizard-note"><b>Important</b><span>Port 443/UDP و MTU پایین‌تر فقط سازگاری NAT/MTU را بهتر می‌کنند. اگر WireGuard protocol-level blocking وجود داشته باشد، از Xray/REALITY استفاده کن. برای مهاجرت بدون تعویض config کاربران، Endpoint را دامنه ثابت پنل قرار بده.</span></div></div>',
       '<div class="settings-card-v2"><div class="settings-card-title"><div><b>OpenVPN</b><span>Client defaults</span></div></div><div class="settings-form-grid"><label>OpenVPN port<input id="opOvpnPort" type="number" min="1" max="65535" value="'+Number(defs.openvpn_port||1194)+'"></label><label>OpenVPN transport<select id="opOvpnProto"><option value="udp" '+(defs.openvpn_proto==='udp'?'selected':'')+'>UDP</option><option value="tcp" '+(defs.openvpn_proto==='tcp'?'selected':'')+'>TCP</option></select></label></div>',
       '<div class="wizard-note"><b>Domain mode</b><span>OpenVPN از TLS/PKI داخلی خودش استفاده می‌کند؛ HTTPS پنل تونل OpenVPN نیست. برای Domain، رکورد A باید مستقیم و DNS-only به VPS اشاره کند. پروفایل‌های جدید روی udp4/tcp4 ساخته می‌شوند تا AAAA اشتباه باعث شکست اتصال نشود.</span></div><div class="settings-actions"><button class="ghost" data-action="openvpn-diagnostics">Domain Diagnostics</button><button class="ghost" data-action="openvpn-repair">Normalize IPv4 runtime</button><button class="primary" data-action="settings-operator-save">Save VPN defaults</button></div></div>'
     ].join('');
@@ -2430,7 +2435,8 @@ async function handleMakiaAction(btn){
   if(action==='migration-restore-open'){openMigrationRestore();return}
   if(action==='migration-restore-verify'){await verifyMigrationRestore();return}
   if(action==='migration-restore-apply'){await applyMigrationRestore(dataDec(btn.dataset.job));return}
-  if(action==='wg-compat-preset'){const values={opWgPort:443,opWgMtu:1280,opWgKeepalive:15,opWgAllowedIps:'0.0.0.0/0',opWgDns:'1.1.1.1'};for(const [id,v] of Object.entries(values)){const el=document.getElementById(id);if(el)el.value=v}toast('Compatibility preset applied; Save to persist');return}
+  if(action==='wg-compat-preset'){const values={opWgPort:443,opWgMtu:1280,opWgKeepalive:25,opWgAllowedIps:'0.0.0.0/0',opWgDns:'1.1.1.1'};for(const [id,v] of Object.entries(values)){const el=document.getElementById(id);if(el)el.value=v}toast('Compatibility preset applied; Save to persist');return}
+  if(action==='wg-performance-preset'){const values={opWgPort:443,opWgMtu:1380,opWgKeepalive:25,opWgAllowedIps:'0.0.0.0/0',opWgDns:'1.1.1.1'};for(const [id,v] of Object.entries(values)){const el=document.getElementById(id);if(el)el.value=v}toast('Performance preset applied; test on the target network before mass rollout');return}
   if(action==='support-grant-create'){await createRemoteSupportGrant();return}
   if(action==='support-grant-revoke'){await revokeRemoteSupportGrant(Number(btn.dataset.id));return}
   if(action==='support-submit'){await submitSupportRequest();return}
