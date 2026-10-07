@@ -1987,6 +1987,69 @@ def _wireguard_set_interface_directive(config_text,key,value_line):
         merged+="\n"+tail
     return merged
 
+
+def _proc_sysctl_value(key):
+    path=Path("/proc/sys")/Path(str(key).replace(".","/"))
+    try:
+        return path.read_text(encoding="utf-8",errors="ignore").strip()
+    except OSError:
+        return ""
+
+
+def wireguard_performance_status(iface="wg0"):
+    cfg=_wireguard_server_config(iface)
+    bbr_available="bbr" in _proc_sysctl_value("net.ipv4.tcp_available_congestion_control").split()
+    qdisc=_proc_sysctl_value("net.core.default_qdisc")
+    congestion=_proc_sysctl_value("net.ipv4.tcp_congestion_control")
+    values={
+        "rmem_max":_proc_sysctl_value("net.core.rmem_max"),
+        "wmem_max":_proc_sysctl_value("net.core.wmem_max"),
+        "udp_rmem_min":_proc_sysctl_value("net.ipv4.udp_rmem_min"),
+        "udp_wmem_min":_proc_sysctl_value("net.ipv4.udp_wmem_min"),
+        "tcp_mtu_probing":_proc_sysctl_value("net.ipv4.tcp_mtu_probing"),
+        "netdev_max_backlog":_proc_sysctl_value("net.core.netdev_max_backlog"),
+    }
+    mss_in=_iptables_check(["-t","mangle","-C","FORWARD","-i",iface,"-p","tcp","--tcp-flags","SYN,RST","SYN","-j","TCPMSS","--clamp-mss-to-pmtu"])
+    mss_out=_iptables_check(["-t","mangle","-C","FORWARD","-o",iface,"-p","tcp","--tcp-flags","SYN,RST","SYN","-j","TCPMSS","--clamp-mss-to-pmtu"])
+    tuned=(
+        int(values["rmem_max"] or 0)>=16777216
+        and int(values["wmem_max"] or 0)>=16777216
+        and int(values["udp_rmem_min"] or 0)>=16384
+        and int(values["udp_wmem_min"] or 0)>=16384
+        and values["tcp_mtu_probing"] in {"1","2"}
+        and mss_in is not False and mss_out is not False
+    )
+    return {
+        "tuned":bool(tuned),
+        "bbr_available":bbr_available,
+        "congestion_control":congestion,
+        "qdisc":qdisc,
+        "mss_clamp_in":mss_in,
+        "mss_clamp_out":mss_out,
+        "server_mtu":int(cfg.get("mtu") or 0),
+        **values,
+    }
+
+
+def _wireguard_performance_sysctl_text():
+    lines=[
+        "# Managed by Makia WireGuard Repair & Optimize",
+        "net.ipv4.ip_forward=1",
+        "net.core.rmem_max=16777216",
+        "net.core.wmem_max=16777216",
+        "net.ipv4.udp_rmem_min=16384",
+        "net.ipv4.udp_wmem_min=16384",
+        "net.core.netdev_max_backlog=16384",
+        "net.ipv4.tcp_mtu_probing=1",
+    ]
+    if "bbr" in _proc_sysctl_value("net.ipv4.tcp_available_congestion_control").split():
+        lines.extend([
+            "net.core.default_qdisc=fq",
+            "net.ipv4.tcp_congestion_control=bbr",
+        ])
+    return "\n".join(lines)+"\n"
+
+
 def repair_wireguard_runtime(iface="wg0"):
     if not re.fullmatch(r"wg\d{1,2}",iface):
         raise ProtocolError("invalid WireGuard interface name")
@@ -2005,12 +2068,16 @@ def repair_wireguard_runtime(iface="wg0"):
     post_up=(
         f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; "
         f"iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; "
-        f"iptables -t nat -C POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {network} -o {uplink} -j MASQUERADE"
+        f"iptables -t nat -C POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {network} -o {uplink} -j MASQUERADE; "
+        f"iptables -t mangle -C FORWARD -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -t mangle -I FORWARD 1 -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu; "
+        f"iptables -t mangle -C FORWARD -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -t mangle -I FORWARD 1 -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
     )
     post_down=(
         f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; "
         f"iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; "
-        f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true"
+        f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true; "
+        f"iptables -t mangle -D FORWARD -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true; "
+        f"iptables -t mangle -D FORWARD -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true"
     )
     updated=_wireguard_set_interface_directive(original,"PostUp",post_up)
     updated=_wireguard_set_interface_directive(updated,"PostDown",post_down)
@@ -2019,11 +2086,15 @@ def repair_wireguard_runtime(iface="wg0"):
     sysctl=sysctl_dir/"99-makia-wireguard.conf"
     sysctl_existed=sysctl.exists()
     sysctl_previous=sysctl.read_bytes() if sysctl_existed else b""
+    perf_sysctl=sysctl_dir/"99-makia-network-performance.conf"
+    perf_existed=perf_sysctl.exists()
+    perf_previous=perf_sysctl.read_bytes() if perf_existed else b""
     try:
         conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
         os.chmod(conf,0o600)
         sysctl.write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
-        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        perf_sysctl.write_text(_wireguard_performance_sysctl_text(),encoding="utf-8")
+        _run(["sysctl","--system"],timeout=30)
         _ufw_allow_if_active(cfg["port"],"udp","WireGuard")
         _run(["systemctl","enable",f"wg-quick@{iface}"],timeout=20)
         _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
@@ -2038,11 +2109,16 @@ def repair_wireguard_runtime(iface="wg0"):
                 sysctl.write_bytes(sysctl_previous)
             elif sysctl.exists():
                 sysctl.unlink()
+            if perf_existed:
+                perf_sysctl.write_bytes(perf_previous)
+            elif perf_sysctl.exists():
+                perf_sysctl.unlink()
+            _run(["sysctl","--system"],timeout=30)
             _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
         except Exception:
             pass
         raise
-    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
+    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface),"performance":wireguard_performance_status(iface)}
 
 def protocol_endpoint_matrix(endpoint):
     endpoint=_validate_endpoint_host(endpoint,"public endpoint")
