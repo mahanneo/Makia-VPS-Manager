@@ -207,6 +207,15 @@ def client_guide_text(kind,protocol=""):
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
         )
+    if kind in {"openvpn_wstunnel","openvpn-wstunnel"}:
+        return common+(
+            "WStunnel 443 / OpenVPN over WebSocket\n"
+            "1) Windows: Makia Client Connector 1.6.0 را نصب و OpenVPN runtime را نیز نصب داشته باشید.\n"
+            "2) در Client Portal روی اتصال مستقیم بزنید؛ Makia WStunnel و سپس OpenVPN را اجرا می‌کند.\n"
+            "3) روش دستی: ابتدا فرمان داخل wstunnel-client-command.txt را اجرا کنید.\n"
+            "4) سپس فایل .ovpn را در OpenVPN اجرا کنید و WStunnel را تا پایان اتصال باز نگه دارید.\n"
+            "5) مسیر WSS و فایل OVPN اختصاصی‌اند و نباید عمومی شوند.\n"
+        )
     if kind=="outline":
         return common+(
             "Outline\n"
