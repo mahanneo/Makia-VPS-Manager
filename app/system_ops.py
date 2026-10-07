@@ -14,7 +14,7 @@ TTY_RE=re.compile(r"^[A-Za-z0-9._/-]{1,64}$")
 # used to expose raw Start buttons for these units, which produced opaque
 # dependency/configuration failures on a fresh or partially configured host.
 OPTIONAL_SERVICE_RULES={
-    "stunnel4":{
+    "makia-stealth":{
         "setup_action":"stealth-setup","setup_label":"Configure / Repair Stealth",
         "managed_by":"",
     },
@@ -38,15 +38,8 @@ def _service_setup_meta(name: str):
     if not rule:
         return {"configured":True,"setup_action":"","setup_label":"","managed_by":""}
     configured=True
-    if name=="stunnel4":
-        conf=Path("/etc/stunnel/makia-openvpn.conf")
-        defaults=Path("/etc/default/stunnel4")
-        enabled=False
-        try:
-            enabled=bool(re.search(r"(?m)^\s*ENABLED\s*=\s*1\s*$",defaults.read_text(encoding="utf-8",errors="ignore")))
-        except OSError:
-            enabled=False
-        configured=conf.is_file() and enabled
+    if name=="makia-stealth":
+        configured=Path("/etc/stunnel/makia-openvpn.conf").is_file()
     elif name=="makia-wstunnel":
         configured=Path("/etc/makia-vps-manager/wstunnel.env").is_file()
     elif name in {"makia-openvpn-wstunnel","openvpn-server@makia-ws"}:
@@ -628,7 +621,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     systemd_dir=Path("/etc/systemd/system")
     systemd_units=[
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
-        "makia-protocol-traffic.service","makia-wstunnel.service","makia-openvpn-wstunnel.service","makia-ikev2-network.service",
+        "makia-protocol-traffic.service","makia-wstunnel.service","makia-openvpn-wstunnel.service","makia-stealth.service","makia-ikev2-network.service",
         "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
         "makia-ops-monitor.service","makia-ops-monitor.timer","makia-mtproxy.service",
     ]

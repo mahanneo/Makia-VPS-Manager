@@ -26,6 +26,7 @@ IKEV2_CONF=Path("/etc/ipsec.conf")
 IKEV2_SECRETS=Path("/etc/ipsec.secrets")
 IKEV2_ENV=Path("/etc/makia-vps-manager/ikev2.env")
 STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
+STUNNEL_MAKIA_SERVICE="makia-stealth"
 WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
 WSTUNNEL_SERVICE="makia-wstunnel"
 OVPN_WSTUNNEL_ENV=Path("/etc/makia-vps-manager/openvpn-wstunnel.env")
@@ -540,7 +541,7 @@ def ikev2_status():
 
 def stealth_status():
     installed=_installed("stunnel4") or _installed("stunnel")
-    active=_active("stunnel4")
+    active=_active(STUNNEL_MAKIA_SERVICE)
     listen_port=None
     backend_port=None
     configured=STUNNEL_MAKIA_CONF.exists()
@@ -763,7 +764,8 @@ def bootstrap_stealth(domain, listen_port=9443):
         raise ProtocolError("Stealth requires a valid HTTPS/Let's Encrypt certificate first")
     STUNNEL_MAKIA_CONF.parent.mkdir(parents=True,exist_ok=True)
     STUNNEL_MAKIA_CONF.write_text(
-        "foreground = no\n"
+        "foreground = yes\n"
+        "pid =\n"
         "client = no\n"
         "sslVersionMin = TLSv1.2\n"
         f"cert = {cert}\nkey = {key}\n\n"
@@ -772,16 +774,13 @@ def bootstrap_stealth(domain, listen_port=9443):
         f"connect = 127.0.0.1:{backend_port}\n",
         encoding="utf-8",
     )
-    defaults=Path("/etc/default/stunnel4")
-    if defaults.exists():
-        text=defaults.read_text(encoding="utf-8",errors="ignore")
-        if re.search(r"(?m)^\s*ENABLED=",text):
-            text=re.sub(r"(?m)^\s*ENABLED=.*$","ENABLED=1",text)
-        else:
-            text+="\nENABLED=1\n"
-        defaults.write_text(text,encoding="utf-8")
-    _run(["systemctl","enable","--now","stunnel4"],timeout=30)
-    _run(["systemctl","restart","stunnel4"],timeout=30)
+    # Makia owns its Stealth runtime explicitly.  Do not depend on Ubuntu's
+    # global stunnel4 service, which may load unrelated/conflicting host configs.
+    if _active("stunnel4"):
+        subprocess.run(["systemctl","disable","--now","stunnel4"],text=True,capture_output=True,timeout=20,check=False)
+    _run(["systemctl","daemon-reload"],timeout=20)
+    _run(["systemctl","enable","--now",STUNNEL_MAKIA_SERVICE],timeout=30)
+    _run(["systemctl","restart",STUNNEL_MAKIA_SERVICE],timeout=30)
     _ufw_allow_if_active(listen_port,"tcp","OpenVPN Stealth")
     status=stealth_status()
     if not status.get("listener"):
@@ -1093,10 +1092,29 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         raise ProtocolError("WStunnel 443 requires a valid Let's Encrypt certificate for the selected domain")
 
     existing=openvpn_wstunnel_status()
-    if _port_transport_in_use(bridge_port,"tcp") and int(existing.get("bridge_port") or 0)!=bridge_port:
-        suggestion=_suggest_free_port("tcp",(10445,11445,12445,13445),exclude_ports={backend_port})
-        hint=f"; try loopback bridge TCP/{suggestion}" if suggestion else ""
-        raise ProtocolError(f"WStunnel loopback bridge TCP/{bridge_port} is already in use{hint}")
+
+    # Internal ports are implementation details and must never make setup fail
+    # merely because an older/optional runtime already owns the historical
+    # defaults.  Preserve an already-ready Makia WStunnel instance, otherwise
+    # pick collision-free loopback ports automatically.
+    existing_bridge=int(existing.get("bridge_port") or 0)
+    existing_backend=int(existing.get("target_port") or 0)
+    if _port_transport_in_use(backend_port,"tcp") and existing_backend!=backend_port:
+        selected=_suggest_free_port(
+            "tcp",(11950,12940,13940,14940,15940,16940),
+            exclude_ports={bridge_port,existing_bridge}
+        )
+        if not selected:
+            raise ProtocolError("No free internal TCP port is available for the WStunnel OpenVPN backend")
+        backend_port=selected
+    if _port_transport_in_use(bridge_port,"tcp") and existing_bridge!=bridge_port:
+        selected=_suggest_free_port(
+            "tcp",(10445,11445,12445,13445,14445,15445),
+            exclude_ports={backend_port,existing_backend}
+        )
+        if not selected:
+            raise ProtocolError("No free internal TCP port is available for the WStunnel loopback bridge")
+        bridge_port=selected
 
     backend=ensure_openvpn_wstunnel_backend(backend_port)
     prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")

@@ -100,8 +100,9 @@ on_exit(){
       systemctl restart openvpn-server@server 2>/dev/null
     fi
     if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl enable --now stunnel4 2>/dev/null
-      systemctl restart stunnel4 2>/dev/null
+      systemctl disable --now stunnel4 2>/dev/null || true
+      systemctl enable --now makia-stealth 2>/dev/null
+      systemctl restart makia-stealth 2>/dev/null
     fi
     if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl enable --now makia-wstunnel 2>/dev/null
@@ -188,7 +189,9 @@ STUNNEL_WAS_CONFIGURED=0
 STUNNEL_WAS_ACTIVE=0
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   STUNNEL_WAS_CONFIGURED=1
-  systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
+  if systemctl is-active --quiet makia-stealth 2>/dev/null || systemctl is-active --quiet stunnel4 2>/dev/null; then
+    STUNNEL_WAS_ACTIVE=1
+  fi
 fi
 
 WSTUNNEL_WAS_CONFIGURED=0
@@ -256,6 +259,7 @@ for item in \
   "etc/systemd/system/makia-mtproxy.service" \
   "etc/systemd/system/makia-wstunnel.service" \
   "etc/systemd/system/makia-openvpn-wstunnel.service" \
+  "etc/systemd/system/makia-stealth.service" \
   "etc/systemd/system/makia-ikev2-network.service" \
   "usr/local/sbin/makia-update" \
   "usr/local/sbin/makia-upgrade" \
@@ -456,6 +460,7 @@ install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/syste
 install -m 0644 "$SRC/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-openvpn-wstunnel.service" /etc/systemd/system/makia-openvpn-wstunnel.service
+install -m 0644 "$SRC/systemd/makia-stealth.service" /etc/systemd/system/makia-stealth.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
@@ -717,9 +722,14 @@ else
     echo "WireGuard was active before update but is no longer active; updater will roll back." >&2
     exit 7
   fi
-  if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet stunnel4; then
-    echo "Stealth/Stunnel was active before update but is no longer active; updater will roll back." >&2
-    exit 9
+  if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]]; then
+    systemctl disable --now stunnel4 2>/dev/null || true
+    systemctl enable --now makia-stealth 2>/dev/null || true
+    systemctl restart makia-stealth 2>/dev/null || true
+    if ! systemctl is-active --quiet makia-stealth; then
+      echo "Stealth was active before update but the dedicated Makia Stealth service is not active; updater will roll back." >&2
+      exit 9
+    fi
   fi
   if [[ "$WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-wstunnel; then
     echo "WireGuard WStunnel was active before update but is no longer active; updater will roll back." >&2

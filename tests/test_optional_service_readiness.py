@@ -60,7 +60,7 @@ def test_optional_service_status_exposes_setup_contract(monkeypatch):
         stderr=""
     monkeypatch.setattr(system_ops.shutil,"which",lambda name:"/bin/systemctl")
     monkeypatch.setattr(system_ops.subprocess,"run",lambda *args,**kwargs:Result())
-    state=system_ops.service_status("stunnel4")
+    state=system_ops.service_status("makia-stealth")
     assert state["state"]=="not-configured"
     assert state["configured"] is False
     assert state["setup_action"]=="stealth-setup"
@@ -94,3 +94,14 @@ def test_update_softfails_only_preexisting_openvpn_listener_gap():
 def test_dashboard_busts_cached_service_controls_after_hotfix():
     html=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
     assert "/static/app.js?v={{version}}-wstunnel-hotfix2" in html
+
+
+def test_stealth_uses_dedicated_makia_service():
+    config=(ROOT/"app/config.py").read_text(encoding="utf-8")
+    ops=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    unit=(ROOT/"systemd/makia-stealth.service").read_text(encoding="utf-8")
+    assert '"makia-stealth": "Stealth / Stunnel"' in config
+    assert 'STUNNEL_MAKIA_SERVICE="makia-stealth"' in ops
+    assert 'ExecStart=/usr/bin/stunnel4 /etc/stunnel/makia-openvpn.conf' in unit
+    assert '"foreground = yes\\n"' in ops
+    assert '"pid =\\n"' in ops

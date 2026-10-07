@@ -222,3 +222,14 @@ def test_android_wstunnel_443_native_contract():
     assert 'if (remoteHost != "127.0.0.1")' in kotlin
     assert "9618838a4c3da6b53a4f6d67d24504b2a9aad14716387ca4c3d4cc53d861dcb4" in workflow
 
+
+
+def test_wstunnel_internal_ports_are_auto_reallocated():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "(11950,12940,13940,14940,15940,16940)" in source
+    assert "(10445,11445,12445,13445,14445,15445)" in source
+    assert "No free internal TCP port is available for the WStunnel OpenVPN backend" in source
+    assert "No free internal TCP port is available for the WStunnel loopback bridge" in source
+    # Historical 11940 remains a preference, not a hard blocker.
+    assert "backend_port=11940" in source
+    assert "backend_port=selected" in source
