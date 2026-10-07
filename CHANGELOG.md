@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.1] - 2026-10-07
+
+### WStunnel 443 stable hotfix
+- Promoted the tested WStunnel 443 panel integration to the 1.6.1 stable patch line without rotating existing users, UUIDs, keys, certificates or active protocol credentials.
+- Fixed the Services page so optional Stunnel/WStunnel runtimes are configured through their owning **Configure / Repair** flows instead of unsafe raw Start/Restart actions.
+- Added backend readiness guards and systemd configuration conditions for the dedicated WStunnel 443 transport and its managed OpenVPN backend.
+- Fixed updater rollback logic so a pre-existing classic OpenVPN listener gap is not misclassified as a new update regression; a listener that was healthy before update still causes strict rollback if the update breaks it.
+- Added transport-aware OpenVPN host-smoke checks and clarified that classic OpenVPN and WStunnel 443 use separate backends.
+- Rotated Admin/Client PWA caches and aligned Windows, Android and Browser connector/package metadata with 1.6.1.
+- Corrected Android WStunnel documentation to match the ARM64 Full Device Direct Connect implementation.
+
 ## [1.6.0] - 2026-10-07
 
 ### OpenVPN WStunnel 443
