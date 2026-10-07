@@ -765,6 +765,7 @@ def bootstrap_stealth(domain, listen_port=9443):
     STUNNEL_MAKIA_CONF.parent.mkdir(parents=True,exist_ok=True)
     STUNNEL_MAKIA_CONF.write_text(
         "foreground = yes\n"
+        "pid =\n"
         "client = no\n"
         "sslVersionMin = TLSv1.2\n"
         f"cert = {cert}\nkey = {key}\n\n"
