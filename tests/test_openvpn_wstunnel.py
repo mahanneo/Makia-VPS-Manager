@@ -222,3 +222,32 @@ def test_android_wstunnel_443_native_contract():
     assert 'if (remoteHost != "127.0.0.1")' in kotlin
     assert "9618838a4c3da6b53a4f6d67d24504b2a9aad14716387ca4c3d4cc53d861dcb4" in workflow
 
+
+
+def test_wstunnel_443_private_ports_are_auto_allocated_on_collision():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "(11940,12940,13940,14940,15940,16940)" in source
+    assert "(10445,11445,12445,13445,14445,15445)" in source
+    assert '"allocated_backend_port":backend_port' in source
+    assert '"allocated_bridge_port":bridge_port' in source
+    assert "existing_prefix=str(existing.get(\"path_prefix\") or \"\")" in source
+
+
+def test_wireguard_wstunnel_repair_preserves_secret_path_and_auto_allocates_public_port():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "(8444,10444,11444,12444,13444,14444)" in source
+    assert "path_prefix or existing_prefix" in source
+    assert '"allocated_port":listen_port' in source
+
+
+def test_stealth_uses_dedicated_makia_service_and_managed_config():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    unit=(ROOT/"systemd/makia-stealth.service").read_text(encoding="utf-8")
+    install=(ROOT/"scripts/install.sh").read_text(encoding="utf-8")
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert 'STUNNEL_MAKIA_CONF=Path("/etc/makia-vps-manager/stunnel-openvpn.conf")' in source
+    assert 'STUNNEL_MAKIA_SERVICE="makia-stealth"' in source
+    assert '"foreground = yes\\n"' in source
+    assert "ExecStart=/usr/bin/stunnel4 /etc/makia-vps-manager/stunnel-openvpn.conf" in unit
+    assert "systemd/makia-stealth.service" in install
+    assert "systemd/makia-stealth.service" in update
