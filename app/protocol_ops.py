@@ -1605,7 +1605,10 @@ def bootstrap_wireguard(port=51820, cidr="10.66.66.1/24", iface="wg0", mtu=0):
         encoding="utf-8"
     )
     os.chmod(conf,0o600)
-    Path("/etc/sysctl.d/99-makia-wireguard.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    (sysctl_dir/"99-makia-wireguard.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+    (sysctl_dir/"99-makia-network-performance.conf").write_text(_wireguard_performance_sysctl_text(),encoding="utf-8")
     _run(["sysctl","--system"],timeout=30)
     _run(["systemctl","enable","--now",f"wg-quick@{iface}"],timeout=30)
     firewall=_ufw_allow_if_active(port,"udp","WireGuard")
@@ -1994,6 +1997,7 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "mss_clamp_out":mss_clamp_out,
         "nat":nat,
         "restricted_network_ready":restricted_network_ready,
+        "performance":wireguard_performance_status(iface),
         "endpoint":endpoint,
         "endpoint_is_ip":endpoint_is_ip,
         "endpoint_ip_version":ip_version,
@@ -2024,6 +2028,75 @@ def _wireguard_set_interface_directive(config_text,key,value_line):
         merged+="\n"+tail
     return merged
 
+
+def _proc_sysctl_value(key):
+    path=Path("/proc/sys")/Path(str(key).replace(".","/"))
+    try:
+        return path.read_text(encoding="utf-8",errors="ignore").strip()
+    except OSError:
+        return ""
+
+
+def _wireguard_performance_sysctl_text():
+    """Safe host-wide network tuning for VPN throughput.
+
+    BBR/fq is enabled only when the running kernel already advertises BBR.
+    The profile otherwise limits itself to socket buffers, backlog and TCP MTU
+    probing, all of which are reversible through the dedicated Makia sysctl file.
+    """
+    lines=[
+        "# Managed by Makia WireGuard performance profile",
+        "net.ipv4.ip_forward=1",
+        "net.core.rmem_max=16777216",
+        "net.core.wmem_max=16777216",
+        "net.ipv4.udp_rmem_min=16384",
+        "net.ipv4.udp_wmem_min=16384",
+        "net.core.netdev_max_backlog=16384",
+        "net.ipv4.tcp_mtu_probing=1",
+    ]
+    if "bbr" in _proc_sysctl_value("net.ipv4.tcp_available_congestion_control").split():
+        lines.extend([
+            "net.core.default_qdisc=fq",
+            "net.ipv4.tcp_congestion_control=bbr",
+        ])
+    return "\n".join(lines)+"\n"
+
+
+def wireguard_performance_status(iface="wg0"):
+    values={
+        "rmem_max":_proc_sysctl_value("net.core.rmem_max"),
+        "wmem_max":_proc_sysctl_value("net.core.wmem_max"),
+        "udp_rmem_min":_proc_sysctl_value("net.ipv4.udp_rmem_min"),
+        "udp_wmem_min":_proc_sysctl_value("net.ipv4.udp_wmem_min"),
+        "netdev_max_backlog":_proc_sysctl_value("net.core.netdev_max_backlog"),
+        "tcp_mtu_probing":_proc_sysctl_value("net.ipv4.tcp_mtu_probing"),
+    }
+    bbr_available="bbr" in _proc_sysctl_value("net.ipv4.tcp_available_congestion_control").split()
+    congestion=_proc_sysctl_value("net.ipv4.tcp_congestion_control")
+    qdisc=_proc_sysctl_value("net.core.default_qdisc")
+    mss_in=_iptables_check(["-t","mangle","-C","FORWARD","-i",iface,"-p","tcp","--tcp-flags","SYN,RST","SYN","-j","TCPMSS","--clamp-mss-to-pmtu"])
+    mss_out=_iptables_check(["-t","mangle","-C","FORWARD","-o",iface,"-p","tcp","--tcp-flags","SYN,RST","SYN","-j","TCPMSS","--clamp-mss-to-pmtu"])
+    tuned=(
+        int(values["rmem_max"] or 0)>=16777216
+        and int(values["wmem_max"] or 0)>=16777216
+        and int(values["udp_rmem_min"] or 0)>=16384
+        and int(values["udp_wmem_min"] or 0)>=16384
+        and int(values["netdev_max_backlog"] or 0)>=16384
+        and values["tcp_mtu_probing"] in {"1","2"}
+        and mss_in is not False
+        and mss_out is not False
+    )
+    return {
+        "tuned":bool(tuned),
+        "bbr_available":bbr_available,
+        "congestion_control":congestion,
+        "qdisc":qdisc,
+        "mss_clamp_in":mss_in,
+        "mss_clamp_out":mss_out,
+        **values,
+    }
+
+
 def repair_wireguard_runtime(iface="wg0"):
     if not re.fullmatch(r"wg\d{1,2}",iface):
         raise ProtocolError("invalid WireGuard interface name")
@@ -2047,11 +2120,15 @@ def repair_wireguard_runtime(iface="wg0"):
     sysctl=sysctl_dir/"99-makia-wireguard.conf"
     sysctl_existed=sysctl.exists()
     sysctl_previous=sysctl.read_bytes() if sysctl_existed else b""
+    perf_sysctl=sysctl_dir/"99-makia-network-performance.conf"
+    perf_existed=perf_sysctl.exists()
+    perf_previous=perf_sysctl.read_bytes() if perf_existed else b""
     try:
         conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
         os.chmod(conf,0o600)
         sysctl.write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
-        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        perf_sysctl.write_text(_wireguard_performance_sysctl_text(),encoding="utf-8")
+        _run(["sysctl","--system"],timeout=30)
         _ufw_allow_if_active(cfg["port"],"udp","WireGuard")
         _run(["systemctl","enable",f"wg-quick@{iface}"],timeout=20)
         _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
@@ -2066,11 +2143,16 @@ def repair_wireguard_runtime(iface="wg0"):
                 sysctl.write_bytes(sysctl_previous)
             elif sysctl.exists():
                 sysctl.unlink()
+            if perf_existed:
+                perf_sysctl.write_bytes(perf_previous)
+            elif perf_sysctl.exists():
+                perf_sysctl.unlink()
+            _run(["sysctl","--system"],timeout=30)
             _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
         except Exception:
             pass
         raise
-    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
+    return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface),"performance":wireguard_performance_status(iface)}
 
 def apply_wireguard_restricted_network_profile(iface="wg0"):
     """Apply a non-destructive compatibility profile for constrained/NAT-heavy networks.
@@ -2101,11 +2183,15 @@ def apply_wireguard_restricted_network_profile(iface="wg0"):
     sysctl=sysctl_dir/"99-makia-wireguard.conf"
     sysctl_existed=sysctl.exists()
     sysctl_previous=sysctl.read_bytes() if sysctl_existed else b""
+    perf_sysctl=sysctl_dir/"99-makia-network-performance.conf"
+    perf_existed=perf_sysctl.exists()
+    perf_previous=perf_sysctl.read_bytes() if perf_existed else b""
     try:
         conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
         os.chmod(conf,0o600)
         sysctl.write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
-        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        perf_sysctl.write_text(_wireguard_performance_sysctl_text(),encoding="utf-8")
+        _run(["sysctl","--system"],timeout=30)
         _ufw_allow_if_active(cfg["port"],"udp","WireGuard")
         _run(["systemctl","enable",f"wg-quick@{iface}"],timeout=20)
         _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
@@ -2122,6 +2208,11 @@ def apply_wireguard_restricted_network_profile(iface="wg0"):
                 sysctl.write_bytes(sysctl_previous)
             elif sysctl.exists():
                 sysctl.unlink()
+            if perf_existed:
+                perf_sysctl.write_bytes(perf_previous)
+            elif perf_sysctl.exists():
+                perf_sysctl.unlink()
+            _run(["sysctl","--system"],timeout=30)
             _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
         except Exception:
             pass
@@ -2135,6 +2226,7 @@ def apply_wireguard_restricted_network_profile(iface="wg0"):
         "ok":True,
         "backup":str(backup),
         "diagnostics":diagnostics,
+        "performance":wireguard_performance_status(iface),
         "recommended_client":{"dns":"1.1.1.1, 8.8.8.8","mtu":1280,"keepalive":15,"allowed_ips":"0.0.0.0/0"},
         "notes":notes,
     }
