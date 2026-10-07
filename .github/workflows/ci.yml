@@ -52,7 +52,7 @@ jobs:
         run: |
           pytest -q tests/test_rc8_operations.py tests/test_rc9_hardening.py tests/test_rc11_outline_runtime.py tests/test_v1_release_gate.py tests/test_xray_iran_presets.py
           grep -Fxq '1.6.1' VERSION
-          grep -q 'VERSION = "1.6.0"' app/config.py
+          grep -q 'VERSION = "1.6.1"' app/config.py
           grep -q 'makia-shell-v160' app/static/sw.js
           test -f docs/UAT-1.6.1.md
           test -f app/static/makia-brand.png
@@ -259,7 +259,7 @@ jobs:
 
       - name: Open access contract
         run: |
-          grep -q 'VERSION = "1.6.0"' app/config.py
+          grep -q 'VERSION = "1.6.1"' app/config.py
           grep -Fxq '1.6.1' VERSION
           grep -q 'require_capability' app/main.py
           grep -q 'data-view="support"' app/templates/dashboard.html
