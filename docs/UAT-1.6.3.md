@@ -73,3 +73,12 @@ Before enabling the mode on a production VPS:
 - Browser VPN: separate Makia Browser Gateway product; this full-device transport does not replace it.
 
 See [WSTUNNEL-OPENVPN-443.md](WSTUNNEL-OPENVPN-443.md).
+
+
+## 1.6.3 WStunnel 443 closure checks
+
+- **Listener stabilization:** Configure / Repair WStunnel 443 on a real VPS and confirm the dedicated `openvpn-server@makia-ws` listener is allowed up to 20 seconds to become observable before setup is declared failed.
+- **Stale-port recovery:** Pre-occupy historical TCP/11940 with an unrelated listener and confirm Makia automatically selects a free internal backend port without changing public HTTPS/TCP443 ownership.
+- **Stealth ownership:** Confirm Configure / Repair Stealth uses `makia-stealth.service`, not Ubuntu's global `stunnel4.service`, and remains active after setup.
+- **Managed WStunnel user:** From **Create access → WStunnel 443**, create a user with password, quota, expiry, device limit and concurrent limit. Confirm a Client Platform account and WStunnel artifact binding are both created.
+- **Delivery:** Log in to `/client/` with the generated username/password and confirm the WStunnel 443 access is visible for Windows/Android Direct Connect.
