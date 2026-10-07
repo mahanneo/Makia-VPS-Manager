@@ -200,9 +200,7 @@ def enforce_host_artifacts(now_ts=None):
                 if str(binding.get("kind") or "").lower()!="openvpn_wstunnel":
                     continue
                 identity=client_store.artifact_client_identity(binding)
-                runtime=ovpn_ws_clients.get(identity)
-                if not runtime:
-                    continue
+                runtime=ovpn_ws_clients.get(identity) or {}
                 try:
                     instances=list(runtime.get("instances") or [])
                     mobile=client_store.artifact_mobile_wireguard(binding)
