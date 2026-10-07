@@ -47,7 +47,7 @@ https://YOUR-PANEL-DOMAIN/help/connect
 3. فایل `.conf` را Import کنید.
 4. Activate را بزنید.
 
-اگر روی یک شبکه وصل نشد، Wi-Fi و Mobile Data را جداگانه امتحان کنید. Endpoint، Port، MTU و DNS را بدون هماهنگی تغییر ندهید.
+برای شبکه‌های محدود یا NAT-heavy، Preset پیشنهادی Makia برای WireGuard عبارت است از UDP/443، MTU 1280، PersistentKeepalive 15 و DNS `1.1.1.1, 8.8.8.8`. در نسخه 1.6.4 پنل می‌تواند Server-side TCP MSS clamping را نیز فعال کند تا بعضی سایت‌های HTTPS روی مسیرهای MTU محدود گیر نکنند. اگر خود WireGuard/UDP در ISP مسدود باشد، از WStunnel 443 استفاده کنید؛ تغییر MTU جایگزین Transport مقاوم نیست.
 
 ## OpenVPN
 
@@ -89,9 +89,9 @@ https://YOUR-PANEL-DOMAIN/help/connect
 
 ### Android — اتصال مستقیم داخل Makia
 
-در Makia 1.6.3، **WStunnel 443 روی Android به‌صورت Full Device Direct Connect** پشتیبانی می‌شود.
+در Makia 1.6.4، **WStunnel 443 روی Android به‌صورت Full Device Direct Connect** پشتیبانی می‌شود.
 
-1. آخرین **Makia Android Connector 1.6.3** را از همان Client Portal نصب کنید.
+1. آخرین **Makia Android Connector 1.6.4** را از همان Client Portal نصب کنید.
 2. با یوزر و رمز خود وارد Client Portal شوید.
 3. پروفایل **WStunnel 443** را انتخاب کنید.
 4. روی **اتصال مستقیم** بزنید.
@@ -103,7 +103,7 @@ Runtime رسمی WStunnel داخل APK قرار دارد؛ کاربر نیاز �
 
 ### iPhone / iPad
 
-در 1.6.3 هنوز Native WStunnel Full Device داخل iOS ادعا نمی‌شود و iOS همچنان از Profile/Import یا کلاینت سازگار استفاده می‌کند.
+در 1.6.4 هنوز Native WStunnel Full Device داخل iOS ادعا نمی‌شود و iOS همچنان از Profile/Import یا کلاینت سازگار استفاده می‌کند.
 
 **نکته امنیتی:** مسیر WebSocket و فایل OVPN اختصاصی‌اند. آن‌ها را برای شخص دیگری ارسال نکنید.
 
