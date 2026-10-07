@@ -1075,6 +1075,8 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
     if len(prefix)<16:
         raise ProtocolError("WStunnel path prefix must be at least 16 characters")
 
+    previous_env=OVPN_WSTUNNEL_ENV.read_bytes() if OVPN_WSTUNNEL_ENV.exists() else None
+    was_ready=bool(existing.get("ready"))
     OVPN_WSTUNNEL_ENV.parent.mkdir(parents=True,exist_ok=True)
     OVPN_WSTUNNEL_ENV.write_text(
         f"OVPN_WSTUNNEL_DOMAIN={domain}\n"
@@ -1090,11 +1092,32 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         _run(["systemctl","daemon-reload"],timeout=20)
         _run(["systemctl","enable","--now",OVPN_WSTUNNEL_SERVICE],timeout=30)
         _run(["systemctl","restart",OVPN_WSTUNNEL_SERVICE],timeout=30)
+        status=openvpn_wstunnel_status()
+        if not status.get("ready"):
+            raise ProtocolError("OpenVPN WStunnel 443 did not become ready")
     except Exception:
+        try:
+            shutil.copy2(nginx_backup,OVPN_WSTUNNEL_NGINX)
+            _run(["nginx","-t"],timeout=20)
+            _run(["systemctl","reload","nginx"],timeout=20)
+        except Exception:
+            pass
+        try:
+            if previous_env is None:
+                OVPN_WSTUNNEL_ENV.unlink(missing_ok=True)
+            else:
+                OVPN_WSTUNNEL_ENV.write_bytes(previous_env)
+                os.chmod(OVPN_WSTUNNEL_ENV,0o600)
+        except Exception:
+            pass
+        try:
+            if was_ready:
+                _run(["systemctl","restart",OVPN_WSTUNNEL_SERVICE],timeout=30)
+            else:
+                subprocess.run(["systemctl","disable","--now",OVPN_WSTUNNEL_SERVICE],text=True,capture_output=True,timeout=20,check=False)
+        except Exception:
+            pass
         raise
-    status=openvpn_wstunnel_status()
-    if not status.get("ready"):
-        raise ProtocolError("OpenVPN WStunnel 443 did not become ready")
     local_port=11941
     client_command=(
         f"wstunnel client --http-upgrade-path-prefix {prefix} --tls-verify-certificate "
