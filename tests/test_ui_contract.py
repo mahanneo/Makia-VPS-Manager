@@ -168,7 +168,7 @@ def test_mkcp_ui_does_not_expose_removed_seed_control():
     assert "kcpSettings" not in JS
 
 
-def test_protocol_hub_exposes_six_real_connection_modes():
+def test_protocol_hub_exposes_seven_real_connection_modes():
     for marker in [
         "Connection Modes",
         "ikev2-setup",
@@ -178,15 +178,19 @@ def test_protocol_hub_exposes_six_real_connection_modes():
         "openvpn-mode",
         "stealth-setup",
         "wstunnel-setup",
+        "openvpn-wstunnel-setup",
+        "openvpn-wstunnel-client",
         "/api/protocols/modes",
         "/api/protocols/ikev2/bootstrap",
         "/api/protocols/ikev2/users",
         "/api/protocols/stealth/bootstrap",
+        "/api/protocols/openvpn/wstunnel/bootstrap",
+        "/api/protocols/openvpn/wstunnel/clients",
         "/api/protocols/wstunnel/bootstrap",
     ]:
         assert marker in JS
-    assert "هر Mode به Backend واقعی متصل است" in JS
-    assert "TCP fallback جداست" in JS
+    assert "WStunnel 443 جدید OpenVPN را داخل WebSocket/TLS" in JS
+    assert "Listener خام TCP/443 فقط یک Owner دارد" in JS
 
 
 def test_protocol_workspace_access_actions_refresh_their_cache():
