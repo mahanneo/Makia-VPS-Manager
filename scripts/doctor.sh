@@ -127,6 +127,22 @@ print("wg0", d.get("port"), d.get("network"), d.get("uplink"))
 PY
     ); then
       ok "WireGuard runtime" "forwarding + NAT + listener ready"
+      WG_COMPAT="$(cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_endpoint_diagnostics("")
+print("ready" if d.get("restricted_network_ready") else "optional")
+print("port=%s mtu=%s mss_in=%s mss_out=%s" % (
+    d.get("port"), d.get("mtu") or "auto", d.get("mss_clamp_in"), d.get("mss_clamp_out")
+))
+PY
+)"
+      WG_COMPAT_STATE="$(printf '%s\n' "$WG_COMPAT" | sed -n '1p')"
+      WG_COMPAT_DETAIL="$(printf '%s\n' "$WG_COMPAT" | sed -n '2p')"
+      if [[ "$WG_COMPAT_STATE" == "ready" ]]; then
+        ok "WireGuard restricted profile" "$WG_COMPAT_DETAIL"
+      else
+        warn "WireGuard restricted profile" "$WG_COMPAT_DETAIL; optional panel tuning available"
+      fi
     else
       fail "WireGuard runtime" "run Protocols → WireGuard → Repair Runtime"
     fi
