@@ -1852,9 +1852,23 @@ async function services(renderToken=window.__viewRenderToken){
   const body=rows.map(s=>{
     const protocolKind=s.name==='xray'?'xray':s.name==='openvpn-server@server'?'openvpn':s.name==='wg-quick@wg0'?'wireguard':'';
     const missing=protocolKind&&installed[s.name]===false;
-    return '<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc((s.label||s.name||'?').slice(0,1))+'</div><div class="service-control-copy"><b>'+htmlEsc(s.label||s.name)+'</b><span>'+htmlEsc(s.name)+'</span></div><span class="status-chip '+(missing?'warn':s.active?'ok':'bad')+'">'+(missing?'نصب نشده':s.active?'در حال اجرا':'متوقف')+'</span><div class="service-switch '+(s.active?'on':'')+'"><i></i></div><div class="toolbar">'+
-      (missing?'<button class="primary" data-action="protocol-setup" data-kind="'+protocolKind+'">راه‌اندازی</button>':'<button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="start">Start</button><button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="restart">Restart</button><button class="danger" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="stop">Stop</button>')+
-      '</div></div>';
+    const optionalSetup=String(s.setup_action||'');
+    const managedBy=String(s.managed_by||'');
+    const unconfigured=optionalSetup&&s.configured===false;
+    const statusText=missing?'نصب نشده':unconfigured?'نیاز به راه‌اندازی':managedBy&&!s.active?'وابسته / متوقف':s.active?'در حال اجرا':'متوقف';
+    const statusClass=missing||unconfigured||managedBy&&!s.active?'warn':s.active?'ok':'bad';
+    let actions='';
+    if(missing){
+      actions='<button class="primary" data-action="protocol-setup" data-kind="'+protocolKind+'">راه‌اندازی</button>';
+    }else if(managedBy){
+      actions='<button class="primary" data-action="'+htmlEsc(optionalSetup)+'">'+htmlEsc(s.setup_label||'مدیریت سرویس والد')+'</button>';
+    }else if(optionalSetup){
+      actions='<button class="primary" data-action="'+htmlEsc(optionalSetup)+'">'+htmlEsc(s.setup_label||(unconfigured?'راه‌اندازی':'Configure / Repair'))+'</button>'+
+        (s.active?'<button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="restart">Restart</button><button class="danger" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="stop">Stop</button>':'');
+    }else{
+      actions='<button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="start">Start</button><button class="ghost" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="restart">Restart</button><button class="danger" data-action="service-action" data-service="'+dataEnc(s.name)+'" data-service-action="stop">Stop</button>';
+    }
+    return '<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc((s.label||s.name||'?').slice(0,1))+'</div><div class="service-control-copy"><b>'+htmlEsc(s.label||s.name)+'</b><span>'+htmlEsc(s.name)+(managedBy?' · managed by '+htmlEsc(managedBy):'')+'</span></div><span class="status-chip '+statusClass+'">'+statusText+'</span><div class="service-switch '+(s.active?'on':'')+'"><i></i></div><div class="toolbar">'+actions+'</div></div>';
   }).join('');
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">▣</span><div><h2>مدیریت سرویس‌ها</h2><p>کنترل وضعیت سرویس‌های اصلی سرور و Engineهای پروتکل</p></div></div><div class="protocol-header-actions"><span class="status-chip '+(running===rows.length?'ok':'warn')+'">'+running+'/'+rows.length+' فعال</span><button class="ghost" data-action="refresh">بروزرسانی</button></div></section>',
