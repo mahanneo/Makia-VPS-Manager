@@ -696,13 +696,47 @@ def get_access_artifact_by_key(kind,external_key):
         row=con.execute("SELECT * FROM access_artifacts WHERE kind=? AND external_key=?",(str(kind),str(external_key))).fetchone()
         return dict(row) if row else None
 
+def _purge_client_artifact_refs(con,artifact_ids):
+    ids=[int(x) for x in artifact_ids if x is not None]
+    if not ids:
+        return
+    placeholders=",".join("?" for _ in ids)
+    tables={
+        str(r["name"])
+        for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'client_artifact_%'"
+        ).fetchall()
+    }
+    # Child state is intentionally removed before the binding. SQLite foreign
+    # keys are not globally enabled in legacy Makia databases, so relying on
+    # ON DELETE behavior would leave quota/policy state orphaned after revoke.
+    for table in (
+        "client_artifact_session_usage",
+        "client_artifact_usage",
+        "client_artifact_policy_state",
+        "client_artifact_bindings",
+    ):
+        if table in tables:
+            con.execute(f"DELETE FROM {table} WHERE artifact_id IN ({placeholders})",ids)
+
+
 def delete_access_artifact(artifact_id):
+    artifact_id=int(artifact_id)
     with connect() as con:
-        con.execute("DELETE FROM access_artifacts WHERE id=?",(int(artifact_id),))
+        _purge_client_artifact_refs(con,[artifact_id])
+        con.execute("DELETE FROM access_artifacts WHERE id=?",(artifact_id,))
 
 def delete_access_artifact_by_key(kind,external_key):
     with connect() as con:
-        con.execute("DELETE FROM access_artifacts WHERE kind=? AND external_key=?",(str(kind),str(external_key)))
+        rows=con.execute(
+            "SELECT id FROM access_artifacts WHERE kind=? AND external_key=?",
+            (str(kind),str(external_key)),
+        ).fetchall()
+        _purge_client_artifact_refs(con,[r["id"] for r in rows])
+        con.execute(
+            "DELETE FROM access_artifacts WHERE kind=? AND external_key=?",
+            (str(kind),str(external_key)),
+        )
 
 
 def create_support_grant(created_by,minutes=30,scope="operator"):

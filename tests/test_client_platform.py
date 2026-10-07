@@ -637,3 +637,41 @@ def test_wstunnel_multi_session_accounting_is_delta_based(client_db):
     sample=client_store.add_artifact_session_samples(account_id,artifact_id,third)
     assert sample["delta_bytes"]==40
     assert sample["used_bytes"]==160
+
+
+def test_artifact_revoke_cleanup_removes_binding_usage_policy_and_session_state(client_db):
+    from app import access_ops
+    account_id=client_store.create_account(
+        "revoke-clean","revoke-clean-pass-001",quota_bytes=1000
+    )
+    payload=access_ops.openvpn_wstunnel_payload(
+        "revoke-clean","client\n",
+        {"server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop","local_port":11941,"remote_port":11940},
+    )
+    artifact_id=db.upsert_access_artifact(
+        "openvpn_wstunnel","revoke-clean","revoke-clean","wstunnel-openvpn",
+        payload["native_filename"],access_ops.seal_payload(payload),
+        '{"client_identity":"mwst-revoke-clean-12345678"}',
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    client_store.add_artifact_counter_sample(account_id,artifact_id,100)
+    client_store.add_artifact_counter_sample(account_id,artifact_id,350)
+    client_store.set_artifact_policy_state(account_id,artifact_id,"client_account_quota")
+    client_store.add_artifact_session_samples(
+        account_id,artifact_id,[{"session_key":"17:1000","total":25}]
+    )
+    assert client_store.account_usage_bytes(account_id)==250
+
+    db.delete_access_artifact_by_key("openvpn_wstunnel","revoke-clean")
+
+    assert db.get_access_artifact(artifact_id) is None
+    assert client_store.list_artifact_bindings(account_id)==[]
+    assert client_store.account_usage_bytes(account_id)==0
+    with db.connect() as con:
+        for table in (
+            "client_artifact_bindings","client_artifact_usage",
+            "client_artifact_policy_state","client_artifact_session_usage",
+        ):
+            assert con.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE artifact_id=?",(artifact_id,)
+            ).fetchone()["n"]==0
