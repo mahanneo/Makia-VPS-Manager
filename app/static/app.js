@@ -338,6 +338,8 @@ async function openAccessDetail(id){
     manage='<button class="primary" data-action="outline-renew" data-key="'+key+'">+30D</button><button class="ghost" data-action="outline-quota" data-key="'+key+'" data-name="'+name+'" data-quota="'+quotaGb+'">'+htmlEsc(tr('حجم','Quota'))+'</button><button class="ghost" data-action="outline-reissue" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('تعویض کلید','Reissue'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="outline" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
   }else if(a.kind==='openvpn'){
     manage='<button class="primary" data-action="nav" data-view="openvpn">'+htmlEsc(tr('مدیریت OpenVPN','Manage OpenVPN'))+'</button><button class="ghost" data-action="openvpn-wstunnel-client" data-name="'+name+'">WStunnel 443</button><button class="ghost" data-action="access-diagnostics" data-kind="openvpn" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
+  }else if(a.kind==='openvpn_wstunnel'){
+    manage='<button class="primary" data-action="nav" data-view="protocols">WStunnel 443</button><button class="ghost" data-action="openvpn-wstunnel-client" data-name="'+name+'">'+htmlEsc(tr('بازسازی بسته','Rebuild package'))+'</button>';
   }else{
     manage='<button class="primary" data-action="nav" data-view="'+kind+'">'+htmlEsc(tr('مدیریت پروتکل','Manage protocol'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
   }
@@ -347,7 +349,7 @@ async function openAccessDetail(id){
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
     '<button class="primary" data-action="client-portal" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button>',
     '<button class="ghost" data-action="protected-export" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button>',
-    '<button class="ghost" data-action="client-guide" data-kind="'+kind+'">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button>'
+    '<button class="ghost" data-action="client-guide" data-kind="'+(a.kind==='openvpn_wstunnel'?'openvpn':kind)+'">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button>'
   ].join(''):'<span class="muted">برای این رکورد خروجی قابل تحویل موجود نیست.</span>';
   modalRoot.innerHTML=[
     '<div class="modal-backdrop detail-backdrop"><aside class="access-detail-drawer">',
