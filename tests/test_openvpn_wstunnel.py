@@ -222,3 +222,18 @@ def test_android_wstunnel_443_native_contract():
     assert 'if (remoteHost != "127.0.0.1")' in kotlin
     assert "9618838a4c3da6b53a4f6d67d24504b2a9aad14716387ca4c3d4cc53d861dcb4" in workflow
 
+
+
+def test_wstunnel_443_auto_resolves_internal_port_conflicts():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "WStunnel 443 backend TCP/" in source
+    assert "(11942,12940,13940,14940,15940,16940)" in source
+    assert "(10445,11445,12445,13445,14445,15445)" in source
+    assert "backend_port=int(backend.get(\"port\") or backend_port)" in source
+
+
+def test_stealth_and_wstunnel_wg_have_managed_port_fallbacks():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "(10443,11443,12443,13443,14443)" in source
+    assert "(8444,10444,11444,12444,13444)" in source
+    assert "Stunnel failed on the requested and fallback ports" in source
