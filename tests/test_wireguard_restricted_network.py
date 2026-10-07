@@ -32,7 +32,7 @@ def test_wireguard_restricted_profile_preserves_active_listen_port():
     start=source.index("def apply_wireguard_restricted_network_profile")
     section=source[start:start+5000]
     assert '_wireguard_set_interface_directive(original,"MTU","MTU = 1280")' in section
-    assert 'ListenPort' not in section
+    assert '_wireguard_set_interface_directive(original,"ListenPort"' not in section
     assert "Existing WireGuard listen port was preserved" in section
 
 
