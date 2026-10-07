@@ -85,8 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v1.6.0 >/dev/null 2>&1; then
-            gh release upload v1.6.0               dist-browser/Makia-Browser-VPN-1.6.0.zip               dist-browser/SHA256SUMS.txt               dist-browser/BUILD-INFO.txt --clobber
-          else
-            gh release create v1.6.0               --target "$GITHUB_SHA"               --title "Makia 1.6.0 — Stable Closure"               --notes "Pure Chrome/Edge Browser VPN release. Browser-only users do not need a Windows executable. See docs/BROWSER-GATEWAY-1.6.0.md and docs/CHROME-WEB-STORE-1.6.0.md."               dist-browser/Makia-Browser-VPN-1.6.0.zip               dist-browser/SHA256SUMS.txt               dist-browser/BUILD-INFO.txt
+          if ! gh release view v1.6.0 >/dev/null 2>&1; then
+            gh release create v1.6.0               --target "$GITHUB_SHA"               --title "Makia 1.6.0 — WStunnel 443"               --notes "Makia 1.6.0 adds managed WStunnel 443 with Windows and Android Full Device Direct Connect while keeping the Pure Browser Gateway architecture separate." || true
           fi
+          gh release upload v1.6.0             dist-browser/Makia-Browser-VPN-1.6.0.zip             dist-browser/SHA256SUMS.txt             dist-browser/BUILD-INFO.txt --clobber
