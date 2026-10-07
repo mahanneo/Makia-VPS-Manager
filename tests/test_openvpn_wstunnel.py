@@ -190,3 +190,18 @@ def test_access_wizard_offers_wstunnel_443_without_parallel_browser_gateway():
     assert "s.openvpn_wstunnel?.ready" in source
     assert "/api/protocols/openvpn/wstunnel/clients" in source
     assert "Policy owner" in source
+
+
+def test_openvpn_management_status_preserves_per_session_counters():
+    text=(
+        "HEADER,CLIENT_LIST,Common Name,Real Address,Virtual Address,Virtual IPv6 Address,"
+        "Bytes Received,Bytes Sent,Connected Since,Connected Since (time_t),Username,Client ID,Peer ID,Data Channel Cipher\n"
+        "CLIENT_LIST,mwst-user-a,198.51.100.2:51000,10.10.0.2,,100,200,now,1700000000,UNDEF,12,0,AES-256-GCM\n"
+        "CLIENT_LIST,mwst-user-a,198.51.100.3:52000,10.10.0.3,,300,400,now,1700000001,UNDEF,13,1,AES-256-GCM\n"
+    )
+    clients=protocol_ops._parse_openvpn_management_status(text)
+    row=clients["mwst-user-a"]
+    assert row["total"]==1000
+    assert len(row["instances"])==2
+    assert row["instances"][0]["session_key"]=="12:1700000000"
+    assert row["instances"][1]["total"]==700

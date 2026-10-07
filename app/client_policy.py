@@ -202,10 +202,10 @@ def enforce_host_artifacts(now_ts=None):
                 if not runtime:
                     continue
                 try:
-                    client_store.add_artifact_counter_sample(
-                        account_id,binding["artifact_id"],int(runtime.get("total") or 0)
+                    sampled=client_store.add_artifact_session_samples(
+                        account_id,binding["artifact_id"],runtime.get("instances") or []
                     )
-                    result["samples"]+=1
+                    result["samples"]+=int(sampled.get("sessions") or 0)
                 except Exception as exc:
                     result["errors"]+=1
                     audit("system","client_policy_wstunnel_sample_failed",identity,str(exc)[:300])

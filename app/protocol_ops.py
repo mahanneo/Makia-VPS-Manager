@@ -2671,12 +2671,26 @@ def _parse_openvpn_management_status(text):
         except Exception:rx=0
         try:tx=max(0,int(item.get("Bytes Sent") or 0))
         except Exception:tx=0
-        entry=out.setdefault(name,{"name":name,"rx":0,"tx":0,"total":0,"real_addresses":[],"client_ids":[]})
+        entry=out.setdefault(name,{"name":name,"rx":0,"tx":0,"total":0,"real_addresses":[],"client_ids":[],"instances":[]})
         entry["rx"]+=rx;entry["tx"]+=tx;entry["total"]+=rx+tx
         address=str(item.get("Real Address") or "").strip()
         if address and address not in entry["real_addresses"]:entry["real_addresses"].append(address)
         cid=str(item.get("Client ID") or "").strip()
         if cid and cid not in entry["client_ids"]:entry["client_ids"].append(cid)
+        connected=str(
+            item.get("Connected Since (time_t)")
+            or item.get("Connected Since")
+            or item.get("Connected Since (time_t) ")
+            or ""
+        ).strip()
+        session_key=(cid+":"+connected) if cid else (address+":"+connected)
+        entry["instances"].append({
+            "session_key":session_key,
+            "client_id":cid,
+            "connected_since":connected,
+            "real_address":address,
+            "rx":rx,"tx":tx,"total":rx+tx,
+        })
     return out
 
 

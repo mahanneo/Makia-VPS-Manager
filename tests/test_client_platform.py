@@ -606,3 +606,34 @@ def test_wstunnel_access_list_exposes_accounting_and_hard_policy(client_db):
     assert item["accounting_supported"] is True
     assert item["enforcement_level"]=="hard"
     assert item["quota_bytes"]==5000
+
+
+def test_wstunnel_multi_session_accounting_is_delta_based(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("ws-multi","ws-multi-pass-001",quota_bytes=100000)
+    payload=access_ops.openvpn_wstunnel_payload(
+        "ws-multi","client\n",
+        {"server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop","local_port":11941,"remote_port":11940},
+    )
+    artifact_id=db.upsert_access_artifact(
+        "openvpn_wstunnel","ws-multi","ws-multi","wstunnel-openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),'{"client_identity":"mwst-ws-multi-12345678"}',
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    first=[
+        {"session_key":"10:1000","total":100},
+        {"session_key":"11:1001","total":200},
+    ]
+    assert client_store.add_artifact_session_samples(account_id,artifact_id,first)["used_bytes"]==0
+    second=[
+        {"session_key":"10:1000","total":160},
+        {"session_key":"11:1001","total":260},
+    ]
+    sample=client_store.add_artifact_session_samples(account_id,artifact_id,second)
+    assert sample["delta_bytes"]==120
+    assert sample["used_bytes"]==120
+    # One session disappearing must not be interpreted as an aggregate counter reset.
+    third=[{"session_key":"11:1001","total":300}]
+    sample=client_store.add_artifact_session_samples(account_id,artifact_id,third)
+    assert sample["delta_bytes"]==40
+    assert sample["used_bytes"]==160

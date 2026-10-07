@@ -131,6 +131,17 @@ def init_client_db():
               FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
             );
 
+            CREATE TABLE IF NOT EXISTS client_artifact_session_usage (
+              account_id INTEGER NOT NULL,
+              artifact_id INTEGER NOT NULL,
+              session_key TEXT NOT NULL,
+              last_counter INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY(account_id,artifact_id,session_key),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
+            );
+
             CREATE TABLE IF NOT EXISTS client_artifact_policy_state (
               account_id INTEGER NOT NULL,
               artifact_id INTEGER NOT NULL,
@@ -596,6 +607,10 @@ def unbind_access_artifact(account_id,artifact_id):
             (int(account_id),int(artifact_id)),
         )
         con.execute(
+            "DELETE FROM client_artifact_session_usage WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        )
+        con.execute(
             "DELETE FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",
             (int(account_id),int(artifact_id)),
         )
@@ -906,6 +921,7 @@ def delete_account(account_id):
         con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_usage_baselines WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_usage WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_artifact_session_usage WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_policy_state WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_protocol_bindings WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_bindings WHERE account_id=?",(account_id,))
@@ -977,8 +993,12 @@ def reset_account_usage(account_id):
                 (account_id,int(row["protocol_client_id"]),int(row["used"] or 0),ts),
             )
         con.execute(
-            "UPDATE client_artifact_usage SET used_bytes=0,updated_at=? WHERE account_id=?",
+            "UPDATE client_artifact_usage SET used_bytes=0,last_counter=0,updated_at=? WHERE account_id=?",
             (ts,account_id),
+        )
+        con.execute(
+            "DELETE FROM client_artifact_session_usage WHERE account_id=?",
+            (account_id,),
         )
     return {"ok":True,"used_bytes":0}
 
@@ -990,6 +1010,69 @@ def artifact_usage_bytes(account_id,artifact_id):
             (int(account_id),int(artifact_id)),
         ).fetchone()
         return int(row["used_bytes"] or 0) if row else 0
+
+
+def add_artifact_session_samples(account_id,artifact_id,instances):
+    """Account concurrent OpenVPN sessions without double-counting reconnects.
+
+    Each OpenVPN management CID + connection timestamp is tracked separately.
+    The first observation establishes a baseline; later observations add only
+    positive per-session deltas to the artifact's aggregate usage.
+    """
+    account_id=int(account_id); artifact_id=int(artifact_id)
+    ts=now_iso()
+    with connect() as con:
+        usage=con.execute(
+            "SELECT used_bytes FROM client_artifact_usage WHERE account_id=? AND artifact_id=?",
+            (account_id,artifact_id),
+        ).fetchone()
+        if not usage:
+            con.execute(
+                """INSERT INTO client_artifact_usage(account_id,artifact_id,used_bytes,last_counter,updated_at)
+                   VALUES(?,?,0,0,?)""",
+                (account_id,artifact_id,ts),
+            )
+            used=0
+        else:
+            used=max(0,int(usage["used_bytes"] or 0))
+        delta_total=0
+        sampled=0
+        for raw in instances or []:
+            key=str(raw.get("session_key") or "").strip()
+            if not key:
+                continue
+            counter=max(0,int(raw.get("total") or 0))
+            row=con.execute(
+                """SELECT last_counter FROM client_artifact_session_usage
+                   WHERE account_id=? AND artifact_id=? AND session_key=?""",
+                (account_id,artifact_id,key),
+            ).fetchone()
+            if not row:
+                con.execute(
+                    """INSERT INTO client_artifact_session_usage(
+                         account_id,artifact_id,session_key,last_counter,updated_at
+                       ) VALUES(?,?,?,?,?)""",
+                    (account_id,artifact_id,key,counter,ts),
+                )
+                sampled+=1
+                continue
+            last=max(0,int(row["last_counter"] or 0))
+            delta=counter-last if counter>=last else counter
+            delta_total+=max(0,delta)
+            sampled+=1
+            con.execute(
+                """UPDATE client_artifact_session_usage SET last_counter=?,updated_at=?
+                   WHERE account_id=? AND artifact_id=? AND session_key=?""",
+                (counter,ts,account_id,artifact_id,key),
+            )
+        if delta_total:
+            used+=delta_total
+            con.execute(
+                """UPDATE client_artifact_usage SET used_bytes=?,updated_at=?
+                   WHERE account_id=? AND artifact_id=?""",
+                (used,ts,account_id,artifact_id),
+            )
+        return {"used_bytes":used,"delta_bytes":delta_total,"sessions":sampled}
 
 
 def artifact_client_identity(binding):
