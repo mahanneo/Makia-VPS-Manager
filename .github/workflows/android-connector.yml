@@ -75,6 +75,22 @@ jobs:
           test -x "$(go env GOPATH)/bin/gomobile"
           test -x "$(go env GOPATH)/bin/gobind"
 
+      - name: Bundle pinned Wstunnel Android ARM64 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=11.0.0
+          archive="wstunnel_${version}_android_arm64.tar.gz"
+          expected="9618838a4c3da6b53a4f6d67d24504b2a9aad14716387ca4c3d4cc53d861dcb4"
+          curl -fsSL --retry 3 "https://github.com/erebe/wstunnel/releases/download/v${version}/${archive}" -o "/tmp/${archive}"
+          echo "${expected}  /tmp/${archive}" | sha256sum -c -
+          rm -rf /tmp/makia-wstunnel-android && mkdir -p /tmp/makia-wstunnel-android
+          tar -xzf "/tmp/${archive}" -C /tmp/makia-wstunnel-android
+          binary="$(find /tmp/makia-wstunnel-android -type f -name wstunnel | head -n1)"
+          test -n "$binary"
+          mkdir -p upstream/sing-box-for-android/app/src/main/jniLibs/arm64-v8a
+          install -m 0755 "$binary" upstream/sing-box-for-android/app/src/main/jniLibs/arm64-v8a/libwstunnel.so
+
       - name: Build official libbox Android AAR
         shell: bash
         working-directory: upstream/sing-box
@@ -135,6 +151,7 @@ jobs:
           print(f"Validated APK: {apk.name} ({apk.stat().st_size} bytes)")
           PY
           unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libbox.so'
+          unzip -l package-android/Makia-Android-Connector.apk | grep -q 'lib/arm64-v8a/libwstunnel.so'
           (cd package-android && find . -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
           test -s package-android/SHA256SUMS.txt
           cat package-android/SHA256SUMS.txt

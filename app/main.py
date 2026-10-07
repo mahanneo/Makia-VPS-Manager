@@ -1848,16 +1848,15 @@ def openvpn_wstunnel_client_create(payload:OpenVPNWStunnelClient,request:Request
     actor=require_capability(request,"openvpn",True)
     try:
         result=protocol_ops.render_openvpn_wstunnel_client(payload.name,payload.local_port)
-        delivery=access_ops.openvpn_wstunnel_payload(payload.name,result["config"],result["transport"])
+        mobile=protocol_ops.render_android_wstunnel_wireguard_client(payload.name)
+        delivery=access_ops.openvpn_wstunnel_payload(payload.name,result["config"],result["transport"],android={
+            "native_filename":mobile["native_filename"],"config":mobile["config"],"transport":mobile["transport"]})
         artifact_id=artifact_save(
             "openvpn_wstunnel",payload.name,payload.name,"wstunnel-openvpn",delivery,{
-                "endpoint":result["endpoint"],
-                "transport":"wstunnel",
-                "public_port":result["transport"]["port"],
-                "local_port":result["transport"]["local_port"],
-                "client_identity":result["client_identity"],
-            }
-        )
+                "endpoint":result["endpoint"],"transport":"wstunnel",
+                "public_port":result["transport"]["port"],"local_port":result["transport"]["local_port"],
+                "client_identity":result["client_identity"],"mobile_wireguard_peer_name":mobile["peer_name"],
+                "mobile_wireguard_public_key":mobile["public_key"]})
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
     result["artifact_id"]=artifact_id
@@ -2463,6 +2462,9 @@ def access_revoke(kind:str,key:str,request:Request):
             if not identity:
                 raise HTTPException(409,"OpenVPN WStunnel client identity is missing")
             protocol_ops.revoke_openvpn_client(identity)
+            mobile_public=str(meta.get("mobile_wireguard_public_key") or "").strip()
+            if mobile_public:
+                protocol_ops.remove_wireguard_peer(mobile_public)
             delete_access_artifact_by_key("openvpn_wstunnel",key)
         elif kind=="outline":
             try: row=get_protocol_client(int(key))

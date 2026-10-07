@@ -74,7 +74,7 @@ def redeem_ticket(token):
         account=client_store.get_account(row["account_id"])
         ok,reason=client_store.account_available(account,now) if account else (False,"missing")
         device=con.execute(
-            "SELECT id,active FROM client_devices WHERE id=? AND account_id=?",
+            "SELECT id,active,platform FROM client_devices WHERE id=? AND account_id=?",
             (int(row["device_id"]),int(row["account_id"])),
         ).fetchone()
         if not ok or not device or not int(device["active"] or 0):
@@ -91,7 +91,7 @@ def redeem_ticket(token):
     if row["delivery_kind"]=="protocol":
         delivery=client_store.protocol_delivery(row["account_id"],row["delivery_id"])
     else:
-        delivery=client_store.artifact_delivery(row["account_id"],row["delivery_id"])
+        delivery=client_store.artifact_delivery(row["account_id"],row["delivery_id"],platform=str(device["platform"] or ""))
     return {
         "account_id":int(row["account_id"]),
         "device_id":int(row["device_id"]),

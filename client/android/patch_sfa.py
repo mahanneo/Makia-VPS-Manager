@@ -25,6 +25,12 @@ dst.write_text(overlay.read_text(encoding="utf-8"),encoding="utf-8")
 
 manifest=root/"app/src/main/AndroidManifest.xml"
 m=manifest.read_text(encoding="utf-8")
+app_start=m.find("<application")
+app_end=m.find(">",app_start)
+if app_start<0 or app_end<0:
+    raise SystemExit("application manifest marker missing")
+if "android:extractNativeLibs" not in m[app_start:app_end]:
+    m=m[:app_end]+'\n        android:extractNativeLibs="true"'+m[app_end:]
 launcher='''<intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

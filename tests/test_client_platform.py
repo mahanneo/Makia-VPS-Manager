@@ -1,3 +1,4 @@
+import base64
 import io
 import sqlite3
 import tarfile
@@ -675,3 +676,22 @@ def test_artifact_revoke_cleanup_removes_binding_usage_policy_and_session_state(
             assert con.execute(
                 f"SELECT COUNT(*) AS n FROM {table} WHERE artifact_id=?",(artifact_id,)
             ).fetchone()["n"]==0
+
+def test_wstunnel_android_delivery_uses_hidden_wireguard_variant(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("ws-android","ws-android-pass-001")
+    android_config="[Interface]\\nPrivateKey = android-secret\\n[Peer]\\nEndpoint = 127.0.0.1:51821\\n"
+    payload=access_ops.openvpn_wstunnel_payload("ws-android","client\\n",
+        {"server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop","local_port":11941,"remote_port":11940},
+        android={"native_filename":"ws-android.conf","config":android_config,
+            "transport":{"type":"wireguard-wstunnel","server":"vpn.example.com","port":443,
+            "path_prefix":"abcdefghijklmnop","local_port":51821,"remote_host":"127.0.0.1","remote_port":51820}})
+    artifact_id=db.upsert_access_artifact("openvpn_wstunnel","ws-android","ws-android","wstunnel-openvpn",
+        payload["native_filename"],access_ops.seal_payload(payload),'{"client_identity":"mwst-x"}')
+    client_store.bind_access_artifact(account_id,artifact_id)
+    assert client_store.artifact_delivery(account_id,artifact_id)["engine"]=="openvpn_wstunnel"
+    mobile=client_store.artifact_delivery(account_id,artifact_id,platform="android")
+    assert mobile["engine"]=="wstunnel_wireguard"
+    assert mobile["transport_config"]["remote_host"]=="127.0.0.1"
+    assert "android-secret" in base64.b64decode(mobile["native_base64"]).decode()
+

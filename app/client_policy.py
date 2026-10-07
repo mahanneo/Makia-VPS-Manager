@@ -141,7 +141,9 @@ def enforce_host_artifacts(now_ts=None):
     now_ts=int(now_ts or time.time())
     accounts={int(a["id"]):a for a in client_store.list_accounts()}
     sessions=system_ops.online_sessions()
-    wg_runtime={str(p.get("name") or ""):p for p in protocol_ops._wireguard_peer_runtime()}
+    wg_rows=protocol_ops._wireguard_peer_runtime()
+    wg_runtime={str(p.get("name") or ""):p for p in wg_rows}
+    wg_runtime_by_key={str(p.get("public_key") or ""):p for p in wg_rows}
     wg_config={str(p.get("name") or ""):p for p in protocol_ops.list_wireguard_peers()}
     try:
         ovpn_runtime=protocol_ops.openvpn_management_status()
@@ -202,9 +204,13 @@ def enforce_host_artifacts(now_ts=None):
                 if not runtime:
                     continue
                 try:
-                    sampled=client_store.add_artifact_session_samples(
-                        account_id,binding["artifact_id"],runtime.get("instances") or []
-                    )
+                    instances=list(runtime.get("instances") or [])
+                    mobile=client_store.artifact_mobile_wireguard(binding)
+                    mobile_runtime=wg_runtime_by_key.get(mobile.get("public_key") or "")
+                    if mobile_runtime:
+                        instances.append({"session_key":"wg:"+str(mobile["public_key"]),
+                            "total":int(mobile_runtime.get("rx") or 0)+int(mobile_runtime.get("tx") or 0)})
+                    sampled=client_store.add_artifact_session_samples(account_id,binding["artifact_id"],instances)
                     result["samples"]+=int(sampled.get("sessions") or 0)
                 except Exception as exc:
                     result["errors"]+=1
@@ -310,9 +316,14 @@ def enforce_host_artifacts(now_ts=None):
                     policy_status=protocol_ops.openvpn_wstunnel_policy_status()
                     if not policy_status.get("configured"):
                         continue
+                    mobile=client_store.artifact_mobile_wireguard(binding)
+                    mobile_name=mobile.get("name") or ""
                     if reason:
                         if not managed:
                             changed=protocol_ops.set_openvpn_wstunnel_client_policy_enabled(identity,False)
+                            mobile_peer=wg_config.get(mobile_name) if mobile_name else None
+                            if mobile_peer and mobile_peer.get("enabled"):
+                                protocol_ops.set_wireguard_peer_enabled(mobile_name,False)
                             client_store.set_artifact_policy_state(
                                 account_id,artifact_id,_managed_reason(reason)
                             )
@@ -326,6 +337,9 @@ def enforce_host_artifacts(now_ts=None):
                     else:
                         if managed.startswith(CLIENT_REASON_PREFIX):
                             protocol_ops.set_openvpn_wstunnel_client_policy_enabled(identity,True)
+                            mobile_peer=next((p for p in protocol_ops.list_wireguard_peers() if p.get("name")==mobile_name),None) if mobile_name else None
+                            if mobile_peer and not mobile_peer.get("enabled"):
+                                protocol_ops.set_wireguard_peer_enabled(mobile_name,True)
                             client_store.set_artifact_policy_state(account_id,artifact_id,"")
                             audit(
                                 "system","client_policy_wstunnel_restore",identity,

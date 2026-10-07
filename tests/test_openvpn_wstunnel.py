@@ -205,3 +205,20 @@ def test_openvpn_management_status_preserves_per_session_counters():
     assert len(row["instances"])==2
     assert row["instances"][0]["session_key"]=="12:1700000000"
     assert row["instances"][1]["total"]==700
+
+def test_android_wstunnel_443_native_contract():
+    unit=(ROOT/"systemd/makia-openvpn-wstunnel.service").read_text(encoding="utf-8")
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    kotlin=(ROOT/"client/android/MakiaEntryActivity.kt").read_text(encoding="utf-8")
+    workflow=(ROOT/".github/workflows/android-connector.yml").read_text(encoding="utf-8")
+    assert "--restrict-to 127.0.0.1:${OVPN_WSTUNNEL_TARGET_PORT}" in unit
+    assert "--restrict-to 127.0.0.1:${OVPN_WSTUNNEL_WG_PORT}" in unit
+    assert "def render_android_wstunnel_wireguard_client" in source
+    assert '"type":"wireguard-wstunnel"' in source
+    assert 'engine == "wstunnel_wireguard"' in kotlin
+    assert '"exclude_package"' in kotlin
+    assert '"libwstunnel.so"' in kotlin
+    assert 'if (port != 443)' in kotlin
+    assert 'if (remoteHost != "127.0.0.1")' in kotlin
+    assert "9618838a4c3da6b53a4f6d67d24504b2a9aad14716387ca4c3d4cc53d861dcb4" in workflow
+

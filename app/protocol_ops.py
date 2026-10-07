@@ -882,6 +882,8 @@ def openvpn_wstunnel_status():
     except Exception: target_port=0
     try: public_port=int(data.get("OVPN_WSTUNNEL_PUBLIC_PORT") or 443)
     except Exception: public_port=443
+    try: wg_port=int(data.get("OVPN_WSTUNNEL_WG_PORT") or 0)
+    except Exception: wg_port=0
     prefix=data.get("OVPN_WSTUNNEL_PATH_PREFIX","")
     nginx_text=""
     try:
@@ -897,8 +899,10 @@ def openvpn_wstunnel_status():
         "bridge_port":bridge_port or None,
         "target_port":target_port or None,
         "public_port":public_port,
+        "wg_port":wg_port or None,
         "domain":data.get("OVPN_WSTUNNEL_DOMAIN",""),
         "path_prefix":prefix,
+        "mobile_ready":bool(wg_port and _active("wg-quick@wg0") and _wireguard_udp_listener(wg_port)),
         "listener":_tcp_listener(bridge_port,loopback_only=True),
         "nginx_location":route_present,
         "backend":backend,
@@ -1072,6 +1076,9 @@ def ensure_openvpn_wstunnel_backend(port=11940):
 def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_port=11940,path_prefix=None):
     if not shutil.which("wstunnel"):
         raise ProtocolError("WStunnel is not installed; run sudo makia-upgrade first")
+    wg=wireguard_status()
+    if not wg.get("service_active") or not wg.get("port"):
+        raise ProtocolError("WStunnel 443 mobile mode requires an active Makia WireGuard server")
     domain=validate_endpoint_selection(domain,"domain",direct=True)
     public_port=_validate_port(public_port)
     bridge_port=_validate_port(bridge_port)
@@ -1104,6 +1111,7 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         f"OVPN_WSTUNNEL_PUBLIC_PORT={public_port}\n"
         f"OVPN_WSTUNNEL_BRIDGE_PORT={bridge_port}\n"
         f"OVPN_WSTUNNEL_TARGET_PORT={backend_port}\n"
+        f"OVPN_WSTUNNEL_WG_PORT={int(wg['port'])}\n"
         f"OVPN_WSTUNNEL_PATH_PREFIX={prefix}\n",
         encoding="utf-8",
     )
@@ -1231,6 +1239,34 @@ def render_openvpn_wstunnel_client(name,local_port=11941):
         "client_command":command,
         "endpoint":f"wss://{transport['server']}:{transport['port']}",
     }
+
+
+def _wstunnel_mobile_wireguard_name(name):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
+        raise ProtocolError("invalid client name")
+    safe=re.sub(r"[^A-Za-z0-9_.-]","-",str(name)).strip(".-") or "client"
+    digest=hashlib.sha256(("android:"+str(name)).encode("utf-8")).hexdigest()[:8]
+    return f"mwsg-{safe[:33]}-{digest}"
+
+
+def render_android_wstunnel_wireguard_client(name,local_port=51821):
+    status=openvpn_wstunnel_status()
+    if not status.get("ready") or not status.get("mobile_ready"):
+        raise ProtocolError("WStunnel 443 Android transport is not ready")
+    local_port=_validate_port(local_port)
+    wg_port=int(status.get("wg_port") or 0)
+    if not wg_port:
+        raise ProtocolError("WStunnel 443 WireGuard target is missing")
+    peer_name=_wstunnel_mobile_wireguard_name(name)
+    peer=create_wireguard_peer(peer_name,status.get("domain") or "",iface="wg0",dns="1.1.1.1",mtu=1280,keepalive=15,allowed_ips="0.0.0.0/0")
+    config=re.sub(r"(?m)^Endpoint\s*=\s*[^\n]+$",f"Endpoint = 127.0.0.1:{local_port}",peer["config"],count=1)
+    transport={"type":"wireguard-wstunnel","server":status.get("domain") or "","port":443,
+        "path_prefix":status.get("path_prefix") or "","local_host":"127.0.0.1","local_port":local_port,
+        "remote_host":"127.0.0.1","remote_port":wg_port,"tls_verify":True,
+        "wireguard_peer_name":peer_name,"wireguard_public_key":peer["public_key"]}
+    return {"name":name,"peer_name":peer_name,"public_key":peer["public_key"],"config":config,
+        "native_filename":f"{name}-wstunnel-android.conf","transport":transport,
+        "endpoint":f"wss://{transport['server']}:443"}
 
 
 def protocol_modes():

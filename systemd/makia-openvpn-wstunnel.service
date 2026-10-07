@@ -7,7 +7,7 @@ Requires=openvpn-server@makia-ws.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/makia-vps-manager/openvpn-wstunnel.env
-ExecStart=/usr/local/bin/wstunnel server --restrict-to 127.0.0.1:${OVPN_WSTUNNEL_TARGET_PORT} --restrict-http-upgrade-path-prefix ${OVPN_WSTUNNEL_PATH_PREFIX} ws://127.0.0.1:${OVPN_WSTUNNEL_BRIDGE_PORT}
+ExecStart=/usr/local/bin/wstunnel server --restrict-to 127.0.0.1:${OVPN_WSTUNNEL_TARGET_PORT} --restrict-to 127.0.0.1:${OVPN_WSTUNNEL_WG_PORT} --restrict-http-upgrade-path-prefix ${OVPN_WSTUNNEL_PATH_PREFIX} ws://127.0.0.1:${OVPN_WSTUNNEL_BRIDGE_PORT}
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

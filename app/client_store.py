@@ -616,7 +616,7 @@ def unbind_access_artifact(account_id,artifact_id):
         )
 
 
-def artifact_delivery(account_id,artifact_id):
+def artifact_delivery(account_id,artifact_id,platform=""):
     account=get_account(account_id)
     ok,reason=account_available(account)
     if not ok:
@@ -632,6 +632,19 @@ def artifact_delivery(account_id,artifact_id):
     if not artifact:
         raise ValueError("access artifact not found")
     payload=access_ops.open_payload(artifact["payload_enc"])
+    kind=str(artifact.get("kind") or "").lower()
+    platform=str(platform or "").strip().lower()
+    if platform=="android" and kind=="openvpn_wstunnel":
+        android=payload.get("android") if isinstance(payload.get("android"),dict) else {}
+        android_config=str(android.get("config") or "")
+        android_transport=android.get("transport") if isinstance(android.get("transport"),dict) else {}
+        android_filename=str(android.get("native_filename") or "makia-wstunnel-android.conf")
+        if not android_config or android_transport.get("type")!="wireguard-wstunnel":
+            raise ValueError("Android WStunnel delivery is not available")
+        return {"id":int(artifact_id),"name":allowed.get("label") or artifact.get("display_name") or "",
+            "engine":"wstunnel_wireguard","protocol":"wstunnel-443","share_link":"",
+            "native_filename":android_filename,"native_base64":base64.b64encode(android_config.encode("utf-8")).decode("ascii"),
+            "qr":"","transport_config":android_transport,"source":"artifact"}
     primary=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not primary:
         raise ValueError("artifact has no client-deliverable payload")
@@ -1081,6 +1094,15 @@ def artifact_client_identity(binding):
     except (TypeError,ValueError):
         meta={}
     return str(meta.get("client_identity") or binding.get("external_key") or "").strip()
+
+
+def artifact_mobile_wireguard(binding):
+    try:
+        meta=json.loads(binding.get("metadata_json") or "{}")
+    except (TypeError,ValueError):
+        meta={}
+    return {"name":str(meta.get("mobile_wireguard_peer_name") or "").strip(),
+            "public_key":str(meta.get("mobile_wireguard_public_key") or "").strip()}
 
 
 def add_artifact_counter_sample(account_id,artifact_id,counter):

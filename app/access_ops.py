@@ -335,7 +335,7 @@ def openvpn_payload(name,config):
     }
 
 
-def openvpn_wstunnel_payload(name,config,transport):
+def openvpn_wstunnel_payload(name,config,transport,android=None):
     filename=f"{safe_filename(name)}-wstunnel.ovpn"
     transport=dict(transport or {})
     command=(
@@ -364,6 +364,7 @@ def openvpn_wstunnel_payload(name,config,transport):
         },
         "primary_text":str(config),
         "transport":transport,
+        "android":dict(android or {}),
         "summary":{
             "mode":"openvpn-wstunnel",
             "endpoint":f"wss://{transport.get('server','')}:{int(transport.get('port') or 443)}",
