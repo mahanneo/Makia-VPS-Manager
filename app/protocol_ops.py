@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import ipaddress
 import json
 import os
@@ -1112,20 +1113,28 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
     }
 
 
-def _ensure_openvpn_client_identity(name):
+def _openvpn_wstunnel_identity(name):
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
         raise ProtocolError("invalid client name")
+    safe=re.sub(r"[^A-Za-z0-9_.-]","-",str(name)).strip(".-") or "client"
+    digest=hashlib.sha256(str(name).encode("utf-8")).hexdigest()[:8]
+    return f"mwst-{safe[:33]}-{digest}"
+
+
+def _ensure_openvpn_client_identity(identity):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",identity or ""):
+        raise ProtocolError("invalid OpenVPN client identity")
     if not (OVPN_EASYRSA/"pki/ca.crt").exists():
         raise ProtocolError("OpenVPN server is not bootstrapped")
     pki=OVPN_EASYRSA/"pki"
-    cert=pki/f"issued/{name}.crt"
-    key=pki/f"private/{name}.key"
+    cert=pki/f"issued/{identity}.crt"
+    key=pki/f"private/{identity}.key"
     if cert.exists() and key.exists():
         return
     env=os.environ.copy()
     env["EASYRSA_BATCH"]="1"
     p=subprocess.run(
-        [str(OVPN_EASYRSA/"easyrsa"),"build-client-full",name,"nopass"],
+        [str(OVPN_EASYRSA/"easyrsa"),"build-client-full",identity,"nopass"],
         cwd=str(OVPN_EASYRSA),env=env,text=True,capture_output=True,timeout=180,check=False,
     )
     if p.returncode!=0:
@@ -1133,15 +1142,16 @@ def _ensure_openvpn_client_identity(name):
 
 
 def render_openvpn_wstunnel_client(name,local_port=11941):
-    _ensure_openvpn_client_identity(name)
+    identity=_openvpn_wstunnel_identity(name)
+    _ensure_openvpn_client_identity(identity)
     status=openvpn_wstunnel_status()
     if not status.get("ready"):
         raise ProtocolError("OpenVPN WStunnel 443 is not configured")
     local_port=_validate_port(local_port)
     pki=OVPN_EASYRSA/"pki"
     ca=(pki/"ca.crt").read_text(encoding="utf-8")
-    cert=(pki/f"issued/{name}.crt").read_text(encoding="utf-8")
-    key=(pki/f"private/{name}.key").read_text(encoding="utf-8")
+    cert=(pki/f"issued/{identity}.crt").read_text(encoding="utf-8")
+    key=(pki/f"private/{identity}.key").read_text(encoding="utf-8")
     ta=(OVPN_DIR/"server/ta.key").read_text(encoding="utf-8")
     client=(
         "client\ndev tun\nproto tcp4-client\n"
@@ -1161,6 +1171,7 @@ def render_openvpn_wstunnel_client(name,local_port=11941):
         "remote_host":"127.0.0.1",
         "remote_port":int(status.get("target_port") or 11940),
         "tls_verify":True,
+        "client_identity":identity,
     }
     command=(
         f"wstunnel client --http-upgrade-path-prefix {transport['path_prefix']} --tls-verify-certificate "
@@ -1169,6 +1180,7 @@ def render_openvpn_wstunnel_client(name,local_port=11941):
     )
     return {
         "name":name,
+        "client_identity":identity,
         "config":client,
         "transport":transport,
         "client_command":command,
@@ -2737,7 +2749,7 @@ def list_openvpn_clients():
         return []
     out=[]
     for cert in sorted(issued.glob("*.crt")):
-        if cert.stem=="server":
+        if cert.stem=="server" or cert.stem.startswith("mwst-"):
             continue
         out.append({"name":cert.stem,"certificate":str(cert)})
     return out
