@@ -106,7 +106,9 @@ Run the `wstunnel-client-command.txt` command first, then import/open the delive
 
 ## Android / iOS
 
-Makia 1.6.2 does not claim native Direct Connect for this transport on Android/iOS. The Client Portal can deliver the package, but automatic mobile integration requires an OpenVPN core plus WStunnel lifecycle integration in the native mobile client.
+Android ARM64 supports Makia Full Device Direct Connect for WStunnel 443 through the bundled WStunnel runtime and the Makia-managed mobile dataplane. The user does not need to install WStunnel separately.
+
+iOS still does not claim an embedded native WStunnel Network Extension in 1.6.2; use the supported profile/import path there.
 
 ## Diagnostics
 
