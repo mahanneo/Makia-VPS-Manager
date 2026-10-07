@@ -565,7 +565,7 @@ def portable_migration_files(data_dir,managed_users,panel_domain="",version="",s
     systemd_dir=Path("/etc/systemd/system")
     systemd_units=[
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
-        "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
+        "makia-protocol-traffic.service","makia-wstunnel.service","makia-openvpn-wstunnel.service","makia-ikev2-network.service",
         "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
         "makia-ops-monitor.service","makia-ops-monitor.timer","makia-mtproxy.service",
     ]
