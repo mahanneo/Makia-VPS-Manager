@@ -103,6 +103,16 @@ on_exit(){
       systemctl enable --now stunnel4 2>/dev/null
       systemctl restart stunnel4 2>/dev/null
     fi
+    if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now makia-wstunnel 2>/dev/null
+      systemctl restart makia-wstunnel 2>/dev/null
+    fi
+    if [[ "${OVPN_WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now openvpn-server@makia-ws 2>/dev/null
+      systemctl restart openvpn-server@makia-ws 2>/dev/null
+      systemctl enable --now makia-openvpn-wstunnel 2>/dev/null
+      systemctl restart makia-openvpn-wstunnel 2>/dev/null
+    fi
     if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
       systemctl enable --now makia-mtproxy 2>/dev/null
       systemctl restart makia-mtproxy 2>/dev/null
@@ -165,6 +175,20 @@ STUNNEL_WAS_ACTIVE=0
 if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   STUNNEL_WAS_CONFIGURED=1
   systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
+fi
+
+WSTUNNEL_WAS_CONFIGURED=0
+WSTUNNEL_WAS_ACTIVE=0
+if [[ -f /etc/makia-vps-manager/wstunnel.env ]]; then
+  WSTUNNEL_WAS_CONFIGURED=1
+  systemctl is-active --quiet makia-wstunnel 2>/dev/null && WSTUNNEL_WAS_ACTIVE=1 || true
+fi
+
+OVPN_WSTUNNEL_WAS_CONFIGURED=0
+OVPN_WSTUNNEL_WAS_ACTIVE=0
+if [[ -f /etc/makia-vps-manager/openvpn-wstunnel.env ]]; then
+  OVPN_WSTUNNEL_WAS_CONFIGURED=1
+  systemctl is-active --quiet makia-openvpn-wstunnel 2>/dev/null && OVPN_WSTUNNEL_WAS_ACTIVE=1 || true
 fi
 
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -682,6 +706,14 @@ else
   if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet stunnel4; then
     echo "Stealth/Stunnel was active before update but is no longer active; updater will roll back." >&2
     exit 9
+  fi
+  if [[ "$WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-wstunnel; then
+    echo "WireGuard WStunnel was active before update but is no longer active; updater will roll back." >&2
+    exit 10
+  fi
+  if [[ "$OVPN_WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-openvpn-wstunnel; then
+    echo "OpenVPN WStunnel 443 was active before update but is no longer active; updater will roll back." >&2
+    exit 11
   fi
   echo "Existing protocol runtime state preserved."
 fi
