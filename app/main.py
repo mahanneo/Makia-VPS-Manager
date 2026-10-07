@@ -1098,6 +1098,35 @@ def wstunnel_bootstrap(payload:WStunnelBootstrap,request:Request):
     audit(actor,"wstunnel_bootstrap","wstunnel",f"domain={payload.domain}; port={payload.port}",ip=ip(request))
     return result
 
+
+class OpenVPNWStunnelBootstrap(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    public_port:int=Field(default=443,ge=1,le=65535)
+    bridge_port:int=Field(default=10445,ge=1,le=65535)
+    backend_port:int=Field(default=11940,ge=1,le=65535)
+    path_prefix:str=Field(default="",max_length=96)
+
+@app.post("/api/protocols/openvpn/wstunnel/bootstrap")
+def openvpn_wstunnel_bootstrap(payload:OpenVPNWStunnelBootstrap,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.bootstrap_openvpn_wstunnel(
+            payload.domain,
+            payload.public_port,
+            payload.bridge_port,
+            payload.backend_port,
+            payload.path_prefix or None,
+        )
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"openvpn_wstunnel_bootstrap_failed","openvpn-wstunnel",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(
+        actor,"openvpn_wstunnel_bootstrap","openvpn-wstunnel",
+        f"domain={payload.domain}; public_port={payload.public_port}; bridge={payload.bridge_port}; backend={payload.backend_port}",
+        ip=ip(request),
+    )
+    return result
+
 class XrayInboundBuilderPayload(BaseModel):
     protocol:str
     port:int=Field(ge=1,le=65535)
@@ -1807,6 +1836,31 @@ def openvpn_client_create(payload:OpenVPNClient,request:Request):
         raise HTTPException(400,str(e))
     result["artifact_id"]=artifact_id
     audit(actor,"openvpn_client_create",payload.name,ip=ip(request))
+    return result
+
+
+class OpenVPNWStunnelClient(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    local_port:int=Field(default=11941,ge=1024,le=65535)
+
+@app.post("/api/protocols/openvpn/wstunnel/clients")
+def openvpn_wstunnel_client_create(payload:OpenVPNWStunnelClient,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.render_openvpn_wstunnel_client(payload.name,payload.local_port)
+        delivery=access_ops.openvpn_wstunnel_payload(payload.name,result["config"],result["transport"])
+        artifact_id=artifact_save(
+            "openvpn_wstunnel",payload.name,payload.name,"wstunnel-openvpn",delivery,{
+                "endpoint":result["endpoint"],
+                "transport":"wstunnel",
+                "public_port":result["transport"]["port"],
+                "local_port":result["transport"]["local_port"],
+            }
+        )
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    result["artifact_id"]=artifact_id
+    audit(actor,"openvpn_wstunnel_client_create",payload.name,f"artifact_id={artifact_id}",ip=ip(request))
     return result
 
 class AccessPackageRequest(BaseModel):
