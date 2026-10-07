@@ -1,7 +1,7 @@
-Makia Android Connector 1.6.1 — install notes
+Makia Android Connector 1.6.3 — install notes
 
 Stable APK:
-Makia-Android-Connector-1.6.1.apk
+Makia-Android-Connector-1.6.3.apk
 
 WStunnel 443:
 - Full Device Direct Connect is supported on Android ARM64.
@@ -12,7 +12,7 @@ WStunnel 443:
 
 Requirements:
 - Android 7.0 or newer (API 24+).
-- ARM64 is required for WStunnel 443 in 1.6.1.
+- ARM64 is required for WStunnel 443 in 1.6.3.
 - Allow installation from the browser/files app if Android asks.
 
 If Android says "App not installed" and an older Makia Connector RC is already installed:
