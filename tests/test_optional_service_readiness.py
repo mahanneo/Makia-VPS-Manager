@@ -78,3 +78,19 @@ def test_wstunnel_service_has_configuration_conditions():
     unit=(ROOT/"systemd/makia-openvpn-wstunnel.service").read_text(encoding="utf-8")
     assert "ConditionPathExists=/etc/makia-vps-manager/openvpn-wstunnel.env" in unit
     assert "ConditionPathExists=/etc/openvpn/server/makia-ws.conf" in unit
+
+
+def test_update_softfails_only_preexisting_openvpn_listener_gap():
+    update=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    smoke=(ROOT/"scripts/uat-smoke.sh").read_text(encoding="utf-8")
+    assert "OVPN_WAS_LISTENING=0" in update
+    assert "openvpn_primary_listener_present" in update
+    assert 'OVPN_WAS_ACTIVE" -eq 1 && "$OVPN_WAS_LISTENING" -eq 1' in update
+    assert "MAKIA_UAT_OPENVPN_LISTENER_SOFTFAIL=1" in update
+    assert "MAKIA_UAT_OPENVPN_LISTENER_SOFTFAIL" in smoke
+    assert "WStunnel 443 uses its separate makia-ws backend" in smoke
+
+
+def test_dashboard_busts_cached_service_controls_after_hotfix():
+    html=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
+    assert "/static/app.js?v={{version}}-wstunnel-hotfix2" in html
