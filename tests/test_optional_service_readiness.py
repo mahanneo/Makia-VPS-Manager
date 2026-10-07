@@ -94,3 +94,12 @@ def test_update_softfails_only_preexisting_openvpn_listener_gap():
 def test_dashboard_busts_cached_service_controls_after_hotfix():
     html=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
     assert "/static/app.js?v={{version}}-wstunnel-hotfix2" in html
+
+
+def test_services_use_makia_owned_stealth_runtime():
+    config=(ROOT/"app/config.py").read_text(encoding="utf-8")
+    ops=(ROOT/"app/system_ops.py").read_text(encoding="utf-8")
+    assert '"makia-stealth": "Stealth TLS / Stunnel"' in config
+    assert '"stunnel4": "Stunnel"' not in config
+    assert '"makia-stealth":{' in ops
+    assert 'Path("/etc/makia-vps-manager/stunnel-openvpn.conf")' in ops
