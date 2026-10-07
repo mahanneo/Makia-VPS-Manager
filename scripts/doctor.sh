@@ -127,6 +127,42 @@ print("wg0", d.get("port"), d.get("network"), d.get("uplink"))
 PY
     ); then
       ok "WireGuard runtime" "forwarding + NAT + listener ready"
+      WG_COMPAT="$(cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+d=protocol_ops.wireguard_endpoint_diagnostics("")
+print("ready" if d.get("restricted_network_ready") else "optional")
+print("port=%s mtu=%s mss_in=%s mss_out=%s" % (
+    d.get("port"), d.get("mtu") or "auto", d.get("mss_clamp_in"), d.get("mss_clamp_out")
+))
+PY
+)"
+      WG_COMPAT_STATE="$(printf '%s\n' "$WG_COMPAT" | sed -n '1p')"
+      WG_COMPAT_DETAIL="$(printf '%s\n' "$WG_COMPAT" | sed -n '2p')"
+      if [[ "$WG_COMPAT_STATE" == "ready" ]]; then
+        ok "WireGuard restricted profile" "$WG_COMPAT_DETAIL"
+      else
+        warn "WireGuard restricted profile" "$WG_COMPAT_DETAIL; optional panel tuning available"
+      fi
+      WG_PERF="$(cd "$APP" && MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
+from app import protocol_ops
+p=protocol_ops.wireguard_performance_status("wg0")
+print("ready" if p.get("tuned") else "optional")
+print("cc=%s qdisc=%s rmem=%s wmem=%s mtu_probe=%s" % (
+    p.get("congestion_control") or "default",
+    p.get("qdisc") or "default",
+    p.get("rmem_max") or "?",
+    p.get("wmem_max") or "?",
+    p.get("tcp_mtu_probing") or "?",
+))
+PY
+)"
+      WG_PERF_STATE="$(printf '%s\n' "$WG_PERF" | sed -n '1p')"
+      WG_PERF_DETAIL="$(printf '%s\n' "$WG_PERF" | sed -n '2p')"
+      if [[ "$WG_PERF_STATE" == "ready" ]]; then
+        ok "WireGuard network tuning" "$WG_PERF_DETAIL"
+      else
+        warn "WireGuard network tuning" "$WG_PERF_DETAIL; Repair Runtime applies safe tuning"
+      fi
     else
       fail "WireGuard runtime" "run Protocols → WireGuard → Repair Runtime"
     fi
