@@ -37,6 +37,8 @@ for _ in {1..30}; do
   sleep 2
 done
 
+docker exec "$CONTAINER" sh -c 'mkdir -p /tmp && chmod 1777 /tmp'
+
 docker cp "$BASELINE_DIR" "$CONTAINER":/tmp/makia-v151
 docker cp tests/upgrade_identity_probe.py "$CONTAINER":/tmp/upgrade_identity_probe.py
 
