@@ -123,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           @(
-            "version=1.6.2"
+            "version=1.6.3"
             "commit=$env:GITHUB_SHA"
             "ref=$env:GITHUB_REF"
             "run_id=$env:GITHUB_RUN_ID"
@@ -137,7 +137,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.6.2
+          name: Makia-Client-Connector-Windows-x64-1.6.3
           path: package/
           if-no-files-found: error
           retention-days: 90

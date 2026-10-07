@@ -4,8 +4,8 @@ import re, sys
 
 root=Path(sys.argv[1]).resolve()
 overlay=Path(sys.argv[2]).resolve()
-MAKIA_VERSION_NAME="1.6.2"
-MAKIA_VERSION_CODE="10602"
+MAKIA_VERSION_NAME="1.6.3"
+MAKIA_VERSION_CODE="10603"
 
 version_props=root/"version.properties"
 vp=version_props.read_text(encoding="utf-8")

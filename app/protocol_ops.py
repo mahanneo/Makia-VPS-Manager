@@ -1055,9 +1055,22 @@ def ensure_openvpn_wstunnel_backend(port=11940):
         _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
         _run(["systemctl","enable","--now",OVPN_WSTUNNEL_BACKEND_SERVICE],timeout=30)
         _run(["systemctl","restart",OVPN_WSTUNNEL_BACKEND_SERVICE],timeout=30)
-        status=_openvpn_named_runtime("makia-ws")
+        status=_wait_openvpn_named_runtime("makia-ws",timeout=20.0)
         if not status.get("service_active") or not status.get("listener"):
-            raise ProtocolError("OpenVPN WStunnel backend started but its loopback TCP listener is missing")
+            detail=""
+            try:
+                p=subprocess.run(
+                    ["journalctl","-u",OVPN_WSTUNNEL_BACKEND_SERVICE,"-n","8","--no-pager","--output=cat"],
+                    text=True,capture_output=True,timeout=8,check=False
+                )
+                lines=[x.strip() for x in (p.stdout or "").splitlines() if x.strip()]
+                if lines:
+                    detail="; "+lines[-1][:280]
+            except Exception:
+                pass
+            raise ProtocolError(
+                "OpenVPN WStunnel backend did not expose its loopback TCP listener after 20s"+detail
+            )
         return status
     except Exception:
         for path in [OVPN_WSTUNNEL_BACKEND_CONF,OVPN_DIR/"makia-wstunnel-up.sh",OVPN_DIR/"makia-wstunnel-down.sh"]:
@@ -1099,7 +1112,18 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
     # pick collision-free loopback ports automatically.
     existing_bridge=int(existing.get("bridge_port") or 0)
     existing_backend=int(existing.get("target_port") or 0)
-    if _port_transport_in_use(backend_port,"tcp") and existing_backend!=backend_port:
+    existing_backend_state=existing.get("backend") or {}
+    backend_is_ours=bool(
+        existing_backend==backend_port
+        and existing_backend_state.get("service_active")
+        and existing_backend_state.get("listener")
+    )
+    bridge_is_ours=bool(
+        existing_bridge==bridge_port
+        and existing.get("service_active")
+        and existing.get("listener")
+    )
+    if _port_transport_in_use(backend_port,"tcp") and not backend_is_ours:
         selected=_suggest_free_port(
             "tcp",(11950,12940,13940,14940,15940,16940),
             exclude_ports={bridge_port,existing_bridge}
@@ -1107,7 +1131,7 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         if not selected:
             raise ProtocolError("No free internal TCP port is available for the WStunnel OpenVPN backend")
         backend_port=selected
-    if _port_transport_in_use(bridge_port,"tcp") and existing_bridge!=bridge_port:
+    if _port_transport_in_use(bridge_port,"tcp") and not bridge_is_ours:
         selected=_suggest_free_port(
             "tcp",(10445,11445,12445,13445,14445,15445),
             exclude_ports={backend_port,existing_backend}
@@ -2110,6 +2134,24 @@ def _openvpn_named_runtime(stem):
     return result
 
 
+def _wait_openvpn_named_runtime(stem,timeout=15.0,interval=0.25):
+    """Wait until a named OpenVPN instance is active and has bound its socket.
+
+    systemctl restart can return while OpenVPN is still finishing PKI/TUN setup
+    on real VPS hosts.  Treating that short window as a hard failure produced
+    false "listener missing" errors for the WStunnel 443 backend.
+    """
+    deadline=time.monotonic()+max(0.0,float(timeout))
+    last={}
+    while True:
+        last=_openvpn_named_runtime(stem)
+        if last.get("service_active") and last.get("listener"):
+            return last
+        if time.monotonic()>=deadline:
+            return last
+        time.sleep(max(0.05,float(interval)))
+
+
 def _openvpn_aux_forward_scripts(stem,network):
     uplink=_default_iface()
     up=OVPN_DIR/f"makia-{stem}-up.sh"
@@ -2187,9 +2229,9 @@ def ensure_openvpn_tcp_fallback(port=8443):
         _run(["systemctl","enable","--now",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
         _run(["systemctl","restart",OVPN_TCP_FALLBACK_SERVICE],timeout=30)
         _ufw_allow_if_active(port,"tcp","OpenVPN TCP fallback")
-        status=_openvpn_named_runtime("makia-tcp")
+        status=_wait_openvpn_named_runtime("makia-tcp",timeout=15.0)
         if not status.get("service_active") or not status.get("listener"):
-            raise ProtocolError("OpenVPN TCP fallback service started but no TCP listener was detected")
+            raise ProtocolError("OpenVPN TCP fallback service started but no TCP listener was detected after 15s")
         return {"ok":True,"status":status,"port":port,"proto":"tcp"}
     except Exception:
         for path in [conf,OVPN_DIR/"makia-tcp-up.sh",OVPN_DIR/"makia-tcp-down.sh"]:

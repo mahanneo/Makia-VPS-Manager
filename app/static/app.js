@@ -397,6 +397,13 @@ async function openProvisionWizard(protocol){
     provisionState.password=sec.secret||'';
     const days=Number(d.ssh_expire_days??30);
     provisionState.expireDate=days?dateAfterDays(days):'';
+  }else if(protocol==='openvpn_wstunnel'){
+    const sec=await api('/api/accounts/generate-secret?mode=strong').catch(()=>({secret:''}));
+    provisionState.password=sec.secret||'';
+    provisionState.quota=Number(d.xray_quota_gb??50);
+    provisionState.expireDays=Number(d.xray_expire_days??30);
+    provisionState.devices=Math.max(1,Math.min(20,Number(d.ssh_devices||1)));
+    provisionState.sessions=Math.max(1,Math.min(provisionState.devices,Number(d.ssh_sessions||1)));
   }
   renderProvisionWizard();
 }
@@ -486,9 +493,11 @@ function wizardIdentityFields(s){
     '<div class="pro-info-card"><div><b>Preset هوشمند</b><span>'+htmlEsc(s.xrayProtocol.toUpperCase())+' · '+htmlEsc(s.transport.toUpperCase())+' · '+htmlEsc(s.security.toUpperCase())+'</span></div><small>در مرحله بعد در صورت نیاز Transport، TLS/REALITY، حجم و IP Limit را تغییر بده.</small></div>'
   ].join('');
   if(s.protocol==='openvpn_wstunnel') return [
-    '<div class="wizard-section-title"><span class="pro-kicker">WSTUNNEL 443</span><h4>دسترسی مقاوم روی HTTPS/443</h4><p>برای این کاربر Certificate مستقل OpenVPN ساخته می‌شود و Transport از مسیر WSS روی Nginx/443 عبور می‌کند.</p></div>',
-    '<div class="wizard-form two"><label>نام Client<input id="wizName" value="'+htmlEsc(s.name)+'"></label><label>Public endpoint<input value="'+htmlEsc(s.endpoint)+'" readonly></label></div>',
-    '<div class="wizard-note"><b>Policy owner</b><span>پس از ساخت، این Artifact را به Client Account همان کاربر Bind کن تا Expiry، Quota، Device Limit و Concurrent Limit روی همان Subscription اعمال شوند.</span></div>'
+    '<div class="wizard-section-title"><span class="pro-kicker">WSTUNNEL 443</span><h4>کاربر WStunnel 443</h4><p>یک Certificate مستقل OpenVPN، حساب Client Platform و Binding مدیریت‌شده برای همین کاربر ساخته می‌شود.</p></div>',
+    '<div class="wizard-form two"><label>نام کاربری / Client<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
+    '<label>رمز ورود اپ کاربر<div class="input-action"><input id="wizPassword" value="'+htmlEsc(s.password||'')+'"><button class="soft" data-action="wizard-secret" data-mode="strong">تولید</button></div></label>',
+    '<label>Public endpoint<input value="'+htmlEsc(s.endpoint)+'" readonly></label></div>',
+    '<div class="wizard-note"><b>تحویل ساده</b><span>کاربر با همین نام کاربری و رمز وارد Client Platform می‌شود؛ Windows/Android دسترسی WStunnel 443 Bind‌شده را می‌بینند و Direct Connect می‌کنند.</span></div>'
   ].join('');
   if(s.protocol==='wireguard') return [
     '<div class="wizard-section-title"><span class="pro-kicker">WIREGUARD PEER</span><h4>Peer جدید</h4><p>برای هر دستگاه یک Peer مستقل بساز؛ تنظیمات شبکه پیش‌فرض برای اکثر کلاینت‌ها کافی است.</p></div>',
@@ -582,7 +591,14 @@ function wizardPolicyFields(s){
       '<div class="toolbar"><button class="soft" data-action="wizard-xray-simple">استفاده از Preset ساده</button><button class="ghost" data-action="xray-advanced">Advanced JSON — همه فیلدهای Core</button></div>'
     ].join('');
   }
-  if(s.protocol==='openvpn_wstunnel') return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>WStunnel 443 آماده است</h4><p>Certificate و بسته WStunnel/OpenVPN ساخته می‌شود. Policyهای کاربر از Client Platform و Binding همان Artifact اعمال می‌شوند.</p></div>';
+  if(s.protocol==='openvpn_wstunnel') return [
+    '<div class="wizard-section-title"><span class="pro-kicker">WSTUNNEL POLICY</span><h4>محدودیت کاربر</h4><p>این Policy روی Client Account و Artifact همین WStunnel اعمال می‌شود.</p></div>',
+    '<div class="wizard-form two"><label>Quota GB<input id="wizQuota" type="number" min="0" value="'+Number(s.quota||0)+'"><small>0 = Unlimited</small></label>',
+    '<label>Expiry days<input id="wizExpireDays" type="number" min="0" max="3650" value="'+Number(s.expireDays||0)+'"><small>0 = بدون انقضا</small></label>',
+    '<label>Device Limit<input id="wizDevices" type="number" min="1" max="20" value="'+Number(s.devices||1)+'"></label>',
+    '<label>Concurrent Connection Limit<input id="wizSessions" type="number" min="1" max="20" value="'+Number(s.sessions||1)+'"></label></div>',
+    '<div class="wizard-note"><b>Enforcement</b><span>Expiry، Quota، Enable/Disable و Concurrent Limit روی WStunnel backend enforce می‌شوند. Device Limit روی ورود و ثبت Device در Client Platform اعمال می‌شود.</span></div>'
+  ].join('');
   const labels={wireguard:'WireGuard',openvpn:'OpenVPN'};
   return '<div class="wizard-review-hint"><div class="review-icon">✓</div><h4>'+htmlEsc(labels[s.protocol]||s.protocol)+' آماده است</h4><p>تنظیمات سرور و Client آماده‌اند. مرحله بعد خلاصه نهایی و بسته تحویل را نشان می‌دهد.</p></div>';
 }
@@ -593,6 +609,7 @@ function wizardReview(s){
   if(s.endpoint)summary.push(['Endpoint',s.endpoint]);
   if(s.protocol==='ssh'){summary.push(['Expire',s.expireDate||'بدون انقضا']);summary.push(['Sessions',s.sessions]);summary.push(['Devices',s.devices])}
   if(s.protocol==='xray'){summary.push(['Port',s.port]);summary.push(['Transport',s.transport.toUpperCase()]);summary.push(['Security',s.security.toUpperCase()]);summary.push(['Quota',s.simpleMode?'Unlimited':s.quota?String(s.quota)+' GB':'Unlimited'])}
+  if(s.protocol==='openvpn_wstunnel'){summary.push(['Quota',s.quota?String(s.quota)+' GB':'Unlimited']);summary.push(['Expiry',s.expireDays?String(s.expireDays)+' days':'Unlimited']);summary.push(['Devices',s.devices]);summary.push(['Concurrent',s.sessions])}
   return [
     '<div class="wizard-section-title"><span class="pro-kicker">REVIEW</span><h4>تأیید نهایی</h4><p>قبل از ساخت، فقط اطلاعات کلیدی را بررسی کن.</p></div>',
     '<div class="review-grid pro-review-grid">'+summary.map(x=>'<div><span>'+htmlEsc(x[0])+'</span><b>'+htmlEsc(x[1])+'</b></div>').join('')+'</div>',
@@ -635,11 +652,17 @@ function validateWizardStep(){
   if(s.step===2){
     if(!s.name)return 'نام کاربر/Client لازم است.';
     if(s.protocol==='ssh'&&(!s.password||s.password.length<4))return 'Password/PIN حداقل ۴ کاراکتر باشد.';
+    if(s.protocol==='openvpn_wstunnel'&&(!s.password||s.password.length<8))return 'رمز ورود WStunnel باید حداقل ۸ کاراکتر باشد.';
     if(!s.endpoint)return 'دامنه یا IP عمومی لازم است.';
     const isIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s.endpoint);
     if(s.endpointMode==='ip'&&!isIp)return 'در حالت IP، آدرس IPv4 عمومی را وارد کن.';
     if(s.endpointMode==='domain'&&(isIp||!/^([a-z0-9-]+\.)+[a-z0-9-]+\.?$/i.test(s.endpoint)))return 'در حالت دامنه، یک hostname معتبر وارد کن.';
     if(s.protocol==='xray'&&(!s.port||s.port<1||s.port>65535))return 'Port معتبر وارد کن.';
+  }
+  if(s.step===3&&s.protocol==='openvpn_wstunnel'){
+    if(Number(s.devices||1)<1||Number(s.devices||1)>20)return 'Device Limit باید بین ۱ تا ۲۰ باشد.';
+    if(Number(s.sessions||1)<1||Number(s.sessions||1)>20)return 'Concurrent Limit باید بین ۱ تا ۲۰ باشد.';
+    if(Number(s.sessions||1)>Number(s.devices||1))return 'Concurrent Limit نمی‌تواند از Device Limit بیشتر باشد.';
   }
   if(s.step===3&&s.protocol==='xray'){
     normalizeXrayProfile(s,false);
@@ -682,12 +705,28 @@ async function createProvisionedAccess(){
     }else if(s.protocol==='wireguard'){
       r=await api('/api/protocols/wireguard/peers',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,dns:s.dns,mtu:s.wgMtu,keepalive:s.wgKeepalive,allowed_ips:s.wgAllowedIps})});key=s.name;
     }else if(s.protocol==='openvpn_wstunnel'){
+      if(!s.password||s.password.length<8)throw new Error('رمز ورود WStunnel باید حداقل ۸ کاراکتر باشد.');
+      if(Number(s.sessions||1)>Number(s.devices||1))throw new Error('Concurrent Limit نمی‌تواند از Device Limit بیشتر باشد.');
+      const accounts=await api('/api/client-platform/accounts');
+      if((accounts||[]).some(a=>String(a.username||'').toLowerCase()===String(s.name||'').toLowerCase())){
+        throw new Error('این نام کاربری در Client Platform وجود دارد. از اپ کاربران، Artifact جدید را به حساب موجود Bind کن یا نام دیگری انتخاب کن.');
+      }
       r=await api('/api/protocols/openvpn/wstunnel/clients',{method:'POST',body:JSON.stringify({name:s.name,local_port:11941})});
       kind='openvpn_wstunnel';key=s.name;
+      const expireAt=Number(s.expireDays||0)>0?Math.floor(Date.now()/1000)+Number(s.expireDays)*86400:0;
+      const account=await api('/api/client-platform/accounts',{method:'POST',body:JSON.stringify({
+        username:s.name,password:s.password,display_name:s.name,plan_name:'WStunnel 443',
+        expire_at:expireAt,quota_gb:Number(s.quota||0),device_limit:Number(s.devices||1),
+        concurrent_device_limit:Number(s.sessions||1),enabled:true
+      })});
+      await api('/api/client-platform/accounts/'+Number(account.id)+'/artifact-bindings',{method:'POST',body:JSON.stringify({
+        artifact_id:Number(r.artifact_id),label:'WStunnel 443',priority:10,enabled:true
+      })});
+      r.client_account=account;
     }else{
       r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
     }
-    showProvisionSuccess(kind,key,s.name,s.packagePassword,s.protocol==='ssh'?s.password:null,r);
+    showProvisionSuccess(kind,key,s.name,s.packagePassword,(s.protocol==='ssh'||s.protocol==='openvpn_wstunnel')?s.password:null,r);
   }catch(e){alert(e.message);if(createBtn){createBtn.disabled=false;createBtn.textContent='ساخت و آماده‌سازی'}}
 }
 
@@ -699,7 +738,7 @@ function showProvisionSuccess(kind,key,name,packagePassword,loginSecret,result){
       '<p>پروفایل روی سرور ساخته شده و بسته‌های تحویل آماده دانلود هستند.</p>',
       '<div class="success-grid"><div><span>Protocol</span><b>'+htmlEsc(kind.toUpperCase())+'</b></div><div><span>Package PIN</span><b class="credential-secret">'+htmlEsc(packagePassword)+'</b></div>',
       (loginSecret?'<div><span>Login Password</span><b class="credential-secret">'+htmlEsc(loginSecret)+'</b></div>':'')+'</div>',
-      '<div class="delivery-actions"><button class="primary action-lg" data-action="client-portal" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button>'+((kind==='xray'||kind==='wireguard'||(kind==='ssh'&&(window.__operatorSettings?.delivery?.npv_enabled!==false)))?'<button class="ghost action-lg" data-action="access-share" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+(kind==='ssh'?'NPV / QR':'QR / Share')+'</button>':'')+'<button class="ghost action-lg" data-action="protected-download-now" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'" data-password="'+dataEnc(packagePassword)+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button>',
+      '<div class="delivery-actions">'+(kind==='openvpn_wstunnel'?'<button class="primary action-lg" data-action="client-open-portal">'+htmlEsc(tr('باز کردن اپ کاربران','Open client app'))+'</button>':'<button class="primary action-lg" data-action="client-portal" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+htmlEsc(tr('لینک اختصاصی کاربر','Client portal link'))+'</button>')+((kind==='xray'||kind==='wireguard'||(kind==='ssh'&&(window.__operatorSettings?.delivery?.npv_enabled!==false)))?'<button class="ghost action-lg" data-action="access-share" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'">'+(kind==='ssh'?'NPV / QR':'QR / Share')+'</button>':'')+'<button class="ghost action-lg" data-action="protected-download-now" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(name)+'" data-password="'+dataEnc(packagePassword)+'">'+htmlEsc(tr('بسته رمزدار','Protected ZIP'))+'</button>',
       '<button class="ghost action-lg" data-action="native-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'">'+htmlEsc(tr('فایل اتصال','Native file'))+'</button><button class="ghost action-lg" data-action="client-guide" data-kind="'+htmlEsc(kind)+'">'+htmlEsc(tr('راهنمای اتصال','Connection guide'))+'</button></div>',
       '<div class="wizard-note"><b>تحویل امن</b><span>فایل و PIN را در دو پیام/کانال جداگانه برای کاربر بفرست.</span></div>',
       '<button class="soft wide-btn" data-action="success-done">بازگشت به Access Center</button>',
@@ -1115,7 +1154,7 @@ async function protocols(renderToken=window.__viewRenderToken){
       udp:'<button class="ghost" data-action="openvpn-mode" data-proto="udp">Use UDP</button>',
       tcp:'<button class="ghost" data-action="openvpn-tcp-fallback">Enable TCP fallback</button>',
       stealth:'<button class="ghost" data-action="stealth-setup">Configure</button>',
-      'wstunnel-openvpn':'<button class="ghost" data-action="openvpn-wstunnel-setup">Configure 443</button><button class="soft" data-action="openvpn-wstunnel-client" data-name="">New user</button>',
+      'wstunnel-openvpn':'<button class="ghost" data-action="openvpn-wstunnel-setup">1) Configure / Repair 443</button><button class="soft" data-action="wizard-open" data-kind="openvpn_wstunnel">2) ساخت کاربر WStunnel</button>',
       wstunnel:'<button class="ghost" data-action="wstunnel-setup">Configure WG</button>'
     }[m.id]||'';
     return '<article class="protocol-mode-card '+(m.ready?'ready':'')+'"><div class="protocol-mode-top"><div class="protocol-mode-icon">'+protocolGlyph(m.id==='udp'||m.id==='tcp'?'openvpn':m.id)+'</div><div><b>'+htmlEsc(m.label)+'</b><span>'+htmlEsc(m.transport||'')+'</span></div><span class="status-chip '+(m.ready?'ok':'warn')+'">'+(m.ready?'READY':'SETUP')+'</span></div><div class="protocol-mode-meta"><span>Port</span><b>'+htmlEsc(ports)+'</b></div><div class="toolbar">'+actions+'</div></article>';

@@ -189,7 +189,8 @@ def test_access_wizard_offers_wstunnel_443_without_parallel_browser_gateway():
     assert "wizardProtocolReady(kind)" in source
     assert "s.openvpn_wstunnel?.ready" in source
     assert "/api/protocols/openvpn/wstunnel/clients" in source
-    assert "Policy owner" in source
+    assert "Concurrent Connection Limit" in source
+    assert "/artifact-bindings" in source
 
 
 def test_openvpn_management_status_preserves_per_session_counters():
@@ -233,3 +234,37 @@ def test_wstunnel_internal_ports_are_auto_reallocated():
     # Historical 11940 remains a preference, not a hard blocker.
     assert "backend_port=11940" in source
     assert "backend_port=selected" in source
+
+
+def test_wstunnel_backend_waits_for_real_listener_before_failing(monkeypatch):
+    states=[
+        {"service_active":True,"listener":False,"port":11950},
+        {"service_active":True,"listener":False,"port":11950},
+        {"service_active":True,"listener":True,"port":11950},
+    ]
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem: states.pop(0) if states else {"service_active":True,"listener":True,"port":11950})
+    monkeypatch.setattr(protocol_ops.time,"sleep",lambda _x: None)
+    out=protocol_ops._wait_openvpn_named_runtime("makia-ws",timeout=1.0,interval=0.01)
+    assert out["service_active"] is True
+    assert out["listener"] is True
+
+
+def test_wstunnel_bootstrap_rejects_stale_internal_port_ownership_contract():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    assert "backend_is_ours=bool(" in source
+    assert "bridge_is_ours=bool(" in source
+    assert 'and existing_backend_state.get("service_active")' in source
+    assert 'and existing_backend_state.get("listener")' in source
+    assert 'if _port_transport_in_use(backend_port,"tcp") and not backend_is_ours:' in source
+    assert 'if _port_transport_in_use(bridge_port,"tcp") and not bridge_is_ours:' in source
+
+
+def test_wstunnel_user_button_uses_managed_access_wizard_and_binding():
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    assert 'data-action="wizard-open" data-kind="openvpn_wstunnel"' in js
+    assert "2) ساخت کاربر WStunnel" in js
+    assert "/api/client-platform/accounts" in js
+    assert "/artifact-bindings" in js
+    assert "concurrent_device_limit" in js
+    assert "Device Limit" in js
+    assert "Concurrent Connection Limit" in js
