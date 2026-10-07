@@ -41,3 +41,34 @@ def test_wireguard_diagnostics_exposes_restricted_network_readiness():
     assert '"mss_clamp_in":mss_clamp_in' in source
     assert '"mss_clamp_out":mss_clamp_out' in source
     assert '"restricted_network_ready":restricted_network_ready' in source
+
+
+def test_wireguard_performance_profile_is_reversible_and_bbr_is_conditional(monkeypatch):
+    values={
+        "net.ipv4.tcp_available_congestion_control":"reno cubic bbr",
+    }
+    monkeypatch.setattr(protocol_ops,"_proc_sysctl_value",lambda key:values.get(key,""))
+    text=protocol_ops._wireguard_performance_sysctl_text()
+    assert "net.core.rmem_max=16777216" in text
+    assert "net.core.wmem_max=16777216" in text
+    assert "net.ipv4.udp_rmem_min=16384" in text
+    assert "net.ipv4.udp_wmem_min=16384" in text
+    assert "net.core.netdev_max_backlog=16384" in text
+    assert "net.ipv4.tcp_mtu_probing=1" in text
+    assert "net.core.default_qdisc=fq" in text
+    assert "net.ipv4.tcp_congestion_control=bbr" in text
+
+    monkeypatch.setattr(protocol_ops,"_proc_sysctl_value",lambda key:"reno cubic" if key=="net.ipv4.tcp_available_congestion_control" else "")
+    no_bbr=protocol_ops._wireguard_performance_sysctl_text()
+    assert "net.ipv4.tcp_congestion_control=bbr" not in no_bbr
+    assert "net.core.default_qdisc=fq" not in no_bbr
+
+
+def test_wireguard_performance_status_is_exposed_to_panel_and_doctor():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    doctor=(ROOT/"scripts/doctor.sh").read_text(encoding="utf-8")
+    assert '"performance":wireguard_performance_status(iface)' in source
+    assert "Network performance" in js
+    assert "WireGuard network tuning" in doctor
+    assert "Repair Runtime applies safe tuning" in doctor
