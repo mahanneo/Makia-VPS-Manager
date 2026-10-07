@@ -89,9 +89,9 @@ https://YOUR-PANEL-DOMAIN/help/connect
 
 ### Android — اتصال مستقیم داخل Makia
 
-در Makia 1.6.0، **WStunnel 443 روی Android به‌صورت Full Device Direct Connect** پشتیبانی می‌شود.
+در Makia 1.6.1، **WStunnel 443 روی Android به‌صورت Full Device Direct Connect** پشتیبانی می‌شود.
 
-1. آخرین **Makia Android Connector 1.6.0** را از همان Client Portal نصب کنید.
+1. آخرین **Makia Android Connector 1.6.1** را از همان Client Portal نصب کنید.
 2. با یوزر و رمز خود وارد Client Portal شوید.
 3. پروفایل **WStunnel 443** را انتخاب کنید.
 4. روی **اتصال مستقیم** بزنید.
@@ -103,7 +103,7 @@ Runtime رسمی WStunnel داخل APK قرار دارد؛ کاربر نیاز �
 
 ### iPhone / iPad
 
-در 1.6.0 هنوز Native WStunnel Full Device داخل iOS ادعا نمی‌شود و iOS همچنان از Profile/Import یا کلاینت سازگار استفاده می‌کند.
+در 1.6.1 هنوز Native WStunnel Full Device داخل iOS ادعا نمی‌شود و iOS همچنان از Profile/Import یا کلاینت سازگار استفاده می‌کند.
 
 **نکته امنیتی:** مسیر WebSocket و فایل OVPN اختصاصی‌اند. آن‌ها را برای شخص دیگری ارسال نکنید.
 
