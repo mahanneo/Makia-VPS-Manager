@@ -583,7 +583,7 @@ def main():
             assert "Backend واقعی Makia" in switcher_text
             page.locator('.change-protocol-modal [data-action="modal-close"]').last.click()
             assert page.locator(".change-protocol-modal").count()==0
-            assert page.locator(".protocol-mode-card").count()==6
+            assert page.locator(".protocol-mode-card").count()==7
             mode_text=page.locator(".protocol-modes-panel").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in mode_text
