@@ -618,7 +618,7 @@ def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
     except ValueError as exc:
         raise HTTPException(status_code=404,detail=str(exc))
     engine=str(item.get("engine") or "").lower()
-    if engine in {"wireguard","openvpn"}:
+    if engine in {"wireguard","openvpn","openvpn_wstunnel","openvpn-wstunnel"}:
         raise HTTPException(status_code=409,detail="This profile requires Full Device / Import mode")
     ticket=client_connector.issue_ticket(
         session["account_id"],session["device_id"],kind,delivery_id
