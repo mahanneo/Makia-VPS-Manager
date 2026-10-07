@@ -1555,6 +1555,24 @@ def _validate_keepalive(value):
         raise ProtocolError("WireGuard keepalive must be between 0 and 3600 seconds")
     return keepalive
 
+def _wireguard_firewall_directives(iface, network, uplink):
+    """Build idempotent forwarding/NAT/MSS rules for the managed WireGuard gateway."""
+    post_up=(
+        f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; "
+        f"iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; "
+        f"iptables -t nat -C POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {network} -o {uplink} -j MASQUERADE; "
+        f"iptables -t mangle -C FORWARD -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -t mangle -I FORWARD 1 -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu; "
+        f"iptables -t mangle -C FORWARD -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -t mangle -I FORWARD 1 -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
+    )
+    post_down=(
+        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; "
+        f"iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; "
+        f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true; "
+        f"iptables -t mangle -D FORWARD -i {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true; "
+        f"iptables -t mangle -D FORWARD -o {iface} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true"
+    )
+    return post_up,post_down
+
 def bootstrap_wireguard(port=51820, cidr="10.66.66.1/24", iface="wg0", mtu=0):
     if not re.fullmatch(r"wg\d{1,2}",iface):
         raise ProtocolError("invalid WireGuard interface name")
@@ -1575,14 +1593,15 @@ def bootstrap_wireguard(port=51820, cidr="10.66.66.1/24", iface="wg0", mtu=0):
     private=_run(["wg","genkey"])
     public=_run(["wg","pubkey"],input_text=private+"\n")
     uplink=_default_iface()
+    post_up,post_down=_wireguard_firewall_directives(iface,str(net.network),uplink)
     conf.write_text(
         "[Interface]\n"
         f"Address = {net}\n"
         f"ListenPort = {int(port)}\n"
         f"PrivateKey = {private}\n"
         +(f"MTU = {mtu}\n" if mtu else "")
-        +f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; iptables -t nat -C POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE\n"
-        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; iptables -t nat -D POSTROUTING -s {net.network} -o {uplink} -j MASQUERADE 2>/dev/null || true\n",
+        +post_up+"\n"
+        +post_down+"\n",
         encoding="utf-8"
     )
     os.chmod(conf,0o600)
@@ -1876,6 +1895,8 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     network=cfg.get("network") or ""
     forward_in=_iptables_check(["-C","FORWARD","-i",iface,"-j","ACCEPT"])
     forward_out=_iptables_check(["-C","FORWARD","-o",iface,"-j","ACCEPT"])
+    mss_clamp_in=_iptables_check(["-t","mangle","-C","FORWARD","-i",iface,"-p","tcp","--tcp-flags","SYN,RST","SYN","-j","TCPMSS","--clamp-mss-to-pmtu"])
+    mss_clamp_out=_iptables_check(["-t","mangle","-C","FORWARD","-o",iface,"-p","tcp","--tcp-flags","SYN,RST","SYN","-j","TCPMSS","--clamp-mss-to-pmtu"])
     nat=None
     if network and uplink:
         nat=_iptables_check(["-t","nat","-C","POSTROUTING","-s",network,"-o",uplink,"-j","MASQUERADE"])
@@ -1928,6 +1949,12 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     if not ip_forward: warnings.append("net.ipv4.ip_forward فعال نیست.")
     if forward_in is False or forward_out is False: warnings.append("Forwarding ruleهای WireGuard در iptables کامل نیستند.")
     if nat is False: warnings.append("NAT/MASQUERADE برای شبکه WireGuard روی uplink پیدا نشد.")
+    if mss_clamp_in is False or mss_clamp_out is False:
+        warnings.append("TCP MSS clamping برای WireGuard کامل نیست؛ در مسیرهای MTU محدود بعضی سایت‌های HTTPS ممکن است کند، ناقص یا Timeout شوند.")
+    if cfg.get("mtu") not in {0,1280}:
+        warnings.append(f"MTU فعلی WireGuard برابر {cfg.get('mtu')} است؛ برای شبکه‌های محدود MTU 1280 معمولاً محافظه‌کارانه‌تر است.")
+    if cfg.get("port") and int(cfg.get("port"))!=443:
+        warnings.append("WireGuard روی UDP/443 نیست. تغییر Port کاربران موجود نیازمند به‌روزرسانی Endpoint/Profile آن‌هاست و خودکار انجام نمی‌شود.")
     peers=_wireguard_peer_runtime(iface)
     recent=sum(1 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)
     if any(p.get("enabled",True) for p in peers) and recent==0:
@@ -1939,6 +1966,13 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
             ((not endpoint_is_ip) and resolved4 and dns_matches_server is not False and (not resolved6 or ipv6_matches_server is True))
         )
     runtime_ok=bool(cfg.get("exists") and service_active and interface_present and listener and ip_forward and forward_in is not False and forward_out is not False and nat is not False)
+    restricted_network_ready=bool(
+        runtime_ok
+        and int(cfg.get("port") or 0)==443
+        and int(cfg.get("mtu") or 0)==1280
+        and mss_clamp_in is not False
+        and mss_clamp_out is not False
+    )
     return {
         "ok":bool(runtime_ok and endpoint_ok),
         "runtime_ok":runtime_ok,
@@ -1956,7 +1990,10 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "ip_forward":ip_forward,
         "forward_in":forward_in,
         "forward_out":forward_out,
+        "mss_clamp_in":mss_clamp_in,
+        "mss_clamp_out":mss_clamp_out,
         "nat":nat,
+        "restricted_network_ready":restricted_network_ready,
         "endpoint":endpoint,
         "endpoint_is_ip":endpoint_is_ip,
         "endpoint_ip_version":ip_version,
@@ -2002,16 +2039,7 @@ def repair_wireguard_runtime(iface="wg0"):
     backup=backup_dir/f"wireguard-repair-{int(time.time())}.conf"
     shutil.copy2(conf,backup)
     network=cfg["network"]
-    post_up=(
-        f"PostUp = iptables -C FORWARD -i {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i {iface} -j ACCEPT; "
-        f"iptables -C FORWARD -o {iface} -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -o {iface} -j ACCEPT; "
-        f"iptables -t nat -C POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {network} -o {uplink} -j MASQUERADE"
-    )
-    post_down=(
-        f"PostDown = iptables -D FORWARD -i {iface} -j ACCEPT 2>/dev/null || true; "
-        f"iptables -D FORWARD -o {iface} -j ACCEPT 2>/dev/null || true; "
-        f"iptables -t nat -D POSTROUTING -s {network} -o {uplink} -j MASQUERADE 2>/dev/null || true"
-    )
+    post_up,post_down=_wireguard_firewall_directives(iface,network,uplink)
     updated=_wireguard_set_interface_directive(original,"PostUp",post_up)
     updated=_wireguard_set_interface_directive(updated,"PostDown",post_down)
     sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
@@ -2043,6 +2071,73 @@ def repair_wireguard_runtime(iface="wg0"):
             pass
         raise
     return {"ok":True,"backup":str(backup),"diagnostics":wireguard_endpoint_diagnostics("",iface)}
+
+def apply_wireguard_restricted_network_profile(iface="wg0"):
+    """Apply a non-destructive compatibility profile for constrained/NAT-heavy networks.
+
+    Existing keys, peers, addresses and listen port are preserved.  The active
+    server MTU is normalized to 1280 and TCP MSS clamping is installed so HTTPS
+    traffic does not stall on lower-MTU paths.
+    """
+    if not re.fullmatch(r"wg\d{1,2}",iface):
+        raise ProtocolError("invalid WireGuard interface name")
+    cfg=_wireguard_server_config(iface)
+    conf=Path(cfg["config"])
+    if not conf.exists():
+        raise ProtocolError("WireGuard server config is not available")
+    if not cfg.get("port") or not cfg.get("network"):
+        raise ProtocolError("WireGuard config is missing Address or ListenPort")
+    original=conf.read_text(encoding="utf-8",errors="ignore")
+    backup_dir=_backup_dir()
+    backup=backup_dir/f"wireguard-restricted-{int(time.time())}.conf"
+    shutil.copy2(conf,backup)
+    uplink=_default_iface()
+    post_up,post_down=_wireguard_firewall_directives(iface,cfg["network"],uplink)
+    updated=_wireguard_set_interface_directive(original,"MTU","MTU = 1280")
+    updated=_wireguard_set_interface_directive(updated,"PostUp",post_up)
+    updated=_wireguard_set_interface_directive(updated,"PostDown",post_down)
+    sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+    sysctl_dir.mkdir(parents=True,exist_ok=True)
+    sysctl=sysctl_dir/"99-makia-wireguard.conf"
+    sysctl_existed=sysctl.exists()
+    sysctl_previous=sysctl.read_bytes() if sysctl_existed else b""
+    try:
+        conf.write_text(updated.rstrip()+"\n",encoding="utf-8")
+        os.chmod(conf,0o600)
+        sysctl.write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        _ufw_allow_if_active(cfg["port"],"udp","WireGuard")
+        _run(["systemctl","enable",f"wg-quick@{iface}"],timeout=20)
+        _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
+        diagnostics=wireguard_endpoint_diagnostics("",iface)
+        if not diagnostics.get("runtime_ok"):
+            raise ProtocolError("WireGuard runtime remains unhealthy after compatibility tuning: "+"; ".join(diagnostics.get("warnings") or []))
+        if diagnostics.get("mss_clamp_in") is False or diagnostics.get("mss_clamp_out") is False:
+            raise ProtocolError("WireGuard TCP MSS clamping was not installed correctly")
+    except Exception:
+        try:
+            shutil.copy2(backup,conf)
+            os.chmod(conf,0o600)
+            if sysctl_existed:
+                sysctl.write_bytes(sysctl_previous)
+            elif sysctl.exists():
+                sysctl.unlink()
+            _run(["systemctl","restart",f"wg-quick@{iface}"],timeout=30)
+        except Exception:
+            pass
+        raise
+    diagnostics=wireguard_endpoint_diagnostics("",iface)
+    notes=[]
+    if int(diagnostics.get("port") or 0)!=443:
+        notes.append("Existing WireGuard listen port was preserved to avoid breaking issued profiles; UDP/443 is recommended for new/migrated deployments.")
+    notes.append("Raw WireGuard still depends on UDP reachability. If the access network blocks WireGuard/UDP at protocol level, use Makia WStunnel 443 instead of repeatedly changing MTU.")
+    return {
+        "ok":True,
+        "backup":str(backup),
+        "diagnostics":diagnostics,
+        "recommended_client":{"dns":"1.1.1.1, 8.8.8.8","mtu":1280,"keepalive":15,"allowed_ips":"0.0.0.0/0"},
+        "notes":notes,
+    }
 
 def protocol_endpoint_matrix(endpoint):
     endpoint=_validate_endpoint_host(endpoint,"public endpoint")
