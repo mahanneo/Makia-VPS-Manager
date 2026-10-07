@@ -9,6 +9,53 @@ class OperationError(RuntimeError): pass
 
 TTY_RE=re.compile(r"^[A-Za-z0-9._/-]{1,64}$")
 
+# Optional protocol runtimes must be configured through their owning Makia
+# workflow before systemd start/restart is allowed.  The generic Services page
+# used to expose raw Start buttons for these units, which produced opaque
+# dependency/configuration failures on a fresh or partially configured host.
+OPTIONAL_SERVICE_RULES={
+    "stunnel4":{
+        "setup_action":"stealth-setup","setup_label":"Configure / Repair Stealth",
+        "managed_by":"",
+    },
+    "makia-wstunnel":{
+        "setup_action":"wstunnel-setup","setup_label":"Configure / Repair WStunnel WG",
+        "managed_by":"",
+    },
+    "makia-openvpn-wstunnel":{
+        "setup_action":"openvpn-wstunnel-setup","setup_label":"Configure / Repair WStunnel 443",
+        "managed_by":"",
+    },
+    "openvpn-server@makia-ws":{
+        "setup_action":"openvpn-wstunnel-setup","setup_label":"Manage from WStunnel 443",
+        "managed_by":"makia-openvpn-wstunnel",
+    },
+}
+
+
+def _service_setup_meta(name: str):
+    rule=OPTIONAL_SERVICE_RULES.get(name)
+    if not rule:
+        return {"configured":True,"setup_action":"","setup_label":"","managed_by":""}
+    configured=True
+    if name=="stunnel4":
+        conf=Path("/etc/stunnel/makia-openvpn.conf")
+        defaults=Path("/etc/default/stunnel4")
+        enabled=False
+        try:
+            enabled=bool(re.search(r"(?m)^\s*ENABLED\s*=\s*1\s*$",defaults.read_text(encoding="utf-8",errors="ignore")))
+        except OSError:
+            enabled=False
+        configured=conf.is_file() and enabled
+    elif name=="makia-wstunnel":
+        configured=Path("/etc/makia-vps-manager/wstunnel.env").is_file()
+    elif name in {"makia-openvpn-wstunnel","openvpn-server@makia-ws"}:
+        configured=(
+            Path("/etc/makia-vps-manager/openvpn-wstunnel.env").is_file()
+            and Path("/etc/openvpn/server/makia-ws.conf").is_file()
+        )
+    return {**rule,"configured":bool(configured)}
+
 def _run(args: list[str], input_text: str | None = None, timeout: int = 15):
     last_error = "operation failed"
     for attempt in range(3):
@@ -130,15 +177,31 @@ def disconnect_session(tty: str):
 def service_status(name: str):
     if name not in ALLOWED_SERVICES:
         raise OperationError("service is not allowlisted")
+    meta=_service_setup_meta(name)
     if not shutil.which("systemctl"):
-        return {"name":name,"label":ALLOWED_SERVICES[name],"active":False,"state":"unsupported"}
+        return {"name":name,"label":ALLOWED_SERVICES[name],"active":False,"state":"unsupported",**meta}
     p=subprocess.run(["systemctl","is-active",name],text=True,capture_output=True)
+    active=p.returncode==0
     state=(p.stdout or p.stderr).strip() or "unknown"
-    return {"name":name,"label":ALLOWED_SERVICES[name],"active":p.returncode==0,"state":state}
+    if not active and not meta.get("configured",True):
+        state="not-configured"
+    return {"name":name,"label":ALLOWED_SERVICES[name],"active":active,"state":state,**meta}
 
 def service_action(name: str, action: str):
     if name not in ALLOWED_SERVICES or action not in {"start","stop","restart"}:
         raise OperationError("operation not allowed")
+    meta=_service_setup_meta(name)
+    if action in {"start","restart"}:
+        if meta.get("managed_by"):
+            raise OperationError(
+                f"{ALLOWED_SERVICES[name]} is managed by {meta['managed_by']}; "
+                "use WStunnel 443 Configure / Repair instead of starting this dependency directly"
+            )
+        if not meta.get("configured",True):
+            raise OperationError(
+                f"{ALLOWED_SERVICES[name]} is not configured yet; "
+                "use its Configure / Repair action in Makia before starting the service"
+            )
     _run(["systemctl",action,name])
     return service_status(name)
 
