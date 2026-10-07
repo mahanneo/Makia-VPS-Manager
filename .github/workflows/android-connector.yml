@@ -90,8 +90,8 @@ jobs:
         run: |
           python makia/client/android/patch_sfa.py upstream/sing-box-for-android makia/client/android/MakiaEntryActivity.kt
           grep -q 'applicationId = "com.makia.client"' upstream/sing-box-for-android/app/build.gradle.kts
-          grep -q '^VERSION_NAME=1.5.1$' upstream/sing-box-for-android/version.properties
-          grep -q '^VERSION_CODE=10501$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_NAME=1.6.0$' upstream/sing-box-for-android/version.properties
+          grep -q '^VERSION_CODE=10600$' upstream/sing-box-for-android/version.properties
           grep -q 'android:scheme="makia"' upstream/sing-box-for-android/app/src/main/AndroidManifest.xml
 
       - name: Build installable Android UAT APK
@@ -121,7 +121,7 @@ jobs:
             echo "ref=$GITHUB_REF"
             echo "run_id=$GITHUB_RUN_ID"
             echo "run_attempt=$GITHUB_RUN_ATTEMPT"
-            echo "makia_version=1.5.1"
+            echo "makia_version=1.6.0"
             echo "signing=debug-uat"
           } > package-android/BUILD-INFO.txt
           python - <<'PY'
@@ -141,7 +141,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Android-Connector-1.5.1-UAT
+          name: Makia-Android-Connector-1.6.0-UAT
           path: package-android/
           if-no-files-found: error
           retention-days: 90
