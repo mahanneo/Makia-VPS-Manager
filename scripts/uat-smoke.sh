@@ -294,6 +294,14 @@ else
   bad "WStunnel tooling missing"
 fi
 
+if [[ -f /etc/makia-vps-manager/openvpn-wstunnel.env ]]; then
+  systemctl is-active --quiet makia-openvpn-wstunnel && ok "OpenVPN WStunnel 443 runtime active" || bad "OpenVPN WStunnel 443 transport inactive"
+  systemctl is-active --quiet openvpn-server@makia-ws && ok "OpenVPN WStunnel backend active" || bad "OpenVPN WStunnel backend inactive"
+  grep -q "BEGIN MAKIA OPENVPN WSTUNNEL" /etc/nginx/sites-available/makia-vps-manager 2>/dev/null && ok "OpenVPN WStunnel Nginx route present" || bad "OpenVPN WStunnel Nginx route missing"
+else
+  ok "OpenVPN WStunnel 443 not configured"
+fi
+
 if [[ -f /etc/makia-vps-manager/mtproxy.env ]]; then
   if [[ -x /opt/makia-mtproxy/mtg ]] && systemctl is-active --quiet makia-mtproxy; then
     MTPORT="$(awk -F= '$1=="MTPROXY_PORT"{print $2;exit}' /etc/makia-vps-manager/mtproxy.env)"
