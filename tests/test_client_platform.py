@@ -122,6 +122,13 @@ def test_client_platform_is_disabled_by_default_and_separate_from_admin_auth():
     assert "app.include_router(client_portal.router)" in main
 
 
+def test_android_connector_has_stable_release_fallback_url():
+    portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    assert "Makia-Android-Connector-{VERSION}.apk" in portal
+    assert "releases/download/" in portal
+    assert 'MAKIA_ANDROID_CONNECTOR_URL' in portal
+
+
 def test_client_admin_api_never_calls_protocol_runtime_mutators():
     source=(ROOT/"app/client_admin.py").read_text(encoding="utf-8")
     forbidden=(
