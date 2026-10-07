@@ -156,11 +156,25 @@ if command -v xray >/dev/null 2>&1 && { [[ -f /usr/local/etc/xray/config.json ]]
   systemctl is-active --quiet xray 2>/dev/null && XRAY_WAS_ACTIVE=1 || true
 fi
 
+openvpn_primary_listener_present(){
+  local conf=/etc/openvpn/server/server.conf port proto flag
+  [[ -f "$conf" ]] || return 1
+  port="$(awk '$1=="port"{print $2; exit}' "$conf" 2>/dev/null || true)"
+  proto="$(awk '$1=="proto"{print tolower($2); exit}' "$conf" 2>/dev/null || true)"
+  [[ "$port" =~ ^[0-9]+$ ]] || return 1
+  if [[ "$proto" == tcp* ]]; then flag=-ltn; else flag=-lun; fi
+  ss -H "$flag" 2>/dev/null | grep -Eq ":${port}([[:space:]]|$)"
+}
+
 OVPN_WAS_PRESENT=0
 OVPN_WAS_ACTIVE=0
+OVPN_WAS_LISTENING=0
 if [[ -f /etc/openvpn/server/server.conf ]]; then
   OVPN_WAS_PRESENT=1
   systemctl is-active --quiet openvpn-server@server 2>/dev/null && OVPN_WAS_ACTIVE=1 || true
+  if [[ "$OVPN_WAS_ACTIVE" -eq 1 ]] && openvpn_primary_listener_present; then
+    OVPN_WAS_LISTENING=1
+  fi
 fi
 
 WG_WAS_PRESENT=0
@@ -656,11 +670,11 @@ if str(d.get("proto") or "") not in {"udp4","tcp4-server"} or not d.get("service
 print("OpenVPN runtime validation PASS:", d.get("proto"), d.get("port"))
 PY
   ); then
-    if [[ "$OVPN_WAS_ACTIVE" -eq 1 ]]; then
-      echo "OpenVPN was healthy before this update but is unhealthy now; updater will roll back."
+    if [[ "$OVPN_WAS_ACTIVE" -eq 1 && "$OVPN_WAS_LISTENING" -eq 1 ]]; then
+      echo "OpenVPN listener was healthy before this update but is unhealthy now; updater will roll back."
       exit 6
     fi
-    echo "WARNING: OpenVPN was already unhealthy before the update and automatic normalization could not fix it."
+    echo "WARNING: OpenVPN primary listener was already unhealthy before the update and automatic normalization could not fix it."
     echo "The panel update will continue so Domain Diagnostics and Repair are available."
   fi
 fi
@@ -781,6 +795,10 @@ if [[ "$DNS_WAS_QUERY_OK" -eq 0 ]]; then
 fi
 if [[ "$STUNNEL_WAS_CONFIGURED" -eq 1 && "$STUNNEL_WAS_ACTIVE" -eq 0 ]]; then
   UAT_ENV+=(MAKIA_UAT_STEALTH_SOFTFAIL=1)
+fi
+if [[ "$OVPN_WAS_PRESENT" -eq 1 && "$OVPN_WAS_ACTIVE" -eq 1 && "$OVPN_WAS_LISTENING" -eq 0 ]]; then
+  echo "OpenVPN primary listener was already missing before this update; retaining it as a warning so unrelated panel/WStunnel fixes can be accepted."
+  UAT_ENV+=(MAKIA_UAT_OPENVPN_LISTENER_SOFTFAIL=1)
 fi
 UAT_CMD=("${UAT_ENV[@]}" /usr/local/sbin/makia-uat-smoke)
 if ! "${UAT_CMD[@]}"; then
