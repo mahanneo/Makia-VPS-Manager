@@ -184,3 +184,12 @@ def test_android_signed_release_workflow_contract():
     ]:
         assert marker in workflow
     assert 'default: "main"' in workflow
+
+
+def test_android_signed_release_uses_available_build_tools():
+    workflow=(ROOT/".github/workflows/android-release.yml").read_text(encoding="utf-8")
+    assert 'sdkmanager "ndk;28.0.13004108" "platforms;android-37.1"' in workflow
+    assert 'build-tools;37.1.0' not in workflow
+    assert 'find "$ANDROID_HOME/build-tools"' in workflow
+    assert '-name apksigner' in workflow
+    assert 'test -n "$apksigner" && test -x "$apksigner"' in workflow

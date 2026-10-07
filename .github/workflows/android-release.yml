@@ -49,11 +49,15 @@ jobs:
         uses: android-actions/setup-android@v4
         with:
           packages: ""
-      - name: Install Android NDK and build tools
+      - name: Install Android NDK and platform
         shell: bash
         run: |
+          set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "ndk;28.0.13004108" "platforms;android-37.1" "build-tools;37.1.0"
+          # Match the UAT workflow. Build-tools are intentionally not pinned to
+          # a not-yet-published SDK package; Gradle uses an available compatible
+          # toolchain and release verification discovers apksigner dynamically.
+          sdkmanager "ndk;28.0.13004108" "platforms;android-37.1"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.0.13004108" >> "$GITHUB_ENV"
       - name: Checkout pinned official SFA and sing-box
         shell: bash
@@ -137,7 +141,8 @@ jobs:
           test -n "$universal"
           mkdir -p package-android-release
           cp "$universal" package-android-release/Makia-Android-Connector-1.6.1.apk
-          apksigner="$ANDROID_HOME/build-tools/37.1.0/apksigner"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner -print | sort -V | tail -n1)"
+          test -n "$apksigner" && test -x "$apksigner"
           "$apksigner" verify --verbose --print-certs package-android-release/Makia-Android-Connector-1.6.1.apk | tee package-android-release/SIGNATURE.txt
           unzip -l package-android-release/Makia-Android-Connector-1.6.1.apk | grep -q 'lib/arm64-v8a/libbox.so'
           unzip -l package-android-release/Makia-Android-Connector-1.6.1.apk | grep -q 'lib/arm64-v8a/libwstunnel.so'
