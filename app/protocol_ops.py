@@ -780,12 +780,38 @@ def bootstrap_stealth(domain, listen_port=9443):
         else:
             text+="\nENABLED=1\n"
         defaults.write_text(text,encoding="utf-8")
-    _run(["systemctl","enable","--now","stunnel4"],timeout=30)
-    _run(["systemctl","restart","stunnel4"],timeout=30)
+    try:
+        _run(["systemctl","enable","--now","stunnel4"],timeout=30)
+        _run(["systemctl","restart","stunnel4"],timeout=30)
+    except Exception as first_error:
+        alternate=_suggest_free_port(
+            "tcp",(10443,11443,12443,13443,14443),
+            exclude_ports={backend_port,listen_port},
+        )
+        if not alternate:
+            raise ProtocolError(f"Stunnel failed to start on TCP/{listen_port}: {str(first_error)[:500]}") from first_error
+        listen_port=int(alternate)
+        STUNNEL_MAKIA_CONF.write_text(
+            "foreground = no\n"
+            "client = no\n"
+            "sslVersionMin = TLSv1.2\n"
+            f"cert = {cert}\nkey = {key}\n\n"
+            "[makia-openvpn]\n"
+            f"accept = 0.0.0.0:{listen_port}\n"
+            f"connect = 127.0.0.1:{backend_port}\n",
+            encoding="utf-8",
+        )
+        try:
+            _run(["systemctl","restart","stunnel4"],timeout=30)
+        except Exception as retry_error:
+            raise ProtocolError(
+                f"Stunnel failed on the requested and fallback ports; "
+                f"last attempt TCP/{listen_port}: {str(retry_error)[:500]}"
+            ) from retry_error
     _ufw_allow_if_active(listen_port,"tcp","OpenVPN Stealth")
     status=stealth_status()
     if not status.get("listener"):
-        raise ProtocolError("Stunnel did not expose the requested TCP listener")
+        raise ProtocolError(f"Stunnel started but no listener appeared on TCP/{listen_port}")
     client=(
         "client = yes\n"
         "foreground = yes\n"
@@ -810,7 +836,10 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
     listen_port=_validate_port(listen_port)
     existing=wstunnel_status()
     if _port_transport_in_use(listen_port,"tcp") and int(existing.get("port") or 0)!=listen_port:
-        raise ProtocolError(f"TCP/{listen_port} is already in use")
+        suggested=_suggest_free_port("tcp",(8444,10444,11444,12444,13444))
+        if not suggested:
+            raise ProtocolError(f"TCP/{listen_port} is already in use and no managed WStunnel fallback port is free")
+        listen_port=int(suggested)
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
     if not cert.exists() or not key.exists():
@@ -1093,12 +1122,34 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         raise ProtocolError("WStunnel 443 requires a valid Let's Encrypt certificate for the selected domain")
 
     existing=openvpn_wstunnel_status()
+    existing_backend=int((existing.get("backend") or {}).get("port") or 0)
+
+    if _port_transport_in_use(backend_port,"tcp") and not (
+        existing_backend==backend_port and (existing.get("backend") or {}).get("listener")
+    ):
+        suggestion=_suggest_free_port(
+            "tcp",(11942,12940,13940,14940,15940,16940),
+            exclude_ports={bridge_port,public_port},
+        )
+        if not suggestion:
+            raise ProtocolError(
+                f"WStunnel 443 backend TCP/{backend_port} is occupied and no managed loopback backend port is free"
+            )
+        backend_port=int(suggestion)
+
     if _port_transport_in_use(bridge_port,"tcp") and int(existing.get("bridge_port") or 0)!=bridge_port:
-        suggestion=_suggest_free_port("tcp",(10445,11445,12445,13445),exclude_ports={backend_port})
-        hint=f"; try loopback bridge TCP/{suggestion}" if suggestion else ""
-        raise ProtocolError(f"WStunnel loopback bridge TCP/{bridge_port} is already in use{hint}")
+        suggestion=_suggest_free_port(
+            "tcp",(10445,11445,12445,13445,14445,15445),
+            exclude_ports={backend_port,public_port},
+        )
+        if not suggestion:
+            raise ProtocolError(
+                f"WStunnel 443 loopback bridge TCP/{bridge_port} is occupied and no managed bridge port is free"
+            )
+        bridge_port=int(suggestion)
 
     backend=ensure_openvpn_wstunnel_backend(backend_port)
+    backend_port=int(backend.get("port") or backend_port)
     prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
     if len(prefix)<16:
         raise ProtocolError("WStunnel path prefix must be at least 16 characters")
