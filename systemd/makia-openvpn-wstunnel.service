@@ -3,6 +3,8 @@ Description=Makia OpenVPN over WebSocket transport
 After=network-online.target nginx.service openvpn-server@makia-ws.service
 Wants=network-online.target
 Requires=openvpn-server@makia-ws.service
+ConditionPathExists=/etc/makia-vps-manager/openvpn-wstunnel.env
+ConditionPathExists=/etc/openvpn/server/makia-ws.conf
 
 [Service]
 Type=simple
