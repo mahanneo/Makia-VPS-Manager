@@ -1,17 +1,23 @@
-Makia Android Connector 1.5.1 — UAT install notes
+Makia Android Connector 1.6.0 — install notes
 
-Recommended APK:
-Makia-Android-Connector.apk
+Stable APK:
+Makia-Android-Connector-1.6.0.apk
+
+WStunnel 443:
+- Full Device Direct Connect is supported on Android ARM64.
+- The official Wstunnel 11.0.0 runtime is bundled inside the Makia Connector.
+- Users do not need to install Wstunnel or OpenVPN separately.
+- Sign in to the Makia Client Portal, choose WStunnel 443, and tap Direct Connect.
+- Android asks for VPN permission the first time only.
 
 Requirements:
 - Android 7.0 or newer (API 24+).
+- ARM64 is required for WStunnel 443 in 1.6.0.
 - Allow installation from the browser/files app if Android asks.
 
 If Android says "App not installed" and an older Makia Connector RC is already installed:
-- Uninstall only the old Makia Connector app, then install this APK again.
-- Current UAT artifacts are debug-signed by GitHub Actions, so an older RC built by another runner may have a different signing certificate.
+- Uninstall only the old Makia Connector app, then install the stable signed APK.
 - This removes only local connector app data. It does not rotate, delete, or recreate any VPS user, UUID, WireGuard key, certificate, or server credential.
 
-Advanced ABI-specific APKs are in the advanced/ folder. Use them only if needed.
-
-Production publishing requires an operator-controlled persistent signing key. See docs/ANDROID-RELEASE-SIGNING.md in the Makia repository.
+GitHub Actions UAT builds remain debug-signed and are not the stable distribution artifact.
+The stable release APK is produced by the protected Android Signed Release workflow with the persistent release signing identity.

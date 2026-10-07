@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import android.net.VpnService
 import android.os.Bundle
+import android.os.Build
 import android.util.Base64
 import android.widget.TextView
 import android.widget.Toast
@@ -33,6 +34,7 @@ import java.net.URL
 class MakiaEntryActivity : ComponentActivity() {
     companion object {
         private const val VPN_REQUEST = 7001
+        private var wstunnelProcess: Process? = null
     }
 
     private var startAfterPermission = false
@@ -59,6 +61,7 @@ class MakiaEntryActivity : ComponentActivity() {
         when (uri.host) {
             "disconnect" -> {
                 BoxService.stop()
+                stopWstunnel()
                 Toast.makeText(this, "اتصال Makia قطع شد", Toast.LENGTH_SHORT).show()
                 finish()
             }
@@ -82,6 +85,7 @@ class MakiaEntryActivity : ComponentActivity() {
                 Settings.rebuildServiceMode()
                 withContext(Dispatchers.Main) { requestVpnAndStart() }
             } catch (e: Exception) {
+                stopWstunnel()
                 withContext(Dispatchers.Main) { fail(e.message ?: "اتصال ناموفق بود") }
             }
         }
@@ -94,7 +98,7 @@ class MakiaEntryActivity : ComponentActivity() {
         connection.readTimeout = 15000
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
-        connection.setRequestProperty("User-Agent", "MakiaAndroidConnector/1.4")
+        connection.setRequestProperty("User-Agent", "MakiaAndroidConnector/1.6.0")
         val body = JSONObject().put("ticket", ticket).toString().toByteArray()
         connection.outputStream.use { it.write(body) }
         val code = connection.responseCode
@@ -152,13 +156,19 @@ class MakiaEntryActivity : ComponentActivity() {
         val share = d.optString("share_link")
         val root = JSONObject()
         root.put("log", JSONObject().put("level", "info"))
-        root.put("inbounds", JSONArray().put(JSONObject()
-            .put("type", "tun").put("tag", "tun-in")
+        val tun = JSONObject().put("type", "tun").put("tag", "tun-in")
             .put("address", JSONArray().put("172.19.0.1/30"))
             .put("mtu", 1400).put("auto_route", true).put("strict_route", true)
-        ))
+        if (engine == "wstunnel_wireguard") tun.put("exclude_package", JSONArray().put(packageName))
+        root.put("inbounds", JSONArray().put(tun))
 
-        if (engine == "wireguard") {
+        if (engine == "wstunnel_wireguard") {
+            val raw = String(Base64.decode(d.getString("native_base64"), Base64.DEFAULT))
+            startWstunnel(d.getJSONObject("transport_config"))
+            root.put("endpoints", JSONArray().put(parseWireGuard(raw)))
+            root.put("outbounds", JSONArray().put(JSONObject().put("type", "direct").put("tag", "direct")))
+            root.put("route", JSONObject().put("final", "wg-ep"))
+        } else if (engine == "wireguard") {
             val raw = if (d.optString("native_base64").isNotBlank()) {
                 String(Base64.decode(d.getString("native_base64"), Base64.DEFAULT))
             } else share
@@ -172,6 +182,43 @@ class MakiaEntryActivity : ComponentActivity() {
             root.put("route", JSONObject().put("final", "proxy"))
         }
         return root.toString()
+    }
+
+    private fun stopWstunnel() {
+        try {
+            wstunnelProcess?.destroy()
+            Thread.sleep(100)
+            if (wstunnelProcess?.isAlive == true) wstunnelProcess?.destroyForcibly()
+        } catch (_: Exception) {
+        } finally {
+            wstunnelProcess = null
+        }
+    }
+
+    private fun startWstunnel(cfg: JSONObject) {
+        stopWstunnel()
+        if (!Build.SUPPORTED_ABIS.contains("arm64-v8a")) throw IllegalStateException("WStunnel 443 فعلاً روی گوشی‌های ARM64 پشتیبانی می‌شود")
+        if (cfg.optString("type") != "wireguard-wstunnel") throw IllegalArgumentException("Invalid WStunnel transport")
+        val server=cfg.optString("server").trim()
+        val port=cfg.optInt("port",0)
+        val prefix=cfg.optString("path_prefix").trim()
+        val localPort=cfg.optInt("local_port",0)
+        val remoteHost=cfg.optString("remote_host").trim()
+        val remotePort=cfg.optInt("remote_port",0)
+        if (!Regex("^[A-Za-z0-9.-]{1,253}$").matches(server)) throw IllegalArgumentException("Invalid WStunnel server")
+        if (port != 443) throw IllegalArgumentException("WStunnel public port must be 443")
+        if (!Regex("^[A-Za-z0-9_-]{16,96}$").matches(prefix)) throw IllegalArgumentException("Invalid WStunnel path")
+        if (localPort !in 1024..65535 || remotePort !in 1..65535) throw IllegalArgumentException("Invalid WStunnel port")
+        if (remoteHost != "127.0.0.1") throw IllegalArgumentException("Invalid WStunnel target")
+        val binary=File(applicationInfo.nativeLibraryDir,"libwstunnel.so")
+        if (!binary.isFile || !binary.canExecute()) throw IllegalStateException("WStunnel runtime در برنامه پیدا نشد")
+        val args=listOf(binary.absolutePath,"client","--http-upgrade-path-prefix",prefix,"--tls-verify-certificate",
+            "-L","udp://127.0.0.1:$localPort:127.0.0.1:$remotePort?timeout_sec=0","wss://$server:443")
+        val process=ProcessBuilder(args).redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.appendTo(File(filesDir,"wstunnel.log"))).start()
+        Thread.sleep(900)
+        if (!process.isAlive) throw IllegalStateException("WStunnel اجرا نشد")
+        wstunnelProcess=process
     }
 
     private fun parseOutbound(value: String): JSONObject {

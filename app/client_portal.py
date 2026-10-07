@@ -74,7 +74,13 @@ def _default_device_label(platform):
 def _android_connector_url():
     raw=str(os.getenv("MAKIA_ANDROID_CONNECTOR_URL","")).strip()
     if not raw:
-        return ""
+        # Stable releases publish the signed Android connector as a GitHub
+        # release asset. This keeps the Client PWA download button usable
+        # after a normal panel upgrade without an extra owner-side setting.
+        raw=(
+            "https://github.com/mahanneo/Makia-VPS-Manager/releases/download/"
+            f"v{VERSION}/Makia-Android-Connector-{VERSION}.apk"
+        )
     parsed=urllib.parse.urlparse(raw)
     if parsed.scheme!="https" or not parsed.netloc:
         return ""
@@ -618,7 +624,7 @@ def client_extension_ticket(delivery_kind:str,delivery_id:int,request:Request):
     except ValueError as exc:
         raise HTTPException(status_code=404,detail=str(exc))
     engine=str(item.get("engine") or "").lower()
-    if engine in {"wireguard","openvpn"}:
+    if engine in {"wireguard","openvpn","openvpn_wstunnel","openvpn-wstunnel"}:
         raise HTTPException(status_code=409,detail="This profile requires Full Device / Import mode")
     ticket=client_connector.issue_ticket(
         session["account_id"],session["device_id"],kind,delivery_id

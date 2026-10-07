@@ -6,6 +6,7 @@ on:
       - "client/windows/**"
       - "app/client_connector.py"
       - "app/client_portal.py"
+      - "app/protocol_ops.py"
       - "app/static/client.js"
       - "app/templates/client_app.html"
       - ".github/workflows/native-connector.yml"
@@ -16,6 +17,7 @@ on:
       - "client/windows/**"
       - "app/client_connector.py"
       - "app/client_portal.py"
+      - "app/protocol_ops.py"
       - "app/static/client.js"
       - "app/templates/client_app.html"
       - ".github/workflows/native-connector.yml"
@@ -70,6 +72,22 @@ jobs:
           Copy-Item client\windows\Uninstall-Makia.cmd package\Uninstall-Makia.cmd
           Copy-Item client\windows\INSTALL.txt package\INSTALL.txt
 
+      - name: Fetch pinned wstunnel 11.0.0
+        shell: pwsh
+        run: |
+          $url="https://github.com/erebe/wstunnel/releases/download/v11.0.0/wstunnel_11.0.0_windows_amd64.tar.gz"
+          $archive="$env:RUNNER_TEMP\wstunnel.tar.gz"
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "024323c9c2dd1ed1c6f38d417d9b2776e2f0083bba507e80d4a8124c8451b164") { throw "wstunnel checksum mismatch: $hash" }
+          $dir="$env:RUNNER_TEMP\wstunnel"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          tar.exe -xzf $archive -C $dir
+          $bin=Get-ChildItem $dir -Recurse -Filter "wstunnel.exe" | Select-Object -First 1
+          if (!$bin) { throw "wstunnel.exe not found" }
+          Copy-Item $bin.FullName package\wstunnel.exe
+          package\wstunnel.exe --version
+
       - name: Smoke package and real installer
         shell: pwsh
         run: |
@@ -85,7 +103,10 @@ jobs:
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
             $runtime=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\sing-box.exe"
-            if (!(Test-Path $installed) -or !(Test-Path $runtime)) { throw "installed Windows runtime incomplete" }
+            $ws=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wstunnel.exe"
+            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws)) { throw "installed Windows runtime incomplete" }
+            $probe=(package\MakiaClientConnector.exe --self-test | ConvertFrom-Json)
+            if (!$probe.ok -or !$probe.sing_box -or !$probe.wstunnel) { throw "connector self-test missing runtime" }
 
             $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
             if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
@@ -102,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           @(
-            "version=1.5.1"
+            "version=1.6.0"
             "commit=$env:GITHUB_SHA"
             "ref=$env:GITHUB_REF"
             "run_id=$env:GITHUB_RUN_ID"
@@ -116,7 +137,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.5.1
+          name: Makia-Client-Connector-Windows-x64-1.6.0
           path: package/
           if-no-files-found: error
           retention-days: 90

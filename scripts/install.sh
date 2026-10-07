@@ -180,6 +180,7 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-metrics-sampler.service" /etc/systemd
 install -m 0644 "$SOURCE_DIR/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
+install -m 0644 "$SOURCE_DIR/systemd/makia-openvpn-wstunnel.service" /etc/systemd/system/makia-openvpn-wstunnel.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 install -m 0644 "$SOURCE_DIR/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service

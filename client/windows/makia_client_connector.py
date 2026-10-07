@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, base64, ctypes, json, os, re, subprocess, sys, tempfile, time
+import argparse, base64, ctypes, json, os, re, socket, subprocess, sys, tempfile, time
 import urllib.parse, urllib.request
 from pathlib import Path
 
@@ -42,7 +42,7 @@ def redeem(controller,ticket):
     req=urllib.request.Request(
         controller.rstrip("/")+"/client/connector/redeem",
         data=data,
-        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.5.1"},
+        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.6.0"},
         method="POST",
     )
     with urllib.request.urlopen(req,timeout=15) as r:
@@ -188,12 +188,27 @@ def singbox_config(outbound):
 def find_binary(names):
     here=Path(sys.executable).resolve().parent
     candidates=[]
+    program_files=[os.environ.get("ProgramFiles",""),os.environ.get("ProgramFiles(x86)","")]
     for n in names:
         candidates += [here/n,ROOT/n]
         for folder in os.environ.get("PATH","").split(os.pathsep):
             if folder:
                 candidates.append(Path(folder)/n)
+        lname=str(n).lower()
+        for base in program_files:
+            if not base:
+                continue
+            root=Path(base)
+            if lname=="openvpn.exe":
+                candidates.append(root/"OpenVPN"/"bin"/"openvpn.exe")
+            elif lname=="wireguard.exe":
+                candidates.append(root/"WireGuard"/"wireguard.exe")
+    seen=set()
     for p in candidates:
+        key=str(p).lower()
+        if key in seen:
+            continue
+        seen.add(key)
         if p.is_file():
             return str(p)
     return None
@@ -209,6 +224,9 @@ def stop_current():
         if state.get("mode")=="process":
             pid=int(state.get("pid") or 0)
             if pid:
+                subprocess.run(["taskkill","/PID",str(pid),"/T","/F"],capture_output=True,timeout=10,check=False)
+        elif state.get("mode")=="multi-process":
+            for pid in reversed([int(x) for x in (state.get("pids") or []) if int(x)>0]):
                 subprocess.run(["taskkill","/PID",str(pid),"/T","/F"],capture_output=True,timeout=10,check=False)
         elif state.get("mode")=="wireguard":
             exe=find_binary(["wireguard.exe"])
@@ -226,6 +244,18 @@ def start_process(cmd):
     flags=getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0)|getattr(subprocess,"DETACHED_PROCESS",0)
     p=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=flags)
     return p.pid
+
+
+def wait_tcp(host,port,timeout=12):
+    deadline=time.time()+float(timeout)
+    while time.time()<deadline:
+        try:
+            with socket.create_connection((str(host),int(port)),timeout=0.5):
+                return True
+        except OSError:
+            time.sleep(0.25)
+    return False
+
 
 def connect_delivery(d,dry_run=False):
     engine=str(d.get("engine") or "").lower()
@@ -261,6 +291,58 @@ def connect_delivery(d,dry_run=False):
         pid=start_process([exe,"--config",str(path)])
         STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":"openvpn","connection_mode":"device"}),encoding="utf-8")
         return {"ok":True,"mode":"openvpn","connected":True,"connection_mode":"device"}
+    if engine in {"openvpn_wstunnel","openvpn-wstunnel"}:
+        raw=base64.b64decode(d.get("native_base64") or "")
+        if not raw:
+            raise RuntimeError("OpenVPN WStunnel profile missing")
+        transport_cfg=d.get("transport_config") or {}
+        server=str(transport_cfg.get("server") or "").strip()
+        port=int(transport_cfg.get("port") or 443)
+        prefix=str(transport_cfg.get("path_prefix") or "").strip()
+        local_port=int(transport_cfg.get("local_port") or 11941)
+        remote_host=str(transport_cfg.get("remote_host") or "")
+        remote_port=int(transport_cfg.get("remote_port") or 11940)
+        if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}",server):
+            raise RuntimeError("Invalid WStunnel server")
+        if port<1 or port>65535 or local_port<1024 or local_port>65535 or remote_port<1 or remote_port>65535:
+            raise RuntimeError("Invalid WStunnel port")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{16,96}",prefix):
+            raise RuntimeError("Invalid WStunnel path prefix")
+        if remote_host!="127.0.0.1":
+            raise RuntimeError("WStunnel remote target must be loopback")
+        path=ROOT/"makia-wstunnel.ovpn"
+        path.write_bytes(raw)
+        openvpn=find_binary(["openvpn.exe"])
+        wstunnel=find_binary(["wstunnel.exe"])
+        if dry_run:
+            return {
+                "ok":True,"mode":"openvpn-wstunnel","openvpn":bool(openvpn),"wstunnel":bool(wstunnel),
+                "profile":str(path),"server":server,"port":port,"local_port":local_port,
+            }
+        if not wstunnel:
+            raise RuntimeError("Makia WStunnel runtime is missing")
+        if not openvpn:
+            raise RuntimeError("OpenVPN Connect/OpenVPN binary is not installed")
+        wcmd=[
+            wstunnel,"client",
+            "--http-upgrade-path-prefix",prefix,
+            "--tls-verify-certificate",
+            "-L",f"tcp://127.0.0.1:{local_port}:127.0.0.1:{remote_port}",
+            f"wss://{server}:{port}",
+        ]
+        wpid=start_process(wcmd)
+        if not wait_tcp("127.0.0.1",local_port,12):
+            subprocess.run(["taskkill","/PID",str(wpid),"/T","/F"],capture_output=True,timeout=10,check=False)
+            raise RuntimeError("WStunnel did not expose the local OpenVPN endpoint")
+        opid=start_process([openvpn,"--config",str(path)])
+        STATE.write_text(json.dumps({
+            "mode":"multi-process","pids":[wpid,opid],"engine":"openvpn-wstunnel",
+            "connection_mode":"device","server":server,"port":port,
+        }),encoding="utf-8")
+        return {
+            "ok":True,"mode":"openvpn-wstunnel","connected":True,
+            "connection_mode":"device","server":server,"port":port,
+        }
     outbound=outbound_from_share(share)
     cfg=singbox_config(outbound)
     PROFILE.write_text(json.dumps(cfg,ensure_ascii=False,indent=2),encoding="utf-8")
@@ -319,8 +401,9 @@ def main():
             print(json.dumps({
                 "ok":True,
                 "app":APP,
-                "version":"1.5.1",
+                "version":"1.6.0",
                 "sing_box":bool(find_binary(["sing-box.exe"])),
+                "wstunnel":bool(find_binary(["wstunnel.exe"])),
                 "root":str(ROOT),
             },ensure_ascii=False))
             return 0

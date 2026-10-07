@@ -64,6 +64,49 @@ https://YOUR-PANEL-DOMAIN/help/connect
 - Makia Profile را روی `udp4` یا `tcp4-client` می‌سازد تا رکورد AAAA اشتباه باعث انتخاب IPv6 نشود.
 - SSL/HTTPS پنل با Certificate داخلی OpenVPN یکی نیست؛ OpenVPN از CA/PKI خودش استفاده می‌کند.
 
+## WStunnel 443 — OpenVPN over WebSocket/TLS
+
+این Mode برای شبکه‌هایی است که HTTPS/TCP443 بهتر از VPN خام عبور می‌کند. ترافیک OpenVPN داخل WebSocket/TLS روی همان پورت عمومی 443 پنل Makia حمل می‌شود.
+
+### Windows — اتصال مستقیم Makia
+
+1. آخرین **Makia Windows Full Device Connector** را نصب کنید.
+2. OpenVPN runtime/client را روی Windows نصب داشته باشید.
+3. وارد Client Portal Makia شوید.
+4. پروفایل **WStunnel 443** را انتخاب کنید.
+5. روی **اتصال مستقیم** بزنید.
+6. Makia ابتدا WStunnel محلی را اجرا می‌کند و بعد OpenVPN را روی همان تونل بالا می‌آورد.
+7. برای قطع، از Disconnect خود Makia استفاده کنید تا هر دو Process بسته شوند.
+
+### اتصال دستی
+
+بسته WStunnel شامل فایل `.ovpn` و فایل `wstunnel-client-command.txt` است.
+
+1. فرمان WStunnel را اجرا کنید.
+2. صبر کنید Local endpoint آماده شود.
+3. فایل `.ovpn` را با OpenVPN اجرا/Import کنید.
+4. تا پایان VPN، WStunnel باید باز بماند.
+
+### Android — اتصال مستقیم داخل Makia
+
+در Makia 1.6.0، **WStunnel 443 روی Android به‌صورت Full Device Direct Connect** پشتیبانی می‌شود.
+
+1. آخرین **Makia Android Connector 1.6.0** را از همان Client Portal نصب کنید.
+2. با یوزر و رمز خود وارد Client Portal شوید.
+3. پروفایل **WStunnel 443** را انتخاب کنید.
+4. روی **اتصال مستقیم** بزنید.
+5. بار اول مجوز Android VPN را تأیید کنید.
+6. Connector، WStunnel را داخل خود برنامه روی WSS/TCP443 اجرا می‌کند و ترافیک کامل دستگاه را از تونل عبور می‌دهد.
+7. برای قطع اتصال از گزینه **قطع اتصال** در Makia استفاده کنید.
+
+Runtime رسمی WStunnel داخل APK قرار دارد؛ کاربر نیاز به نصب WStunnel، OpenVPN یا اجرای فرمان جداگانه روی Android ندارد.
+
+### iPhone / iPad
+
+در 1.6.0 هنوز Native WStunnel Full Device داخل iOS ادعا نمی‌شود و iOS همچنان از Profile/Import یا کلاینت سازگار استفاده می‌کند.
+
+**نکته امنیتی:** مسیر WebSocket و فایل OVPN اختصاصی‌اند. آن‌ها را برای شخص دیگری ارسال نکنید.
+
 ## SSH / NPV Tunnel / NapsternetV
 
 ### NPV

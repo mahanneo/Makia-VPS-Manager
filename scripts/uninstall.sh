@@ -12,9 +12,11 @@ systemctl disable --now makia-metrics-sampler 2>/dev/null || true
 systemctl disable --now makia-protocol-traffic 2>/dev/null || true
 systemctl disable --now makia-browser-gateway 2>/dev/null || true
 systemctl disable --now makia-wstunnel 2>/dev/null || true
+systemctl disable --now makia-openvpn-wstunnel 2>/dev/null || true
+systemctl disable --now openvpn-server@makia-ws 2>/dev/null || true
 systemctl disable --now makia-ikev2-network 2>/dev/null || true
 systemctl disable --now makia-mtproxy 2>/dev/null || true
-rm -f /etc/systemd/system/makia-vps-manager.service /etc/systemd/system/makia-policy-enforcer.service /etc/systemd/system/makia-metrics-sampler.service /etc/systemd/system/makia-protocol-traffic.service /etc/systemd/system/makia-browser-gateway.service /etc/systemd/system/makia-wstunnel.service /etc/systemd/system/makia-ikev2-network.service /etc/systemd/system/makia-mtproxy.service
+rm -f /etc/systemd/system/makia-vps-manager.service /etc/systemd/system/makia-policy-enforcer.service /etc/systemd/system/makia-metrics-sampler.service /etc/systemd/system/makia-protocol-traffic.service /etc/systemd/system/makia-browser-gateway.service /etc/systemd/system/makia-wstunnel.service /etc/systemd/system/makia-openvpn-wstunnel.service /etc/systemd/system/makia-ikev2-network.service /etc/systemd/system/makia-mtproxy.service
 rm -f /etc/nginx/sites-enabled/makia-vps-manager /etc/nginx/sites-available/makia-vps-manager
 rm -f /usr/local/sbin/makia-update /usr/local/sbin/makia-backup /usr/local/sbin/makia-uninstall /usr/local/sbin/makia-doctor /usr/local/sbin/makia-uat-smoke /usr/local/sbin/makia-reset-admin /usr/local/sbin/makia-upgrade /usr/local/sbin/makia-ikev2-network /usr/local/sbin/makia-install-wstunnel /usr/local/sbin/makia-install-mtproxy /usr/local/sbin/makia-refresh-mtproxy /usr/local/sbin/makia-install-dns
 rm -f /usr/local/sbin/dragon-update /usr/local/sbin/dragon-backup /usr/local/sbin/dragon-uninstall

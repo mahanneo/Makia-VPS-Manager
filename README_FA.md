@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>نسخه ۱.۵.۱</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+  <strong>نسخه ۱.۶.۰</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
-**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۵.۱](docs/UAT-1.5.1.md)**
+**[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۶.۰](docs/UAT-1.6.0.md)**
 
 ---
 
@@ -45,17 +45,18 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 | Xray / V2Ray | ✅ | Share Link، QR، Subscription، Portal | حجم، انقضا، IP Policy، تمدید، Diagnostics |
 | WireGuard | ✅ | Config، QR، Portal | فعال/غیرفعال، Reissue، Diagnostics |
 | OpenVPN | ✅ | فایل OVPN، Portal | Revoke، Transport/Runtime Diagnostics |
+| WStunnel 443 / OpenVPN WSS | ✅ | بسته WStunnel + OVPN، Client Platform، اتصال مستقیم Windows | انقضا/حجم/غیرفعال‌سازی حساب، محدودیت اتصال همزمان، Accounting ترافیک، Revoke مستقل Certificate، Diagnostics مسیر و Runtime |
 | Outline | ✅ | Access Key واقعی `ss://`، QR، Portal، ZIP رمزدار | حجم، انقضا، تمدید، Reissue، Traffic، Diagnostics، حذف |
 
 در Xray مسیرهای Guided برای پروتکل‌های پشتیبانی‌شده مانند VLESS، VMess، Trojan، Shadowsocks و Hysteria2 وجود دارند و تنظیمات Advanced قبل از Apply توسط Core اعتبارسنجی می‌شوند.
 
 در WireGuard/OpenVPN، Makia قابلیتی را که Engine واقعاً enforce نمی‌کند به‌صورت Fake نمایش نمی‌دهد.
 
-## Makia Client نسخه ۱.۵.۱
+## Makia Client نسخه ۱.۶.۰
 
 کاربر نهایی یک آدرس HTTPS واحد از Makia می‌گیرد و با نام کاربری و رمز خودش وارد می‌شود. داخل Client Portal فقط حجم، تاریخ انقضا، وضعیت دستگاه‌ها و دسترسی‌های همان حساب نمایش داده می‌شود.
 
-- **Windows:** اتصال Full Device مستقیم با Makia Client Connector.
+- **Windows:** اتصال Full Device مستقیم با Makia Client Connector؛ در Mode جدید WStunnel 443، Makia ابتدا تونل WebSocket/TLS روی HTTPS/443 و سپس OpenVPN را اجرا می‌کند.
 - **Chrome / Edge:** افزونه Makia Browser VPN مستقیماً به Browser Gateway امن روی VPS وصل می‌شود و به EXE، Registry یا Native Messaging نیاز ندارد.
 - **Android:** Makia Android Connector برای پروتکل‌های پشتیبانی‌شده از Android VpnService استفاده می‌کند؛ Artifact خودکار فعلی صریحاً UAT/debug-signed است تا زمانی که کلید خصوصی Release Signing پایدار در GitHub Secrets تنظیم شود.
 - **iPhone / iPad:** کاربر در Safari وارد می‌شود، Makia را با Add to Home Screen نصب می‌کند و از جریان Open/Import متناسب با iOS استفاده می‌کند. VPN Native داخل خود Makia در iOS تا زمان ساخت Apple-signed با Network Extension و UAT روی دستگاه واقعی ادعا نمی‌شود.
@@ -191,7 +192,7 @@ CI نسخه ۱ شامل Python compile/import، Pytest، DB/Migration، JavaScri
 
 موارد وابسته به محیط مانند Firewall/NAT، DNS propagation، Docker/Shadowbox واقعی، اتصال Client واقعی و SCP واقعی باید روی Host مقصد تست شوند.
 
-جزئیات نسخه جاری در **[docs/UAT-1.5.1.md](docs/UAT-1.5.1.md)** و وضعیت کلاینت‌ها در **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** ثبت شده است.
+جزئیات نسخه جاری در **[docs/UAT-1.6.0.md](docs/UAT-1.6.0.md)** و معماری WStunnel در **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** و وضعیت کلاینت‌ها در **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** ثبت شده است.
 
 ## مجوز
 

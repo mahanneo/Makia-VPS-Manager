@@ -103,6 +103,16 @@ on_exit(){
       systemctl enable --now stunnel4 2>/dev/null
       systemctl restart stunnel4 2>/dev/null
     fi
+    if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now makia-wstunnel 2>/dev/null
+      systemctl restart makia-wstunnel 2>/dev/null
+    fi
+    if [[ "${OVPN_WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
+      systemctl enable --now openvpn-server@makia-ws 2>/dev/null
+      systemctl restart openvpn-server@makia-ws 2>/dev/null
+      systemctl enable --now makia-openvpn-wstunnel 2>/dev/null
+      systemctl restart makia-openvpn-wstunnel 2>/dev/null
+    fi
     if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
       systemctl enable --now makia-mtproxy 2>/dev/null
       systemctl restart makia-mtproxy 2>/dev/null
@@ -167,6 +177,20 @@ if [[ -f /etc/stunnel/makia-openvpn.conf ]]; then
   systemctl is-active --quiet stunnel4 2>/dev/null && STUNNEL_WAS_ACTIVE=1 || true
 fi
 
+WSTUNNEL_WAS_CONFIGURED=0
+WSTUNNEL_WAS_ACTIVE=0
+if [[ -f /etc/makia-vps-manager/wstunnel.env ]]; then
+  WSTUNNEL_WAS_CONFIGURED=1
+  systemctl is-active --quiet makia-wstunnel 2>/dev/null && WSTUNNEL_WAS_ACTIVE=1 || true
+fi
+
+OVPN_WSTUNNEL_WAS_CONFIGURED=0
+OVPN_WSTUNNEL_WAS_ACTIVE=0
+if [[ -f /etc/makia-vps-manager/openvpn-wstunnel.env ]]; then
+  OVPN_WSTUNNEL_WAS_CONFIGURED=1
+  systemctl is-active --quiet makia-openvpn-wstunnel 2>/dev/null && OVPN_WSTUNNEL_WAS_ACTIVE=1 || true
+fi
+
 STAMP_DATA="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="/var/backups/makia-vps-manager/makia-data-${STAMP_DATA}.tar.gz"
 BACKUP_TMP="$(mktemp -d)"
@@ -217,6 +241,7 @@ for item in \
   "etc/systemd/system/makia-ops-monitor.timer" \
   "etc/systemd/system/makia-mtproxy.service" \
   "etc/systemd/system/makia-wstunnel.service" \
+  "etc/systemd/system/makia-openvpn-wstunnel.service" \
   "etc/systemd/system/makia-ikev2-network.service" \
   "usr/local/sbin/makia-update" \
   "usr/local/sbin/makia-upgrade" \
@@ -245,6 +270,8 @@ for item in \
   "etc/ipsec.conf" \
   "etc/ipsec.secrets" \
   "etc/makia-vps-manager/wstunnel.env" \
+  "etc/makia-vps-manager/openvpn-wstunnel.env" \
+  "etc/openvpn/server/makia-ws.conf" \
   "etc/makia-vps-manager/mtproxy.env" \
   "etc/makia-vps-manager/mtproxy.toml" \
   "etc/makia-vps-manager/dns.json" \
@@ -414,6 +441,7 @@ install -m 0644 "$SRC/systemd/makia-metrics-sampler.service" /etc/systemd/system
 install -m 0644 "$SRC/systemd/makia-protocol-traffic.service" /etc/systemd/system/makia-protocol-traffic.service
 install -m 0644 "$SRC/systemd/makia-browser-gateway.service" /etc/systemd/system/makia-browser-gateway.service
 install -m 0644 "$SRC/systemd/makia-wstunnel.service" /etc/systemd/system/makia-wstunnel.service
+install -m 0644 "$SRC/systemd/makia-openvpn-wstunnel.service" /etc/systemd/system/makia-openvpn-wstunnel.service
 install -m 0644 "$SRC/systemd/makia-ikev2-network.service" /etc/systemd/system/makia-ikev2-network.service
 install -m 0644 "$SRC/systemd/makia-migration-restore@.service" /etc/systemd/system/makia-migration-restore@.service
 install -m 0644 "$SRC/systemd/makia-scheduled-backup.service" /etc/systemd/system/makia-scheduled-backup.service
@@ -678,6 +706,14 @@ else
   if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet stunnel4; then
     echo "Stealth/Stunnel was active before update but is no longer active; updater will roll back." >&2
     exit 9
+  fi
+  if [[ "$WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-wstunnel; then
+    echo "WireGuard WStunnel was active before update but is no longer active; updater will roll back." >&2
+    exit 10
+  fi
+  if [[ "$OVPN_WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-openvpn-wstunnel; then
+    echo "OpenVPN WStunnel 443 was active before update but is no longer active; updater will roll back." >&2
+    exit 11
   fi
   echo "Existing protocol runtime state preserved."
 fi

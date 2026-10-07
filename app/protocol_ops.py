@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import ipaddress
 import json
 import os
@@ -27,10 +28,20 @@ IKEV2_ENV=Path("/etc/makia-vps-manager/ikev2.env")
 STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
 WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
 WSTUNNEL_SERVICE="makia-wstunnel"
+OVPN_WSTUNNEL_ENV=Path("/etc/makia-vps-manager/openvpn-wstunnel.env")
+OVPN_WSTUNNEL_SERVICE="makia-openvpn-wstunnel"
+OVPN_WSTUNNEL_BACKEND_CONF=OVPN_DIR/"server/makia-ws.conf"
+OVPN_WSTUNNEL_BACKEND_SERVICE="openvpn-server@makia-ws"
+OVPN_WSTUNNEL_NGINX=Path("/etc/nginx/sites-available/makia-vps-manager")
+OVPN_WSTUNNEL_NGINX_BEGIN="# BEGIN MAKIA OPENVPN WSTUNNEL"
+OVPN_WSTUNNEL_NGINX_END="# END MAKIA OPENVPN WSTUNNEL"
+OVPN_WSTUNNEL_LIMITS_BEGIN="# BEGIN MAKIA WSTUNNEL EDGE LIMITS"
+OVPN_WSTUNNEL_LIMITS_END="# END MAKIA WSTUNNEL EDGE LIMITS"
 OVPN_TCP_FALLBACK_CONF=OVPN_DIR/"server/makia-tcp.conf"
 OVPN_TCP_FALLBACK_SERVICE="openvpn-server@makia-tcp"
 OVPN_CLIENT_POLICY_DIR=OVPN_DIR/"server/makia-client-policy"
 OVPN_MANAGEMENT_SOCKET=Path("/run/makia-openvpn-management.sock")
+OVPN_WSTUNNEL_MANAGEMENT_SOCKET=Path("/run/makia-openvpn-wstunnel-management.sock")
 OVPN_POLICY_MARKER="# Managed by Makia Client Platform"
 
 
@@ -837,12 +848,434 @@ def bootstrap_wstunnel(domain, listen_port=8444, path_prefix=None):
     }
 
 
+def _openvpn_wstunnel_env():
+    data={}
+    if OVPN_WSTUNNEL_ENV.exists():
+        for line in OVPN_WSTUNNEL_ENV.read_text(encoding="utf-8",errors="ignore").splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key,value=line.split("=",1)
+                data[key.strip()]=value.strip()
+    return data
+
+
+def _tcp_listener(port,loopback_only=False):
+    if not port or not shutil.which("ss"):
+        return False
+    p=subprocess.run(["ss","-H","-ltn"],text=True,capture_output=True,timeout=8,check=False)
+    if p.returncode!=0:
+        return False
+    for line in (p.stdout or "").splitlines():
+        if not re.search(rf":{int(port)}\b",line):
+            continue
+        if not loopback_only:
+            return True
+        if re.search(rf"(?:127\.0\.0\.1|\[::1\]):{int(port)}\b",line):
+            return True
+    return False
+
+
+def openvpn_wstunnel_status():
+    data=_openvpn_wstunnel_env()
+    try: bridge_port=int(data.get("OVPN_WSTUNNEL_BRIDGE_PORT") or 0)
+    except Exception: bridge_port=0
+    try: target_port=int(data.get("OVPN_WSTUNNEL_TARGET_PORT") or 0)
+    except Exception: target_port=0
+    try: public_port=int(data.get("OVPN_WSTUNNEL_PUBLIC_PORT") or 443)
+    except Exception: public_port=443
+    try: wg_port=int(data.get("OVPN_WSTUNNEL_WG_PORT") or 0)
+    except Exception: wg_port=0
+    prefix=data.get("OVPN_WSTUNNEL_PATH_PREFIX","")
+    nginx_text=""
+    try:
+        nginx_text=OVPN_WSTUNNEL_NGINX.read_text(encoding="utf-8",errors="ignore")
+    except Exception:
+        pass
+    backend=_openvpn_named_runtime("makia-ws")
+    route_present=bool(prefix and OVPN_WSTUNNEL_NGINX_BEGIN in nginx_text and f"/{prefix}" in nginx_text)
+    return {
+        "installed":bool(shutil.which("wstunnel")),
+        "configured":OVPN_WSTUNNEL_ENV.exists(),
+        "service_active":_active(OVPN_WSTUNNEL_SERVICE),
+        "bridge_port":bridge_port or None,
+        "target_port":target_port or None,
+        "public_port":public_port,
+        "wg_port":wg_port or None,
+        "domain":data.get("OVPN_WSTUNNEL_DOMAIN",""),
+        "path_prefix":prefix,
+        "mobile_ready":bool(wg_port and _active("wg-quick@wg0") and _wireguard_udp_listener(wg_port)),
+        "listener":_tcp_listener(bridge_port,loopback_only=True),
+        "nginx_location":route_present,
+        "backend":backend,
+        "ready":bool(
+            OVPN_WSTUNNEL_ENV.exists()
+            and _active(OVPN_WSTUNNEL_SERVICE)
+            and _tcp_listener(bridge_port,loopback_only=True)
+            and backend.get("service_active")
+            and backend.get("listener")
+            and prefix
+            and route_present
+        ),
+    }
+
+
+def _nginx_tls_server_block(text):
+    for match in re.finditer(r"(?m)^\s*server\s*\{",text):
+        brace=text.find("{",match.start())
+        if brace<0:
+            continue
+        depth=0
+        end=None
+        for idx in range(brace,len(text)):
+            ch=text[idx]
+            if ch=="{": depth+=1
+            elif ch=="}":
+                depth-=1
+                if depth==0:
+                    end=idx
+                    break
+        if end is None:
+            continue
+        block=text[match.start():end+1]
+        if (
+            re.search(r"(?m)^\s*listen\s+(?:\[::\]:)?443\b",block)
+            and "proxy_pass http://127.0.0.1:8787" in block
+        ):
+            return match.start(),end
+    raise ProtocolError("Makia HTTPS/Nginx server block on TCP/443 was not found")
+
+
+def _configure_openvpn_wstunnel_nginx(path_prefix,bridge_port):
+    path_prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or ""))
+    if len(path_prefix)<16:
+        raise ProtocolError("WStunnel path prefix must be at least 16 characters")
+    if not OVPN_WSTUNNEL_NGINX.exists():
+        raise ProtocolError("Makia Nginx site is not installed")
+    original=OVPN_WSTUNNEL_NGINX.read_text(encoding="utf-8",errors="ignore")
+    cleaned=re.sub(
+        rf"(?ms)^[ \t]*{re.escape(OVPN_WSTUNNEL_NGINX_BEGIN)}.*?{re.escape(OVPN_WSTUNNEL_NGINX_END)}[ \t]*\n?",
+        "",
+        original,
+    )
+    cleaned=re.sub(
+        rf"(?ms)^[ \t]*{re.escape(OVPN_WSTUNNEL_LIMITS_BEGIN)}.*?{re.escape(OVPN_WSTUNNEL_LIMITS_END)}[ \t]*\n?",
+        "",
+        cleaned,
+    )
+    limits=(
+        OVPN_WSTUNNEL_LIMITS_BEGIN+"\n"
+        "limit_req_zone $binary_remote_addr zone=makia_wstunnel_req:10m rate=30r/s;\n"
+        "limit_conn_zone $binary_remote_addr zone=makia_wstunnel_conn:10m;\n"
+        +OVPN_WSTUNNEL_LIMITS_END+"\n"
+    )
+    cleaned=limits+cleaned.lstrip()
+    start,end=_nginx_tls_server_block(cleaned)
+    location=(
+        "\n    "+OVPN_WSTUNNEL_NGINX_BEGIN+"\n"
+        f"    location ^~ /{path_prefix} {{\n"
+        f"        proxy_pass http://127.0.0.1:{int(bridge_port)};\n"
+        "        proxy_http_version 1.1;\n"
+        "        proxy_set_header Upgrade $http_upgrade;\n"
+        '        proxy_set_header Connection "upgrade";\n'
+        "        proxy_set_header Host $host;\n"
+        "        proxy_set_header X-Real-IP $remote_addr;\n"
+        "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n"
+        "        proxy_set_header X-Forwarded-Proto $scheme;\n"
+        "        limit_req zone=makia_wstunnel_req burst=60 nodelay;\n"
+        "        limit_conn makia_wstunnel_conn 128;\n"
+        "        proxy_connect_timeout 5s;\n"
+        "        proxy_read_timeout 3600s;\n"
+        "        proxy_send_timeout 3600s;\n"
+        "        proxy_buffering off;\n"
+        "    }\n"
+        "    "+OVPN_WSTUNNEL_NGINX_END+"\n"
+    )
+    updated=cleaned[:end]+location+cleaned[end:]
+    backup=_backup_dir()/f"nginx-makia-vps-manager.{int(time.time())}-{secrets.token_hex(3)}.bak"
+    shutil.copy2(OVPN_WSTUNNEL_NGINX,backup)
+    try:
+        OVPN_WSTUNNEL_NGINX.write_text(updated,encoding="utf-8")
+        _run(["nginx","-t"],timeout=20)
+        _run(["systemctl","reload","nginx"],timeout=20)
+    except Exception:
+        shutil.copy2(backup,OVPN_WSTUNNEL_NGINX)
+        try:
+            _run(["nginx","-t"],timeout=20)
+            _run(["systemctl","reload","nginx"],timeout=20)
+        except Exception:
+            pass
+        raise
+    return str(backup)
+
+
+def ensure_openvpn_wstunnel_backend(port=11940):
+    port=_validate_port(port)
+    server_dir=OVPN_DIR/"server"
+    required=[server_dir/"ca.crt",server_dir/"server.crt",server_dir/"server.key",server_dir/"dh.pem",server_dir/"crl.pem",server_dir/"ta.key"]
+    missing=[p.name for p in required if not p.exists()]
+    if missing:
+        raise ProtocolError("OpenVPN WStunnel requires the existing OpenVPN PKI; missing: "+", ".join(missing))
+    current=_openvpn_named_runtime("makia-ws")
+    same=int(current.get("port") or 0)==port and OVPN_WSTUNNEL_BACKEND_CONF.exists()
+    if _port_transport_in_use(port,"tcp") and not (same and current.get("listener")):
+        raise ProtocolError(f"TCP/{port} is already in use; choose another WStunnel backend port")
+
+    network="10.10.0.0/24"
+    backup_dir=_backup_dir()
+    stamp=f"{int(time.time())}-{secrets.token_hex(3)}"
+    backups={}
+    for path in [OVPN_WSTUNNEL_BACKEND_CONF,OVPN_DIR/"makia-wstunnel-up.sh",OVPN_DIR/"makia-wstunnel-down.sh"]:
+        if path.exists():
+            target=backup_dir/f"{path.name}.{stamp}.bak"
+            shutil.copy2(path,target)
+            backups[path]=target
+    try:
+        up,down=_openvpn_aux_forward_scripts("wstunnel",network)
+        OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
+        os.chmod(OVPN_CLIENT_POLICY_DIR,0o755)
+        OVPN_WSTUNNEL_BACKEND_CONF.parent.mkdir(parents=True,exist_ok=True)
+        OVPN_WSTUNNEL_BACKEND_CONF.write_text(
+            f"port {port}\nproto tcp4-server\nlocal 127.0.0.1\ndev tun-ws\n"
+            "topology subnet\nserver 10.10.0.0 255.255.255.0\n"
+            f"ca {server_dir/'ca.crt'}\ncert {server_dir/'server.crt'}\nkey {server_dir/'server.key'}\n"
+            f"dh {server_dir/'dh.pem'}\ncrl-verify {server_dir/'crl.pem'}\ntls-crypt {server_dir/'ta.key'}\n"
+            f"client-config-dir {OVPN_CLIENT_POLICY_DIR}\n"
+            f"management {OVPN_WSTUNNEL_MANAGEMENT_SOCKET} unix\n"
+            "management-client-user root\nmanagement-client-group root\n"
+            "duplicate-cn\n"
+            'push "redirect-gateway def1 bypass-dhcp"\n'
+            'push "dhcp-option DNS 1.1.1.1"\npush "dhcp-option DNS 8.8.8.8"\n'
+            "keepalive 10 120\npersist-key\npersist-tun\nuser nobody\ngroup nogroup\n"
+            "data-ciphers AES-256-GCM:AES-128-GCM\ndata-ciphers-fallback AES-256-GCM\nauth SHA256\nverb 3\n"
+            f"script-security 2\nup {up}\ndown {down}\n",
+            encoding="utf-8",
+        )
+        os.chmod(OVPN_WSTUNNEL_BACKEND_CONF,0o600)
+        sysctl_dir=Path(os.getenv("MAKIA_SYSCTL_DIR","/etc/sysctl.d"))
+        sysctl_dir.mkdir(parents=True,exist_ok=True)
+        (sysctl_dir/"99-makia-openvpn.conf").write_text("net.ipv4.ip_forward=1\n",encoding="utf-8")
+        _run(["sysctl","-w","net.ipv4.ip_forward=1"],timeout=10)
+        _run(["systemctl","enable","--now",OVPN_WSTUNNEL_BACKEND_SERVICE],timeout=30)
+        _run(["systemctl","restart",OVPN_WSTUNNEL_BACKEND_SERVICE],timeout=30)
+        status=_openvpn_named_runtime("makia-ws")
+        if not status.get("service_active") or not status.get("listener"):
+            raise ProtocolError("OpenVPN WStunnel backend started but its loopback TCP listener is missing")
+        return status
+    except Exception:
+        for path in [OVPN_WSTUNNEL_BACKEND_CONF,OVPN_DIR/"makia-wstunnel-up.sh",OVPN_DIR/"makia-wstunnel-down.sh"]:
+            backup=backups.get(path)
+            try:
+                if backup and backup.exists():
+                    shutil.copy2(backup,path)
+                elif path.exists() and path not in backups:
+                    path.unlink()
+            except Exception:
+                pass
+        raise
+
+
+def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_port=11940,path_prefix=None):
+    if not shutil.which("wstunnel"):
+        raise ProtocolError("WStunnel is not installed; run sudo makia-upgrade first")
+    wg=wireguard_status()
+    if not wg.get("service_active") or not wg.get("port"):
+        raise ProtocolError("WStunnel 443 mobile mode requires an active Makia WireGuard server")
+    domain=validate_endpoint_selection(domain,"domain",direct=True)
+    public_port=_validate_port(public_port)
+    bridge_port=_validate_port(bridge_port)
+    backend_port=_validate_port(backend_port)
+    if public_port!=443:
+        raise ProtocolError("Makia OpenVPN WStunnel is intentionally published through HTTPS TCP/443")
+    if not _active("nginx"):
+        raise ProtocolError("Nginx/HTTPS must be active before enabling WStunnel 443")
+    cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+    key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
+    if not cert.exists() or not key.exists():
+        raise ProtocolError("WStunnel 443 requires a valid Let's Encrypt certificate for the selected domain")
+
+    existing=openvpn_wstunnel_status()
+    if _port_transport_in_use(bridge_port,"tcp") and int(existing.get("bridge_port") or 0)!=bridge_port:
+        suggestion=_suggest_free_port("tcp",(10445,11445,12445,13445),exclude_ports={backend_port})
+        hint=f"; try loopback bridge TCP/{suggestion}" if suggestion else ""
+        raise ProtocolError(f"WStunnel loopback bridge TCP/{bridge_port} is already in use{hint}")
+
+    backend=ensure_openvpn_wstunnel_backend(backend_port)
+    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
+    if len(prefix)<16:
+        raise ProtocolError("WStunnel path prefix must be at least 16 characters")
+
+    previous_env=OVPN_WSTUNNEL_ENV.read_bytes() if OVPN_WSTUNNEL_ENV.exists() else None
+    was_ready=bool(existing.get("ready"))
+    OVPN_WSTUNNEL_ENV.parent.mkdir(parents=True,exist_ok=True)
+    OVPN_WSTUNNEL_ENV.write_text(
+        f"OVPN_WSTUNNEL_DOMAIN={domain}\n"
+        f"OVPN_WSTUNNEL_PUBLIC_PORT={public_port}\n"
+        f"OVPN_WSTUNNEL_BRIDGE_PORT={bridge_port}\n"
+        f"OVPN_WSTUNNEL_TARGET_PORT={backend_port}\n"
+        f"OVPN_WSTUNNEL_WG_PORT={int(wg['port'])}\n"
+        f"OVPN_WSTUNNEL_PATH_PREFIX={prefix}\n",
+        encoding="utf-8",
+    )
+    os.chmod(OVPN_WSTUNNEL_ENV,0o600)
+    nginx_backup=_configure_openvpn_wstunnel_nginx(prefix,bridge_port)
+    try:
+        _run(["systemctl","daemon-reload"],timeout=20)
+        _run(["systemctl","enable","--now",OVPN_WSTUNNEL_SERVICE],timeout=30)
+        _run(["systemctl","restart",OVPN_WSTUNNEL_SERVICE],timeout=30)
+        status=openvpn_wstunnel_status()
+        if not status.get("ready"):
+            raise ProtocolError("OpenVPN WStunnel 443 did not become ready")
+    except Exception:
+        try:
+            shutil.copy2(nginx_backup,OVPN_WSTUNNEL_NGINX)
+            _run(["nginx","-t"],timeout=20)
+            _run(["systemctl","reload","nginx"],timeout=20)
+        except Exception:
+            pass
+        try:
+            if previous_env is None:
+                OVPN_WSTUNNEL_ENV.unlink(missing_ok=True)
+            else:
+                OVPN_WSTUNNEL_ENV.write_bytes(previous_env)
+                os.chmod(OVPN_WSTUNNEL_ENV,0o600)
+        except Exception:
+            pass
+        try:
+            if was_ready:
+                _run(["systemctl","restart",OVPN_WSTUNNEL_SERVICE],timeout=30)
+            else:
+                subprocess.run(["systemctl","disable","--now",OVPN_WSTUNNEL_SERVICE],text=True,capture_output=True,timeout=20,check=False)
+        except Exception:
+            pass
+        raise
+    local_port=11941
+    client_command=(
+        f"wstunnel client --http-upgrade-path-prefix {prefix} --tls-verify-certificate "
+        f"-L 'tcp://127.0.0.1:{local_port}:127.0.0.1:{backend_port}' "
+        f"wss://{domain}:{public_port}"
+    )
+    return {
+        "ok":True,
+        "status":status,
+        "domain":domain,
+        "public_port":public_port,
+        "backend":backend,
+        "nginx_backup":nginx_backup,
+        "client_local_port":local_port,
+        "client_command":client_command,
+        "note":"OpenVPN runs through a WebSocket/TLS tunnel on the same public HTTPS TCP/443 endpoint.",
+    }
+
+
+def _openvpn_wstunnel_identity(name):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
+        raise ProtocolError("invalid client name")
+    safe=re.sub(r"[^A-Za-z0-9_.-]","-",str(name)).strip(".-") or "client"
+    digest=hashlib.sha256(str(name).encode("utf-8")).hexdigest()[:8]
+    return f"mwst-{safe[:33]}-{digest}"
+
+
+def _ensure_openvpn_client_identity(identity):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",identity or ""):
+        raise ProtocolError("invalid OpenVPN client identity")
+    if not (OVPN_EASYRSA/"pki/ca.crt").exists():
+        raise ProtocolError("OpenVPN server is not bootstrapped")
+    pki=OVPN_EASYRSA/"pki"
+    cert=pki/f"issued/{identity}.crt"
+    key=pki/f"private/{identity}.key"
+    if cert.exists() and key.exists():
+        return
+    env=os.environ.copy()
+    env["EASYRSA_BATCH"]="1"
+    p=subprocess.run(
+        [str(OVPN_EASYRSA/"easyrsa"),"build-client-full",identity,"nopass"],
+        cwd=str(OVPN_EASYRSA),env=env,text=True,capture_output=True,timeout=180,check=False,
+    )
+    if p.returncode!=0:
+        raise ProtocolError((p.stderr or p.stdout or "easy-rsa failed").strip()[:1200])
+
+
+def render_openvpn_wstunnel_client(name,local_port=11941):
+    identity=_openvpn_wstunnel_identity(name)
+    _ensure_openvpn_client_identity(identity)
+    status=openvpn_wstunnel_status()
+    if not status.get("ready"):
+        raise ProtocolError("OpenVPN WStunnel 443 is not configured")
+    local_port=_validate_port(local_port)
+    pki=OVPN_EASYRSA/"pki"
+    ca=(pki/"ca.crt").read_text(encoding="utf-8")
+    cert=(pki/f"issued/{identity}.crt").read_text(encoding="utf-8")
+    key=(pki/f"private/{identity}.key").read_text(encoding="utf-8")
+    ta=(OVPN_DIR/"server/ta.key").read_text(encoding="utf-8")
+    client=(
+        "client\ndev tun\nproto tcp4-client\n"
+        f"remote 127.0.0.1 {local_port}\n"
+        "resolv-retry infinite\nconnect-retry 2 30\nnobind\npersist-key\npersist-tun\nauth-nocache\n"
+        "remote-cert-tls server\nverify-x509-name server name\n"
+        "data-ciphers AES-256-GCM:AES-128-GCM\nauth SHA256\nverb 3\n"
+        f"<ca>\n{ca}</ca>\n<cert>\n{cert}</cert>\n<key>\n{key}</key>\n<tls-crypt>\n{ta}</tls-crypt>\n"
+    )
+    transport={
+        "type":"openvpn-wstunnel",
+        "server":status.get("domain") or "",
+        "port":int(status.get("public_port") or 443),
+        "path_prefix":status.get("path_prefix") or "",
+        "local_host":"127.0.0.1",
+        "local_port":local_port,
+        "remote_host":"127.0.0.1",
+        "remote_port":int(status.get("target_port") or 11940),
+        "tls_verify":True,
+        "client_identity":identity,
+    }
+    command=(
+        f"wstunnel client --http-upgrade-path-prefix {transport['path_prefix']} --tls-verify-certificate "
+        f"-L 'tcp://127.0.0.1:{local_port}:127.0.0.1:{transport['remote_port']}' "
+        f"wss://{transport['server']}:{transport['port']}"
+    )
+    return {
+        "name":name,
+        "client_identity":identity,
+        "config":client,
+        "transport":transport,
+        "client_command":command,
+        "endpoint":f"wss://{transport['server']}:{transport['port']}",
+    }
+
+
+def _wstunnel_mobile_wireguard_name(name):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name or ""):
+        raise ProtocolError("invalid client name")
+    safe=re.sub(r"[^A-Za-z0-9_.-]","-",str(name)).strip(".-") or "client"
+    digest=hashlib.sha256(("android:"+str(name)).encode("utf-8")).hexdigest()[:8]
+    return f"mwsg-{safe[:33]}-{digest}"
+
+
+def render_android_wstunnel_wireguard_client(name,local_port=51821):
+    status=openvpn_wstunnel_status()
+    if not status.get("ready") or not status.get("mobile_ready"):
+        raise ProtocolError("WStunnel 443 Android transport is not ready")
+    local_port=_validate_port(local_port)
+    wg_port=int(status.get("wg_port") or 0)
+    if not wg_port:
+        raise ProtocolError("WStunnel 443 WireGuard target is missing")
+    peer_name=_wstunnel_mobile_wireguard_name(name)
+    peer=create_wireguard_peer(peer_name,status.get("domain") or "",iface="wg0",dns="1.1.1.1",mtu=1280,keepalive=15,allowed_ips="0.0.0.0/0")
+    config=re.sub(r"(?m)^Endpoint\s*=\s*[^\n]+$",f"Endpoint = 127.0.0.1:{local_port}",peer["config"],count=1)
+    transport={"type":"wireguard-wstunnel","server":status.get("domain") or "","port":443,
+        "path_prefix":status.get("path_prefix") or "","local_host":"127.0.0.1","local_port":local_port,
+        "remote_host":"127.0.0.1","remote_port":wg_port,"tls_verify":True,
+        "wireguard_peer_name":peer_name,"wireguard_public_key":peer["public_key"]}
+    return {"name":name,"peer_name":peer_name,"public_key":peer["public_key"],"config":config,
+        "native_filename":f"{name}-wstunnel-android.conf","transport":transport,
+        "endpoint":f"wss://{transport['server']}:443"}
+
+
 def protocol_modes():
     wg=wireguard_status()
     ov=_openvpn_server_runtime()
     ike=ikev2_status()
     st=stealth_status()
     ws=wstunnel_status()
+    ovws=openvpn_wstunnel_status()
     tcp=_openvpn_named_runtime("makia-tcp")
     return {
         "modes":[
@@ -851,7 +1284,8 @@ def protocol_modes():
             {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
             {"id":"tcp","label":"TCP","ports":[tcp.get("port")] if tcp.get("port") else ([ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else []),"transport":"OpenVPN TCP fallback","ready":bool((tcp.get("service_active") and tcp.get("listener")) or (ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp"))),"status":tcp if tcp.get("config") else ov},
             {"id":"stealth","label":"Stealth","ports":[st.get("port")] if st.get("port") else [],"transport":"OpenVPN over TLS/Stunnel","ready":bool(st.get("service_active") and st.get("listener")),"status":st},
-            {"id":"wstunnel","label":"WStunnel","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
+            {"id":"wstunnel-openvpn","label":"WStunnel 443","ports":[443],"transport":"OpenVPN over WebSocket/TLS","ready":bool(ovws.get("ready")),"status":ovws},
+            {"id":"wstunnel","label":"WStunnel WG","ports":[ws.get("port")] if ws.get("port") else [],"transport":"WireGuard over WSS","ready":bool(ws.get("service_active") and ws.get("listener")),"status":ws},
         ],
         "constraints":{
             "openvpn_primary_transport_switch":True,
@@ -886,6 +1320,7 @@ def catalog():
         "ikev2":ike,
         "stealth":stealth,
         "wstunnel":ws,
+        "openvpn_wstunnel":openvpn_wstunnel_status(),
         "ssh":ssh,
         "capabilities":[
             {"id":"vless","engine":"xray","available":x["installed"]},
@@ -903,6 +1338,7 @@ def catalog():
             {"id":"stunnel","engine":"stunnel","available":st["installed"],"mode":"service"},
             {"id":"ikev2","engine":"strongswan","available":ike["installed"],"mode":"guided"},
             {"id":"stealth","engine":"stunnel","available":st["installed"],"mode":"guided"},
+            {"id":"wstunnel-openvpn","engine":"wstunnel","available":ws["installed"] and ovpn["installed"],"mode":"guided"},
             {"id":"wstunnel","engine":"wstunnel","available":ws["installed"],"mode":"guided"},
             {"id":"tuic","engine":"external","available":False,"mode":"unavailable"},
             {"id":"amneziawg","engine":"external","available":False,"mode":"unavailable"},
@@ -2218,13 +2654,14 @@ def enable_openvpn_policy_runtime():
         raise ProtocolError(str(exc)) from exc
 
 
-def _openvpn_management_command(command,until_end=False):
-    if not OVPN_MANAGEMENT_SOCKET.exists():
+def _openvpn_management_command(command,until_end=False,socket_path=None):
+    socket_path=Path(socket_path or OVPN_MANAGEMENT_SOCKET)
+    if not socket_path.exists():
         raise ProtocolError("OpenVPN management socket is not available")
     s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     s.settimeout(3.0)
     try:
-        s.connect(str(OVPN_MANAGEMENT_SOCKET))
+        s.connect(str(socket_path))
         try:s.recv(4096)
         except socket.timeout:pass
         s.sendall((str(command).strip()+"\n").encode("utf-8"))
@@ -2270,12 +2707,26 @@ def _parse_openvpn_management_status(text):
         except Exception:rx=0
         try:tx=max(0,int(item.get("Bytes Sent") or 0))
         except Exception:tx=0
-        entry=out.setdefault(name,{"name":name,"rx":0,"tx":0,"total":0,"real_addresses":[],"client_ids":[]})
+        entry=out.setdefault(name,{"name":name,"rx":0,"tx":0,"total":0,"real_addresses":[],"client_ids":[],"instances":[]})
         entry["rx"]+=rx;entry["tx"]+=tx;entry["total"]+=rx+tx
         address=str(item.get("Real Address") or "").strip()
         if address and address not in entry["real_addresses"]:entry["real_addresses"].append(address)
         cid=str(item.get("Client ID") or "").strip()
         if cid and cid not in entry["client_ids"]:entry["client_ids"].append(cid)
+        connected=str(
+            item.get("Connected Since (time_t)")
+            or item.get("Connected Since")
+            or item.get("Connected Since (time_t) ")
+            or ""
+        ).strip()
+        session_key=(cid+":"+connected) if cid else (address+":"+connected)
+        entry["instances"].append({
+            "session_key":session_key,
+            "client_id":cid,
+            "connected_since":connected,
+            "real_address":address,
+            "rx":rx,"tx":tx,"total":rx+tx,
+        })
     return out
 
 
@@ -2290,19 +2741,31 @@ def openvpn_management_status():
         return {"available":False,"clients":{},"error":str(exc)[:300]}
 
 
-def openvpn_management_kill(name):
+def openvpn_management_kill(name,socket_path=None):
     name=_validate_openvpn_client_name(name)
-    response=_openvpn_management_command(f"kill {name}",until_end=False)
+    response=_openvpn_management_command(f"kill {name}",until_end=False,socket_path=socket_path)
     if "ERROR:" in response:
         raise ProtocolError(response.strip()[:500])
     return {"name":name,"disconnected":"SUCCESS:" in response}
 
 
-def set_openvpn_client_policy_enabled(name,enabled):
+def openvpn_management_client_kill(client_id,socket_path=None):
+    try:
+        client_id=int(client_id)
+    except (TypeError,ValueError):
+        raise ProtocolError("invalid OpenVPN client id")
+    if client_id<0:
+        raise ProtocolError("invalid OpenVPN client id")
+    response=_openvpn_management_command(f"client-kill {client_id}",until_end=False,socket_path=socket_path)
+    if "ERROR:" in response:
+        raise ProtocolError(response.strip()[:500])
+    return {"client_id":client_id,"disconnected":"SUCCESS:" in response}
+
+
+def _set_openvpn_ccd_enabled(name,enabled,management_socket=None,runtime_ready=False):
     name=_validate_openvpn_client_name(name)
-    status=openvpn_policy_status()
-    if not status.get("configured"):
-        raise ProtocolError("OpenVPN Client policy runtime is not configured")
+    OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
+    os.chmod(OVPN_CLIENT_POLICY_DIR,0o755)
     path=OVPN_CLIENT_POLICY_DIR/name
     marker=OVPN_POLICY_MARKER+"\n"
     if enabled:
@@ -2322,10 +2785,72 @@ def set_openvpn_client_policy_enabled(name,enabled):
         os.chmod(tmp,0o644)
         os.replace(tmp,path)
     disconnected=False
-    if status.get("ready"):
-        try:disconnected=bool(openvpn_management_kill(name).get("disconnected"))
+    if runtime_ready and management_socket:
+        try:disconnected=bool(openvpn_management_kill(name,management_socket).get("disconnected"))
         except ProtocolError:disconnected=False
     return {"name":name,"enabled":False,"disconnected":disconnected}
+
+
+def set_openvpn_client_policy_enabled(name,enabled):
+    status=openvpn_policy_status()
+    if not status.get("configured"):
+        raise ProtocolError("OpenVPN Client policy runtime is not configured")
+    return _set_openvpn_ccd_enabled(
+        name,enabled,
+        management_socket=OVPN_MANAGEMENT_SOCKET,
+        runtime_ready=bool(status.get("ready")),
+    )
+
+
+def openvpn_wstunnel_policy_status():
+    if not OVPN_WSTUNNEL_BACKEND_CONF.exists():
+        return {
+            "configured":False,"ready":False,"socket":False,
+            "management_socket":str(OVPN_WSTUNNEL_MANAGEMENT_SOCKET),
+        }
+    text=OVPN_WSTUNNEL_BACKEND_CONF.read_text(encoding="utf-8",errors="ignore")
+    expected=[
+        f"client-config-dir {OVPN_CLIENT_POLICY_DIR}",
+        f"management {OVPN_WSTUNNEL_MANAGEMENT_SOCKET} unix",
+        "management-client-user root",
+        "management-client-group root",
+    ]
+    configured=all(item in text for item in expected)
+    socket_ready=OVPN_WSTUNNEL_MANAGEMENT_SOCKET.exists()
+    return {
+        "configured":configured,
+        "ready":bool(
+            configured and socket_ready
+            and _active(OVPN_WSTUNNEL_BACKEND_SERVICE)
+            and _openvpn_named_runtime("makia-ws").get("listener")
+        ),
+        "socket":socket_ready,
+        "management_socket":str(OVPN_WSTUNNEL_MANAGEMENT_SOCKET),
+    }
+
+
+def openvpn_wstunnel_management_status():
+    status=openvpn_wstunnel_policy_status()
+    if not status.get("ready"):
+        return {"available":False,"clients":{},"error":"WStunnel OpenVPN policy runtime not ready"}
+    try:
+        text=_openvpn_management_command(
+            "status 3",until_end=True,socket_path=OVPN_WSTUNNEL_MANAGEMENT_SOCKET
+        )
+        return {"available":True,"clients":_parse_openvpn_management_status(text),"error":""}
+    except ProtocolError as exc:
+        return {"available":False,"clients":{},"error":str(exc)[:300]}
+
+
+def set_openvpn_wstunnel_client_policy_enabled(name,enabled):
+    status=openvpn_wstunnel_policy_status()
+    if not status.get("configured"):
+        raise ProtocolError("WStunnel OpenVPN policy runtime is not configured")
+    return _set_openvpn_ccd_enabled(
+        name,enabled,
+        management_socket=OVPN_WSTUNNEL_MANAGEMENT_SOCKET,
+        runtime_ready=bool(status.get("ready")),
+    )
 
 
 def _openvpn_remote_block(endpoint,port):
@@ -2394,7 +2919,7 @@ def list_openvpn_clients():
         return []
     out=[]
     for cert in sorted(issued.glob("*.crt")):
-        if cert.stem=="server":
+        if cert.stem=="server" or cert.stem.startswith("mwst-"):
             continue
         out.append({"name":cert.stem,"certificate":str(cert)})
     return out
@@ -2591,6 +3116,7 @@ def connection_port_plan():
     tcp=_openvpn_named_runtime("makia-tcp")
     st=stealth_status()
     ws=wstunnel_status()
+    ovws=openvpn_wstunnel_status()
     rows=[]
     for service,port in [
         ("HTTPS",443),
@@ -2625,7 +3151,13 @@ def connection_port_plan():
         },
         "blockers":{"openvpn_tcp":tcp_blockers,"stealth":stealth_blockers},
         "https_tcp_443_reserved":bool(_port_transport_in_use(443,"tcp")),
-        "note":"TCP/443 has one owner. UDP/443 may coexist because TCP and UDP are independent transports.",
+        "wstunnel_openvpn_shared_https":{
+            "configured":bool(ovws.get("configured")),
+            "ready":bool(ovws.get("ready")),
+            "port":443,
+            "owner":"Nginx HTTPS path route",
+        },
+        "note":"Raw TCP listeners cannot share TCP/443. OpenVPN WStunnel 443 is different: Nginx remains the only 443 listener and routes one secret WebSocket path internally. UDP/443 remains independent.",
     }
 
 def _select_available_port(preferred, proto, fallbacks=()):

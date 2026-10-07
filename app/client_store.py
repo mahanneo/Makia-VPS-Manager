@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import secrets
 import time
 from datetime import datetime, timezone
@@ -126,6 +127,17 @@ def init_client_db():
               last_counter INTEGER NOT NULL DEFAULT 0,
               updated_at TEXT NOT NULL,
               PRIMARY KEY(account_id,artifact_id),
+              FOREIGN KEY(account_id) REFERENCES client_accounts(id),
+              FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS client_artifact_session_usage (
+              account_id INTEGER NOT NULL,
+              artifact_id INTEGER NOT NULL,
+              session_key TEXT NOT NULL,
+              last_counter INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY(account_id,artifact_id,session_key),
               FOREIGN KEY(account_id) REFERENCES client_accounts(id),
               FOREIGN KEY(artifact_id) REFERENCES access_artifacts(id)
             );
@@ -567,7 +579,8 @@ def list_artifact_bindings(account_id):
     with connect() as con:
         rows=con.execute(
             """SELECT b.id AS binding_id,b.label,b.priority,b.enabled AS binding_enabled,
-                      a.id AS artifact_id,a.kind,a.external_key,a.display_name,a.protocol,a.native_filename
+                      a.id AS artifact_id,a.kind,a.external_key,a.display_name,a.protocol,a.native_filename,
+                      a.metadata_json
                FROM client_artifact_bindings b
                JOIN access_artifacts a ON a.id=b.artifact_id
                WHERE b.account_id=? AND b.enabled=1
@@ -594,12 +607,20 @@ def unbind_access_artifact(account_id,artifact_id):
             (int(account_id),int(artifact_id)),
         )
         con.execute(
+            "DELETE FROM client_artifact_session_usage WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        )
+        con.execute(
             "DELETE FROM client_artifact_policy_state WHERE account_id=? AND artifact_id=?",
             (int(account_id),int(artifact_id)),
         )
 
 
-def artifact_delivery(account_id,artifact_id):
+def artifact_delivery(account_id,artifact_id,platform=""):
+    account=get_account(account_id)
+    ok,reason=account_available(account)
+    if not ok:
+        raise PermissionError("client account "+str(reason))
     allowed=None
     for item in list_artifact_bindings(account_id):
         if int(item["artifact_id"])==int(artifact_id):
@@ -611,6 +632,19 @@ def artifact_delivery(account_id,artifact_id):
     if not artifact:
         raise ValueError("access artifact not found")
     payload=access_ops.open_payload(artifact["payload_enc"])
+    kind=str(artifact.get("kind") or "").lower()
+    platform=str(platform or "").strip().lower()
+    if platform=="android" and kind=="openvpn_wstunnel":
+        android=payload.get("android") if isinstance(payload.get("android"),dict) else {}
+        android_config=str(android.get("config") or "")
+        android_transport=android.get("transport") if isinstance(android.get("transport"),dict) else {}
+        android_filename=str(android.get("native_filename") or "makia-wstunnel-android.conf")
+        if not android_config or android_transport.get("type")!="wireguard-wstunnel":
+            raise ValueError("Android WStunnel delivery is not available")
+        return {"id":int(artifact_id),"name":allowed.get("label") or artifact.get("display_name") or "",
+            "engine":"wstunnel_wireguard","protocol":"wstunnel-443","share_link":"",
+            "native_filename":android_filename,"native_base64":base64.b64encode(android_config.encode("utf-8")).decode("ascii"),
+            "qr":"","transport_config":android_transport,"source":"artifact"}
     primary=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not primary:
         raise ValueError("artifact has no client-deliverable payload")
@@ -621,6 +655,7 @@ def artifact_delivery(account_id,artifact_id):
         native=native.encode("utf-8")
     native_b64=base64.b64encode(bytes(native)).decode("ascii") if isinstance(native,(bytes,bytearray)) else ""
     qr_svg=""
+    transport_config=payload.get("transport") if isinstance(payload.get("transport"),dict) else {}
     kind=str(artifact.get("kind") or "").lower()
     if kind in {"wireguard","outline","xray","ssh"} and primary:
         try:
@@ -636,6 +671,7 @@ def artifact_delivery(account_id,artifact_id):
         "native_filename":filename,
         "native_base64":native_b64,
         "qr":qr_svg,
+        "transport_config":transport_config,
         "source":"artifact",
     }
 
@@ -653,25 +689,32 @@ def client_access_list(account_id):
         item["enforcement_text"]="expiry + quota" if engine in {"xray","outline"} else "delivery only"
         item["account_used_bytes"]=protocol_usage_for_account(account_id,item["protocol_client_id"])
         items.append(item)
+    account=get_account(account_id) or {}
+    account_ok,_account_reason=account_available(account)
+    account_quota=int(account.get("quota_bytes") or 0)
     for item in list_artifact_bindings(account_id):
+        kind=str(item.get("kind") or "").lower()
+        used=artifact_usage_bytes(account_id,item["artifact_id"])
+        hard=kind in {"wireguard","ssh","openvpn_wstunnel"}
         items.append({
             "binding_id":item["binding_id"],
             "label":item.get("label") or item.get("display_name") or "",
             "name":item.get("display_name") or "",
             "engine":item.get("kind") or "",
             "protocol":item.get("protocol") or item.get("kind") or "",
-            "available":True,
+            "available":bool(account_ok),
             "source":"artifact",
             "delivery_id":int(item["artifact_id"]),
             "delivery_kind":"artifact",
             "native_filename":item.get("native_filename") or "",
-            "used_bytes":0,
-            "quota_bytes":0,
-            "accounting_supported":str(item.get("kind") or "").lower()=="wireguard",
-            "enforcement_level":"hard" if str(item.get("kind") or "").lower() in {"wireguard","ssh"} else "delivery",
+            "used_bytes":used,
+            "quota_bytes":account_quota,
+            "accounting_supported":kind in {"wireguard","openvpn_wstunnel"},
+            "enforcement_level":"hard" if hard else "delivery",
             "enforcement_text":(
-                "expiry + quota" if str(item.get("kind") or "").lower()=="wireguard"
-                else "expiry + device/session" if str(item.get("kind") or "").lower()=="ssh"
+                "expiry + quota" if kind=="wireguard"
+                else "expiry + device/session" if kind=="ssh"
+                else "expiry + quota + concurrent" if kind=="openvpn_wstunnel"
                 else "delivery only"
             ),
         })
@@ -891,6 +934,7 @@ def delete_account(account_id):
         con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_usage_baselines WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_usage WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_artifact_session_usage WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_policy_state WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_protocol_bindings WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_artifact_bindings WHERE account_id=?",(account_id,))
@@ -962,10 +1006,103 @@ def reset_account_usage(account_id):
                 (account_id,int(row["protocol_client_id"]),int(row["used"] or 0),ts),
             )
         con.execute(
-            "UPDATE client_artifact_usage SET used_bytes=0,updated_at=? WHERE account_id=?",
+            "UPDATE client_artifact_usage SET used_bytes=0,last_counter=0,updated_at=? WHERE account_id=?",
             (ts,account_id),
         )
+        con.execute(
+            "DELETE FROM client_artifact_session_usage WHERE account_id=?",
+            (account_id,),
+        )
     return {"ok":True,"used_bytes":0}
+
+
+def artifact_usage_bytes(account_id,artifact_id):
+    with connect() as con:
+        row=con.execute(
+            "SELECT used_bytes FROM client_artifact_usage WHERE account_id=? AND artifact_id=?",
+            (int(account_id),int(artifact_id)),
+        ).fetchone()
+        return int(row["used_bytes"] or 0) if row else 0
+
+
+def add_artifact_session_samples(account_id,artifact_id,instances):
+    """Account concurrent OpenVPN sessions without double-counting reconnects.
+
+    Each OpenVPN management CID + connection timestamp is tracked separately.
+    The first observation establishes a baseline; later observations add only
+    positive per-session deltas to the artifact's aggregate usage.
+    """
+    account_id=int(account_id); artifact_id=int(artifact_id)
+    ts=now_iso()
+    with connect() as con:
+        usage=con.execute(
+            "SELECT used_bytes FROM client_artifact_usage WHERE account_id=? AND artifact_id=?",
+            (account_id,artifact_id),
+        ).fetchone()
+        if not usage:
+            con.execute(
+                """INSERT INTO client_artifact_usage(account_id,artifact_id,used_bytes,last_counter,updated_at)
+                   VALUES(?,?,0,0,?)""",
+                (account_id,artifact_id,ts),
+            )
+            used=0
+        else:
+            used=max(0,int(usage["used_bytes"] or 0))
+        delta_total=0
+        sampled=0
+        for raw in instances or []:
+            key=str(raw.get("session_key") or "").strip()
+            if not key:
+                continue
+            counter=max(0,int(raw.get("total") or 0))
+            row=con.execute(
+                """SELECT last_counter FROM client_artifact_session_usage
+                   WHERE account_id=? AND artifact_id=? AND session_key=?""",
+                (account_id,artifact_id,key),
+            ).fetchone()
+            if not row:
+                con.execute(
+                    """INSERT INTO client_artifact_session_usage(
+                         account_id,artifact_id,session_key,last_counter,updated_at
+                       ) VALUES(?,?,?,?,?)""",
+                    (account_id,artifact_id,key,counter,ts),
+                )
+                sampled+=1
+                continue
+            last=max(0,int(row["last_counter"] or 0))
+            delta=counter-last if counter>=last else counter
+            delta_total+=max(0,delta)
+            sampled+=1
+            con.execute(
+                """UPDATE client_artifact_session_usage SET last_counter=?,updated_at=?
+                   WHERE account_id=? AND artifact_id=? AND session_key=?""",
+                (counter,ts,account_id,artifact_id,key),
+            )
+        if delta_total:
+            used+=delta_total
+            con.execute(
+                """UPDATE client_artifact_usage SET used_bytes=?,updated_at=?
+                   WHERE account_id=? AND artifact_id=?""",
+                (used,ts,account_id,artifact_id),
+            )
+        return {"used_bytes":used,"delta_bytes":delta_total,"sessions":sampled}
+
+
+def artifact_client_identity(binding):
+    try:
+        meta=json.loads(binding.get("metadata_json") or "{}")
+    except (TypeError,ValueError):
+        meta={}
+    return str(meta.get("client_identity") or binding.get("external_key") or "").strip()
+
+
+def artifact_mobile_wireguard(binding):
+    try:
+        meta=json.loads(binding.get("metadata_json") or "{}")
+    except (TypeError,ValueError):
+        meta={}
+    return {"name":str(meta.get("mobile_wireguard_peer_name") or "").strip(),
+            "public_key":str(meta.get("mobile_wireguard_public_key") or "").strip()}
 
 
 def add_artifact_counter_sample(account_id,artifact_id,counter):

@@ -400,7 +400,7 @@ def main():
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator(".provision-drawer").wait_for()
             page.screenshot(path='/tmp/makia-new-access.png',full_page=True)
-            assert page.locator(".wizard-protocol").count()==5
+            assert page.locator(".wizard-protocol").count()==6
             assert page.locator('.wizard-protocol[data-kind="outline"]').count()==1
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
             page.locator("#wizEndpointMode").select_option("ip")
@@ -576,14 +576,14 @@ def main():
             page.locator(".protocol-modes-panel").wait_for()
             page.locator('[data-action="change-protocol"]').click()
             page.locator(".change-protocol-modal").wait_for()
-            assert page.locator(".change-protocol-row").count()==6
+            assert page.locator(".change-protocol-row").count()==7
             switcher_text=page.locator(".change-protocol-modal").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in switcher_text
             assert "Backend واقعی Makia" in switcher_text
             page.locator('.change-protocol-modal [data-action="modal-close"]').last.click()
             assert page.locator(".change-protocol-modal").count()==0
-            assert page.locator(".protocol-mode-card").count()==6
+            assert page.locator(".protocol-mode-card").count()==7
             mode_text=page.locator(".protocol-modes-panel").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in mode_text

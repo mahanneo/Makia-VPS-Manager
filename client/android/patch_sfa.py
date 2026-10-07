@@ -4,8 +4,8 @@ import re, sys
 
 root=Path(sys.argv[1]).resolve()
 overlay=Path(sys.argv[2]).resolve()
-MAKIA_VERSION_NAME="1.5.1"
-MAKIA_VERSION_CODE="10501"
+MAKIA_VERSION_NAME="1.6.0"
+MAKIA_VERSION_CODE="10600"
 
 version_props=root/"version.properties"
 vp=version_props.read_text(encoding="utf-8")
@@ -25,6 +25,12 @@ dst.write_text(overlay.read_text(encoding="utf-8"),encoding="utf-8")
 
 manifest=root/"app/src/main/AndroidManifest.xml"
 m=manifest.read_text(encoding="utf-8")
+app_start=m.find("<application")
+app_end=m.find(">",app_start)
+if app_start<0 or app_end<0:
+    raise SystemExit("application manifest marker missing")
+if "android:extractNativeLibs" not in m[app_start:app_end]:
+    m=m[:app_end]+'\n        android:extractNativeLibs="true"'+m[app_end:]
 launcher='''<intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

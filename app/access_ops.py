@@ -207,6 +207,15 @@ def client_guide_text(kind,protocol=""):
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
         )
+    if kind in {"openvpn_wstunnel","openvpn-wstunnel"}:
+        return common+(
+            "WStunnel 443 / OpenVPN over WebSocket\n"
+            "1) Windows: Makia Client Connector 1.6.0 را نصب و OpenVPN runtime را نیز نصب داشته باشید.\n"
+            "2) در Client Portal روی اتصال مستقیم بزنید؛ Makia WStunnel و سپس OpenVPN را اجرا می‌کند.\n"
+            "3) روش دستی: ابتدا فرمان داخل wstunnel-client-command.txt را اجرا کنید.\n"
+            "4) سپس فایل .ovpn را در OpenVPN اجرا کنید و WStunnel را تا پایان اتصال باز نگه دارید.\n"
+            "5) مسیر WSS و فایل OVPN اختصاصی‌اند و نباید عمومی شوند.\n"
+        )
     if kind=="outline":
         return common+(
             "Outline\n"
@@ -324,6 +333,44 @@ def openvpn_payload(name,config):
         "primary_text":str(config),
         "summary":{},
     }
+
+
+def openvpn_wstunnel_payload(name,config,transport,android=None):
+    filename=f"{safe_filename(name)}-wstunnel.ovpn"
+    transport=dict(transport or {})
+    command=(
+        f"wstunnel client --http-upgrade-path-prefix {transport.get('path_prefix','')} --tls-verify-certificate "
+        f"-L 'tcp://127.0.0.1:{int(transport.get('local_port') or 11941)}:"
+        f"127.0.0.1:{int(transport.get('remote_port') or 11940)}' "
+        f"wss://{transport.get('server','')}:{int(transport.get('port') or 443)}"
+    )
+    guide=(
+        "Makia · WStunnel 443\n"
+        "این پروفایل OpenVPN را داخل WebSocket/TLS روی TCP/443 عبور می‌دهد.\n\n"
+        "Windows / Makia Client Connector:\n"
+        "1) بسته Makia Windows را نصب کنید.\n"
+        "2) Direct Connect را از Client Portal بزنید؛ WStunnel و OpenVPN خودکار اجرا می‌شوند.\n\n"
+        "Manual:\n"
+        "1) wstunnel را اجرا کنید:\n"+command+"\n"
+        f"2) فایل {filename} را با OpenVPN باز کنید.\n"
+        "3) تا وقتی VPN متصل است پنجره/فرآیند WStunnel باید فعال بماند.\n"
+    )
+    return {
+        "native_filename":filename,
+        "files":{
+            filename:str(config).encode("utf-8"),
+            "wstunnel-client-command.txt":command.encode("utf-8"),
+            "connection-guide-fa.txt":guide.encode("utf-8"),
+        },
+        "primary_text":str(config),
+        "transport":transport,
+        "android":dict(android or {}),
+        "summary":{
+            "mode":"openvpn-wstunnel",
+            "endpoint":f"wss://{transport.get('server','')}:{int(transport.get('port') or 443)}",
+        },
+    }
+
 
 def xray_payload(name,protocol,share_link,subscription_url=None,client_url=None):
     profile={

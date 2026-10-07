@@ -1,12 +1,13 @@
 # Makia Release Status
 
-Current stable line: **1.5.1**
+Current release candidate line: **1.6.0**
 
 | Surface | Repository gate | Distribution state | Production claim |
 | --- | --- | --- | --- |
 | VPS panel / installer | CI + Ubuntu 22.04/24.04 clean-install + upgrade smoke | `main` installer/updater | Ready, subject to host/provider UAT |
 | Browser VPN | Browser Extension Build + real TLS gateway smoke | GitHub Release / Chrome Web Store package | Ready after store review + real browser UAT |
 | Windows Full Device | Windows build + installer smoke | GitHub Actions artifact | Build-ready; real Windows protocol UAT required |
+| OpenVPN WStunnel 443 | CI + server contract + Windows package | opt-in mode, disabled until configured | Candidate: real restrictive-network UAT required before stable claim |
 | Android Full Device | Android build + APK structure/signature smoke | GitHub Actions UAT artifact | UAT-ready; public release signing still external |
 | Client Portal / PWA | CI/browser smoke | served by Makia panel | Ready for account/profile delivery |
 | iOS/iPadOS | PWA/Open/Import | served by Makia panel | No native in-app VPN claim |

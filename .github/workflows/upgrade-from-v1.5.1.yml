@@ -1,0 +1,44 @@
+name: Upgrade From 1.5.1 Smoke
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    paths:
+      - "scripts/update.sh"
+      - "scripts/uat-smoke.sh"
+      - "scripts/doctor.sh"
+      - "upgrade.sh"
+      - "tests/upgrade_v151_smoke.sh"
+      - "tests/upgrade_identity_probe.py"
+      - "app/**"
+      - "systemd/**"
+      - "nginx/**"
+      - "VERSION"
+      - ".github/workflows/upgrade-from-v1.5.1.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: upgrade-v151-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade-v151:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v5
+
+      - name: Checkout exact production baseline 1.5.1
+        uses: actions/checkout@v5
+        with:
+          ref: 13c45ed90e32db39dc2dd10e0a3964fb193fa9d6
+          path: baseline-v151
+
+      - name: Bash syntax
+        run: bash -n tests/upgrade_v151_smoke.sh
+
+      - name: Production-parity upgrade smoke
+        run: bash tests/upgrade_v151_smoke.sh "${GITHUB_SHA}" baseline-v151

@@ -93,7 +93,7 @@ MANAGED_RESTORE_PATHS=[
 ]
 for _unit in [
     "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
-    "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
+    "makia-protocol-traffic.service","makia-wstunnel.service","makia-openvpn-wstunnel.service","makia-ikev2-network.service",
     "makia-migration-restore@.service","makia-mtproxy.service",
 ]:
     MANAGED_RESTORE_PATHS.append(Path("/etc/systemd/system")/_unit)
@@ -341,7 +341,7 @@ def restore_ssh_users(blob:bytes):
 def stop_stack():
     services=[
         "makia-vps-manager","makia-policy-enforcer","makia-metrics-sampler","makia-protocol-traffic",
-        "xray","wg-quick@wg0","stunnel4","makia-wstunnel","makia-ikev2-network","makia-mtproxy","unbound",
+        "xray","wg-quick@wg0","stunnel4","makia-wstunnel","makia-openvpn-wstunnel","makia-ikev2-network","makia-mtproxy","unbound",
         "strongswan-starter","strongswan",
     ]
     server_dir=Path("/etc/openvpn/server")
@@ -386,7 +386,7 @@ def restore_v2_system_payload(payload):
 
     allowed_units={
         "makia-vps-manager.service","makia-policy-enforcer.service","makia-metrics-sampler.service",
-        "makia-protocol-traffic.service","makia-wstunnel.service","makia-ikev2-network.service",
+        "makia-protocol-traffic.service","makia-wstunnel.service","makia-openvpn-wstunnel.service","makia-ikev2-network.service",
         "makia-migration-restore@.service","makia-scheduled-backup.service","makia-scheduled-backup.timer",
         "makia-ops-monitor.service","makia-ops-monitor.timer","makia-mtproxy.service",
     }
@@ -536,6 +536,14 @@ def restart_stack():
     if Path("/etc/makia-vps-manager/wstunnel.env").exists() and shutil.which("wstunnel"):
         run(["systemctl","enable","--now","makia-wstunnel"],check=False)
         run(["systemctl","restart","makia-wstunnel"],check=False)
+    if Path("/etc/makia-vps-manager/openvpn-wstunnel.env").exists() and shutil.which("wstunnel"):
+        run(["systemctl","enable","--now","openvpn-server@makia-ws"],check=False)
+        run(["systemctl","restart","openvpn-server@makia-ws"],check=False)
+        run(["systemctl","enable","--now","makia-openvpn-wstunnel"],check=False)
+        run(["systemctl","restart","makia-openvpn-wstunnel"],check=False)
+        if shutil.which("nginx"):
+            run(["nginx","-t"],check=False)
+            run(["systemctl","reload","nginx"],check=False)
 
     if Path("/opt/outline/access.txt").exists() and shutil.which("docker"):
         run(["systemctl","enable","--now","docker"],check=False)
@@ -582,6 +590,9 @@ def validate_restored(panel_domain=""):
 
     if Path("/etc/makia-vps-manager/wstunnel.env").exists():
         checks.append(("wstunnel",run(["systemctl","is-active","makia-wstunnel"],check=False).returncode==0))
+    if Path("/etc/makia-vps-manager/openvpn-wstunnel.env").exists():
+        checks.append(("openvpn-wstunnel",run(["systemctl","is-active","makia-openvpn-wstunnel"],check=False).returncode==0))
+        checks.append(("openvpn-wstunnel-backend",run(["systemctl","is-active","openvpn-server@makia-ws"],check=False).returncode==0))
 
     if Path("/opt/outline/access.txt").exists():
         checks.append(("outline",run(["docker","inspect","-f","{{.State.Running}}","shadowbox"],check=False).stdout.strip().lower()=="true"))

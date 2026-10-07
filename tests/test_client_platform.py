@@ -1,3 +1,4 @@
+import base64
 import io
 import sqlite3
 import tarfile
@@ -119,6 +120,13 @@ def test_client_platform_is_disabled_by_default_and_separate_from_admin_auth():
     assert 'CLIENT_DEVICE_COOKIE="makia_client_device"' in portal
     assert "makia_session" not in portal
     assert "app.include_router(client_portal.router)" in main
+
+
+def test_android_connector_has_stable_release_fallback_url():
+    portal=(ROOT/"app/client_portal.py").read_text(encoding="utf-8")
+    assert "Makia-Android-Connector-{VERSION}.apk" in portal
+    assert "releases/download/" in portal
+    assert 'MAKIA_ANDROID_CONNECTOR_URL' in portal
 
 
 def test_client_admin_api_never_calls_protocol_runtime_mutators():
@@ -551,10 +559,146 @@ def test_client_pwa_rc_has_cross_platform_install_and_browser_security_contract(
     assert 'window.addEventListener("online"' in js
     assert 'document.addEventListener("visibilitychange"' in js
     assert ".mc-grid-4" in css
-    assert 'const CACHE="makia-client-v151-mobile-login"' in sw
+    assert 'const CACHE="makia-client-v160-mobile-login"' in sw
     assert 'response.headers["X-Frame-Options"]="DENY"' in portal
     assert 'response.headers["Referrer-Policy"]="no-referrer"' in portal
     assert 'response.headers["Content-Security-Policy"]' in portal
     assert '"lang":"fa"' in portal
     assert '"dir":"rtl"' in portal
     assert '"id":"/client/"' in portal
+
+
+def test_wstunnel_artifact_delivery_respects_account_expiry_and_quota(client_db):
+    account_id=client_store.create_account(
+        "ws-policy","ws-policy-pass-001",quota_bytes=100,expire_at=int(time.time())+3600
+    )
+    from app import access_ops
+    payload=access_ops.openvpn_wstunnel_payload(
+        "ws-one","client\nremote 127.0.0.1 11941\n",
+        {
+            "server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop",
+            "local_port":11941,"remote_port":11940,
+        },
+    )
+    artifact_id=db.upsert_access_artifact(
+        "openvpn_wstunnel","ws-one","ws-one","wstunnel-openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),'{"client_identity":"mwst-ws-one-12345678"}',
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    delivered=client_store.artifact_delivery(account_id,artifact_id)
+    assert delivered["engine"]=="openvpn_wstunnel"
+    client_store.add_artifact_counter_sample(account_id,artifact_id,10)
+    client_store.add_artifact_counter_sample(account_id,artifact_id,120)
+    with pytest.raises(PermissionError,match="quota"):
+        client_store.artifact_delivery(account_id,artifact_id)
+
+
+def test_wstunnel_access_list_exposes_accounting_and_hard_policy(client_db):
+    account_id=client_store.create_account(
+        "ws-list","ws-list-pass-001",quota_bytes=5000,device_limit=3,concurrent_device_limit=2
+    )
+    from app import access_ops
+    payload=access_ops.openvpn_wstunnel_payload(
+        "ws-list","client\n",
+        {
+            "server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop",
+            "local_port":11941,"remote_port":11940,
+        },
+    )
+    artifact_id=db.upsert_access_artifact(
+        "openvpn_wstunnel","ws-list","ws-list","wstunnel-openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),'{"client_identity":"mwst-ws-list-12345678"}',
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    item=next(x for x in client_store.client_access_list(account_id) if x["engine"]=="openvpn_wstunnel")
+    assert item["accounting_supported"] is True
+    assert item["enforcement_level"]=="hard"
+    assert item["quota_bytes"]==5000
+
+
+def test_wstunnel_multi_session_accounting_is_delta_based(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("ws-multi","ws-multi-pass-001",quota_bytes=100000)
+    payload=access_ops.openvpn_wstunnel_payload(
+        "ws-multi","client\n",
+        {"server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop","local_port":11941,"remote_port":11940},
+    )
+    artifact_id=db.upsert_access_artifact(
+        "openvpn_wstunnel","ws-multi","ws-multi","wstunnel-openvpn",payload["native_filename"],
+        access_ops.seal_payload(payload),'{"client_identity":"mwst-ws-multi-12345678"}',
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    first=[
+        {"session_key":"10:1000","total":100},
+        {"session_key":"11:1001","total":200},
+    ]
+    assert client_store.add_artifact_session_samples(account_id,artifact_id,first)["used_bytes"]==0
+    second=[
+        {"session_key":"10:1000","total":160},
+        {"session_key":"11:1001","total":260},
+    ]
+    sample=client_store.add_artifact_session_samples(account_id,artifact_id,second)
+    assert sample["delta_bytes"]==120
+    assert sample["used_bytes"]==120
+    # One session disappearing must not be interpreted as an aggregate counter reset.
+    third=[{"session_key":"11:1001","total":300}]
+    sample=client_store.add_artifact_session_samples(account_id,artifact_id,third)
+    assert sample["delta_bytes"]==40
+    assert sample["used_bytes"]==160
+
+
+def test_artifact_revoke_cleanup_removes_binding_usage_policy_and_session_state(client_db):
+    from app import access_ops
+    account_id=client_store.create_account(
+        "revoke-clean","revoke-clean-pass-001",quota_bytes=1000
+    )
+    payload=access_ops.openvpn_wstunnel_payload(
+        "revoke-clean","client\n",
+        {"server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop","local_port":11941,"remote_port":11940},
+    )
+    artifact_id=db.upsert_access_artifact(
+        "openvpn_wstunnel","revoke-clean","revoke-clean","wstunnel-openvpn",
+        payload["native_filename"],access_ops.seal_payload(payload),
+        '{"client_identity":"mwst-revoke-clean-12345678"}',
+    )
+    client_store.bind_access_artifact(account_id,artifact_id)
+    client_store.add_artifact_counter_sample(account_id,artifact_id,100)
+    client_store.add_artifact_counter_sample(account_id,artifact_id,350)
+    client_store.set_artifact_policy_state(account_id,artifact_id,"client_account_quota")
+    client_store.add_artifact_session_samples(
+        account_id,artifact_id,[{"session_key":"17:1000","total":25}]
+    )
+    assert client_store.account_usage_bytes(account_id)==250
+
+    db.delete_access_artifact_by_key("openvpn_wstunnel","revoke-clean")
+
+    assert db.get_access_artifact(artifact_id) is None
+    assert client_store.list_artifact_bindings(account_id)==[]
+    assert client_store.account_usage_bytes(account_id)==0
+    with db.connect() as con:
+        for table in (
+            "client_artifact_bindings","client_artifact_usage",
+            "client_artifact_policy_state","client_artifact_session_usage",
+        ):
+            assert con.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE artifact_id=?",(artifact_id,)
+            ).fetchone()["n"]==0
+
+def test_wstunnel_android_delivery_uses_hidden_wireguard_variant(client_db):
+    from app import access_ops
+    account_id=client_store.create_account("ws-android","ws-android-pass-001")
+    android_config="[Interface]\\nPrivateKey = android-secret\\n[Peer]\\nEndpoint = 127.0.0.1:51821\\n"
+    payload=access_ops.openvpn_wstunnel_payload("ws-android","client\\n",
+        {"server":"vpn.example.com","port":443,"path_prefix":"abcdefghijklmnop","local_port":11941,"remote_port":11940},
+        android={"native_filename":"ws-android.conf","config":android_config,
+            "transport":{"type":"wireguard-wstunnel","server":"vpn.example.com","port":443,
+            "path_prefix":"abcdefghijklmnop","local_port":51821,"remote_host":"127.0.0.1","remote_port":51820}})
+    artifact_id=db.upsert_access_artifact("openvpn_wstunnel","ws-android","ws-android","wstunnel-openvpn",
+        payload["native_filename"],access_ops.seal_payload(payload),'{"client_identity":"mwst-x"}')
+    client_store.bind_access_artifact(account_id,artifact_id)
+    assert client_store.artifact_delivery(account_id,artifact_id)["engine"]=="openvpn_wstunnel"
+    mobile=client_store.artifact_delivery(account_id,artifact_id,platform="android")
+    assert mobile["engine"]=="wstunnel_wireguard"
+    assert mobile["transport_config"]["remote_host"]=="127.0.0.1"
+    assert "android-secret" in base64.b64decode(mobile["native_base64"]).decode()
+

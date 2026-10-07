@@ -151,7 +151,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","outline":"outline"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -1098,6 +1098,35 @@ def wstunnel_bootstrap(payload:WStunnelBootstrap,request:Request):
     audit(actor,"wstunnel_bootstrap","wstunnel",f"domain={payload.domain}; port={payload.port}",ip=ip(request))
     return result
 
+
+class OpenVPNWStunnelBootstrap(BaseModel):
+    domain:str=Field(min_length=3,max_length=253)
+    public_port:int=Field(default=443,ge=1,le=65535)
+    bridge_port:int=Field(default=10445,ge=1,le=65535)
+    backend_port:int=Field(default=11940,ge=1,le=65535)
+    path_prefix:str=Field(default="",max_length=96)
+
+@app.post("/api/protocols/openvpn/wstunnel/bootstrap")
+def openvpn_wstunnel_bootstrap(payload:OpenVPNWStunnelBootstrap,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.bootstrap_openvpn_wstunnel(
+            payload.domain,
+            payload.public_port,
+            payload.bridge_port,
+            payload.backend_port,
+            payload.path_prefix or None,
+        )
+    except protocol_ops.ProtocolError as e:
+        audit(actor,"openvpn_wstunnel_bootstrap_failed","openvpn-wstunnel",str(e)[:500],ip=ip(request))
+        raise HTTPException(400,str(e))
+    audit(
+        actor,"openvpn_wstunnel_bootstrap","openvpn-wstunnel",
+        f"domain={payload.domain}; public_port={payload.public_port}; bridge={payload.bridge_port}; backend={payload.backend_port}",
+        ip=ip(request),
+    )
+    return result
+
 class XrayInboundBuilderPayload(BaseModel):
     protocol:str
     port:int=Field(ge=1,le=65535)
@@ -1809,6 +1838,31 @@ def openvpn_client_create(payload:OpenVPNClient,request:Request):
     audit(actor,"openvpn_client_create",payload.name,ip=ip(request))
     return result
 
+
+class OpenVPNWStunnelClient(BaseModel):
+    name:str=Field(min_length=1,max_length=48)
+    local_port:int=Field(default=11941,ge=1024,le=65535)
+
+@app.post("/api/protocols/openvpn/wstunnel/clients")
+def openvpn_wstunnel_client_create(payload:OpenVPNWStunnelClient,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    try:
+        result=protocol_ops.render_openvpn_wstunnel_client(payload.name,payload.local_port)
+        mobile=protocol_ops.render_android_wstunnel_wireguard_client(payload.name)
+        delivery=access_ops.openvpn_wstunnel_payload(payload.name,result["config"],result["transport"],android={
+            "native_filename":mobile["native_filename"],"config":mobile["config"],"transport":mobile["transport"]})
+        artifact_id=artifact_save(
+            "openvpn_wstunnel",payload.name,payload.name,"wstunnel-openvpn",delivery,{
+                "endpoint":result["endpoint"],"transport":"wstunnel",
+                "public_port":result["transport"]["port"],"local_port":result["transport"]["local_port"],
+                "client_identity":result["client_identity"],"mobile_wireguard_peer_name":mobile["peer_name"],
+                "mobile_wireguard_public_key":mobile["public_key"]})
+    except protocol_ops.ProtocolError as e:
+        raise HTTPException(400,str(e))
+    result["artifact_id"]=artifact_id
+    audit(actor,"openvpn_wstunnel_client_create",payload.name,f"artifact_id={artifact_id}",ip=ip(request))
+    return result
+
 class AccessPackageRequest(BaseModel):
     password:str=Field(min_length=4,max_length=128)
 
@@ -1987,6 +2041,18 @@ def access_entries(request:Request):
             "tx":wg_runtime.get(peer["public_key"],{}).get("tx",0)
         })
 
+    for artifact in artifacts.values():
+        if artifact.get("kind")!="openvpn_wstunnel":
+            continue
+        key=str(artifact.get("external_key") or "")
+        rows.append({
+            "id":f"openvpn_wstunnel:{key}","kind":"openvpn_wstunnel","key":key,
+            "name":artifact.get("display_name") or key,"protocol":"wstunnel-openvpn",
+            "status":"active","online":None,"device_limit":1,"can_export":True,
+            "artifact_id":artifact.get("id"),"legacy":False,
+            "endpoint":saved_endpoint(artifact),
+        })
+
     known_ovpn={a["external_key"] for a in artifacts.values() if a["kind"]=="openvpn"}
     for client in protocol_ops.list_openvpn_clients():
         key=client["name"]
@@ -1998,7 +2064,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2384,6 +2450,22 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="openvpn_wstunnel":
+            artifact=get_access_artifact_by_key("openvpn_wstunnel",key)
+            if not artifact:
+                raise HTTPException(404,"OpenVPN WStunnel client not found")
+            try:
+                meta=json.loads(artifact.get("metadata_json") or "{}")
+            except Exception:
+                meta={}
+            identity=str(meta.get("client_identity") or "").strip()
+            if not identity:
+                raise HTTPException(409,"OpenVPN WStunnel client identity is missing")
+            protocol_ops.revoke_openvpn_client(identity)
+            mobile_public=str(meta.get("mobile_wireguard_public_key") or "").strip()
+            if mobile_public:
+                protocol_ops.remove_wireguard_peer(mobile_public)
+            delete_access_artifact_by_key("openvpn_wstunnel",key)
         elif kind=="outline":
             try: row=get_protocol_client(int(key))
             except Exception: row=None

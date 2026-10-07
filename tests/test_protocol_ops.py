@@ -301,7 +301,7 @@ def test_replace_managed_block_is_idempotent():
     assert "value=2" in second
 
 
-def test_protocol_modes_reports_six_real_modes(monkeypatch):
+def test_protocol_modes_reports_seven_real_modes(monkeypatch):
     monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{
         "service_active":True,"config":"/etc/wireguard/wg0.conf","port":443
     })
@@ -321,15 +321,20 @@ def test_protocol_modes_reports_six_real_modes(monkeypatch):
     monkeypatch.setattr(protocol_ops,"wstunnel_status",lambda:{
         "service_active":True,"listener":True,"port":8444
     })
+    monkeypatch.setattr(protocol_ops,"openvpn_wstunnel_status",lambda:{
+        "configured":True,"ready":True,"service_active":True,"listener":True,
+        "public_port":443,"bridge_port":10445,"target_port":11940,
+    })
     data=protocol_ops.protocol_modes()
     ids=[row["id"] for row in data["modes"]]
-    assert ids==["ikev2","wireguard","udp","tcp","stealth","wstunnel"]
+    assert ids==["ikev2","wireguard","udp","tcp","stealth","wstunnel-openvpn","wstunnel"]
     by_id={row["id"]:row for row in data["modes"]}
     assert by_id["ikev2"]["ready"] is True
     assert by_id["wireguard"]["ready"] is True
     assert by_id["udp"]["ready"] is True
     assert by_id["tcp"]["ready"] is True
     assert by_id["stealth"]["ready"] is False
+    assert by_id["wstunnel-openvpn"]["ready"] is True
     assert by_id["wstunnel"]["ready"] is True
     assert data["constraints"]["tcp_fallback_parallel"] is True
 
