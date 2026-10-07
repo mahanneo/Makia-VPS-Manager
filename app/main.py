@@ -151,7 +151,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","outline":"outline"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -1855,6 +1855,7 @@ def openvpn_wstunnel_client_create(payload:OpenVPNWStunnelClient,request:Request
                 "transport":"wstunnel",
                 "public_port":result["transport"]["port"],
                 "local_port":result["transport"]["local_port"],
+                "client_identity":result["client_identity"],
             }
         )
     except protocol_ops.ProtocolError as e:
@@ -2041,6 +2042,18 @@ def access_entries(request:Request):
             "tx":wg_runtime.get(peer["public_key"],{}).get("tx",0)
         })
 
+    for artifact in artifacts.values():
+        if artifact.get("kind")!="openvpn_wstunnel":
+            continue
+        key=str(artifact.get("external_key") or "")
+        rows.append({
+            "id":f"openvpn_wstunnel:{key}","kind":"openvpn_wstunnel","key":key,
+            "name":artifact.get("display_name") or key,"protocol":"wstunnel-openvpn",
+            "status":"active","online":None,"device_limit":1,"can_export":True,
+            "artifact_id":artifact.get("id"),"legacy":False,
+            "endpoint":saved_endpoint(artifact),
+        })
+
     known_ovpn={a["external_key"] for a in artifacts.values() if a["kind"]=="openvpn"}
     for client in protocol_ops.list_openvpn_clients():
         key=client["name"]
@@ -2052,7 +2065,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2438,6 +2451,19 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="openvpn_wstunnel":
+            artifact=get_access_artifact_by_key("openvpn_wstunnel",key)
+            if not artifact:
+                raise HTTPException(404,"OpenVPN WStunnel client not found")
+            try:
+                meta=json.loads(artifact.get("metadata_json") or "{}")
+            except Exception:
+                meta={}
+            identity=str(meta.get("client_identity") or "").strip()
+            if not identity:
+                raise HTTPException(409,"OpenVPN WStunnel client identity is missing")
+            protocol_ops.revoke_openvpn_client(identity)
+            delete_access_artifact_by_key("openvpn_wstunnel",key)
         elif kind=="outline":
             try: row=get_protocol_client(int(key))
             except Exception: row=None
