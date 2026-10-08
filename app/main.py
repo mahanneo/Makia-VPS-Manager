@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
-import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib
+import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib, threading
 import pyotp, qrcode
 import qrcode.image.svg
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
@@ -1844,6 +1844,7 @@ class OpenVPNWStunnelClient(BaseModel):
     local_port:int=Field(default=11941,ge=1024,le=65535)
 
 class OpenVPNWStunnelProvision(OpenVPNWStunnelClient):
+    endpoint:str=Field(default="",max_length=255)
     password:str=Field(min_length=8,max_length=128)
     expire_days:int=Field(default=0,ge=0,le=3650)
     quota_gb:float=Field(default=0,ge=0,le=100000)
@@ -1854,7 +1855,6 @@ class OpenVPNWStunnelProvision(OpenVPNWStunnelClient):
 # A protocol identity, a mobile WireGuard peer, an encrypted artifact and a
 # Client Platform account form one managed provisioning operation.  Keep the
 # lock in this owner rather than trying to compensate in the browser.
-import threading
 _wstunnel_provision_lock=threading.RLock()
 
 
@@ -1952,6 +1952,9 @@ def openvpn_wstunnel_provision(payload:OpenVPNWStunnelProvision,request:Request)
             identity,mobile_name=_wstunnel_new_user_preflight(payload.name)
         except protocol_ops.ProtocolError as exc:
             raise HTTPException(409,str(exc)) from exc
+        current_domain=str(protocol_ops.openvpn_wstunnel_status().get("domain") or "").rstrip(".").lower()
+        if payload.endpoint and str(payload.endpoint).rstrip(".").lower()!=current_domain:
+            raise HTTPException(409,"The selected WStunnel endpoint differs from the configured TLS domain")
         account_id=None
         artifact_id=None
         try:
