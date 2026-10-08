@@ -42,7 +42,7 @@ def redeem(controller,ticket):
     req=urllib.request.Request(
         controller.rstrip("/")+"/client/connector/redeem",
         data=data,
-        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.6.3"},
+        headers={"Content-Type":"application/json","User-Agent":"MakiaClientConnector/1.6.4"},
         method="POST",
     )
     with urllib.request.urlopen(req,timeout=15) as r:
@@ -401,7 +401,7 @@ def main():
             print(json.dumps({
                 "ok":True,
                 "app":APP,
-                "version":"1.6.3",
+                "version":"1.6.4",
                 "sing_box":bool(find_binary(["sing-box.exe"])),
                 "wstunnel":bool(find_binary(["wstunnel.exe"])),
                 "root":str(ROOT),
