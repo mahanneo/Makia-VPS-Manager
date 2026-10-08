@@ -4,7 +4,7 @@ const IP_PROBES=[
   {url:"https://api4.ipify.org?format=json",json:true},
   {url:"https://checkip.amazonaws.com/",json:false}
 ];
-const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","connectionError"];
+const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","connectionError","authDiagnostic"];
 
 function publicIp(value){
   const ip=String(value||"").trim();
@@ -51,7 +51,7 @@ async function clearBrowserProxy(){
   await chrome.storage.session.remove(["proxyAuth","proxyEndpoint"]);
   await chrome.storage.local.set({
     connected:false,activeLabel:"",proxyHost:"",proxyPort:0,
-    exitIp:"",directIp:"",verifiedAt:0,connectionError:""
+    exitIp:"",directIp:"",verifiedAt:0,connectionError:"",authDiagnostic:""
   });
 }
 async function effectiveProxy(expectedHost,expectedPort){
@@ -122,6 +122,9 @@ async function setBrowserProxy(proxy){
 chrome.webRequest.onAuthRequired.addListener(
   (details,callback)=>{
     if(!details.isProxy){callback({});return;}
+    // Diagnostics are deliberately metadata-only: never persist credentials,
+    // tokens, password contents or full request URLs in local storage.
+    const note=(message)=>{chrome.storage.local.set({authDiagnostic:message}).catch(()=>{});};
     chrome.storage.session.get(["proxyAuth","proxyEndpoint"]).then(saved=>{
       const auth=saved.proxyAuth||{},endpoint=saved.proxyEndpoint||{};
       const challenger=details.challenger||{};
@@ -129,12 +132,20 @@ chrome.webRequest.onAuthRequired.addListener(
       const challengerPort=Number(challenger.port||0);
       const expectedHost=String(endpoint.host||"").toLowerCase();
       const expectedPort=Number(endpoint.port||0);
-      if(!auth.username||!auth.password||!expectedHost||!expectedPort||
-        challengerHost !== expectedHost||challengerPort !== expectedPort){
+      if(!auth.username||!auth.password||!expectedHost||!expectedPort){
+        note("اطلاعات احراز هویت Gateway در افزونه موجود نیست.");
         callback({cancel:true});return;
       }
+      if(challengerHost !== expectedHost||challengerPort !== expectedPort){
+        note("درخواست احراز هویت مربوط به Gateway مورد انتظار نیست: "+challengerHost+":"+challengerPort);
+        callback({cancel:true});return;
+      }
+      note("درخواست رمز Gateway دریافت شد؛ اطلاعات امن ارسال شدند (پذیرش سرور هنوز تأیید نشده).");
       callback({authCredentials:{username:auth.username,password:auth.password}});
-    }).catch(()=>callback({cancel:true}));
+    }).catch(()=>{
+      note("خواندن اطلاعات احراز هویت از نشست افزونه ناموفق بود.");
+      callback({cancel:true});
+    });
   },
   {urls:["<all_urls>"]},["asyncBlocking"]
 );
