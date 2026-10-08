@@ -1,34 +1,32 @@
 # Makia Release Status
 
-Current stable line: **1.6.3** (as of 2026-10-08). PR #98 and PR #99 are draft / unmerged; neither is a production release.
+Current server/control-plane stable release: **1.6.4** (2026-10-08). [Release v1.6.4](https://github.com/mahanneo/Makia-VPS-Manager/releases/tag/v1.6.4). PR #99 is merged to `main` as `4ac973e0b21cbd73179dcc349e5cbc2e7a4645b8`; the live VPS was upgraded using the exact tested candidate `a3d2eaeee9678be613de0fa22d565d46c4ed5ea1`. Both commits have the **identical Git tree SHA**, so the published source and installed source are equivalent. PR #98 remains a separate draft and is **not** included in v1.6.4.
 
-| Surface | Repository gate | Distribution state | Production claim |
-| --- | --- | --- | --- |
-| VPS panel / installer | CI + Ubuntu 22.04/24.04 clean-install + upgrade smoke | `main` installer/updater | Ready, subject to host/provider UAT |
-| Browser VPN | Browser Extension Build + real TLS gateway smoke | GitHub Release / Chrome Web Store package | Ready after store review + real browser UAT |
-| Windows Full Device | Windows build + installer smoke | GitHub Actions artifact | Build-ready; real Windows protocol UAT required |
-| OpenVPN WStunnel 443 | CI + clean-install + upgrade + Windows/Android package gates | opt-in mode, disabled until configured | Code gates passed, but actual WStunnel setup, user policy and Iran-network UAT remain pending on production VPS |
-| Android Full Device | Android UAT build; signed build currently fails at release signing secrets | UAT/debug-signed artifact only, no verified release-signed APK for 1.6.3 | ARM64 direct-connect implementation is not yet production verified on real devices/restricted networks |
-| Client Portal / PWA | CI/browser smoke | served by Makia panel | Ready for account/profile delivery |
-| iOS/iPadOS | PWA/Open/Import | served by Makia panel | No native in-app VPN claim |
+| Surface | Repository / host evidence | Release readiness |
+| --- | --- | --- |
+| VPS panel, installer and updater | CI, Ubuntu 22.04/24.04 clean install, upgrades from 1.3.0/1.5.1, production host update and HTTPS health PASS | **v1.6.4 server release approved** |
+| WStunnel443 (OpenVPN bridge and Android WG backend) | Backend `ready=True`, policy socket ready, HTTPS TCP/443 gateway, loopback TCP/10445 and TCP/11950; transactional provisioning test suite PASS | Server-side readiness confirmed; real-account/field-connection UAT still pending |
+| Stealth / legacy Stunnel | Dedicated TCP/39443 active; legacy TCP/9443 listener preserved during upgrade | Listener preserved; legacy global `stunnel4.service` still has a failed systemd status and requires separate cleanup |
+| WireGuard / Xray / OpenVPN primary | Existing configs preserved, diagnostics PASS, services active | Server runtime healthy; cross-provider client connectivity unverified |
+| Browser VPN | Browser extension workflow and browser CI PASS | Build available; real browser/store review remains separate |
+| Windows full device | Windows connector build PASS | Build-ready, real-device connection/revocation UAT required |
+| Android full device | Android UAT/debug build workflow separate from signed release | **Not signed/verified production stable**; needs existing signing keystore and ARM64 real-device field UAT |
+| Client Portal / PWA | Live backend HEALTH OK; SQLite integrity check OK, account/artifact counts retained | Server-side account delivery operational; real-user end-to-end test pending |
+| iOS/iPadOS | PWA/Open/Import | Native iOS VPN functionality is **not** claimed |
 
-## Product boundaries
+## October 8 production acceptance evidence
 
-- Browser VPN and Windows Full Device are separate products.
-- Browser VPN does not require the Windows package.
-- Windows Full Device does not install/register a browser Native Messaging host.
-- Android CI artifacts are explicitly UAT/debug-signed until an operator-controlled release key is configured.
-- Native iOS VPN is not claimed.
+- Server `p.mahinet.shop` returns `{"ok":true,"version":"1.6.4"}` from both public HTTPS and local TLS Nginx route.
+- Nginx, Makia, WStunnel, OpenVPN backend, Stealth, WireGuard, Xray, policy enforcer and browser gateway are active; TCP 80/443/9443/39443/10445/11950 listeners remain.
+- Server-side SQLite `PRAGMA integrity_check=ok`; the pre/post aggregate state still has 2 client accounts, 14 access artifacts, 2 artifact bindings.
+- Fresh data and runtime archives were transferred to the operator workstation and authenticated/encrypted AES-256-GCM off-host with SHA-256 and decrypt-roundtrip checks. Isolated restore and SQLite integrity check PASS. **No live destructive disaster-recovery cutover has been tested.**
+- The updater preserves the existing TCP/9443 Stunnel process during normal update and rollback and honors an explicitly pinned immutable GitHub SHA even when a custom archive URL is configured.
+- Existing MahiNet storefront and Outline containers are running; pre-existing MahiNet Worker health and Watchtower restart issues remain separately tracked and are not Makia v1.6.4 regressions.
 
-## Production acceptance still required
+## Remaining release boundaries
 
-- Verify the exact installed host version and existing-user baseline before any upgrade.
-- Confirm DNS, certificate chain, Nginx TCP/443 ownership, loopback OpenVPN backend and policy management socket.
-- Prove authenticated Client Platform delivery, OpenVPN/Android transport, quota, expiry, disable/re-enable and revocation on real clients.
-- Observe WireGuard UDP and TCP/TLS/WSS separately across different Iranian operators; a single profile cannot be universally certified as fast or reachable.
-- Run off-host encrypted backup verification and reversible upgrade / existing-user regression.
-- Persistent Android release signing requires operator-controlled environment secrets; never generate an unannounced new signing identity.
-
-## Release hygiene
-
-Only the latest stable `main` and current release documentation should be used for installation. Historical UAT documents remain for audit/history and are not current install instructions.
+- Do not state that WStunnel, WireGuard or Stealth is guaranteed to work across all Iranian ISPs; field tests on multiple real mobile/desktop networks are needed.
+- Android signing must use the *existing* operator-owned release keystore; do not replace signing identity or publish UAT/debug APK as release-signed.
+- Confirm real profile issuance and native connect/disconnect, quota, expiry, revoke and rollback on test accounts before marking client applications fully production verified.
+- The distinct experimental WireGuard constrained-network PR #98 is not part of this release.
+- Historical 1.6.3 documents remain accessible for audit only. For new installs and updates, use the current official release/main documentation.
