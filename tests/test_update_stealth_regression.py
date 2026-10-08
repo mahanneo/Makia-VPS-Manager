@@ -54,3 +54,11 @@ def test_rollback_restarts_previously_active_core_protocols():
     assert 'systemctl restart wg-quick@wg0' in source
     assert 'systemctl restart openvpn-server@server' in source
     assert 'systemctl restart makia-stealth' in source
+
+
+def test_update_never_rebootstraps_existing_protocol_configs_just_for_code_change():
+    source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "Existing Xray/WireGuard/OpenVPN configs detected; skipping full-stack bootstrap." in source
+    assert "[[ -f /etc/wireguard/wg0.conf ]]" in source
+    assert "[[ -f /etc/openvpn/server/server.conf ]]" in source
+    assert "Missing core protocol configuration detected" in source
