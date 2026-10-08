@@ -81,7 +81,7 @@ Makia stores an encrypted `openvpn_wstunnel` delivery artifact containing:
 - connection guide;
 - structured transport metadata for Makia Windows Direct Connect.
 
-Bind the artifact to the intended **Client Platform account** to apply that account's enable/disable state, expiry, traffic quota and concurrent-session policy. The Client Platform device limit protects authenticated portal/native ticket registration. A downloaded static OVPN/WStunnel package is still a portable credential; strict hardware binding would require issuing a separate certificate per physical device and is not claimed in 1.6.3.
+Bind the artifact to the intended **Client Platform account** to apply that account's enable/disable state, expiry and traffic quota. OpenVPN concurrent-session limiting is backend-enforced; static Android WireGuard identities cannot independently enforce a strict per-physical-device concurrency ceiling. The Client Platform device limit protects authenticated portal/native ticket registration. A downloaded static OVPN/WStunnel package is still a portable credential; strict hardware binding would require issuing a separate certificate per physical device and is not claimed in 1.6.3.
 
 The artifact can be bound to a Client Platform account.
 
@@ -106,7 +106,7 @@ Run the `wstunnel-client-command.txt` command first, then import/open the delive
 
 ## Android / iOS
 
-Makia 1.6.1 does not claim native Direct Connect for this transport on Android/iOS. The Client Portal can deliver the package, but automatic mobile integration requires an OpenVPN core plus WStunnel lifecycle integration in the native mobile client.
+Makia 1.6.3 has an Android ARM64 Direct Connect implementation using a separate WireGuard peer carried through WStunnel/WSS on TCP/443. This is not the Windows OpenVPN backend or a proprietary Windscribe client. The Android UAT/debug-signed build exists; a production release-signed APK and real-device/limited-network UAT have **not** been verified. iOS/iPadOS remain PWA/import-only; no native full-device direct-connect claim.
 
 ## Diagnostics
 
