@@ -1115,7 +1115,7 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
     if existing.get("configured"):
         bridge_port=int(existing.get("bridge_port") or bridge_port)
         backend_port=int(existing.get("target_port") or backend_port)
-    if existing.get("ready") and existing.get("domain")==domain and not path_prefix:
+    if (existing.get("ready") and existing.get("domain")==domain and not path_prefix and OVPN_WSTUNNEL_MANAGEMENT_SOCKET.is_socket()):
         local_port=11941
         command=(
             f"wstunnel client --http-upgrade-path-prefix {existing['path_prefix']} --tls-verify-certificate "
