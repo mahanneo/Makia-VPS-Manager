@@ -1,4 +1,7 @@
 from pathlib import Path
+import socket
+
+import pytest
 
 from app import protocol_ops
 
@@ -268,3 +271,81 @@ def test_wstunnel_user_button_uses_managed_access_wizard_and_binding():
     assert "concurrent_device_limit" in js
     assert "Device Limit" in js
     assert "Concurrent Connection Limit" in js
+
+
+def test_wstunnel_refuses_certificate_creation_until_server_ready(monkeypatch):
+    monkeypatch.setattr(protocol_ops,"openvpn_wstunnel_status",lambda:{"ready":False})
+    def forbidden(_identity):
+        raise AssertionError("certificate identity must not be created")
+    monkeypatch.setattr(protocol_ops,"_ensure_openvpn_client_identity",forbidden)
+    with pytest.raises(protocol_ops.ProtocolError,match="not configured"):
+        protocol_ops.render_openvpn_wstunnel_client("not-ready")
+
+
+def test_healthy_wstunnel_backend_repair_is_noop(tmp_path,monkeypatch):
+    root=tmp_path/"openvpn"
+    server=root/"server"
+    server.mkdir(parents=True)
+    for part in ("ca.crt","server.crt","server.key","dh.pem","crl.pem","ta.key"):
+        (server/part).write_text("mock",encoding="utf-8")
+    (server/"makia-ws.conf").write_text("port 11950\nproto tcp4-server\n",encoding="utf-8")
+    monkeypatch.setattr(protocol_ops,"OVPN_DIR",root)
+    monkeypatch.setattr(protocol_ops,"OVPN_WSTUNNEL_BACKEND_CONF",server/"makia-ws.conf")
+    policy_sock=tmp_path/"management.sock"
+    monkeypatch.setattr(protocol_ops,"OVPN_WSTUNNEL_MANAGEMENT_SOCKET",policy_sock)
+    monkeypatch.setattr(protocol_ops,"_openvpn_named_runtime",lambda stem:{
+        "config":str(server/"makia-ws.conf"),"port":11950,
+        "proto":"tcp4-server","service_active":True,"listener":True,
+    })
+    monkeypatch.setattr(protocol_ops,"_port_transport_in_use",lambda port,proto:True)
+    monkeypatch.setattr(protocol_ops,"_run",lambda *a,**k:pytest.fail("healthy backend must not restart"))
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as sock:
+        sock.bind(str(policy_sock))
+        state=protocol_ops.ensure_openvpn_wstunnel_backend(11950)
+    assert state["service_active"] and state["listener"]
+
+
+def test_wstunnel_provision_binding_failure_cleans_new_assets(monkeypatch):
+    from app import main
+    changes=[]
+    monkeypatch.setattr(main,"require_capability",lambda request,feature,mutation=False:"admin")
+    monkeypatch.setattr(main,"require_mutation",lambda request:"admin")
+    monkeypatch.setattr(main,"ip",lambda request:"127.0.0.1")
+    monkeypatch.setattr(main,"audit",lambda *a,**k:None)
+    monkeypatch.setattr(main.client_store,"account_by_username",lambda name:None)
+    monkeypatch.setattr(main,"_wstunnel_new_user_preflight",lambda name:("identity","mobile-peer"))
+    monkeypatch.setattr(main.client_store,"create_account",lambda *a:99)
+    monkeypatch.setattr(main,"_wstunnel_new_user_artifact",lambda *a:({"ok":True},88))
+    def failed_bind(*args,**kwargs):
+        raise ValueError("test binding failure")
+    monkeypatch.setattr(main.client_store,"bind_access_artifact",failed_bind)
+    monkeypatch.setattr(main,"_wstunnel_new_user_cleanup",
+        lambda name,identity,mobile,artifact_created=False:changes.append(("assets",artifact_created)) or [])
+    monkeypatch.setattr(main.client_store,"delete_account",lambda account_id:changes.append(("account",account_id)))
+    payload=main.OpenVPNWStunnelProvision(name="alice",password="valid-pass-123")
+    with pytest.raises(main.HTTPException) as exc:
+        main.openvpn_wstunnel_provision(payload,object())
+    assert exc.value.status_code==400
+    assert changes==[("assets",True),("account",99)]
+
+
+def test_wstunnel_provision_rejects_existing_account_without_mutations(monkeypatch):
+    from app import main
+    monkeypatch.setattr(main,"require_capability",lambda *a,**k:"admin")
+    monkeypatch.setattr(main,"require_mutation",lambda *a,**k:"admin")
+    monkeypatch.setattr(main.client_store,"account_by_username",lambda name:{"id":17})
+    monkeypatch.setattr(main,"_wstunnel_new_user_artifact",lambda *a:pytest.fail("never touch existing assets"))
+    payload=main.OpenVPNWStunnelProvision(name="alice",password="valid-pass-123")
+    with pytest.raises(main.HTTPException) as exc:
+        main.openvpn_wstunnel_provision(payload,object())
+    assert exc.value.status_code==409
+
+
+def test_wstunnel_wizard_provisions_atomically_in_backend():
+    javascript=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
+    start=javascript.index("async function createProvisionedAccess()")
+    end=javascript.index("function showProvisionSuccess(",start)
+    create_flow=javascript[start:end]
+    assert "'/api/protocols/openvpn/wstunnel/provision'" in create_flow
+    assert "'/api/client-platform/accounts'" not in create_flow
+    assert "'/artifact-bindings'" not in create_flow

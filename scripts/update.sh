@@ -100,9 +100,11 @@ on_exit(){
       systemctl restart openvpn-server@server 2>/dev/null
     fi
     if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl disable --now stunnel4 2>/dev/null || true
-      systemctl enable --now makia-stealth 2>/dev/null
-      systemctl restart makia-stealth 2>/dev/null
+      # Rollback must preserve a separately used legacy TCP/9443 listener.
+      # Keep the dedicated Stealth instance up without stopping stunnel4.
+      if ! systemctl is-active --quiet makia-stealth; then
+        systemctl enable --now makia-stealth 2>/dev/null || true
+      fi
     fi
     if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl enable --now makia-wstunnel 2>/dev/null
@@ -322,6 +324,12 @@ if [[ "$FORCE_MAIN" == "1" ]]; then
   SOURCE_COMMIT="$(resolve_github_commit "$REF")"
   ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"
   echo "Force-main update enabled; pinned immutable source commit: $SOURCE_COMMIT"
+elif [[ "${MAKIA_REF:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  # An explicit immutable commit pin takes priority over persistent archive
+  # overrides; otherwise the operator could silently install another build.
+  SOURCE_COMMIT="$MAKIA_REF"
+  ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"
+  echo "Operator-pinned immutable source commit: $SOURCE_COMMIT"
 elif [[ -n "${MAKIA_RELEASE_ARCHIVE_URL:-}" ]]; then
   ARCHIVE_URL="$MAKIA_RELEASE_ARCHIVE_URL"
   echo "Using explicitly configured release archive URL."
@@ -604,7 +612,16 @@ install_verified_shell "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 systemctl daemon-reload
 
 if [[ "$PROTOCOL_RUNTIME_CHANGED" -eq 1 ]]; then
-  echo "Protocol runtime changed; ensuring the complete Makia protocol stack is installed and ready..."
+  # Merely updating protocol_ops.py must not make a stable production host
+  # bootstrap all live protocols again. Existing Xray/WireGuard/OpenVPN
+  # identities stay in place; the targeted runtime checks below decide whether
+  # an unhealthy component needs a documented repair.
+  if { [[ -f /usr/local/etc/xray/config.json ]] || [[ -f /etc/xray/config.json ]]; } \
+      && [[ -f /etc/wireguard/wg0.conf ]] \
+      && [[ -f /etc/openvpn/server/server.conf ]]; then
+    echo "Existing Xray/WireGuard/OpenVPN configs detected; skipping full-stack bootstrap."
+  else
+    echo "Missing core protocol configuration detected; provisioning only during incomplete-install recovery..."
   (
     cd "$APP"
   MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
@@ -627,6 +644,7 @@ print("Protocol stack READY: Xray, WireGuard UDP/%s, OpenVPN %s/%s" % (
 ))
 PY
 )
+  fi
 
 # Repair the historical root-only Xray config/TLS permission mismatch before
 # the post-update UAT gate. This preserves credentials and rolls back the
@@ -723,13 +741,16 @@ else
     exit 7
   fi
   if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]]; then
-    systemctl disable --now stunnel4 2>/dev/null || true
-    systemctl enable --now makia-stealth 2>/dev/null || true
-    systemctl restart makia-stealth 2>/dev/null || true
+    # A distinct legacy stunnel listener can still serve old client profiles.
+    # Preserve its process and listen port; migration requires a separate review.
     if ! systemctl is-active --quiet makia-stealth; then
-      echo "Stealth was active before update but the dedicated Makia Stealth service is not active; updater will roll back." >&2
+      systemctl enable --now makia-stealth 2>/dev/null || true
+    fi
+    if ! systemctl is-active --quiet makia-stealth; then
+      echo "Stealth was previously active; dedicated Makia unit is unavailable." >&2
       exit 9
     fi
+    echo "Preserving legacy stunnel listener and running dedicated Makia Stealth."
   fi
   if [[ "$WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-wstunnel; then
     echo "WireGuard WStunnel was active before update but is no longer active; updater will roll back." >&2

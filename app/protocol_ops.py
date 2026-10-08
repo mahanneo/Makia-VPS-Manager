@@ -1017,6 +1017,11 @@ def ensure_openvpn_wstunnel_backend(port=11940):
     same=int(current.get("port") or 0)==port and OVPN_WSTUNNEL_BACKEND_CONF.exists()
     if _port_transport_in_use(port,"tcp") and not (same and current.get("listener")):
         raise ProtocolError(f"TCP/{port} is already in use; choose another WStunnel backend port")
+    # Repair must not disconnect established users simply because the operator
+    # pressed Configure again.  Rebuild only if the backend or policy socket
+    # actually needs repair.
+    if same and current.get("service_active") and current.get("listener") and OVPN_WSTUNNEL_MANAGEMENT_SOCKET.is_socket():
+        return current
 
     network="10.10.0.0/24"
     backup_dir=_backup_dir()
@@ -1105,6 +1110,24 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         raise ProtocolError("WStunnel 443 requires a valid Let's Encrypt certificate for the selected domain")
 
     existing=openvpn_wstunnel_status()
+    # Existing client packages contain this secret WebSocket path and the
+    # internal target. Never rotate them on an ordinary Configure / Repair.
+    if existing.get("configured"):
+        bridge_port=int(existing.get("bridge_port") or bridge_port)
+        backend_port=int(existing.get("target_port") or backend_port)
+    if (existing.get("ready") and existing.get("domain")==domain and not path_prefix and OVPN_WSTUNNEL_MANAGEMENT_SOCKET.is_socket()):
+        local_port=11941
+        command=(
+            f"wstunnel client --http-upgrade-path-prefix {existing['path_prefix']} --tls-verify-certificate "
+            f"-L 'tcp://127.0.0.1:{local_port}:127.0.0.1:{backend_port}' "
+            f"wss://{domain}:{public_port}"
+        )
+        return {
+            "ok":True,"status":existing,"domain":domain,"public_port":public_port,
+            "backend":existing["backend"],"nginx_backup":"","client_local_port":local_port,
+            "client_command":command,
+            "note":"Already ready; existing user sessions, ports and client paths were preserved.",
+        }
 
     # Internal ports are implementation details and must never make setup fail
     # merely because an older/optional runtime already owns the historical
@@ -1141,7 +1164,7 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         bridge_port=selected
 
     backend=ensure_openvpn_wstunnel_backend(backend_port)
-    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
+    prefix=re.sub(r"[^A-Za-z0-9_-]","",str(path_prefix or existing.get("path_prefix") or "")) or secrets.token_urlsafe(24).replace("-","").replace("_","")
     if len(prefix)<16:
         raise ProtocolError("WStunnel path prefix must be at least 16 characters")
 
@@ -1158,8 +1181,9 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         encoding="utf-8",
     )
     os.chmod(OVPN_WSTUNNEL_ENV,0o600)
-    nginx_backup=_configure_openvpn_wstunnel_nginx(prefix,bridge_port)
+    nginx_backup=None
     try:
+        nginx_backup=_configure_openvpn_wstunnel_nginx(prefix,bridge_port)
         _run(["systemctl","daemon-reload"],timeout=20)
         _run(["systemctl","enable","--now",OVPN_WSTUNNEL_SERVICE],timeout=30)
         _run(["systemctl","restart",OVPN_WSTUNNEL_SERVICE],timeout=30)
@@ -1167,12 +1191,13 @@ def bootstrap_openvpn_wstunnel(domain,public_port=443,bridge_port=10445,backend_
         if not status.get("ready"):
             raise ProtocolError("OpenVPN WStunnel 443 did not become ready")
     except Exception:
-        try:
-            shutil.copy2(nginx_backup,OVPN_WSTUNNEL_NGINX)
-            _run(["nginx","-t"],timeout=20)
-            _run(["systemctl","reload","nginx"],timeout=20)
-        except Exception:
-            pass
+        if nginx_backup:
+            try:
+                shutil.copy2(nginx_backup,OVPN_WSTUNNEL_NGINX)
+                _run(["nginx","-t"],timeout=20)
+                _run(["systemctl","reload","nginx"],timeout=20)
+            except Exception:
+                pass
         try:
             if previous_env is None:
                 OVPN_WSTUNNEL_ENV.unlink(missing_ok=True)
@@ -1238,11 +1263,11 @@ def _ensure_openvpn_client_identity(identity):
 
 def render_openvpn_wstunnel_client(name,local_port=11941):
     identity=_openvpn_wstunnel_identity(name)
-    _ensure_openvpn_client_identity(identity)
     status=openvpn_wstunnel_status()
     if not status.get("ready"):
         raise ProtocolError("OpenVPN WStunnel 443 is not configured")
     local_port=_validate_port(local_port)
+    _ensure_openvpn_client_identity(identity)
     pki=OVPN_EASYRSA/"pki"
     ca=(pki/"ca.crt").read_text(encoding="utf-8")
     cert=(pki/f"issued/{identity}.crt").read_text(encoding="utf-8")

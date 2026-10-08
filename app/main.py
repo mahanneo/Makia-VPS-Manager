@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
-import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib
+import time, io, base64, secrets, string, urllib.request, urllib.parse, json, os, stat, re, ipaddress, socket, hashlib, threading
 import pyotp, qrcode
 import qrcode.image.svg
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
@@ -1843,25 +1843,152 @@ class OpenVPNWStunnelClient(BaseModel):
     name:str=Field(min_length=1,max_length=48)
     local_port:int=Field(default=11941,ge=1024,le=65535)
 
-@app.post("/api/protocols/openvpn/wstunnel/clients")
-def openvpn_wstunnel_client_create(payload:OpenVPNWStunnelClient,request:Request):
-    actor=require_capability(request,"openvpn",True)
+class OpenVPNWStunnelProvision(OpenVPNWStunnelClient):
+    endpoint:str=Field(default="",max_length=255)
+    password:str=Field(min_length=8,max_length=128)
+    expire_days:int=Field(default=0,ge=0,le=3650)
+    quota_gb:float=Field(default=0,ge=0,le=100000)
+    device_limit:int=Field(default=1,ge=1,le=20)
+    concurrent_device_limit:int=Field(default=1,ge=1,le=20)
+
+
+# A protocol identity, a mobile WireGuard peer, an encrypted artifact and a
+# Client Platform account form one managed provisioning operation.  Keep the
+# lock in this owner rather than trying to compensate in the browser.
+_wstunnel_provision_lock=threading.RLock()
+
+
+def _wstunnel_new_user_preflight(name):
+    identity=protocol_ops._openvpn_wstunnel_identity(name)
+    mobile_name=protocol_ops._wstunnel_mobile_wireguard_name(name)
+    status=protocol_ops.openvpn_wstunnel_status()
+    if not (status.get("ready") and status.get("mobile_ready")):
+        raise protocol_ops.ProtocolError("WStunnel 443 OpenVPN and Android/WireGuard backends must be ready before creating a user")
+    if get_access_artifact_by_key("openvpn_wstunnel",name):
+        raise protocol_ops.ProtocolError("WStunnel access name already exists; existing user credentials were not changed")
+    pki=protocol_ops.OVPN_EASYRSA/"pki"
+    if (pki/"issued"/f"{identity}.crt").exists() or (pki/"private"/f"{identity}.key").exists():
+        raise protocol_ops.ProtocolError("WStunnel certificate identity already exists; explicit recovery is required")
+    if any(p.get("name")==mobile_name for p in protocol_ops.list_wireguard_peers()):
+        raise protocol_ops.ProtocolError("WStunnel mobile peer identity already exists; explicit recovery is required")
+    return identity,mobile_name
+
+
+def _wstunnel_new_user_cleanup(name,identity,mobile_name,artifact_created=False):
+    errors=[]
+    if artifact_created:
+        try:
+            delete_access_artifact_by_key("openvpn_wstunnel",name)
+        except Exception as exc:
+            errors.append("artifact: "+str(exc)[:120])
     try:
-        result=protocol_ops.render_openvpn_wstunnel_client(payload.name,payload.local_port)
-        mobile=protocol_ops.render_android_wstunnel_wireguard_client(payload.name)
-        delivery=access_ops.openvpn_wstunnel_payload(payload.name,result["config"],result["transport"],android={
+        peer=next((p for p in protocol_ops.list_wireguard_peers() if p.get("name")==mobile_name),None)
+        if peer:
+            protocol_ops.remove_wireguard_peer(peer["public_key"])
+    except Exception as exc:
+        errors.append("mobile peer: "+str(exc)[:120])
+    try:
+        if (protocol_ops.OVPN_EASYRSA/"pki"/"issued"/f"{identity}.crt").exists():
+            protocol_ops.revoke_openvpn_client(identity)
+    except Exception as exc:
+        errors.append("OpenVPN certificate: "+str(exc)[:120])
+    return errors
+
+
+def _wstunnel_new_user_artifact(name,local_port,identity,mobile_name):
+    artifact_created=False
+    try:
+        result=protocol_ops.render_openvpn_wstunnel_client(name,local_port)
+        mobile=protocol_ops.render_android_wstunnel_wireguard_client(name)
+        delivery=access_ops.openvpn_wstunnel_payload(name,result["config"],result["transport"],android={
             "native_filename":mobile["native_filename"],"config":mobile["config"],"transport":mobile["transport"]})
         artifact_id=artifact_save(
-            "openvpn_wstunnel",payload.name,payload.name,"wstunnel-openvpn",delivery,{
+            "openvpn_wstunnel",name,name,"wstunnel-openvpn",delivery,{
                 "endpoint":result["endpoint"],"transport":"wstunnel",
                 "public_port":result["transport"]["port"],"local_port":result["transport"]["local_port"],
                 "client_identity":result["client_identity"],"mobile_wireguard_peer_name":mobile["peer_name"],
                 "mobile_wireguard_public_key":mobile["public_key"]})
-    except protocol_ops.ProtocolError as e:
-        raise HTTPException(400,str(e))
+        artifact_created=True
+        return result,artifact_id
+    except Exception as exc:
+        errors=_wstunnel_new_user_cleanup(name,identity,mobile_name,artifact_created)
+        if errors:
+            raise protocol_ops.ProtocolError(
+                "WStunnel user creation failed and cleanup needs operator review: "+"; ".join(errors)
+            ) from exc
+        raise
+
+
+@app.post("/api/protocols/openvpn/wstunnel/clients")
+def openvpn_wstunnel_client_create(payload:OpenVPNWStunnelClient,request:Request):
+    actor=require_capability(request,"openvpn",True)
+    with _wstunnel_provision_lock:
+        try:
+            identity,mobile_name=_wstunnel_new_user_preflight(payload.name)
+            result,artifact_id=_wstunnel_new_user_artifact(payload.name,payload.local_port,identity,mobile_name)
+        except protocol_ops.ProtocolError as exc:
+            audit(actor,"openvpn_wstunnel_client_create_failed",payload.name,str(exc)[:300],ip=ip(request))
+            raise HTTPException(400,str(exc)) from exc
     result["artifact_id"]=artifact_id
     audit(actor,"openvpn_wstunnel_client_create",payload.name,f"artifact_id={artifact_id}",ip=ip(request))
     return result
+
+
+@app.post("/api/protocols/openvpn/wstunnel/provision")
+def openvpn_wstunnel_provision(payload:OpenVPNWStunnelProvision,request:Request):
+    """Create protocol assets, account and binding with compensating rollback.
+
+    The browser must never orchestrate multiple independent provisioning writes.
+    A failure restores new assets only; existing credentials are not modified.
+    """
+    actor=require_capability(request,"openvpn",True)
+    require_mutation(request)
+    if payload.concurrent_device_limit>payload.device_limit:
+        raise HTTPException(400,"concurrent_device_limit cannot exceed device_limit")
+    with _wstunnel_provision_lock:
+        if client_store.account_by_username(payload.name):
+            raise HTTPException(409,"Client Platform username already exists")
+        try:
+            identity,mobile_name=_wstunnel_new_user_preflight(payload.name)
+        except protocol_ops.ProtocolError as exc:
+            raise HTTPException(409,str(exc)) from exc
+        current_domain=str(protocol_ops.openvpn_wstunnel_status().get("domain") or "").rstrip(".").lower()
+        if payload.endpoint and str(payload.endpoint).rstrip(".").lower()!=current_domain:
+            raise HTTPException(409,"The selected WStunnel endpoint differs from the configured TLS domain")
+        account_id=None
+        artifact_id=None
+        try:
+            account_id=client_store.create_account(
+                payload.name,payload.password,payload.name,"WStunnel 443",
+                int(time.time())+payload.expire_days*86400 if payload.expire_days else 0,
+                int(payload.quota_gb*1024**3),payload.device_limit,
+                payload.concurrent_device_limit,True,
+            )
+            result,artifact_id=_wstunnel_new_user_artifact(payload.name,payload.local_port,identity,mobile_name)
+            client_store.bind_access_artifact(account_id,artifact_id,"WStunnel 443",10,True)
+            account=client_store.account_admin_snapshot(account_id)
+        except Exception as exc:
+            cleanup=[]
+            if artifact_id is not None:
+                cleanup.extend(_wstunnel_new_user_cleanup(payload.name,identity,mobile_name,True))
+            if account_id is not None:
+                try:
+                    client_store.delete_account(account_id)
+                except Exception as cleanup_exc:
+                    cleanup.append("Client account: "+str(cleanup_exc)[:120])
+            audit(actor,"openvpn_wstunnel_provision_failed",payload.name,
+                  f"cleanup_errors={len(cleanup)}",ip=ip(request))
+            if cleanup:
+                raise HTTPException(
+                    500,"WStunnel provisioning failed; incomplete cleanup: "+"; ".join(cleanup)
+                ) from exc
+            if isinstance(exc,(ValueError,protocol_ops.ProtocolError)):
+                raise HTTPException(400,str(exc)) from exc
+            raise HTTPException(500,"WStunnel provisioning failed; new resources were rolled back") from exc
+    audit(actor,"openvpn_wstunnel_provision",payload.name,
+          f"account_id={account_id}; artifact_id={artifact_id}",ip=ip(request))
+    return {**result,"artifact_id":artifact_id,"client_account":account}
+
 
 class AccessPackageRequest(BaseModel):
     password:str=Field(min_length=4,max_length=128)

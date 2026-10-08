@@ -8,9 +8,11 @@ def test_update_tracks_stealth_pre_state_and_migrates_owner():
     assert "STUNNEL_WAS_ACTIVE=0" in source
     assert "systemctl is-active --quiet makia-stealth" in source
     assert "systemctl is-active --quiet stunnel4" in source
-    assert "systemctl disable --now stunnel4" in source
+    assert "Preserving legacy stunnel listener" in source
     assert "systemctl enable --now makia-stealth" in source
-    assert "dedicated Makia Stealth service is not active" in source
+    assert "systemctl disable --now stunnel4" not in source
+    assert "systemctl restart makia-stealth 2>/dev/null || true" not in source.split('Protocol runtime code unchanged;')[-1]
+    assert "dedicated Makia unit is unavailable" in source
 
 def test_update_softfails_only_preexisting_inactive_stealth():
     source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
@@ -53,4 +55,22 @@ def test_rollback_restarts_previously_active_core_protocols():
     assert 'systemctl restart xray' in source
     assert 'systemctl restart wg-quick@wg0' in source
     assert 'systemctl restart openvpn-server@server' in source
-    assert 'systemctl restart makia-stealth' in source
+    assert 'systemctl enable --now makia-stealth' in source
+    assert 'systemctl disable --now stunnel4' not in source
+
+
+def test_update_never_rebootstraps_existing_protocol_configs_just_for_code_change():
+    source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    assert "Existing Xray/WireGuard/OpenVPN configs detected; skipping full-stack bootstrap." in source
+    assert "[[ -f /etc/wireguard/wg0.conf ]]" in source
+    assert "[[ -f /etc/openvpn/server/server.conf ]]" in source
+    assert "Missing core protocol configuration detected" in source
+
+
+def test_operator_pinned_commit_overrides_persistent_archive_override():
+    source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
+    pin='elif [[ "${MAKIA_REF:-}" =~ ^[0-9a-f]{40}$ ]]'
+    archive='elif [[ -n "${MAKIA_RELEASE_ARCHIVE_URL:-}" ]]'
+    assert pin in source and archive in source
+    assert source.index(pin)<source.index(archive)
+    assert 'Operator-pinned immutable source commit:' in source

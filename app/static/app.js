@@ -707,22 +707,15 @@ async function createProvisionedAccess(){
     }else if(s.protocol==='openvpn_wstunnel'){
       if(!s.password||s.password.length<8)throw new Error('رمز ورود WStunnel باید حداقل ۸ کاراکتر باشد.');
       if(Number(s.sessions||1)>Number(s.devices||1))throw new Error('Concurrent Limit نمی‌تواند از Device Limit بیشتر باشد.');
-      const accounts=await api('/api/client-platform/accounts');
-      if((accounts||[]).some(a=>String(a.username||'').toLowerCase()===String(s.name||'').toLowerCase())){
-        throw new Error('این نام کاربری در Client Platform وجود دارد. از اپ کاربران، Artifact جدید را به حساب موجود Bind کن یا نام دیگری انتخاب کن.');
-      }
-      r=await api('/api/protocols/openvpn/wstunnel/clients',{method:'POST',body:JSON.stringify({name:s.name,local_port:11941})});
+      // One server-side operation owns account, certificate, mobile peer,
+      // encrypted delivery artifact and binding. The browser never leaves a
+      // half-provisioned account after a failed follow-up request.
+      r=await api('/api/protocols/openvpn/wstunnel/provision',{method:'POST',body:JSON.stringify({
+        name:s.name,endpoint:s.endpoint,local_port:11941,password:s.password,
+        expire_days:Number(s.expireDays||0),quota_gb:Number(s.quota||0),
+        device_limit:Number(s.devices||1),concurrent_device_limit:Number(s.sessions||1)
+      })});
       kind='openvpn_wstunnel';key=s.name;
-      const expireAt=Number(s.expireDays||0)>0?Math.floor(Date.now()/1000)+Number(s.expireDays)*86400:0;
-      const account=await api('/api/client-platform/accounts',{method:'POST',body:JSON.stringify({
-        username:s.name,password:s.password,display_name:s.name,plan_name:'WStunnel 443',
-        expire_at:expireAt,quota_gb:Number(s.quota||0),device_limit:Number(s.devices||1),
-        concurrent_device_limit:Number(s.sessions||1),enabled:true
-      })});
-      await api('/api/client-platform/accounts/'+Number(account.id)+'/artifact-bindings',{method:'POST',body:JSON.stringify({
-        artifact_id:Number(r.artifact_id),label:'WStunnel 443',priority:10,enabled:true
-      })});
-      r.client_account=account;
     }else{
       r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
     }
