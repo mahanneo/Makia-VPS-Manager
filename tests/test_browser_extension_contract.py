@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_browser_extension_manifest_contract():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert manifest["version"]=="1.6.4.1"
+    assert manifest["version"]=="1.6.4.2"
     assert "nativeMessaging" not in manifest["permissions"]
     assert "webRequest" in manifest["permissions"]
     assert "webRequestAuthProvider" in manifest["permissions"]
@@ -63,3 +63,19 @@ def test_verified_proxy_requires_real_egress_probe_and_effective_chrome_settings
     assert 'connectionError' in background
     assert 'action:"verify"' in popup
     assert 'action:"status"' in popup
+
+
+def test_proxy_errors_must_reverify_before_disconnecting():
+    bg=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    assert "let proxyErrorRecheck=null" in bg
+    assert "await verifyBrowserProxy();" in bg.split("chrome.proxy.onProxyError.addListener",1)[1]
+    assert "Makia proxy changed during egress verification" in bg
+
+
+def test_browser_auth_diagnostics_never_persist_credentials():
+    source=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    popup=(ROOT/"client/browser-extension/popup.js").read_text(encoding="utf-8")
+    assert 'authDiagnostic' in source
+    assert 'authDiagnostic' in popup
+    assert 'note("درخواست رمز Gateway دریافت شد' in source
+    assert 'chrome.storage.local.set({proxyAuth:' not in source
