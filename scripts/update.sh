@@ -324,6 +324,12 @@ if [[ "$FORCE_MAIN" == "1" ]]; then
   SOURCE_COMMIT="$(resolve_github_commit "$REF")"
   ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"
   echo "Force-main update enabled; pinned immutable source commit: $SOURCE_COMMIT"
+elif [[ "${MAKIA_REF:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  # An explicit immutable commit pin takes priority over persistent archive
+  # overrides; otherwise the operator could silently install another build.
+  SOURCE_COMMIT="$MAKIA_REF"
+  ARCHIVE_URL="https://codeload.github.com/${REPO}/tar.gz/${SOURCE_COMMIT}"
+  echo "Operator-pinned immutable source commit: $SOURCE_COMMIT"
 elif [[ -n "${MAKIA_RELEASE_ARCHIVE_URL:-}" ]]; then
   ARCHIVE_URL="$MAKIA_RELEASE_ARCHIVE_URL"
   echo "Using explicitly configured release archive URL."
