@@ -12,7 +12,7 @@ def test_update_tracks_stealth_pre_state_and_migrates_owner():
     assert "systemctl enable --now makia-stealth" in source
     assert "systemctl disable --now stunnel4" not in source
     assert "systemctl restart makia-stealth 2>/dev/null || true" not in source.split('Protocol runtime code unchanged;')[-1]
-    assert "dedicated Makia Stealth service is not active" in source
+    assert "dedicated Makia unit is unavailable" in source
 
 def test_update_softfails_only_preexisting_inactive_stealth():
     source=(ROOT/"scripts/update.sh").read_text(encoding="utf-8")
@@ -55,7 +55,8 @@ def test_rollback_restarts_previously_active_core_protocols():
     assert 'systemctl restart xray' in source
     assert 'systemctl restart wg-quick@wg0' in source
     assert 'systemctl restart openvpn-server@server' in source
-    assert 'systemctl restart makia-stealth' in source
+    assert 'systemctl enable --now makia-stealth' in source
+    assert 'systemctl disable --now stunnel4' not in source
 
 
 def test_update_never_rebootstraps_existing_protocol_configs_just_for_code_change():
