@@ -733,13 +733,16 @@ else
     exit 7
   fi
   if [[ "$STUNNEL_WAS_ACTIVE" -eq 1 ]]; then
-    systemctl disable --now stunnel4 2>/dev/null || true
-    systemctl enable --now makia-stealth 2>/dev/null || true
-    systemctl restart makia-stealth 2>/dev/null || true
+    # A distinct legacy stunnel listener can still serve old client profiles.
+    # Preserve its process and listen port; migration requires a separate review.
     if ! systemctl is-active --quiet makia-stealth; then
-      echo "Stealth was active before update but the dedicated Makia Stealth service is not active; updater will roll back." >&2
+      systemctl enable --now makia-stealth 2>/dev/null || true
+    fi
+    if ! systemctl is-active --quiet makia-stealth; then
+      echo "Stealth was previously active; dedicated Makia unit is unavailable." >&2
       exit 9
     fi
+    echo "Preserving legacy stunnel listener and running dedicated Makia Stealth."
   fi
   if [[ "$WSTUNNEL_WAS_ACTIVE" -eq 1 ]] && ! systemctl is-active --quiet makia-wstunnel; then
     echo "WireGuard WStunnel was active before update but is no longer active; updater will roll back." >&2
