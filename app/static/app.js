@@ -711,7 +711,7 @@ async function createProvisionedAccess(){
       // encrypted delivery artifact and binding. The browser never leaves a
       // half-provisioned account after a failed follow-up request.
       r=await api('/api/protocols/openvpn/wstunnel/provision',{method:'POST',body:JSON.stringify({
-        name:s.name,local_port:11941,password:s.password,
+        name:s.name,endpoint:s.endpoint,local_port:11941,password:s.password,
         expire_days:Number(s.expireDays||0),quota_gb:Number(s.quota||0),
         device_limit:Number(s.devices||1),concurrent_device_limit:Number(s.sessions||1)
       })});
