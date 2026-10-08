@@ -8,8 +8,10 @@ def test_update_tracks_stealth_pre_state_and_migrates_owner():
     assert "STUNNEL_WAS_ACTIVE=0" in source
     assert "systemctl is-active --quiet makia-stealth" in source
     assert "systemctl is-active --quiet stunnel4" in source
-    assert "systemctl disable --now stunnel4" in source
+    assert "Preserving legacy stunnel listener" in source
     assert "systemctl enable --now makia-stealth" in source
+    assert "systemctl disable --now stunnel4" not in source
+    assert "systemctl restart makia-stealth 2>/dev/null || true" not in source.split('Protocol runtime code unchanged;')[-1]
     assert "dedicated Makia Stealth service is not active" in source
 
 def test_update_softfails_only_preexisting_inactive_stealth():
