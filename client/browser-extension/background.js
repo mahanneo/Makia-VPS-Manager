@@ -123,7 +123,7 @@ chrome.webRequest.onAuthRequired.addListener(
       const expectedHost=String(endpoint.host||"").toLowerCase();
       const expectedPort=Number(endpoint.port||0);
       if(!auth.username||!auth.password||!expectedHost||!expectedPort||
-        challengerHost!==expectedHost||challengerPort!==expectedPort){
+        challengerHost !== expectedHost||challengerPort !== expectedPort){
         callback({cancel:true});return;
       }
       callback({authCredentials:{username:auth.username,password:auth.password}});
