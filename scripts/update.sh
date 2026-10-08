@@ -100,9 +100,11 @@ on_exit(){
       systemctl restart openvpn-server@server 2>/dev/null
     fi
     if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl disable --now stunnel4 2>/dev/null || true
-      systemctl enable --now makia-stealth 2>/dev/null
-      systemctl restart makia-stealth 2>/dev/null
+      # Rollback must preserve a separately used legacy TCP/9443 listener.
+      # Keep the dedicated Stealth instance up without stopping stunnel4.
+      if ! systemctl is-active --quiet makia-stealth; then
+        systemctl enable --now makia-stealth 2>/dev/null || true
+      fi
     fi
     if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl enable --now makia-wstunnel 2>/dev/null
