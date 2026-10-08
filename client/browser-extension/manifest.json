@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Makia Browser VPN",
-  "version": "1.6.4",
-  "description": "Secure browser-only VPN through your Makia Browser Gateway. No Windows app required.",
+  "version": "1.6.4.1",
+  "description": "Verified HTTPS browser proxy with actual exit-IP check. Browser only; not a system-wide VPN.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk/f7jf0B3/FCxukwTPdM2C9xsijRA5IVNaCQCbwO0LePJ5d18PTNO6lkgqSz47Hl5Pnrpuk+gVX6PhF+AEZehBYfDwlJBjMfmoiDvi4dOPlRrzuO5Ds9Gr5oHQlCTNrrtS7Rq5Rw4lPue8+TfJmXtiwPQwlizrAlX8YlfFBqo9d5CxokQRI7HR6asU6gBXqIMEUPn/lj2zC6EKbOUQiIVO+htsvKNcCnkWAxwqEcIR87JptsQvo9qxCkqb7Y7ZmFFhVjcIWn2Z6u0tvXl8aOJ/tLa7LCcbWb5IHNADLrmmby4AaG0n6wQ2PigNkv1HT5DWJCqoNfPVAX1qtcbqYx/wIDAQAB",
   "permissions": [
     "storage",

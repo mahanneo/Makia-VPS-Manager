@@ -44,11 +44,18 @@ async function render(){
   $("appView").classList.toggle("hidden",!logged);
   if(!logged) return;
 
-  const connection=await chrome.storage.local.get(["connected","proxyHost"]);
+  const status=await chrome.runtime.sendMessage({action:"status"});
+  const connection=status&&status.ok?status.result:{connected:false,connectionError:"وضعیت Proxy قابل بررسی نیست"};
   $("statusDot").className="dot "+(connection.connected?"on":"off");
-  $("connectionState").textContent=connection.connected?"متصل":"قطع";
+  $("connectionState").textContent=connection.connected?"متصل · تأیید شد":"قطع";
   $("activeLabel").textContent=connection.connected?"Makia Browser VPN":"Browser VPN";
   $("disconnectBtn").classList.toggle("hidden",!connection.connected);
+  $("verifyBtn").classList.toggle("hidden",!connection.connected);
+  $("exitIp").textContent=connection.connected&&connection.exitIp?connection.exitIp:"هنوز تأیید نشده";
+  $("verificationState").textContent=connection.connected&&connection.verifiedAt?
+    "IP خروجی از اتصال HTTPS واقعی بررسی شد. آخرین تست: "+new Date(connection.verifiedAt).toLocaleTimeString("fa-IR"):
+    "صرف نمایش وضعیت متصل، تغییر IP را تضمین نمی‌کند.";
+  if(connection.connectionError&&!$("appError").textContent) setError("appError",connection.connectionError);
 
   const a=state.account||{};
   const quota=Number(a.quota_bytes||0),used=Number(a.used_bytes||0);
@@ -111,6 +118,15 @@ async function connectGateway(){
     await render();
   }
 }
+async function verifyGateway(){
+  setError("appError","");
+  $("verifyBtn").disabled=true;
+  try{
+    const result=await chrome.runtime.sendMessage({action:"verify"});
+    if(!result||!result.ok) throw new Error((result&&result.error)||"تست IP خروجی ناموفق بود");
+  }catch(e){setError("appError",String(e.message||e));}
+  finally{$("verifyBtn").disabled=false;await render();}
+}
 async function disconnect(){
   setError("appError","");
   const r=await chrome.runtime.sendMessage({action:"disconnect"});
@@ -131,6 +147,7 @@ $("loginBtn").addEventListener("click",login);
 $("refreshBtn").addEventListener("click",refresh);
 $("connectBtn").addEventListener("click",connectGateway);
 $("disconnectBtn").addEventListener("click",disconnect);
+$("verifyBtn").addEventListener("click",verifyGateway);
 $("logoutBtn").addEventListener("click",()=>logout(true));
 (async()=>{
   await loadStorage();

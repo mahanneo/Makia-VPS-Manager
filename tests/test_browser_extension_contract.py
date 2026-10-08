@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_browser_extension_manifest_contract():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert manifest["version"]=="1.6.4"
+    assert manifest["version"]=="1.6.4.1"
     assert "nativeMessaging" not in manifest["permissions"]
     assert "webRequest" in manifest["permissions"]
     assert "webRequestAuthProvider" in manifest["permissions"]
@@ -51,3 +51,15 @@ def test_browser_extension_enables_webrtc_and_dns_leak_protection():
     assert "networkPredictionEnabled.set" in background
     assert "networkPredictionEnabled.clear" in background
     assert "webRTCIPHandlingPolicy.clear" in background
+
+
+def test_verified_proxy_requires_real_egress_probe_and_effective_chrome_settings():
+    background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    popup=(ROOT/"client/browser-extension/popup.js").read_text(encoding="utf-8")
+    assert 'levelOfControl==="controlled_by_this_extension"' in background
+    assert "verifyBrowserProxy()" in background
+    assert 'exitIp===s.directIp' in background
+    assert 'IP verification unavailable' in background
+    assert 'connectionError' in background
+    assert 'action:"verify"' in popup
+    assert 'action:"status"' in popup
