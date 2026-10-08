@@ -604,7 +604,16 @@ install_verified_shell "$SRC/upgrade.sh" /usr/local/sbin/makia-upgrade
 systemctl daemon-reload
 
 if [[ "$PROTOCOL_RUNTIME_CHANGED" -eq 1 ]]; then
-  echo "Protocol runtime changed; ensuring the complete Makia protocol stack is installed and ready..."
+  # Merely updating protocol_ops.py must not make a stable production host
+  # bootstrap all live protocols again. Existing Xray/WireGuard/OpenVPN
+  # identities stay in place; the targeted runtime checks below decide whether
+  # an unhealthy component needs a documented repair.
+  if { [[ -f /usr/local/etc/xray/config.json ]] || [[ -f /etc/xray/config.json ]]; } \
+      && [[ -f /etc/wireguard/wg0.conf ]] \
+      && [[ -f /etc/openvpn/server/server.conf ]]; then
+    echo "Existing Xray/WireGuard/OpenVPN configs detected; skipping full-stack bootstrap."
+  else
+    echo "Missing core protocol configuration detected; provisioning only during incomplete-install recovery..."
   (
     cd "$APP"
   MAKIA_DATA_DIR="$APP/data" "$APP/.venv/bin/python" - <<'PY'
@@ -627,6 +636,7 @@ print("Protocol stack READY: Xray, WireGuard UDP/%s, OpenVPN %s/%s" % (
 ))
 PY
 )
+  fi
 
 # Repair the historical root-only Xray config/TLS permission mismatch before
 # the post-update UAT gate. This preserves credentials and rolls back the
