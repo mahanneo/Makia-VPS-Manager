@@ -89,4 +89,4 @@ jobs:
           if ! gh release view v1.6.4 >/dev/null 2>&1; then
             gh release create v1.6.4               --target "$GITHUB_SHA"               --title "Makia 1.6.4 — WStunnel 443 Stable Hotfix"               --notes "Makia 1.6.4 adds managed WStunnel 443 with Windows and Android Full Device Direct Connect while keeping the Pure Browser Gateway architecture separate." || true
           fi
-          gh release upload v1.6.4             dist-browser/Makia-Browser-VPN-1.6.4.1.zip             dist-browser/SHA256SUMS.txt             dist-browser/BUILD-INFO.txt --clobber
+          gh release upload v1.6.4             dist-browser/Makia-Browser-VPN-1.6.4.1.zip             dist-browser/SHA256-Browser-VPN-1.6.4.1.txt             dist-browser/BUILD-INFO-Browser.txt --clobber
