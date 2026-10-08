@@ -44,7 +44,7 @@ jobs:
           from pathlib import Path
           m=json.loads(Path("client/browser-extension/manifest.json").read_text())
           assert m["manifest_version"]==3
-          assert m["version"]=="1.6.4.1"
+          assert m["version"]=="1.6.4.2"
           assert "nativeMessaging" not in m["permissions"]
           assert "proxy" in m["permissions"]
           assert "webRequest" in m["permissions"]
@@ -62,21 +62,21 @@ jobs:
         shell: bash
         run: |
           rm -rf dist-browser
-          mkdir -p dist-browser/Makia-Browser-VPN-1.6.4.1
-          cp client/browser-extension/background.js client/browser-extension/popup.js client/browser-extension/popup.html client/browser-extension/popup.css client/browser-extension/manifest.json dist-browser/Makia-Browser-VPN-1.6.4.1/
+          mkdir -p dist-browser/Makia-Browser-VPN-1.6.4.2
+          cp client/browser-extension/background.js client/browser-extension/popup.js client/browser-extension/popup.html client/browser-extension/popup.css client/browser-extension/manifest.json dist-browser/Makia-Browser-VPN-1.6.4.2/
           (
-            cd dist-browser/Makia-Browser-VPN-1.6.4.1
-            zip -qr ../Makia-Browser-VPN-1.6.4.1.zip .
+            cd dist-browser/Makia-Browser-VPN-1.6.4.2
+            zip -qr ../Makia-Browser-VPN-1.6.4.2.zip .
           )
-          sha256sum dist-browser/Makia-Browser-VPN-1.6.4.1.zip | tee dist-browser/SHA256-Browser-VPN-1.6.4.1.txt
-          printf 'browser_version=1.6.4.1\nserver_version=1.6.4\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO-Browser.txt
+          sha256sum dist-browser/Makia-Browser-VPN-1.6.4.2.zip | tee dist-browser/SHA256-Browser-VPN-1.6.4.2.txt
+          printf 'browser_version=1.6.4.2\nserver_version=1.6.4\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO-Browser.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Browser-VPN-1.6.4.1
+          name: Makia-Browser-VPN-1.6.4.2
           path: |
-            dist-browser/Makia-Browser-VPN-1.6.4.1.zip
-            dist-browser/SHA256-Browser-VPN-1.6.4.1.txt
+            dist-browser/Makia-Browser-VPN-1.6.4.2.zip
+            dist-browser/SHA256-Browser-VPN-1.6.4.2.txt
             dist-browser/BUILD-INFO-Browser.txt
           if-no-files-found: error
 
@@ -89,4 +89,4 @@ jobs:
           if ! gh release view v1.6.4 >/dev/null 2>&1; then
             gh release create v1.6.4               --target "$GITHUB_SHA"               --title "Makia 1.6.4 — WStunnel 443 Stable Hotfix"               --notes "Makia 1.6.4 adds managed WStunnel 443 with Windows and Android Full Device Direct Connect while keeping the Pure Browser Gateway architecture separate." || true
           fi
-          gh release upload v1.6.4             dist-browser/Makia-Browser-VPN-1.6.4.1.zip             dist-browser/SHA256-Browser-VPN-1.6.4.1.txt             dist-browser/BUILD-INFO-Browser.txt --clobber
+          gh release upload v1.6.4             dist-browser/Makia-Browser-VPN-1.6.4.2.zip             dist-browser/SHA256-Browser-VPN-1.6.4.2.txt             dist-browser/BUILD-INFO-Browser.txt --clobber
