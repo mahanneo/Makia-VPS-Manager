@@ -17,7 +17,7 @@ async function fetchPublicIp(){
   let last=null;
   for(const item of IP_PROBES){
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),8000);
+    const timer=setTimeout(()=>controller.abort(),14000);
     try{
       const response=await fetch(item.url+(item.url.includes("?")?"&":"?")+"_="+Date.now(),{
         cache:"no-store",redirect:"error",signal:controller.signal
@@ -74,6 +74,13 @@ async function verifyBrowserProxy(){
   const exitIp=await fetchPublicIp();
   if(s.directIp&&exitIp===s.directIp)
     throw new Error("Public IP has not changed. Browser traffic is not verified through Makia.");
+  // Reject stale completion if another message disconnected or replaced
+  // the proxy while this network request was pending.
+  const current=await chrome.storage.local.get(["proxyHost","proxyPort"]);
+  if(current.proxyHost!==s.proxyHost||current.proxyPort!==s.proxyPort||
+      !await effectiveProxy(s.proxyHost,s.proxyPort)){
+    throw new Error("Makia proxy changed during egress verification.");
+  }
   await chrome.storage.local.set({
     connected:true,exitIp,verifiedAt:Date.now(),connectionError:""
   });
@@ -132,14 +139,31 @@ chrome.webRequest.onAuthRequired.addListener(
   {urls:["<all_urls>"]},["asyncBlocking"]
 );
 
-chrome.proxy.onProxyError.addListener(async details=>{
-  const saved=await chrome.storage.local.get(["connected"]);
-  if(saved.connected){
-    await chrome.storage.local.set({
-      connected:false,
-      connectionError:"Browser proxy error: "+String(details.error||"Gateway unavailable")
-    });
-  }
+// One failed CONNECT (for example an unsupported destination port) does not
+// prove that the entire HTTPS Gateway is down. Confirm the actual public egress
+// before changing the global status. Coalesce bursts to avoid auth/probe storms.
+let proxyErrorRecheck=null;
+chrome.proxy.onProxyError.addListener(details=>{
+  if(proxyErrorRecheck)return proxyErrorRecheck;
+  proxyErrorRecheck=(async()=>{
+    const before=await chrome.storage.local.get(["connected","proxyHost","proxyPort"]);
+    if(!before.connected||!before.proxyHost)return;
+    try{
+      await verifyBrowserProxy();
+    }catch(e){
+      const now=await chrome.storage.local.get(["connected","proxyHost","proxyPort"]);
+      if(now.connected&&now.proxyHost===before.proxyHost&&now.proxyPort===before.proxyPort){
+        // Keep the proxy configuration in place instead of silently routing
+        // traffic directly; the user must explicitly disconnect/reconnect.
+        await chrome.storage.local.set({
+          connected:false,
+          connectionError:"Browser Gateway egress check failed after proxy error ("+
+            String(details.error||"unknown")+"): "+String(e.message||e)
+        });
+      }
+    }
+  })().finally(()=>{proxyErrorRecheck=null;});
+  return proxyErrorRecheck;
 });
 chrome.runtime.onInstalled.addListener(()=>clearBrowserProxy().catch(()=>{}));
 chrome.runtime.onStartup.addListener(()=>clearBrowserProxy().catch(()=>{}));
