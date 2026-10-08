@@ -56,6 +56,7 @@ async function render(){
     "IP خروجی از اتصال HTTPS واقعی بررسی شد. آخرین تست: "+new Date(connection.verifiedAt).toLocaleTimeString("fa-IR"):
     "صرف نمایش وضعیت متصل، تغییر IP را تضمین نمی‌کند.";
   if(connection.connectionError&&!$("appError").textContent) setError("appError",connection.connectionError);
+  $("authDiagnostic").textContent=String(connection.authDiagnostic||"");
 
   const a=state.account||{};
   const quota=Number(a.quota_bytes||0),used=Number(a.used_bytes||0);
