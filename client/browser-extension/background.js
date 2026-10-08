@@ -64,8 +64,13 @@ async function effectiveProxy(expectedHost,expectedPort){
     Number(proxy&&proxy.port||0)===Number(expectedPort);
 }
 async function disconnectWithError(message){
+  const last=await chrome.storage.local.get(["authDiagnostic"]).catch(()=>({}));
   try{await clearBrowserProxy();}catch(_){}
-  await chrome.storage.local.set({connected:false,connectionError:String(message||"Proxy not verified")});
+  await chrome.storage.local.set({
+    connected:false,
+    connectionError:String(message||"Proxy not verified"),
+    authDiagnostic:String(last.authDiagnostic||"")
+  });
 }
 async function verifyBrowserProxy(){
   const s=await chrome.storage.local.get(CONNECTION_KEYS);
