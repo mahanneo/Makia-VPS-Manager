@@ -1,20 +1,45 @@
-# Android Release Signing
+# Android Release Signing — Makia v1.6.4
 
-The automatic Android connector workflow intentionally produces an installable **UAT/debug-signed** APK. A debug signing identity is not suitable for permanent public distribution because future builds may not be upgrade-compatible and the key is not an operator-controlled production identity.
+## Current, verified release status (2026-10-08)
 
-## Production requirement
+- Android Connector UAT Build: **SUCCESS** on `main` v1.6.4. Its APK is a debug/UAT-signed artifact only.
+- Android Signed Release: **FAILURE** at the `Install persistent release signing identity` step. GitHub Actions emitted `MAKIA_ANDROID_KEYSTORE_B64 is required`; the required keystore secret was empty.
+- Native Android build dependency / AAR phase completed; the failing step is release signing configuration, not a proven native protocol defect.
+- **No signed production APK should be claimed or downloaded from the v1.6.4 release until the signed workflow succeeds and the asset is verified.**
 
-Before publishing Makia Android publicly, create one long-lived private Android release keystore and keep it outside the repository. Store the keystore and passwords only in a protected release system / GitHub Actions secrets.
+## Mandatory signing identity / upgrade compatibility
 
-Never commit the private keystore, passwords or base64 keystore contents to Git.
+Before enabling production distribution, first determine whether any previously installed release-signed Makia Android app already exists. If it does, reuse that **exact** existing signing identity and key alias. Changing Android signing certificates without an authorized signing-key rotation path can block in-place upgrades.
 
-Recommended secret names for a future signed-release workflow:
+Keep keystore files and passwords entirely outside the public repository and ChatGPT messages. Store an independently protected recovery copy of the original keystore.
 
-- `MAKIA_ANDROID_KEYSTORE_B64`
-- `MAKIA_ANDROID_KEY_ALIAS`
-- `MAKIA_ANDROID_KEY_PASSWORD`
-- `MAKIA_ANDROID_STORE_PASSWORD`
+The Android application ID is `com.makia.client`.
 
-The first public production APK/AAB must establish the permanent application signing identity for `com.makia.client`. Preserve that key for all future upgrades.
+## Required GitHub Actions secrets (exact names from current workflow)
 
-Until those secrets are configured and a signed release workflow is verified on a real device, GitHub artifacts must remain clearly labelled `UAT`.
+The workflow `.github/workflows/android-release.yml` executes in GitHub Actions environment `android-release` and reads these four secrets:
+
+| Exact GitHub secret | Content |
+| --- | --- |
+| `MAKIA_ANDROID_KEYSTORE_B64` | Base64 of the **existing** Android release keystore binary |
+| `MAKIA_ANDROID_KEYSTORE_PASSWORD` | Keystore/store password |
+| `MAKIA_ANDROID_KEY_ALIAS` | Key alias inside the keystore |
+| `MAKIA_ANDROID_KEY_PASSWORD` | Key/alias password |
+
+**Important:** `MAKIA_ANDROID_STORE_PASSWORD` (without `KEY`) is an old documentation typo; the current workflow reads **`MAKIA_ANDROID_KEYSTORE_PASSWORD`**. Do not configure only the obsolete name.
+
+The repository owner can set these via GitHub → Repository **Settings** → **Environments** → **android-release** → **Environment secrets** → **Add secret**, or repository-level Actions secrets if permitted by policy. The deployment environment name must match `android-release`.
+
+Prefer protected environment secrets, restrictive environment deployment permissions, and a trusted signing identity. Never echo key data in logs or commit base64 content.
+
+## Publish gate
+
+1. Verify availability of the original keystore and check signing certificate fingerprint against any prior installed release-signed package. If no prior signed release exists, explicitly approve creating and securely backing up the first permanent production key.
+2. Configure all four exact Secrets in the `android-release` environment.
+3. From GitHub **Actions** → **Android Signed Release** → **Run workflow**, select the approved release source `main` or the exact v1.6.4 release commit.
+4. Confirm successful Gradle build, `apksigner verify`, expected ARM64 native libraries, uploaded APK and checksum, and APK presence in `v1.6.4` GitHub Release.
+5. Perform Android ARM64 real-device install/update and connect/disconnect tests, including WStunnel443, quota/revoke, app lifecycle, and restricted-network field tests. Do not claim that every Iranian ISP is supported.
+
+## UAT-only APK
+
+The separately named `Makia-Android-Connector-1.6.4-UAT` GitHub Actions artifact is appropriate for controlled tests only. Debug signatures should not be used for permanent, publicly distributed production clients. A VPN client's native connection, permission prompts, account binding, quota and revocation are only proven by actual device testing.
