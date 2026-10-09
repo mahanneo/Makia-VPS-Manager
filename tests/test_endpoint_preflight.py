@@ -1,0 +1,50 @@
+import pytest
+from app.endpoint_preflight import ALL, evaluate
+
+@pytest.mark.parametrize("protocol",["ssh","wireguard","openvpn","outline","xray-direct"])
+def test_direct_protocols_support_public_ipv4(protocol):
+    r=evaluate(protocol,"212.100.171.183")
+    assert r.ok and r.mode=="ip"
+
+@pytest.mark.parametrize("protocol",["browser-gateway","wstunnel-wss","openvpn-wstunnel","stealth-tls","ikev2-cert"])
+def test_tls_modes_reject_ip_without_a_real_name_certificate(protocol):
+    r=evaluate(protocol,"212.100.171.183")
+    assert not r.ok
+    assert any("TLS certificate" in err for err in r.errors)
+
+def test_good_direct_domain_and_dns_only_guidance():
+    r=evaluate("wireguard","vpn.example.org",server_ipv4="212.100.171.183",
+               resolved_ipv4=["212.100.171.183"])
+    assert r.ok and r.mode=="domain"
+    assert any("DNS-only" in s for s in r.next_steps)
+
+def test_dns_mismatch_rejected_before_mutation():
+    r=evaluate("openvpn","vpn.example.org",server_ipv4="212.100.171.183",
+               resolved_ipv4=["8.8.8.8"])
+    assert not r.ok and "A record" in r.errors[0]
+
+def test_tls_hostname_requires_matching_certificate():
+    r=evaluate("browser-gateway","p.example.org",
+               resolved_ipv4=["212.100.171.183"],tls_names=["other.example.org"])
+    assert not r.ok
+    assert any("certificate" in s for s in r.errors)
+    ok=evaluate("browser-gateway","p.example.org",
+                resolved_ipv4=["212.100.171.183"],tls_names=["p.example.org"])
+    assert ok.ok
+
+@pytest.mark.parametrize("value",[
+    "http://vpn.example.org","https://vpn.example.org:443","127.0.0.1",
+    "192.168.1.5","localhost","vpn.example.org/path","vpn.example.org:443",
+    "bad..example.org","foo@example.org","",
+])
+def test_rejects_invalid_address_input(value):
+    with pytest.raises(ValueError):
+        evaluate("wireguard",value)
+
+def test_invalid_ports_are_not_accepted():
+    assert not evaluate("ssh","212.100.171.183",0).ok
+    assert not evaluate("ssh","212.100.171.183",65536).ok
+
+def test_insecure_pptp_explicitly_rejected():
+    with pytest.raises(ValueError,match="PPTP"):
+        evaluate("pptp","212.100.171.183")
