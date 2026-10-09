@@ -214,6 +214,11 @@ def validate_user_password(password: str):
         raise OperationError("password/PIN must be at least 4 characters")
     if len(password)>128:
         raise OperationError("password is too long")
+    # chpasswd consumes newline-separated username:password records as root.
+    # Newlines/control bytes in a user-selected password must not be allowed
+    # to become a second account's password-change instruction.
+    if any(ord(ch)<32 or ord(ch)==127 for ch in password):
+        raise OperationError("password contains unsupported control characters")
 
 def create_ssh_user(username: str,password: str,expire: str|None=None):
     validate_username(username); validate_user_password(password)
