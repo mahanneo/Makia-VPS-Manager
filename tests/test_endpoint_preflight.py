@@ -3,7 +3,9 @@ from app.endpoint_preflight import ALL, evaluate
 
 @pytest.mark.parametrize("protocol",["ssh","wireguard","openvpn","outline","xray-direct"])
 def test_direct_protocols_support_public_ipv4(protocol):
-    r=evaluate(protocol,"212.100.171.183")
+    # Outline/Xray ports are runtime-defined rather than safe universal defaults.
+    port=443 if protocol in {"outline","xray-direct"} else None
+    r=evaluate(protocol,"212.100.171.183",port)
     assert r.ok and r.mode=="ip"
 
 @pytest.mark.parametrize("protocol",["browser-gateway","wstunnel-wss","openvpn-wstunnel","stealth-tls","ikev2-cert"])
@@ -48,3 +50,10 @@ def test_invalid_ports_are_not_accepted():
 def test_insecure_pptp_explicitly_rejected():
     with pytest.raises(ValueError,match="PPTP"):
         evaluate("pptp","212.100.171.183")
+
+
+def test_runtime_defined_protocol_port_must_be_explicit():
+    for protocol in ("outline","xray-direct"):
+        result=evaluate(protocol,"212.100.171.183")
+        assert not result.ok
+        assert "Choose a port" in result.errors[0]
