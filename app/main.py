@@ -4047,6 +4047,10 @@ def endpoint_preflight_get(request:Request,protocol:str,endpoint:str,port:int|No
         "port":selection.port,"transport":selection.transport,
         "errors":selection.errors,"warnings":selection.warnings,
         "next_steps":selection.next_steps,
+        "needs_tls_certificate":selection.needs_tls_certificate,
+        "direct_ip_supported":selection.direct_ip_supported,
+        "recommended_for_first_setup":selection.recommended_for_first_setup,
+        "user_message_fa":selection.user_message_fa,
         "read_only":True,
         "live_runtime_validated":False,
     }
