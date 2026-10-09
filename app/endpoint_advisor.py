@@ -43,7 +43,7 @@ def connection_setup():
         if dns4 and candidates:
             dns_status=bool(set(dns4).intersection(candidates))
     recommended_mode="domain" if domain and tls_certificate and dns_status is not False else "ip"
-    preferred=candidates[0] if recommended_mode=="ip" else domain
+    preferred=(candidates[0] if candidates else "") if recommended_mode=="ip" else domain
     if not preferred and domain:
         preferred=domain
         recommended_mode="domain"
