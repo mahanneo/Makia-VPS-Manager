@@ -151,7 +151,8 @@ MAKIA_RELEASE_ARCHIVE_URL=${MAKIA_RELEASE_ARCHIVE_URL:-}
 MAKIA_RELEASE_BEARER_TOKEN=${MAKIA_RELEASE_BEARER_TOKEN:-}
 MAKIA_ADMIN_ALLOWED_CIDRS=${MAKIA_ADMIN_ALLOWED_CIDRS:-}
 MAKIA_CLIENT_PORTAL_ENABLED=${MAKIA_CLIENT_PORTAL_ENABLED:-auto}
-MAKIA_PUBLIC_BASE_URL=${MAKIA_PUBLIC_BASE_URL:-}
+MAKIA_PUBLIC_IPV4=${MAKIA_PUBLIC_IPV4:-}
+  MAKIA_PUBLIC_BASE_URL=${MAKIA_PUBLIC_BASE_URL:-}
 MAKIA_ANDROID_CONNECTOR_URL=${MAKIA_ANDROID_CONNECTOR_URL:-}
 EOF
   chmod 0600 /etc/makia-vps-manager/makia.env
@@ -190,12 +191,15 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.service" /etc/systemd/sys
 install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
 install -m 0644 "$SOURCE_DIR/systemd/makia-mtproxy.service" /etc/systemd/system/makia-mtproxy.service
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
+install -m 0644 "$SOURCE_DIR/nginx/makia-ip-fallback.conf" /etc/nginx/sites-available/makia-ip-fallback
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
+ln -sfn /etc/nginx/sites-available/makia-ip-fallback /etc/nginx/sites-enabled/makia-ip-fallback
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
 
 install -m 0755 "$SOURCE_DIR/scripts/update.sh" /usr/local/sbin/makia-update
 install -m 0755 "$SOURCE_DIR/scripts/backup.sh" /usr/local/sbin/makia-backup
 install -m 0755 "$SOURCE_DIR/scripts/uninstall.sh" /usr/local/sbin/makia-uninstall
+install -m 0755 "$SOURCE_DIR/scripts/enable-ip-panel.sh" /usr/local/sbin/makia-enable-ip-panel
 install -m 0755 "$SOURCE_DIR/scripts/doctor.sh" /usr/local/sbin/makia-doctor
 install -m 0755 "$SOURCE_DIR/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 install -m 0755 "$SOURCE_DIR/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
@@ -297,8 +301,33 @@ systemctl reload nginx
 echo "Running full-stack installation smoke gate..."
 /usr/local/sbin/makia-uat-smoke
 
-SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
-PANEL_URL="http://${SERVER_IP:-SERVER_IP}/"
+# Never announce a private interface/NAT address as a public panel URL.
+# Operators behind NAT should set MAKIA_PUBLIC_IPV4 to the provider's address.
+SERVER_IP="$(python3 - <<'PY'
+import ipaddress, os, subprocess
+choices=[]
+override=str(os.environ.get("MAKIA_PUBLIC_IPV4","")).strip()
+if override: choices.append(override)
+try:
+    choices.extend(subprocess.check_output(["hostname","-I"],text=True,timeout=5).split())
+except Exception:
+    pass
+for value in choices:
+    try:
+        ip=ipaddress.ip_address(value)
+    except ValueError:
+        continue
+    if ip.version==4 and ip.is_global:
+        print(ip.compressed)
+        break
+PY
+)"
+if [[ -n "$SERVER_IP" ]]; then
+  PANEL_URL="http://${SERVER_IP}/"
+else
+  PANEL_URL="http://<YOUR_PUBLIC_IPV4>/"
+  echo "WARNING: no public IPv4 detected. On NAT/cloud hosts set MAKIA_PUBLIC_IPV4 to your provider-assigned public IPv4."
+fi
 if [[ "$NEW_ADMIN_BOOTSTRAP" == "1" ]]; then
   cat >"$CREDENTIAL_FILE" <<EOF
 Makia VPS Manager
@@ -329,6 +358,6 @@ else
   printf '\nExisting administrator detected; its password was not changed.\n'
   printf 'If needed, reset it explicitly with: sudo makia-reset-admin\n'
 fi
-printf 'For public exposure, configure Domain + HTTPS and review Security Center.\n'
+printf 'IP access is HTTP bootstrap only; for secure public administration configure Domain + HTTPS.\n'
 printf 'Protocol stack: Xray + WireGuard + OpenVPN are preinstalled and bootstrapped.\n'
 printf 'Run: makia-doctor   for host diagnostics.\n\n'

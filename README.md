@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.6.1</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Version 1.6.4</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.1 UAT](docs/UAT-1.6.1.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[Release status](docs/RELEASE-STATUS.md)**
 
 ---
 
@@ -37,6 +37,14 @@ The Xray Inbound Center includes selectable, Core-validated starting profiles fo
 
 These are **starting presets, not a connectivity guarantee**. ISP filtering, mobile networks, datacenter policy, client implementation and protocol fingerprints change over time. Makia therefore keeps XHTTP experimental on the pinned 26.3.27 Core and validates every selectable preset with the actual Xray binary in CI.
 
+## IP and domain connection setup
+
+New host owners can provision SSH, WireGuard, OpenVPN and Xray through the guided **IP / Domain** endpoint selector. The server suggests publicly routable IPv4 addresses and the configured hostname, warns on incorrect DNS and certificate readiness, and never invents a public address from an RFC1918 interface on NAT hosts. For NAT VPS installations, set `MAKIA_PUBLIC_IPV4` in the root-only runtime environment. **IP-based HTTP panel login is bootstrap-only and unencrypted**; production management requires trusted HTTPS, with a matching domain certificate or a specially issued IP certificate. TLS and WSS can require a hostname/SNI even if the underlying socket accepts an IP.
+
+Detailed setup: **[IP or Domain guide (Persian)](docs/SETUP-IP-OR-DOMAIN-FA.md)**. Device instructions: **[Android / iPhone / Windows / Chrome](docs/CLIENT-INSTALLATION-MATRIX-FA.md)**.
+
+**PPTP is intentionally not offered** because MS-CHAPv2 and PPTP are insecure; use IKEv2, WireGuard or OpenVPN. No panel can guarantee ISP reachability without real client field tests.
+
 ## Protocol support
 
 | Protocol | Provisioning | Delivery | Policy / operations |
@@ -52,7 +60,7 @@ Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 wh
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## Makia Client 1.6.1
+## Makia Client 1.6.4
 
 ### Pure Browser Gateway
 
@@ -209,7 +217,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.6.1.md](docs/UAT-1.6.1.md)** for the current release gate and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
+See **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the current release gate and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
 
 ## Runtime layout
 

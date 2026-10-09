@@ -297,7 +297,8 @@ for item in \
   "etc/makia-vps-manager/dns.json" \
   "etc/unbound/unbound.conf.d/makia.conf" \
   "opt/makia-mtproxy" \
-  "etc/nginx/sites-available/makia-vps-manager"; do
+  "etc/nginx/sites-available/makia-vps-manager" \
+  "etc/nginx/sites-available/makia-ip-fallback"; do
   [[ -e "/$item" ]] && SNAPSHOT+=("$item")
 done
 tar -C / -czf "$RELEASE_BACKUP" "${SNAPSHOT[@]}"
@@ -485,6 +486,7 @@ ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/ma
 install_verified_shell "$SRC/scripts/update.sh" /usr/local/sbin/makia-update
 install_verified_shell "$SRC/scripts/backup.sh" /usr/local/sbin/makia-backup
 install_verified_shell "$SRC/scripts/uninstall.sh" /usr/local/sbin/makia-uninstall
+install_verified_shell "$SRC/scripts/enable-ip-panel.sh" /usr/local/sbin/makia-enable-ip-panel
 install_verified_shell "$SRC/scripts/doctor.sh" /usr/local/sbin/makia-doctor
 install_verified_shell "$SRC/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 install -m 0755 "$SRC/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
