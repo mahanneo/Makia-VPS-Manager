@@ -4,6 +4,8 @@ permissions:
   contents: write
 
 on:
+  release:
+    types: [published]
   pull_request:
     paths:
       - "client/browser-extension/**"
@@ -44,7 +46,7 @@ jobs:
           from pathlib import Path
           m=json.loads(Path("client/browser-extension/manifest.json").read_text())
           assert m["manifest_version"]==3
-          assert m["version"]=="1.6.4.2"
+          assert m["version"]=="1.6.4.3"
           assert "nativeMessaging" not in m["permissions"]
           assert "proxy" in m["permissions"]
           assert "webRequest" in m["permissions"]
@@ -62,31 +64,40 @@ jobs:
         shell: bash
         run: |
           rm -rf dist-browser
-          mkdir -p dist-browser/Makia-Browser-VPN-1.6.4.2
-          cp client/browser-extension/background.js client/browser-extension/popup.js client/browser-extension/popup.html client/browser-extension/popup.css client/browser-extension/manifest.json dist-browser/Makia-Browser-VPN-1.6.4.2/
+          mkdir -p dist-browser/Makia-Browser-VPN-1.6.4.3
+          cp client/browser-extension/background.js client/browser-extension/popup.js client/browser-extension/popup.html client/browser-extension/popup.css client/browser-extension/manifest.json dist-browser/Makia-Browser-VPN-1.6.4.3/
           (
-            cd dist-browser/Makia-Browser-VPN-1.6.4.2
-            zip -qr ../Makia-Browser-VPN-1.6.4.2.zip .
+            cd dist-browser/Makia-Browser-VPN-1.6.4.3
+            zip -qr ../Makia-Browser-VPN-1.6.4.3.zip .
           )
-          sha256sum dist-browser/Makia-Browser-VPN-1.6.4.2.zip | tee dist-browser/SHA256-Browser-VPN-1.6.4.2.txt
-          printf 'browser_version=1.6.4.2\nserver_version=1.6.4\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO-Browser.txt
+          sha256sum dist-browser/Makia-Browser-VPN-1.6.4.3.zip | tee dist-browser/SHA256-Browser-VPN-1.6.4.3.txt
+          printf 'browser_version=1.6.4.3\nserver_version=1.6.4\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO-Browser.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Browser-VPN-1.6.4.2
+          name: Makia-Browser-VPN-1.6.4.3
           path: |
-            dist-browser/Makia-Browser-VPN-1.6.4.2.zip
-            dist-browser/SHA256-Browser-VPN-1.6.4.2.txt
+            dist-browser/Makia-Browser-VPN-1.6.4.3.zip
+            dist-browser/SHA256-Browser-VPN-1.6.4.3.txt
             dist-browser/BUILD-INFO-Browser.txt
           if-no-files-found: error
 
-      - name: Publish public GitHub release asset
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # Only a deliberately published GitHub Release may ship the extension.
+      # Pushing to main must not silently overwrite an existing stable asset.
+      - name: Publish browser package for approved GitHub Release
+        if: github.event_name == 'release'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          if ! gh release view v1.6.4 >/dev/null 2>&1; then
-            gh release create v1.6.4               --target "$GITHUB_SHA"               --title "Makia 1.6.4 — WStunnel 443 Stable Hotfix"               --notes "Makia 1.6.4 adds managed WStunnel 443 with Windows and Android Full Device Direct Connect while keeping the Pure Browser Gateway architecture separate." || true
+          set -euo pipefail
+          server_version="$(cat VERSION)"
+          if [ "$RELEASE_TAG" != "v$server_version" ]; then
+            echo "::error::Release tag $RELEASE_TAG does not match server VERSION $server_version"
+            exit 1
           fi
-          gh release upload v1.6.4             dist-browser/Makia-Browser-VPN-1.6.4.2.zip             dist-browser/SHA256-Browser-VPN-1.6.4.2.txt             dist-browser/BUILD-INFO-Browser.txt --clobber
+          gh release upload "$RELEASE_TAG" \
+            dist-browser/Makia-Browser-VPN-1.6.4.3.zip \
+            dist-browser/SHA256-Browser-VPN-1.6.4.3.txt \
+            dist-browser/BUILD-INFO-Browser.txt --clobber
