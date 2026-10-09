@@ -494,6 +494,7 @@ install_verified_shell "$SRC/scripts/xray-cert-sync.sh" /etc/letsencrypt/renewal
 install_verified_shell "$SRC/scripts/makia-vpn-tls-sync.sh" /etc/letsencrypt/renewal-hooks/deploy/makia-vpn-tls-sync
 install -m 0755 "$SRC/scripts/reset-admin.sh" /usr/local/sbin/makia-reset-admin
 install -m 0755 "$SRC/scripts/configure-owner.py" /usr/local/sbin/makia-owner-config
+install -m 0755 "$SRC/scripts/endpoint-wizard.py" /usr/local/sbin/makia-endpoint-wizard
 install_verified_shell "$SRC/scripts/ikev2-network.sh" /usr/local/sbin/makia-ikev2-network
 install_verified_shell "$SRC/scripts/install-wstunnel.sh" /usr/local/sbin/makia-install-wstunnel
 install_verified_shell "$SRC/scripts/install-outline.sh" /usr/local/sbin/makia-install-outline
