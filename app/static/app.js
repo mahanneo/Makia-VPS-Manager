@@ -723,7 +723,7 @@ function provisionErrorHelp(raw){
     [/runtime|not installed|not active|listener/i,'سرویس پروتکل هنوز آماده نیست. اول در صفحه پروتکل Diagnostics و Listener را بررسی کن، سپس کاربر بساز.']
   ];
   const matched=instructions.find(([pattern])=>pattern.test(msg));
-  return matched?matched[1]+'\\n\\nجزئیات فنی: '+msg:msg;
+  return matched?matched[1]+'\n\nجزئیات فنی: '+msg:msg;
 }
 
 async function createProvisionedAccess(){
