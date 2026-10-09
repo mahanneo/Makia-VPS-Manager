@@ -61,20 +61,32 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   c=await s.send("connect",s.proxy);
   assert.equal(c.ok,false);
   assert.equal(s.local.connected,false);
-  assert.equal(s.applied,false);
+  assert.equal(s.applied,true,"Failed verification must not silently enable direct browsing");
   assert.match(s.local.connectionError,/IP has not changed/);
+  assert.equal((await s.send("status")).result.proxyActive,true);
+  assert.equal((await s.send("connect",s.proxy)).ok,false,"Held proxy requires explicit disconnect");
+  assert.equal(s.applied,true);
+  assert.equal((await s.send("disconnect")).ok,true);
+  assert.equal(s.applied,false);
 
   s=await scenario({effective:false});
   c=await s.send("connect",s.proxy);
   assert.equal(c.ok,false);
   assert.equal(s.local.connected,false);
+  assert.equal(s.applied,false,"Proxy not owned by Makia must not be treated as held");
   assert.match(s.local.connectionError,/did not apply/);
 
   s=await scenario({probeFails:true});
   c=await s.send("connect",s.proxy);
   assert.equal(c.ok,false);
   assert.equal(s.local.connected,false);
+  assert.equal(s.applied,true,"Offline gateway stays installed until explicit disconnect");
+  assert.equal((await s.send("status")).result.proxyActive,true);
   assert.match(s.local.connectionError,/IP verification unavailable/);
+  assert.equal((await s.send("verify")).ok,false);
+  assert.equal(s.applied,true,"Repeated verification failure must not clear installed proxy");
+  await s.send("disconnect");
+  assert.equal(s.applied,false);
   // A single failed subrequest does not mean the entire proxy is offline.
   s=await scenario();
   c=await s.send("connect",s.proxy);
@@ -90,5 +102,10 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   assert.equal(s.local.connected,false);
   assert.equal(s.applied,true);
   assert.match(s.local.connectionError,/egress check failed/);
-  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 6 scenarios PASS");
+  assert.equal((await s.send("status")).result.proxyActive,true);
+  s.setBlocked(false);
+  assert.equal((await s.send("verify")).ok,true,"A repaired gateway is re-verifiable without direct fallback");
+  assert.equal(s.local.connected,true);
+  assert.equal(s.applied,true);
+  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 10 assertions groups PASS");
 })().catch(e=>{console.error(e);process.exitCode=1;});
