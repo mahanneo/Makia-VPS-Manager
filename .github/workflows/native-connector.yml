@@ -142,35 +142,6 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  publish-windows-uat:
-    name: Attach Windows UAT package to current release
-    needs: windows-connector
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: Makia-Client-Connector-Windows-x64-1.6.4
-          path: windows-package
-      - name: Bundle and publish the clearly labeled Windows UAT package
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          version="$(tr -d '[:space:]' < VERSION)"
-          test "$version" = "1.6.4"
-          zip_name="Makia-Client-Connector-Windows-x64-${version}-UAT.zip"
-          (cd windows-package && zip -qr "../$zip_name" .)
-          sha256sum "$zip_name" > "SHA256-Windows-${version}.txt"
-          for attempt in {1..12}; do
-            if gh release view "v$version" >/dev/null 2>&1; then
-              break
-            fi
-            sleep 5
-          done
-          gh release view "v$version" >/dev/null
-          gh release upload "v$version" "$zip_name" "SHA256-Windows-${version}.txt" --clobber
+
+  # Uploads to the workflow artifact store only. Publishing a Windows UAT
+  # package requires a separately approved, version-matched release process.
