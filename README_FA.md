@@ -9,12 +9,18 @@
 </p>
 
 <p align="center">
-  <strong>نسخه ۱.۶.۱</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+  <strong>نسخه پایدار فعلی ۱.۶.۴</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
 **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۶.۱](docs/UAT-1.6.1.md)**
 
 ---
+
+## 🚦 نصب با IP یا دامنه؛ بدون حدس و تنظیمات اشتباه
+
+**[راهنمای گام‌به‌گام IP/دامنه، توضیح پورت‌ها و کلاینت‌های Android/iPhone/Windows/Chrome](docs/IP-DOMAIN-SETUP-FA.md)**
+
+قبل از ساخت کانفیگ می‌توانید با `python3 scripts/endpoint-wizard.py` انتخاب‌ها را به فارسی بررسی کنید. SSH، WireGuard و OpenVPN عادی با IP یا دامنه قابل تنظیم‌اند، اما **Browser VPN، WSS، Stealth TLS و IKEv2 گواهی‌محورِ فعلی بدون دامنه و گواهی معتبر راه‌اندازی نمی‌شوند**. PPTP عمداً پشتیبانی نمی‌شود. این بررسی Read-only است و ادعای تست اتصال واقعی نیست.
 
 ## Makia چیست؟
 

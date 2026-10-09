@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
@@ -4030,6 +4030,27 @@ class GeneralSettings(BaseModel):
     panel_domain:str=""
     theme:str="glass"
     density:str="comfortable"
+
+@app.get("/api/settings/endpoint/preflight")
+def endpoint_preflight_get(request:Request,protocol:str,endpoint:str,port:int|None=None,server_ip:str=""):
+    """Read-only operator hint; never generates credentials or mutates a listener."""
+    require_user(request)
+    try:
+        selection=endpoint_preflight.evaluate(
+            protocol,endpoint,port,server_ipv4=server_ip,
+        )
+    except (ValueError,OverflowError) as exc:
+        raise HTTPException(status_code=400,detail=str(exc))
+    return {
+        "ok":selection.ok,"protocol":selection.protocol,
+        "endpoint":selection.endpoint,"mode":selection.mode,
+        "port":selection.port,"transport":selection.transport,
+        "errors":selection.errors,"warnings":selection.warnings,
+        "next_steps":selection.next_steps,
+        "read_only":True,
+        "live_runtime_validated":False,
+    }
+
 
 @app.get("/api/settings/general")
 def general_settings_get(request:Request):
