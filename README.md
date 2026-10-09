@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Stable server release 1.6.4</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Stable server release 1.6.5</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.4 release status](docs/RELEASE-STATUS.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.5 release status](docs/RELEASE-STATUS.md)**
 
 ---
 
