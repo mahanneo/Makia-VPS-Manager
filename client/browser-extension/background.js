@@ -219,7 +219,7 @@ async function retainProxyOnLifecycle(){
     await chrome.storage.local.set({
       connected:false,exitIp:"",verifiedAt:0,
       connectionError:held?
-        "Browser restarted or extension updated: proxy retained but not verified. Recheck or Disconnect explicitly.":
+        "Browser restarted or extension updated: proxy is held but not verified. Session-only proxy credentials may be unavailable. Disconnect explicitly, then reconnect to restore access.":
         "Browser proxy control was not restored; another extension or policy may control browsing."
     });
   }catch(e){
