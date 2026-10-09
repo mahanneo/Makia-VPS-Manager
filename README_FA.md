@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>نسخه ۱.۶.۱</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
+  <strong>نسخه پایدار فعلی ۱.۶.۴</strong> · SSH/NPV · Xray/V2Ray · WireGuard · OpenVPN · Outline
 </p>
 
 **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[گزارش UAT نسخه ۱.۶.۱](docs/UAT-1.6.1.md)**
