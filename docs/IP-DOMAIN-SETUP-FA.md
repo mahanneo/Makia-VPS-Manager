@@ -30,6 +30,8 @@
 ۴. برای انتخاب بدون تغییر سیستم، داخل سورس Makia اجرا کنید:
 
 ```bash
+sudo makia-endpoint-wizard
+# یا (از داخل سورس Makia)
 python3 scripts/endpoint-wizard.py
 # یا
 python3 -m app.endpoint_preflight --protocol wireguard --endpoint 203.0.113.10 --port 51820 --json
