@@ -1,24 +1,19 @@
 name: Android Signed Release
 
 on:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "client/android/**"
-      - "app/client_portal.py"
-      - "app/client_store.py"
-      - "app/protocol_ops.py"
-      - "app/access_ops.py"
-      - "systemd/makia-openvpn-wstunnel.service"
-      - ".github/workflows/android-release.yml"
-      - "VERSION"
+  # Production-signed Android builds run by an explicit release decision.
+  # Ordinary main pushes may change backend code without client UAT.
   workflow_dispatch:
     inputs:
       source_ref:
-        description: "Git ref to build (use the UAT-approved release commit/branch)"
+        description: "Git ref to build (use the UAT-approved release tag/commit)"
         required: true
         default: "main"
+      publish_release:
+        description: "Publish signed APK only if source_ref matches the existing version tag"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -156,6 +151,7 @@ jobs:
           retention-days: 90
 
       - name: Publish signed Android connector to stable GitHub release
+        if: ${{ inputs.publish_release == true }}
         shell: bash
         working-directory: makia
         env:
@@ -163,6 +159,13 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$(cat VERSION)"
+          # A signed Stable asset must come from the version's exact tag,
+          # not a new main commit that still carries an older VERSION file.
+          git fetch --force --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$tag")" || {
+            echo "::error::Stable APK publication requires checkout of exact tag $tag"
+            exit 1
+          }
           apk="../package-android-release/Makia-Android-Connector-1.6.4.apk"
           sums="../package-android-release/SHA256SUMS.txt"
           sig="../package-android-release/SIGNATURE.txt"
