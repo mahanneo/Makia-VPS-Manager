@@ -110,3 +110,14 @@ def test_cleanup_failure_is_reported_not_masked_as_success(monkeypatch, provisio
     assert "incomplete" in exc.value.detail
     assert "delete-os-user-error" in events
     assert "audit:account_create_failed" in events
+
+def test_unrecoverable_chpasswd_cleanup_reports_manual_reconciliation(monkeypatch, provision):
+    payload, events = provision
+    def initial_failure(*args):
+        raise system_ops.ProvisionRollbackError("new Linux account remains")
+    monkeypatch.setattr(main_app.system_ops, "create_ssh_user", initial_failure)
+    with pytest.raises(HTTPException) as exc:
+        main_app.create_account(payload, Request())
+    assert exc.value.status_code == 500
+    assert "new Linux account remains" in exc.value.detail
+    assert events == ["audit:account_create_failed"]
