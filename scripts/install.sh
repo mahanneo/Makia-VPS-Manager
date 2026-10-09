@@ -191,7 +191,9 @@ install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.service" /etc/systemd/sys
 install -m 0644 "$SOURCE_DIR/systemd/makia-ops-monitor.timer" /etc/systemd/system/makia-ops-monitor.timer
 install -m 0644 "$SOURCE_DIR/systemd/makia-mtproxy.service" /etc/systemd/system/makia-mtproxy.service
 install -m 0644 "$SOURCE_DIR/nginx/makia-vps-manager.conf" /etc/nginx/sites-available/makia-vps-manager
+install -m 0644 "$SOURCE_DIR/nginx/makia-ip-fallback.conf" /etc/nginx/sites-available/makia-ip-fallback
 ln -sfn /etc/nginx/sites-available/makia-vps-manager /etc/nginx/sites-enabled/makia-vps-manager
+ln -sfn /etc/nginx/sites-available/makia-ip-fallback /etc/nginx/sites-enabled/makia-ip-fallback
 rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manager /etc/nginx/sites-available/dragon-vps-manager
 
 install -m 0755 "$SOURCE_DIR/scripts/update.sh" /usr/local/sbin/makia-update
