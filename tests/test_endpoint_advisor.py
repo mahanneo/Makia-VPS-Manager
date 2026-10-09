@@ -77,3 +77,32 @@ def test_invalid_env_address_is_ignored(monkeypatch):
 
 def test_port_contract_never_claims_pptp():
     assert endpoint_advisor.connection_setup if callable(endpoint_advisor.connection_setup) else False
+
+
+def test_automode_direct_rejects_private_ipv4_before_mutation(monkeypatch):
+    from app import protocol_ops
+    with pytest.raises(protocol_ops.ProtocolError,match="public IPv4"):
+        protocol_ops.validate_endpoint_selection("192.168.0.3","auto",direct=True)
+
+
+def test_automode_direct_rejects_wrong_dns_with_nated_public_ip(monkeypatch):
+    import socket
+    from app import protocol_ops
+    monkeypatch.setenv("MAKIA_PUBLIC_IPV4","8.8.8.8")
+    monkeypatch.setattr(protocol_ops,"_local_ipv4_candidates",lambda:["10.0.0.5"])
+    def fake_lookup(host,port,family):
+        assert host=="vpn.example.org" and family==socket.AF_INET
+        return [(socket.AF_INET,socket.SOCK_STREAM,6,"",("1.1.1.1",0))]
+    monkeypatch.setattr(protocol_ops.socket,"getaddrinfo",fake_lookup)
+    with pytest.raises(protocol_ops.ProtocolError,match="A record does not match"):
+        protocol_ops.validate_endpoint_selection("vpn.example.org","auto",direct=True)
+
+
+def test_automode_direct_accepts_matching_nat_dns(monkeypatch):
+    import socket
+    from app import protocol_ops
+    monkeypatch.setenv("MAKIA_PUBLIC_IPV4","8.8.8.8")
+    monkeypatch.setattr(protocol_ops,"_local_ipv4_candidates",lambda:["10.0.0.5"])
+    monkeypatch.setattr(protocol_ops.socket,"getaddrinfo",
+                        lambda *args:[(socket.AF_INET,socket.SOCK_STREAM,6,"",("8.8.8.8",0))])
+    assert protocol_ops.validate_endpoint_selection("vpn.example.org","auto",direct=True)=="vpn.example.org"
