@@ -95,10 +95,17 @@ def evaluate(protocol: str, endpoint: str, port: int | None = None, *,
                 resolved_ipv4 = []
         if not resolved_ipv4:
             errors.append("Domain has no IPv4 A record. Create an A record pointing to your VPS.")
-        elif any(not ipaddress.IPv4Address(value).is_global for value in resolved_ipv4):
-            errors.append("Domain A record points to a private or non-public IPv4; choose the actual public VPS address.")
-        elif server_ipv4 and protocol not in {"xray-direct"} and server_ipv4 not in resolved_ipv4:
-            errors.append("Domain A record does not point at the selected server IP; raw VPN protocols must not use an HTTP-only CDN proxy.")
+        else:
+            try:
+                parsed_addresses = [ipaddress.IPv4Address(value) for value in resolved_ipv4]
+            except (ipaddress.AddressValueError, ValueError, TypeError):
+                errors.append("Domain lookup returned an invalid IPv4 A record; verify DNS before creating a profile.")
+            else:
+                if any(not address.is_global for address in parsed_addresses):
+                    errors.append("Domain A record points to a private or non-public IPv4; choose the actual public VPS address.")
+                elif server_ipv4 and protocol not in {"xray-direct"} and server_ipv4 not in [str(address) for address in parsed_addresses]:
+                    errors.append("Domain A record does not point at the selected server IP; raw VPN protocols must not use an HTTP-only CDN proxy.")
+        # End of DNS A record validation.
         if protocol in TLS_NAME_REQUIRED:
             if tls_names is None:
                 warnings.append("TLS certificate coverage cannot be confirmed offline; verify on the VPS before activating.")

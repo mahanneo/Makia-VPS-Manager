@@ -84,3 +84,9 @@ def test_user_guidance_distinguishes_ip_from_tls_modes():
 def test_port_not_an_integer_produces_clean_validation_error():
     with pytest.raises(ValueError,match="Port must be"):
         evaluate("ssh","212.100.171.183","twenty-two")
+
+@pytest.mark.parametrize("bad_dns", [["not-an-ip"], ["2001:db8::1"], [None], ["212.100.171.183", "bad-address"]])
+def test_invalid_resolved_a_records_fail_closed_without_uncaught_exception(bad_dns):
+    result = evaluate("wireguard", "vpn.example.org", resolved_ipv4=bad_dns)
+    assert not result.ok
+    assert any("invalid IPv4" in error for error in result.errors)
