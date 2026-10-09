@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
-from .db import init_db, connect, audit, upsert_profile, all_profiles, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
+from .db import init_db, connect, audit, upsert_profile, all_profiles, get_profile, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
 from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight
 
@@ -771,8 +771,14 @@ def create_account(payload:AccountCreate,request:Request):
         endpoint=protocol_ops.validate_endpoint_selection(payload.endpoint or public_host(request),payload.endpoint_mode,direct=True,check_aaaa=True)
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
+    # Do not overwrite orphaned DB state from a previous/parallel attempt.
+    # A pre-existing Linux account is separately rejected by useradd.
+    if get_profile(payload.username) or get_access_artifact_by_key("ssh",payload.username):
+        raise HTTPException(409,"An SSH profile or access artifact already exists for this username.")
+    created=False
     try:
         system_ops.create_ssh_user(payload.username,password,payload.expire_date)
+        created=True
         upsert_profile(payload.username,payload.plan,payload.note,payload.expire_date,payload.connection_limit,payload.quota_mb,1,payload.device_limit,payload.renewal_days)
         delivery=access_ops.ssh_payload(endpoint,payload.username,password,22,ssh_npv_options(payload.username))
         artifact_id=artifact_save("ssh",payload.username,payload.username,"ssh",delivery,{
@@ -780,8 +786,38 @@ def create_account(payload:AccountCreate,request:Request):
             "connection_limit":payload.connection_limit,"device_limit":payload.device_limit,
             "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode
         })
-    except system_ops.OperationError as e: raise HTTPException(400,str(e))
-    audit(actor,"account_create",payload.username,f"plan={payload.plan}; limit={payload.connection_limit}; quota_mb={payload.quota_mb}; password_mode={payload.password_mode}",ip(request))
+        audit(actor,"account_create",payload.username,f"plan={payload.plan}; limit={payload.connection_limit}; quota_mb={payload.quota_mb}; password_mode={payload.password_mode}",ip(request))
+    except Exception as exc:
+        if not created:
+            if isinstance(exc,system_ops.ProvisionRollbackError):
+                try:
+                    audit(actor,"account_create_failed",payload.username,"system_user_rollback=incomplete",ip(request))
+                except Exception:
+                    pass
+                raise HTTPException(500,str(exc)) from exc
+            if isinstance(exc,system_ops.OperationError):
+                raise HTTPException(400,str(exc)) from exc
+            raise
+        rollback_errors=[]
+        # Revoke access before removing the identity. Do not leave an
+        # enabled orphan user if any of the database operations fail.
+        for cleanup in (
+            lambda: delete_access_artifact_by_key("ssh",payload.username),
+            lambda: delete_profile(payload.username),
+            lambda: system_ops.delete_user(payload.username),
+        ):
+            try:
+                cleanup()
+            except Exception as rollback_exc:
+                rollback_errors.append(type(rollback_exc).__name__)
+        try:
+            audit(actor,"account_create_failed",payload.username,
+                  "rollback="+("incomplete:"+",".join(rollback_errors) if rollback_errors else "complete"),ip(request))
+        except Exception:
+            pass
+        if rollback_errors:
+            raise HTTPException(500,"Account setup failed and rollback was incomplete. Check the host and account records before retrying.") from exc
+        raise HTTPException(500,"Account setup failed; new SSH user and access records were rolled back.") from exc
     return {"ok":True,"username":payload.username,"password":password if generated else None,"generated":generated,"artifact_id":artifact_id}
 
 class AccountUpdate(BaseModel):

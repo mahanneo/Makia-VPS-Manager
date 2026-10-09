@@ -122,6 +122,8 @@ def test_ssh_package_does_not_embed_password_in_openssh_config():
 def test_ssh_account_uses_selected_ip_in_npv_and_native_exports(monkeypatch):
     saved=[]
     monkeypatch.setattr(main_app,"require_mutation",lambda request:"admin")
+    monkeypatch.setattr(main_app,"get_profile",lambda username:None)
+    monkeypatch.setattr(main_app,"get_access_artifact_by_key",lambda kind,key:None)
     monkeypatch.setattr(main_app.system_ops,"create_ssh_user",lambda *args:None)
     monkeypatch.setattr(main_app,"upsert_profile",lambda *args:None)
     monkeypatch.setattr(main_app,"ssh_npv_options",lambda username:{"enabled":True})
