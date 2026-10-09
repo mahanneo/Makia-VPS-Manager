@@ -38,10 +38,13 @@ def connection_setup():
         from app import panel_ops
         status=panel_ops.domain_status(domain)
         dns4=list(status.get("resolved_ipv4") or [])
-        tls_certificate=bool(status.get("certificate") and status.get("https_listener"))
         certificate_expires_in=status.get("certificate_days_left")
+        tls_certificate=bool(
+            status.get("certificate") and status.get("https_listener") and
+            (certificate_expires_in is None or certificate_expires_in>0)
+        )
         if dns4 and candidates:
-            dns_status=bool(set(dns4).intersection(candidates))
+            dns_status=set(dns4).issubset(set(candidates))
     recommended_mode="domain" if domain and tls_certificate and dns_status is not False else "ip"
     preferred=(candidates[0] if candidates else "") if recommended_mode=="ip" else domain
     if not preferred and domain:
