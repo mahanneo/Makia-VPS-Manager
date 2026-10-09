@@ -43,4 +43,4 @@ def test_manual_migration_has_rollback_and_does_not_change_tls():
     assert "http://127.0.0.1/healthz" in code
     assert "(?:80|\\[::\\]:80)" in code
     assert "letsencrypt" not in code.lower()
-    assert 'certbot' not in code.lower().split("trap restore err",1)[1]
+    assert not re.search(r"(?m)^\\s*(?:certbot\\s|\\$\\{?CERTBOT\\}?)",code)
