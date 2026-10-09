@@ -297,8 +297,33 @@ systemctl reload nginx
 echo "Running full-stack installation smoke gate..."
 /usr/local/sbin/makia-uat-smoke
 
-SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
-PANEL_URL="http://${SERVER_IP:-SERVER_IP}/"
+# Never announce a private interface/NAT address as a public panel URL.
+# Operators behind NAT should set MAKIA_PUBLIC_IPV4 to the provider's address.
+SERVER_IP="$(python3 - <<'PY'
+import ipaddress, os, subprocess
+choices=[]
+override=str(os.environ.get("MAKIA_PUBLIC_IPV4","")).strip()
+if override: choices.append(override)
+try:
+    choices.extend(subprocess.check_output(["hostname","-I"],text=True,timeout=5).split())
+except Exception:
+    pass
+for value in choices:
+    try:
+        ip=ipaddress.ip_address(value)
+    except ValueError:
+        continue
+    if ip.version==4 and ip.is_global:
+        print(ip.compressed)
+        break
+PY
+)"
+if [[ -n "$SERVER_IP" ]]; then
+  PANEL_URL="http://${SERVER_IP}/"
+else
+  PANEL_URL="http://<YOUR_PUBLIC_IPV4>/"
+  echo "WARNING: no public IPv4 detected. On NAT/cloud hosts set MAKIA_PUBLIC_IPV4 to your provider-assigned public IPv4."
+fi
 if [[ "$NEW_ADMIN_BOOTSTRAP" == "1" ]]; then
   cat >"$CREDENTIAL_FILE" <<EOF
 Makia VPS Manager
@@ -329,6 +354,6 @@ else
   printf '\nExisting administrator detected; its password was not changed.\n'
   printf 'If needed, reset it explicitly with: sudo makia-reset-admin\n'
 fi
-printf 'For public exposure, configure Domain + HTTPS and review Security Center.\n'
+printf 'IP access is HTTP bootstrap only; for secure public administration configure Domain + HTTPS.\n'
 printf 'Protocol stack: Xray + WireGuard + OpenVPN are preinstalled and bootstrapped.\n'
 printf 'Run: makia-doctor   for host diagnostics.\n\n'
