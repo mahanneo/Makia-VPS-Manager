@@ -9,11 +9,11 @@ def test_short_pin_rejected():
         validate_user_password("123")
 
 @pytest.mark.parametrize("malicious", [
-    "goodpin\\notheruser:hijack",
-    "1234\\rotheruser:hijack",
-    "1234\\x00",
-    "1234\\tother",
-    "1234\\x7f"
+    "goodpin\notheruser:hijack",
+    "1234\rotheruser:hijack",
+    "1234\x00",
+    "1234\tother",
+    "1234\x7f"
 ])
 def test_manual_ssh_password_rejects_control_characters(malicious):
     with pytest.raises(OperationError, match="control characters"):
