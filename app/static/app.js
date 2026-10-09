@@ -711,6 +711,21 @@ async function wizardNext(){
 }
 function wizardPrev(){captureWizard();provisionState.step=Math.max(1,provisionState.step-1);renderProvisionWizard()}
 
+function provisionErrorHelp(raw){
+  const msg=String(raw||'خطای ناشناخته در ساخت پروفایل');
+  const instructions=[
+    [/A record does not match|DNS.only|CDN proxy/i,'رکورد A این دامنه به IP عمومی همین VPS اشاره نمی‌کند. DNS را روی DNS Only تنظیم کن یا حالت IP را انتخاب کن.'],
+    [/Domain has no reachable A|could not resolve|DNS resolution/i,'دامنه فعلاً رکورد A معتبر ندارد. آدرس را بررسی کن یا از IP عمومی VPS استفاده کن.'],
+    [/AAAA record|IPv6 routing/i,'دامنه رکورد AAAA دارد ولی IPv6 روی این سرور درست تنظیم نشده. AAAA را اصلاح کن یا از IPv4 استفاده کن.'],
+    [/IP mode requires|public IPv4/i,'برای حالت IP باید IPv4 عمومی سرور را وارد کنی؛ IP خصوصی 10.x یا 192.168.x معتبر نیست.'],
+    [/this port\/transport is already in use|already used by another|address already in use/i,'این پورت از قبل روی همین سرور استفاده می‌شود. Port آزاد متناسب با پروتکل انتخاب کن؛ TCP و UDP مستقل هستند.'],
+    [/certificate|TLS domain|SSL|SNI/i,'این حالت به دامنه/SNI و گواهی معتبر نیاز دارد. اول بخش Domain & TLS را آماده کن یا از حالت غیر TLS سازگار استفاده کن.'],
+    [/runtime|not installed|not active|listener/i,'سرویس پروتکل هنوز آماده نیست. اول در صفحه پروتکل Diagnostics و Listener را بررسی کن، سپس کاربر بساز.']
+  ];
+  const matched=instructions.find(([pattern])=>pattern.test(msg));
+  return matched?matched[1]+'\\n\\nجزئیات فنی: '+msg:msg;
+}
+
 async function createProvisionedAccess(){
   captureWizard();const s=provisionState;if(!s)return;
   if(!s.packagePassword||s.packagePassword.length<4){alert('Package PIN حداقل ۴ کاراکتر باشد.');return}
@@ -741,7 +756,7 @@ async function createProvisionedAccess(){
       r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
     }
     showProvisionSuccess(kind,key,s.name,s.packagePassword,(s.protocol==='ssh'||s.protocol==='openvpn_wstunnel')?s.password:null,r);
-  }catch(e){alert(e.message);if(createBtn){createBtn.disabled=false;createBtn.textContent='ساخت و آماده‌سازی'}}
+  }catch(e){alert(provisionErrorHelp(e.message));if(createBtn){createBtn.disabled=false;createBtn.textContent='ساخت و آماده‌سازی'}}
 }
 
 function showProvisionSuccess(kind,key,name,packagePassword,loginSecret,result){
