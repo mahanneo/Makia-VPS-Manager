@@ -4,6 +4,7 @@ set -Eeuo pipefail
 [[ "$EUID" -eq 0 ]] || { echo "Run as root: sudo makia-enable-ip-panel" >&2; exit 1; }
 command -v nginx >/dev/null || { echo "nginx is not installed" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
+nginx -t
 DOMAIN=/etc/nginx/sites-available/makia-vps-manager
 FALLBACK=/etc/nginx/sites-available/makia-ip-fallback
 LINK=/etc/nginx/sites-enabled/makia-ip-fallback
@@ -24,9 +25,11 @@ if [[ -e "$FALLBACK" ]]; then cp -a "$FALLBACK" "$backup/makia-ip-fallback"; had
 if [[ -L "$LINK" ]]; then cp -aP "$LINK" "$backup/makia-ip-fallback.link"; had_link=1; fi
 restore(){
     local rc=$?
+    trap - ERR
     cp -a "$backup/makia-vps-manager" "$DOMAIN"
     if [[ "$had_fallback" -eq 1 ]]; then cp -a "$backup/makia-ip-fallback" "$FALLBACK"; else rm -f "$FALLBACK"; fi
-    if [[ "$had_link" -eq 1 ]]; then cp -aP "$backup/makia-ip-fallback.link" "$LINK"; else rm -f "$LINK"; fi
+    rm -f "$LINK"
+    if [[ "$had_link" -eq 1 ]]; then cp -aP "$backup/makia-ip-fallback.link" "$LINK"; fi
     nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
     echo "IP fallback validation failed; original Nginx site restored. Backup: $backup" >&2
     exit "$rc"
