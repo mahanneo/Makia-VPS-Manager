@@ -6,6 +6,8 @@ service for proof that a VPN works over the public Internet.
 import ipaddress
 import os
 
+from pathlib import Path
+
 from app import protocol_ops
 from app.db import get_setting
 
@@ -75,7 +77,12 @@ def connection_setup():
                 "unsupported":True,
                 "note":"PPTP/MS-CHAPv2 is deprecated and unsafe; use IKEv2, WireGuard or OpenVPN."}
     }
+    # On upgraded hosts Certbot may still own the legacy default_server.
+    # This is an Nginx configuration hint, not a remote reachability test.
+    fallback_enabled=Path("/etc/nginx/sites-enabled/makia-ip-fallback").exists()
     warnings=[]
+    if domain and candidates and not fallback_enabled:
+        warnings.append("دسترسی IP کنار دامنه هنوز جدا نشده است؛ ابتدا Nginx را بررسی و در صورت نیاز makia-enable-ip-panel را اجرا کنید.")
     if not candidates:
         warnings.append("هیچ IPv4 عمومی روی کارت شبکه پیدا نشد؛ در سرورهای NAT مقدار MAKIA_PUBLIC_IPV4 را تنظیم کنید.")
     if domain and not dns4:
@@ -97,6 +104,7 @@ def connection_setup():
         "domain_tls_ready":tls_certificate,
         "protocols":protocols,
         "warnings":warnings,
+        "ip_http_fallback_configured":fallback_enabled,
         "ip_panel_url":("http://"+candidates[0]+"/") if candidates else "",
         "domain_panel_url":("https://"+domain+"/") if domain and tls_certificate else "",
         "security_note":"IP-based HTTP panel login is unencrypted. Use HTTPS with a trusted hostname for administration; an IP-only TLS certificate must explicitly include that IP.",
