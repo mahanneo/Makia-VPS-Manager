@@ -13,7 +13,8 @@
 برای NAT ابتدا IP عمومی ارائه‌شده توسط سرویس‌دهنده را پیدا کنید. IPهای `10.x.x.x` و `192.168.x.x` آدرس عمومی قابل اتصال نیستند. هنگام نصب جدید می‌توانید `MAKIA_PUBLIC_IPV4` را وارد کنید:
 
 ```bash
-sudo MAKIA_PUBLIC_IPV4=YOUR_PUBLIC_IPV4 bash install.sh
+curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/install.sh -o ./makia-install.sh
+sudo env MAKIA_PUBLIC_IPV4=YOUR_PUBLIC_IPV4 bash ./makia-install.sh
 ```
 
 اگر نصب قبلاً انجام شده، در فایل **root-only** زیر مقدار را اضافه کنید:
