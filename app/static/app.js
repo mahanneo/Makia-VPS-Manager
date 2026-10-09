@@ -366,14 +366,19 @@ async function openAccessDetail(id){
 
 async function openProvisionWizard(protocol){
   if(!window.__protocolData) window.__protocolData=await api('/api/protocols');
-  const [defs,operator]=await Promise.all([
+  const [defs,operator,setup]=await Promise.all([
     api('/api/accounts/new-defaults').catch(()=>({username:'user001'})),
-    api('/api/settings/operator').catch(()=>({defaults:{},delivery:{}}))
+    api('/api/settings/operator').catch(()=>({defaults:{},delivery:{}})),
+    api('/api/protocols/connection-setup').catch(()=>({choices:{},warnings:[]}))
   ]);
   window.__operatorSettings=operator;
+  window.__endpointSetup=setup;
   const d=operator.defaults||{};
-  const initialEndpoint=window.PANEL_DOMAIN||location.hostname;
-  const initialMode=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(initialEndpoint)?'ip':'domain';
+  const shownHost=location.hostname;
+  const shownIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(shownHost);
+  const initialMode=shownIp?'ip':(setup.recommended_mode||'domain');
+  const initialEndpoint=(shownIp?shownHost:setup.recommended_endpoint)||
+    (setup.choices?.[initialMode]?.value)||window.PANEL_DOMAIN||shownHost;
   const ovpn=window.__protocolData?.openvpn||{};
   const usedXrayPorts=new Set((window.__protocolData?.xray?.inbounds||[]).map(x=>Number(x.port)));
   let xrayPort=Number(d.xray_port||2087);
@@ -381,7 +386,10 @@ async function openProvisionWizard(protocol){
   provisionState={
     step:protocol?2:1,protocol:protocol||'',name:defs.username||'user001',
     endpoint:initialEndpoint,endpointMode:initialMode,
-    endpointValues:{ip:initialMode==='ip'?initialEndpoint:'',domain:initialMode==='domain'?initialEndpoint:''},
+    endpointValues:{
+      ip:(setup.choices?.ip?.value)||(initialMode==='ip'?initialEndpoint:''),
+      domain:(setup.choices?.domain?.value)||(initialMode==='domain'?initialEndpoint:'')
+    },
     password:'',passwordMode:d.ssh_password_mode||'pin6',
     expireDate:'',plan:'',note:'',sessions:Number(d.ssh_sessions||1),devices:Number(d.ssh_devices||1),
     xrayProtocol:d.xray_protocol||'vless',port:xrayPort,transport:'tcp',security:'reality',simpleMode:true,manualXray:false,path:d.xray_path||'/makia',
@@ -555,8 +563,18 @@ function xrayPrerequisiteMessage(s){
 
 function wizardEndpointFields(s){
   const mode=s.endpointMode==='ip'?'ip':'domain';
-  return '<label>Endpoint type<select id="wizEndpointMode"><option value="domain" '+(mode==='domain'?'selected':'')+'>دامنه</option><option value="ip" '+(mode==='ip'?'selected':'')+'>IPv4 عمومی</option></select></label>'+
-    '<label>'+(mode==='ip'?'Public IPv4':'Domain / hostname')+'<input id="wizEndpoint" dir="ltr" autocomplete="off" placeholder="'+(mode==='ip'?'IPv4 عمومی VPS':'vpn.example.com')+'" value="'+htmlEsc(s.endpoint)+'"><small>'+(mode==='domain'?(s.protocol==='xray'?'TLS ممکن است به SNI و گواهی معتبر نیاز داشته باشد.':s.protocol==='ssh'?'رکورد A باید مستقیم به VPS برسد؛ AAAA فقط با IPv6 سالم سرور.':'رکورد A باید مستقیم به VPS برسد؛ Proxy/CDN برای این پروتکل مناسب نیست.'):'IP عمومی سرور را وارد کن؛ خروجی کلاینت از همین IP استفاده می‌کند.')+'</small></label>';
+  const setup=window.__endpointSetup||{},choices=setup.choices||{};
+  const warning=(setup.warnings||[]).map(w=>'<div class="wizard-note"><span>'+htmlEsc(w)+'</span></div>').join('');
+  const hint=mode==='ip'?
+    'بدون دامنه هم SSH، WireGuard، OpenVPN و REALITY قابل استفاده‌اند. فقط IPv4 عمومی VPS را وارد کنید؛ نه 192.168.x.x یا 10.x.x.x.':
+    'رکورد A دامنه را مستقیم به IP این VPS بفرستید (DNS only). برای TLS/WSS گواهی معتبر و SNI مطابق دامنه لازم است.';
+  const advanced=(s.protocol==='xray'&&s.security==='tls')||s.protocol==='openvpn_wstunnel';
+  const tlsWarning=(advanced&&mode==='ip')?'<div class="wizard-note danger-note"><b>نیاز به دامنه</b><span>این حالت TLS/WSS با IP ساده قابل تضمین نیست. دامنه معتبر و گواهی درست انتخاب کنید.</span></div>':'';
+  return '<label>آدرس را چگونه به کاربر بدهیم؟<select id="wizEndpointMode"><option value="ip" '+(mode==='ip'?'selected':'')+'>IP عمومی سرور (بدون دامنه)</option><option value="domain" '+(mode==='domain'?'selected':'')+'>دامنه (DNS / TLS)</option></select><small>این انتخاب فقط آدرس داخل پروفایل کاربر را مشخص می‌کند؛ پورت سرویس جداست.</small></label>'+
+    '<label>'+(mode==='ip'?'IP عمومی VPS':'نام دامنه')+'<input id="wizEndpoint" dir="ltr" autocomplete="off" spellcheck="false" placeholder="'+(mode==='ip'?'مثلاً 203.0.113.10':'vpn.example.com')+'" value="'+htmlEsc(s.endpoint)+'"><small>'+htmlEsc(hint)+'</small></label>'+
+    (mode==='domain'&&choices.domain?.value?'<div class="wizard-note"><span>دامنه تنظیم‌شده پنل: <b>'+htmlEsc(choices.domain.value)+'</b> — وضعیت DNS و گواهی را قبل از صدور حساب بررسی کنید.</span></div>':'')+
+    (mode==='ip'&&!choices.ip?.value?'<div class="wizard-note"><span>IP عمومی خودکار شناسایی نشد. اگر VPS پشت NAT است از IP عمومی اعلام‌شده توسط سرویس‌دهنده استفاده کنید.</span></div>':'')+
+    tlsWarning+warning;
 }
 
 function wizardPolicyFields(s){
