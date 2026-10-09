@@ -789,6 +789,12 @@ def create_account(payload:AccountCreate,request:Request):
         audit(actor,"account_create",payload.username,f"plan={payload.plan}; limit={payload.connection_limit}; quota_mb={payload.quota_mb}; password_mode={payload.password_mode}",ip(request))
     except Exception as exc:
         if not created:
+            if isinstance(exc,system_ops.ProvisionRollbackError):
+                try:
+                    audit(actor,"account_create_failed",payload.username,"system_user_rollback=incomplete",ip(request))
+                except Exception:
+                    pass
+                raise HTTPException(500,str(exc)) from exc
             if isinstance(exc,system_ops.OperationError):
                 raise HTTPException(400,str(exc)) from exc
             raise
