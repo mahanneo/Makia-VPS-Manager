@@ -35,6 +35,10 @@ class Check:
     errors: list[str]
     warnings: list[str]
     next_steps: list[str]
+    needs_tls_certificate: bool = False
+    direct_ip_supported: bool = False
+    recommended_for_first_setup: bool = False
+    user_message_fa: str = ""
 
 def _host(raw: str):
     raw = str(raw or "").strip()
@@ -66,7 +70,10 @@ def evaluate(protocol: str, endpoint: str, port: int | None = None, *,
         raise ValueError("Unsupported protocol. PPTP is intentionally not supported because it is insecure.")
     host, mode = _host(endpoint)
     default, transport = PORTS[protocol]
-    port = default if port is None else int(port)
+    try:
+        port = default if port is None else int(port)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Port must be an integer between 1 and 65535.") from exc
     errors, warnings, steps = [], [], []
     if server_ipv4:
         try:
@@ -109,7 +116,20 @@ def evaluate(protocol: str, endpoint: str, port: int | None = None, *,
         steps.append("Verify server's actual UDP/TCP transport matches the .ovpn profile.")
     if protocol == "browser-gateway":
         steps.append("Requires HTTPS proxy port, proxy authentication, and a real external IP check in Chrome/Edge.")
-    return Check(not errors, protocol, host, mode, port, transport, errors, warnings, steps)
+    # A successful endpoint preflight is not a verified service/handshake.
+    needs_tls = protocol in TLS_NAME_REQUIRED
+    beginner = protocol in {"ssh", "wireguard", "openvpn"} and mode == "ip"
+    if errors:
+        fa = "آدرس یا پورت برای این پروتکل معتبر نیست؛ ابتدا خطاها را اصلاح کنید."
+    elif warnings:
+        fa = "بررسی اولیه موفق بود؛ هشدارها و اتصال واقعی را جدا بررسی کنید."
+    else:
+        fa = "مشخصات اولیه درست است؛ وضعیت سرویس، فایروال و اتصال واقعی هنوز باید بررسی شود."
+    return Check(not errors, protocol, host, mode, port, transport, errors, warnings, steps,
+                 needs_tls_certificate=needs_tls,
+                 direct_ip_supported=protocol in DIRECT,
+                 recommended_for_first_setup=beginner,
+                 user_message_fa=fa)
 
 def main():
     parser=argparse.ArgumentParser(description="Makia IP/domain endpoint preflight (read-only)")
