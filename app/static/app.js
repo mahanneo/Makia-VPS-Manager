@@ -2078,7 +2078,10 @@ async function checkEndpointPreview(){
     const data=await api('/api/settings/endpoint/preflight?'+params.toString());
     const lines=[
       data.ok?'✅ مناسب برای ادامه مراحل تنظیم':'⛔ این انتخاب قبل از ساخت کانفیگ نیاز به اصلاح دارد',
-      'Endpoint: '+data.endpoint+' | '+data.transport+'/'+data.port,
+      'آدرس: '+data.endpoint+' | پورت: '+data.port+' / '+data.transport,
+      'اتصال مستقیم با IP: '+(data.direct_ip_supported?'پشتیبانی می‌شود':'در این حالت نیاز به دامنه و گواهی است'),
+      'گواهی TLS: '+(data.needs_tls_certificate?'ضروری':'برای این پروتکل الزامی نیست'),
+      data.user_message_fa||'',
       ...(data.errors||[]).map(x=>'خطا: '+x),
       ...(data.warnings||[]).map(x=>'هشدار: '+x),
       ...(data.next_steps||[]).map(x=>'قدم بعد: '+x),

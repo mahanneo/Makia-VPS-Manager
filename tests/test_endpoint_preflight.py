@@ -67,3 +67,20 @@ def test_server_ipv4_input_is_validated():
     result=evaluate("ssh","212.100.171.183",server_ipv4="not-an-ip")
     assert not result.ok
     assert "public IPv4" in " ".join(result.errors)
+
+
+def test_user_guidance_distinguishes_ip_from_tls_modes():
+    direct=evaluate("wireguard","212.100.171.183",51820)
+    assert direct.ok and direct.direct_ip_supported
+    assert direct.recommended_for_first_setup
+    assert not direct.needs_tls_certificate
+    assert "اتصال واقعی" in direct.user_message_fa
+
+    tls=evaluate("browser-gateway","212.100.171.183",9444)
+    assert not tls.ok and tls.needs_tls_certificate
+    assert not tls.direct_ip_supported
+    assert "خطاها" in tls.user_message_fa
+
+def test_port_not_an_integer_produces_clean_validation_error():
+    with pytest.raises(ValueError,match="Port must be"):
+        evaluate("ssh","212.100.171.183","twenty-two")
