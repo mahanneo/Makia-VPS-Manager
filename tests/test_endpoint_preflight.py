@@ -57,3 +57,13 @@ def test_runtime_defined_protocol_port_must_be_explicit():
         result=evaluate(protocol,"212.100.171.183")
         assert not result.ok
         assert "Choose a port" in result.errors[0]
+
+def test_private_dns_records_do_not_create_connectable_profiles():
+    result=evaluate("wireguard","vpn.example.org",resolved_ipv4=["192.168.10.10"])
+    assert not result.ok
+    assert "non-public" in " ".join(result.errors)
+
+def test_server_ipv4_input_is_validated():
+    result=evaluate("ssh","212.100.171.183",server_ipv4="not-an-ip")
+    assert not result.ok
+    assert "public IPv4" in " ".join(result.errors)
