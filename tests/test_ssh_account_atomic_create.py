@@ -121,3 +121,20 @@ def test_unrecoverable_chpasswd_cleanup_reports_manual_reconciliation(monkeypatc
     assert exc.value.status_code == 500
     assert "new Linux account remains" in exc.value.detail
     assert events == ["audit:account_create_failed"]
+
+
+@pytest.mark.parametrize("userdel_fails", [False, True])
+def test_chpasswd_failure_removes_new_os_account_or_reports_orphan(monkeypatch, userdel_fails):
+    calls = []
+    def fake_run(argv, input_text=None, timeout=15):
+        calls.append(argv[0])
+        if argv[0] == "chpasswd":
+            raise system_ops.OperationError("password update failed")
+        if argv[0] == "userdel" and userdel_fails:
+            raise system_ops.OperationError("cleanup refused")
+        return ""
+    monkeypatch.setattr(system_ops, "_run", fake_run)
+    expected = system_ops.ProvisionRollbackError if userdel_fails else system_ops.OperationError
+    with pytest.raises(expected):
+        system_ops.create_ssh_user("freshuser", "secure1234")
+    assert calls == ["useradd", "chpasswd", "userdel"]
