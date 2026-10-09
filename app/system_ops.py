@@ -7,6 +7,10 @@ from .config import ALLOWED_SERVICES
 
 class OperationError(RuntimeError): pass
 
+class ProvisionRollbackError(OperationError):
+    """A newly created system account could not be removed after failed setup."""
+    pass
+
 TTY_RE=re.compile(r"^[A-Za-z0-9._/-]{1,64}$")
 
 # Optional protocol runtimes must be configured through their owning Makia
@@ -228,8 +232,14 @@ def create_ssh_user(username: str,password: str,expire: str|None=None):
     _run(args)
     try:
         _run(["chpasswd"],input_text=f"{username}:{password}\n")
-    except Exception:
-        subprocess.run(["userdel","-r",username],capture_output=True)
+    except Exception as exc:
+        try:
+            _run(["userdel","-r",username],timeout=15)
+        except Exception as rollback_exc:
+            raise ProvisionRollbackError(
+                "SSH password provisioning failed; newly created system user may remain. "
+                "Manual account reconciliation is required before retry."
+            ) from rollback_exc
         raise
     return {"username":username,"expire":expire}
 
