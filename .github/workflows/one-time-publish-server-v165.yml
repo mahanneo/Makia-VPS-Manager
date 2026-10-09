@@ -1,0 +1,58 @@
+name: One-time publish verified Makia server v1.6.5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-time-publish-server-v165.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verified-source-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish source archive for production-tested Makia server
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          TAG=v1.6.5
+          # This is the fully documented, production-tested runtime commit
+          # plus GitHub release/docs/workflow hygiene already on main.
+          SOURCE_SHA=470633ba0fadd54d41585573ace7086876c9c1dc
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists; refusing to overwrite."
+            exit 1
+          fi
+          curl -fsSL --retry 3 --connect-timeout 8 --max-time 90 \
+            "https://codeload.github.com/$GH_REPO/tar.gz/$SOURCE_SHA" \
+            -o Makia-VPS-Manager-1.6.5-source.tar.gz
+          mkdir -p unpack
+          tar -xzf Makia-VPS-Manager-1.6.5-source.tar.gz -C unpack --strip-components=1
+          test "$(cat unpack/VERSION)" = 1.6.5
+          grep -Fq 'VERSION = "1.6.5"' unpack/app/config.py
+          grep -Fq 'MAKIA_LIVE_SAFE' unpack/scripts/update.sh
+          bash -n unpack/scripts/update.sh
+          sha256sum Makia-VPS-Manager-1.6.5-source.tar.gz > SHA256SUMS-v1.6.5.txt
+          cat > NOTES.md <<'EOF'
+          Makia VPS Manager 1.6.5 — Live-safe server hotfix (9 October 2026)
+
+          - Secure SSH account creation: reject control characters in root chpasswd input and explicitly roll back failed provisioning.
+          - Stealth Configure/Repair keeps historical global stunnel4 listener(s) running rather than disconnecting legacy clients.
+          - MAKIA_LIVE_SAFE=1 guards healthy running VPN, WStunnel, Browser Gateway and Nginx processes during managed backend update/rollback.
+          - Tested clean installation, upgrades from 1.3.0 and 1.5.1, CI, and production VPS host smoke (PASS; 35 PASS / 1 WARN / 0 FAIL).
+          - Production: p.mahinet.shop returns version 1.6.5; Xray/OpenVPN/Stunnel/WStunnel/Gateway primary PIDs unchanged. MahiNet and Outline remained active.
+
+          KNOWN: stunnel4 legacy systemd unit still fails with duplicate port ownership; its old TCP/9443 listener is preserved pending separate client migration. Real Android/Windows/Chrome end-to-end connection, exit IP and revocation UAT is not yet verified. v1.6.5 is a server release; no new client APK/EXE/extension is promoted here. Existing v1.6.4 client packages remain separate.
+          EOF
+          gh release create "$TAG" \
+            Makia-VPS-Manager-1.6.5-source.tar.gz \
+            SHA256SUMS-v1.6.5.txt \
+            --target "$SOURCE_SHA" \
+            --title "Makia VPS Manager v1.6.5 — Live-safe Server Hotfix" \
+            --notes-file NOTES.md
+          gh release view "$TAG" --json tagName,url
