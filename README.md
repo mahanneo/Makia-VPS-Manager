@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Version 1.6.1</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Stable server release 1.6.4</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.1 UAT](docs/UAT-1.6.1.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.4 release status](docs/RELEASE-STATUS.md)**
 
 ---
 
@@ -52,7 +52,7 @@ Xray guided workflows include VLESS, VMess, Trojan, Shadowsocks and Hysteria2 wh
 
 WireGuard/OpenVPN do not claim per-client quota/expiry where the underlying engine does not enforce it. Makia prefers an explicit unavailable state over a fake control.
 
-## Makia Client 1.6.1
+## Makia Client — platform status
 
 ### Pure Browser Gateway
 
@@ -62,7 +62,7 @@ End users can open the same authenticated Client URL on Android, iPhone/iPad, Wi
 
 - **Windows:** one-click Full Device Direct Connect through the Makia Client Connector, including OpenVPN-over-WStunnel/TLS on HTTPS TCP/443 when that mode is configured.
 - **Chrome / Edge:** Makia Browser VPN connects directly to the authenticated TLS Browser Gateway on the VPS; no Windows EXE, Registry entry or Native Messaging host is required.
-- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; the CI artifact is explicitly UAT/debug-signed until a persistent private release-signing key is configured.
+- **Android:** Makia Android Connector uses Android VpnService for supported Direct Connect profiles; Android debug/UAT and release-signing workflows are separate; a production APK requires verified use of the existing owner-held signing key, matching fingerprint, and real-device UAT.
 - **iPhone / iPad:** install the PWA from Safari with Add to Home Screen and use the platform-aware Open/Import flow. Native in-app iOS tunnelling is not claimed until an Apple-signed Network Extension build completes real-device UAT.
 - Native launch tickets are one-time, device-bound and short-lived; VPN secrets are not embedded in the `makia://` URL.
 - The Client Portal remains disabled by default until the operator completes host UAT/canary.
@@ -213,7 +213,7 @@ The repository CI for v1 covers:
 
 Environment-dependent behavior still requires real-host verification: firewall/NAT, DNS propagation, external VPN clients, Docker/Shadowbox, SCP host trust and provider networking cannot be fully proven by GitHub Actions.
 
-See **[docs/UAT-1.6.1.md](docs/UAT-1.6.1.md)** for the current release gate and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
+See **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for current release boundaries and **[docs/UAT-1.6.1.md](docs/UAT-1.6.1.md)** for historical 1.6.1 acceptance and **[docs/WSTUNNEL-OPENVPN-443.md](docs/WSTUNNEL-OPENVPN-443.md)** for the WStunnel 443 architecture and **[docs/RELEASE-STATUS.md](docs/RELEASE-STATUS.md)** for the supported-client matrix.
 
 ## Runtime layout
 
