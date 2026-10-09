@@ -375,10 +375,13 @@ async function openProvisionWizard(protocol){
   window.__endpointSetup=setup;
   const d=operator.defaults||{};
   const shownHost=location.hostname;
-  const shownIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(shownHost);
-  const initialMode=shownIp?'ip':(setup.recommended_mode||'domain');
-  const initialEndpoint=(shownIp?shownHost:setup.recommended_endpoint)||
-    (setup.choices?.[initialMode]?.value)||window.PANEL_DOMAIN||shownHost;
+  const candidateIps=Array.isArray(setup.public_ipv4)?setup.public_ipv4:[];
+  // Browser reachability via a private/local address must not leak into a
+  // public VPN profile intended for clients outside this machine's LAN.
+  const shownPublicIp=candidateIps.includes(shownHost);
+  const initialMode=shownPublicIp?'ip':(setup.recommended_mode||'domain');
+  const initialEndpoint=(shownPublicIp?shownHost:setup.recommended_endpoint)||
+    (setup.choices?.[initialMode]?.value)||(!setup.choices?window.PANEL_DOMAIN||shownHost:'');
   const ovpn=window.__protocolData?.openvpn||{};
   const usedXrayPorts=new Set((window.__protocolData?.xray?.inbounds||[]).map(x=>Number(x.port)));
   let xrayPort=Number(d.xray_port||2087);
