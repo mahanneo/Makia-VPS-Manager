@@ -199,6 +199,7 @@ rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/dragon-vps-manag
 install -m 0755 "$SOURCE_DIR/scripts/update.sh" /usr/local/sbin/makia-update
 install -m 0755 "$SOURCE_DIR/scripts/backup.sh" /usr/local/sbin/makia-backup
 install -m 0755 "$SOURCE_DIR/scripts/uninstall.sh" /usr/local/sbin/makia-uninstall
+install -m 0755 "$SOURCE_DIR/scripts/enable-ip-panel.sh" /usr/local/sbin/makia-enable-ip-panel
 install -m 0755 "$SOURCE_DIR/scripts/doctor.sh" /usr/local/sbin/makia-doctor
 install -m 0755 "$SOURCE_DIR/scripts/uat-smoke.sh" /usr/local/sbin/makia-uat-smoke
 install -m 0755 "$SOURCE_DIR/scripts/restore-portable.py" /usr/local/sbin/makia-restore-portable
