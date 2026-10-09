@@ -2063,6 +2063,34 @@ async function submitSupportRequest(){
   }catch(e){alert('Support: '+e.message)}
 }
 
+async function checkEndpointPreview(){
+  const host=document.getElementById('endpointPreviewHost');
+  const protocol=document.getElementById('endpointPreviewProtocol');
+  const port=document.getElementById('endpointPreviewPort');
+  const server=document.getElementById('endpointPreviewServerIp');
+  const result=document.getElementById('endpointPreviewResult');
+  if(!host||!protocol||!port||!server||!result)return;
+  result.textContent='در حال بررسی اولیه IP / دامنه…';
+  try{
+    const params=new URLSearchParams({protocol:protocol.value,endpoint:host.value.trim()});
+    if(port.value.trim())params.set('port',port.value.trim());
+    if(server.value.trim())params.set('server_ip',server.value.trim());
+    const data=await api('/api/settings/endpoint/preflight?'+params.toString());
+    const lines=[
+      data.ok?'✅ مناسب برای ادامه مراحل تنظیم':'⛔ این انتخاب قبل از ساخت کانفیگ نیاز به اصلاح دارد',
+      'Endpoint: '+data.endpoint+' | '+data.transport+'/'+data.port,
+      ...(data.errors||[]).map(x=>'خطا: '+x),
+      ...(data.warnings||[]).map(x=>'هشدار: '+x),
+      ...(data.next_steps||[]).map(x=>'قدم بعد: '+x),
+      'این بررسی فقط راهنماست؛ Listener/Firewall/TLS و اتصال واقعی هنوز آزموده نشده‌اند.'
+    ];
+    result.textContent=lines.join('\n');
+    result.style.whiteSpace='pre-line';
+  }catch(e){
+    result.textContent='ورودی نامعتبر یا خطای بررسی: '+String(e.message||e);
+  }
+}
+
 async function settings(renderToken=window.__viewRenderToken){
   title.textContent='Settings';setPageContext('PANEL CONFIGURATION');
   const [general,two,tokens,operator,backupRows,sec]=await Promise.all([
@@ -2104,7 +2132,13 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="settings-card-v2"><div class="domain-health-v2"><div><span>Configured domain</span><b>'+htmlEsc(general.panel_domain||'IP Mode')+'</b></div><div><span>DNS IPv4</span><b class="'+(ds.dns_matches_server===false?'warn-text':'')+'">'+htmlEsc(ds.resolved_ipv4?.length?ds.resolved_ipv4.join(', '):'Not resolved')+'</b></div><div><span>DNS → this VPS</span><b class="'+(ds.dns_matches_server===false?'warn-text':ds.dns_matches_server===true?'ok-text':'')+'">'+(ds.dns_matches_server===true?'MATCH':ds.dns_matches_server===false?'MISMATCH':'UNVERIFIED')+'</b></div><div><span>Certificate</span><b class="'+(ds.certificate&&Number(ds.certificate_days_left??-1)>14?'ok-text':'warn-text')+'">'+(ds.certificate?('Installed'+(ds.certificate_days_left!==null&&ds.certificate_days_left!==undefined?' · '+Number(ds.certificate_days_left)+'d':'')):'Not installed')+'</b></div><div><span>Nginx</span><b class="'+(ds.nginx_active&&ds.nginx_config_ok?'ok-text':'warn-text')+'">'+(ds.nginx_active&&ds.nginx_config_ok?'ACTIVE / VALID':'CHECK REQUIRED')+'</b></div><div><span>Listeners</span><b>'+(ds.http_listener?'80✓':'80—')+' · '+(ds.https_listener?'443✓':'443—')+'</b></div><div><span>Certbot</span><b class="'+(ds.certbot_nginx_ready?'ok-text':'warn-text')+'">'+(ds.certbot_nginx_ready?'READY':ds.certbot_installed?'NGINX PLUGIN MISSING':'HOST PACKAGE MISSING')+'</b></div></div>',
       '<div class="settings-form-grid two"><label>Panel Domain<input id="domainName" value="'+htmlEsc(general.panel_domain||'')+'" placeholder="panel.example.com"></label><label>Let\'s Encrypt email<input id="tlsEmail" type="email" placeholder="admin@example.com"></label></div>',
       '<div class="wizard-note"><b>DNS gate</b><span>Issue / Renew ابتدا DNS را با IPv4 همین VPS تطبیق می‌دهد، Domain را روی Nginx اعمال می‌کند و فقط از Certbot ازپیش‌نصب‌شده استفاده می‌کند؛ نصب Package داخل Web Service انجام نمی‌شود. nginx -t و Listener 443 تأیید می‌شوند و در خطا تنظیم Nginx rollback می‌شود.</span></div>',
-      '<div class="settings-actions"><button class="ghost" data-action="settings-domain-apply">Apply domain to Nginx</button><button class="primary" data-action="settings-cert-issue">Issue / Renew HTTPS</button></div></div>'
+      '<div class="settings-actions"><button class="ghost" data-action="settings-domain-apply">Apply domain to Nginx</button><button class="primary" data-action="settings-cert-issue">Issue / Renew HTTPS</button></div></div>',
+      '<div class="settings-card-v2"><div class="settings-card-title"><div><b>بررسی IP یا دامنه قبل از ساخت کانفیگ</b><span>Read-only · بدون تغییر سرویس، پورت یا حساب کاربر</span></div></div>',
+      '<div class="settings-form-grid"><label>نوع اتصال<select id="endpointPreviewProtocol"><option value="ssh">SSH</option><option value="wireguard">WireGuard معمولی</option><option value="openvpn">OpenVPN معمولی</option><option value="outline">Outline</option><option value="xray-direct">Xray مستقیم</option><option value="browser-gateway">Browser VPN / HTTPS Proxy</option><option value="openvpn-wstunnel">OpenVPN + WStunnel</option><option value="wstunnel-wss">WStunnel WSS</option><option value="stealth-tls">Stealth TLS</option><option value="ikev2-cert">IKEv2</option></select></label>',
+      '<label>آدرس IP عمومی یا دامنه<input id="endpointPreviewHost" placeholder="vpn.example.com یا IP عمومی VPS" autocomplete="off"></label>',
+      '<label>پورت (اختیاری؛ خالی = مقدار پیش‌فرض)<input id="endpointPreviewPort" type="number" min="1" max="65535" placeholder="مثلاً 51820"></label>',
+      '<label>IP عمومی VPS (برای بررسی مطابقت DNS، اختیاری)<input id="endpointPreviewServerIp" autocomplete="off" placeholder="Public IPv4"></label></div>',
+      '<div class="settings-actions"><button class="ghost" data-action="endpoint-preview-check">بررسی سازگاری (بدون اعمال)</button></div><div id="endpointPreviewResult" class="wizard-note" role="status">ابتدا نوع اتصال و آدرس را وارد کنید؛ این بررسی، جای تست واقعی روی سرور را نمی‌گیرد.</div></div>',
     ].join('');
   }else if(tab==='ssh'){
     body=[
@@ -2431,6 +2465,7 @@ async function handleMakiaAction(btn){
   if(action==='support-telegram'){window.open(btn.dataset.url,'_blank','noopener');return}
   if(action==='settings-tab'){window.__settingsTab=btn.dataset.tab||'general';await currentView();return}
   if(action==='settings-general-save'){await saveGeneral();return}
+  if(action==='endpoint-preview-check'){await checkEndpointPreview();return}
   if(action==='settings-domain-apply'){await applySettingsDomain();return}
   if(action==='settings-cert-issue'){await issueSettingsCertificate();return}
   if(action==='settings-operator-save'){await saveOperatorSettings();return}
