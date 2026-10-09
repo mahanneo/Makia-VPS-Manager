@@ -1523,6 +1523,11 @@ def validate_endpoint_selection(value, mode="auto", direct=False, check_aaaa=Fal
         raise ProtocolError("endpoint mode must be IP or domain")
     try: address=ipaddress.ip_address(host)
     except ValueError: address=None
+    # Existing automated provisioning often sends mode=auto. For direct
+    # SSH/WireGuard/OpenVPN access, normalize it before any user is created,
+    # so RFC1918 IPs and unresolved/non-direct DNS cannot silently export.
+    if mode=="auto" and direct:
+        mode="ip" if address is not None else "domain"
     if mode=="ip" and (address is None or address.version!=4):
         raise ProtocolError("IP mode requires a public IPv4 address")
     if mode=="domain" and address is not None:
@@ -1536,6 +1541,13 @@ def validate_endpoint_selection(value, mode="auto", direct=False, check_aaaa=Fal
             raise ProtocolError("Domain has no reachable A/IPv4 record")
         if direct:
             local={x for x in _local_ipv4_candidates() if ipaddress.ip_address(x).is_global}
+            configured=os.getenv("MAKIA_PUBLIC_IPV4","").strip()
+            try:
+                configured_ip=ipaddress.ip_address(configured)
+                if configured_ip.version==4 and configured_ip.is_global:
+                    local.add(configured_ip.compressed)
+            except ValueError:
+                pass
             if local and not resolved.issubset(local):
                 raise ProtocolError("Domain A record does not match this VPS public IPv4; disable HTTP/CDN proxy for this protocol")
         if check_aaaa:
