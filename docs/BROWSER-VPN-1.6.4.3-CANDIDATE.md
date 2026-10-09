@@ -5,13 +5,13 @@ The server release remains **v1.6.4**. This change does not modify the live VPS,
 
 ## Fixed behavior
 
-Previously, a failed initial proxy exit-IP verification or manual recheck could call `clearBrowserProxy()`, silently removing the installed HTTPS proxy and permitting browser traffic to go out directly. The proxy-error event handler already kept the proxy installed on an unsuccessful follow-up check, but other paths did not.
+Previously, browser startup/update or a failed initial proxy exit-IP verification or manual recheck could call `clearBrowserProxy()`, silently removing the installed HTTPS proxy and permitting browser traffic to go out directly. The proxy-error event handler already kept the proxy installed on an unsuccessful follow-up check, but other paths did not.
 
 This candidate retains a proxy that Chrome confirms is controlled by Makia, reports the connection as **not verified**, clears any previous verified exit IP, and shows a visible **Disconnect** action. Users can manually retry verification without changing network mode. A second Connect request is rejected while the held proxy remains installed. This is intentional **fail-closed** behavior: browser networking may be unavailable until the user explicitly disconnects or the Gateway recovers.
 
 If Chrome never granted effective control of proxy settings (for instance, policy or another extension owns it), Makia cannot enforce a browser-wide kill switch and reports the failure instead of claiming protection. The UI distinguishes an active-but-unverified proxy from an established verified connection.
 
-A portal authorization failure alone no longer triggers automatic proxy removal while an effective Makia proxy remains installed.
+A portal authorization failure alone no longer triggers automatic proxy removal while an effective Makia proxy remains installed. Browser restart/update now attempts to preserve the selected HTTPS proxy and marks the old verified exit as stale; credentials remain session-only.
 
 ## Validation gates
 
@@ -26,7 +26,7 @@ A portal authorization failure alone no longer triggers automatic proxy removal 
 2. Check `chrome.proxy.settings` effective control, HTTP CONNECT auth/407, TLS identity, verified IPv4 exit IP, IPv6 behavior and DNS/WebRTC leakage on real desktop clients.
 3. Simulate gateway connection refusal and DNS failures **during initial connect**, **while connected**, and **during manual reverify**. Ensure traffic does not silently fall back to direct while the proxy is held.
 4. Confirm that **Disconnect** explicitly clears the proxy and privacy settings; check policy or other-extension conflicts.
-5. Test browser restart, extension update and session expiry separately. **Automatic browser startup handling is not yet claimed fail-closed across process restart**, because the existing onStartup routine resets proxy state; this remains an explicit release blocker.
+5. Test browser restart, extension update and session expiry separately. The candidate now preserves and marks an installed proxy **unverified** across browser startup/update in mock tests; the user must explicitly disconnect or reverify. Chrome/Edge real-process validation is still a release blocker; proxy ownership cannot be guaranteed against conflicting enterprise policies or extensions.
 6. Confirm real-world behavior on unstable networks without exposing test credentials or genuine end-user traffic.
 
 Do not treat a green mock test as a real Browser VPN UAT or publish this candidate before the remaining failure modes are addressed.
