@@ -74,3 +74,23 @@ def test_operator_pinned_commit_overrides_persistent_archive_override():
     assert pin in source and archive in source
     assert source.index(pin)<source.index(archive)
     assert 'Operator-pinned immutable source commit:' in source
+
+
+def test_stealth_configure_preserves_legacy_stunnel_listener():
+    source=(ROOT/"app/protocol_ops.py").read_text(encoding="utf-8")
+    configure=source.split("def bootstrap_stealth(",1)[1].split("def bootstrap_wstunnel(",1)[0]
+    assert '"disable","--now","stunnel4"' not in configure
+    assert '["systemctl","stop","stunnel4"]' not in configure
+    assert '["systemctl","restart","stunnel4"]' not in configure
+    assert '["systemctl","enable","--now",STUNNEL_MAKIA_SERVICE]' in configure
+    assert '["systemctl","restart",STUNNEL_MAKIA_SERVICE]' in configure
+
+
+def test_doctor_warns_of_failed_or_enabled_legacy_stunnel_unit():
+    source=(ROOT/"scripts/doctor.sh").read_text(encoding="utf-8")
+    assert "Legacy Stunnel conflict" in source
+    assert "Legacy Stunnel autostart" in source
+    assert 'systemctl is-failed --quiet stunnel4' in source
+    assert 'systemctl is-enabled --quiet stunnel4' in source
+    assert 'systemctl is-active --quiet makia-stealth' in source
+    assert 'disable --now stunnel4' not in source

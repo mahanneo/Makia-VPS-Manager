@@ -774,10 +774,11 @@ def bootstrap_stealth(domain, listen_port=9443):
         f"connect = 127.0.0.1:{backend_port}\n",
         encoding="utf-8",
     )
-    # Makia owns its Stealth runtime explicitly.  Do not depend on Ubuntu's
-    # global stunnel4 service, which may load unrelated/conflicting host configs.
-    if _active("stunnel4"):
-        subprocess.run(["systemctl","disable","--now","stunnel4"],text=True,capture_output=True,timeout=20,check=False)
+    # Makia owns the configured Stealth listener, but an older global
+    # stunnel4 instance can still serve independent client traffic on a
+    # different (possibly now absent from disk) legacy listener. Never stop
+    # or disable that instance from a Stealth Configure/Repair request.
+    # Its retirement needs an explicit, separately audited host migration.
     _run(["systemctl","daemon-reload"],timeout=20)
     _run(["systemctl","enable","--now",STUNNEL_MAKIA_SERVICE],timeout=30)
     _run(["systemctl","restart",STUNNEL_MAKIA_SERVICE],timeout=30)
