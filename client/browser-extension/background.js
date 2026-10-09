@@ -64,7 +64,20 @@ async function effectiveProxy(expectedHost,expectedPort){
     Number(proxy&&proxy.port||0)===Number(expectedPort);
 }
 async function disconnectWithError(message){
-  const last=await chrome.storage.local.get(["authDiagnostic"]).catch(()=>({}));
+  const last=await chrome.storage.local.get(["authDiagnostic","proxyHost","proxyPort"]).catch(()=>({}));
+  // A failed verification does NOT authorize switching an installed proxy
+  // back to direct. Only an explicit Disconnect may remove a held proxy.
+  const held=!!last.proxyHost&&!!last.proxyPort&&
+    await effectiveProxy(last.proxyHost,last.proxyPort).catch(()=>false);
+  if(held){
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:String(message||"Proxy not verified")+
+        " Proxy is still active to prevent direct fallback; use Disconnect to browse directly.",
+      authDiagnostic:String(last.authDiagnostic||"")
+    });
+    return;
+  }
   try{await clearBrowserProxy();}catch(_){}
   await chrome.storage.local.set({
     connected:false,
@@ -181,12 +194,54 @@ chrome.proxy.onProxyError.addListener(details=>{
   })().finally(()=>{proxyErrorRecheck=null;});
   return proxyErrorRecheck;
 });
-chrome.runtime.onInstalled.addListener(()=>clearBrowserProxy().catch(()=>{}));
-chrome.runtime.onStartup.addListener(()=>clearBrowserProxy().catch(()=>{}));
+// Browser restart/update must not silently remove an already selected proxy.
+// Session-only credentials are not copied into persistent storage. A held proxy
+// may block browsing until the user explicitly disconnects and reconnects.
+async function retainProxyOnLifecycle(){
+  const saved=await chrome.storage.local.get(["proxyHost","proxyPort"]);
+  const host=String(saved.proxyHost||"").trim();
+  const port=Number(saved.proxyPort||0);
+  if(!host||!Number.isInteger(port)||port<1||port>65535){
+    await clearBrowserProxy();
+    return;
+  }
+  try{
+    if(!await effectiveProxy(host,port)){
+      await chrome.proxy.settings.set({
+        value:{mode:"fixed_servers",rules:{
+          singleProxy:{scheme:"https",host,port},
+          bypassList:["<local>","127.0.0.1","localhost","::1"]
+        }},scope:"regular"
+      });
+    }
+    await applyPrivacyProtection();
+    const held=await effectiveProxy(host,port);
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:held?
+        "Browser restarted or extension updated: proxy is held but not verified. Session-only proxy credentials may be unavailable. Disconnect explicitly, then reconnect to restore access.":
+        "Browser proxy control was not restored; another extension or policy may control browsing."
+    });
+  }catch(e){
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:"Could not restore safe proxy control after restart: "+String(e.message||e)
+    });
+  }
+}
+chrome.runtime.onInstalled.addListener(details=>{
+  if(details&&details.reason==="install")return clearBrowserProxy().catch(()=>{});
+  return retainProxyOnLifecycle().catch(()=>{});
+});
+chrome.runtime.onStartup.addListener(()=>retainProxyOnLifecycle().catch(()=>{}));
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   (async()=>{
     if(message&&message.action==="connect"){
+      const before=await chrome.storage.local.get(["proxyHost","proxyPort"]);
+      if(before.proxyHost&&before.proxyPort&&
+          await effectiveProxy(before.proxyHost,before.proxyPort))
+        throw new Error("An existing proxy is still installed. Disconnect explicitly before reconnecting.");
       await clearBrowserProxy();
       try{
         const verified=await setBrowserProxy(message.proxy);
@@ -211,14 +266,19 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     }
     if(message&&message.action==="status"){
       const s=await chrome.storage.local.get(CONNECTION_KEYS);
-      if(s.connected&&!await effectiveProxy(s.proxyHost,s.proxyPort)){
+      const proxyActive=!!s.proxyHost&&!!s.proxyPort&&
+        await effectiveProxy(s.proxyHost,s.proxyPort).catch(()=>false);
+      if(s.connected&&!proxyActive){
         await chrome.storage.local.set({
-          connected:false,connectionError:"Browser proxy is no longer controlled by Makia."
+          connected:false,exitIp:"",verifiedAt:0,
+          connectionError:"Browser proxy is no longer controlled by Makia."
         });
         s.connected=false;
+        s.exitIp="";
+        s.verifiedAt=0;
         s.connectionError="Browser proxy is no longer controlled by Makia.";
       }
-      return {ok:true,result:s};
+      return {ok:true,result:{...s,proxyActive}};
     }
     throw new Error("Unknown extension action");
   })().then(sendResponse).catch(e=>sendResponse({ok:false,error:String(e.message||e)}));

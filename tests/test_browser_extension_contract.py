@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_browser_extension_manifest_contract():
     manifest=json.loads((ROOT/"client/browser-extension/manifest.json").read_text(encoding="utf-8"))
     assert manifest["manifest_version"]==3
-    assert manifest["version"]=="1.6.4.2"
+    assert manifest["version"]=="1.6.4.3"
     assert "nativeMessaging" not in manifest["permissions"]
     assert "webRequest" in manifest["permissions"]
     assert "webRequestAuthProvider" in manifest["permissions"]
@@ -79,3 +79,13 @@ def test_browser_auth_diagnostics_never_persist_credentials():
     assert 'authDiagnostic' in popup
     assert 'note("درخواست رمز Gateway دریافت شد' in source
     assert 'chrome.storage.local.set({proxyAuth:' not in source
+
+def test_failed_proxy_verification_must_not_silently_fall_back_to_direct():
+    bg=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
+    popup=(ROOT/"client/browser-extension/popup.js").read_text(encoding="utf-8")
+    assert 'if(held){' in bg
+    assert '" Proxy is still active to prevent direct fallback;' in bg
+    assert 'return {ok:true,result:{...s,proxyActive}};' in bg
+    assert 'Disconnect explicitly before reconnecting' in bg
+    assert 'const held=!!connection.proxyActive&&!connection.connected' in popup
+    assert 'else {' in popup and 'await logout(false)' in popup

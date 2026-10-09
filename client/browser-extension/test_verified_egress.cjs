@@ -3,7 +3,7 @@ const assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("nod
 const source=fs.readFileSync(path.join(__dirname,"background.js"),"utf8");
 
 async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effective=true,probeFails=false}={}){
-  const local={},session={};let applied=false;let listener;let onProxyError;let failNextProxyProbe=false;
+  const local={},session={};let applied=false;let listener;let onProxyError;let onInstalled;let onStartup;let failNextProxyProbe=false;
   const area=store=>({
     async get(keys){return Object.fromEntries(keys.map(k=>[k,store[k]]));},
     async set(values){Object.assign(store,values);},
@@ -28,7 +28,7 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
       onProxyError:{addListener(fn){onProxyError=fn;}}
     },
     webRequest:{onAuthRequired:{addListener(){}}},
-    runtime:{onInstalled:{addListener(){}},onStartup:{addListener(){}},onMessage:{addListener(fn){listener=fn;}}}
+    runtime:{onInstalled:{addListener(fn){onInstalled=fn;}},onStartup:{addListener(fn){onStartup=fn;}},onMessage:{addListener(fn){listener=fn;}}}
   };
   const mockFetch=async url=>{
     if((probeFails||failNextProxyProbe)&&applied)throw new Error("test proxy blocked");
@@ -41,7 +41,11 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
       listener({action,proxy},{},resolve);
     });
   }
-  return {send,local,session,proxyError:(error)=>onProxyError({error}),setBlocked:(yes)=>{failNextProxyProbe=yes;},proxy:{scheme:"https",host:"p.mahinet.shop",port:9444,username:"test",password:"test-secret"},get applied(){return applied;}};
+  return {send,local,session,proxyError:(error)=>onProxyError({error}),
+    restart:()=>onStartup(),update:()=>onInstalled({reason:"update"}),
+    install:()=>onInstalled({reason:"install"}),setBlocked:(yes)=>{failNextProxyProbe=yes;},
+    proxy:{scheme:"https",host:"p.mahinet.shop",port:9444,username:"test",password:"test-secret"},
+    get applied(){return applied;}};
 }
 
 (async()=>{
@@ -61,20 +65,32 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   c=await s.send("connect",s.proxy);
   assert.equal(c.ok,false);
   assert.equal(s.local.connected,false);
-  assert.equal(s.applied,false);
+  assert.equal(s.applied,true,"Failed verification must not silently enable direct browsing");
   assert.match(s.local.connectionError,/IP has not changed/);
+  assert.equal((await s.send("status")).result.proxyActive,true);
+  assert.equal((await s.send("connect",s.proxy)).ok,false,"Held proxy requires explicit disconnect");
+  assert.equal(s.applied,true);
+  assert.equal((await s.send("disconnect")).ok,true);
+  assert.equal(s.applied,false);
 
   s=await scenario({effective:false});
   c=await s.send("connect",s.proxy);
   assert.equal(c.ok,false);
   assert.equal(s.local.connected,false);
+  assert.equal(s.applied,false,"Proxy not owned by Makia must not be treated as held");
   assert.match(s.local.connectionError,/did not apply/);
 
   s=await scenario({probeFails:true});
   c=await s.send("connect",s.proxy);
   assert.equal(c.ok,false);
   assert.equal(s.local.connected,false);
+  assert.equal(s.applied,true,"Offline gateway stays installed until explicit disconnect");
+  assert.equal((await s.send("status")).result.proxyActive,true);
   assert.match(s.local.connectionError,/IP verification unavailable/);
+  assert.equal((await s.send("verify")).ok,false);
+  assert.equal(s.applied,true,"Repeated verification failure must not clear installed proxy");
+  await s.send("disconnect");
+  assert.equal(s.applied,false);
   // A single failed subrequest does not mean the entire proxy is offline.
   s=await scenario();
   c=await s.send("connect",s.proxy);
@@ -90,5 +106,27 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   assert.equal(s.local.connected,false);
   assert.equal(s.applied,true);
   assert.match(s.local.connectionError,/egress check failed/);
-  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 6 scenarios PASS");
+  assert.equal((await s.send("status")).result.proxyActive,true);
+  s.setBlocked(false);
+  assert.equal((await s.send("verify")).ok,true,"A repaired gateway is re-verifiable without direct fallback");
+  assert.equal(s.local.connected,true);
+  assert.equal(s.applied,true);
+  s=await scenario();
+  assert.equal((await s.send("connect",s.proxy)).ok,true);
+  await s.restart();
+  assert.equal(s.applied,true,"Browser restart must preserve a previously configured proxy");
+  assert.equal(s.local.connected,false,"Browser restart must require fresh verification");
+  assert.equal((await s.send("status")).result.proxyActive,true);
+  assert.match(s.local.connectionError,/proxy is held but not verified/);
+  await s.update();
+  assert.equal(s.applied,true,"Extension update must not silently clear selected proxy");
+  assert.equal(s.local.connected,false);
+  assert.equal((await s.send("disconnect")).ok,true);
+  assert.equal(s.applied,false);
+
+  s=await scenario();
+  await s.install();
+  assert.equal(s.applied,false,"First install without an assigned proxy stays direct");
+
+  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 12 scenario groups PASS");
 })().catch(e=>{console.error(e);process.exitCode=1;});

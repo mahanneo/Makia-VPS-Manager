@@ -46,14 +46,19 @@ async function render(){
 
   const status=await chrome.runtime.sendMessage({action:"status"});
   const connection=status&&status.ok?status.result:{connected:false,connectionError:"وضعیت Proxy قابل بررسی نیست"};
+  const held=!!connection.proxyActive&&!connection.connected;
+  const needsReauth=held&&/Browser restarted or extension updated/.test(String(connection.connectionError||''));
   $("statusDot").className="dot "+(connection.connected?"on":"off");
-  $("connectionState").textContent=connection.connected?"متصل · تأیید شد":"قطع";
-  $("activeLabel").textContent=connection.connected?"Makia Browser VPN":"Browser VPN";
-  $("disconnectBtn").classList.toggle("hidden",!connection.connected);
-  $("verifyBtn").classList.toggle("hidden",!connection.connected);
+  $("connectionState").textContent=connection.connected?"متصل · تأیید شد":
+    held?"اتصال تأیید نشد · پروکسی همچنان فعال است":"قطع";
+  $("activeLabel").textContent=connection.connected||held?"Makia Browser VPN":"Browser VPN";
+  $("disconnectBtn").classList.toggle("hidden",!connection.connected&&!connection.proxyHost);
+  $("verifyBtn").classList.toggle("hidden",!connection.connected&&(!held||needsReauth));
   $("exitIp").textContent=connection.connected&&connection.exitIp?connection.exitIp:"هنوز تأیید نشده";
   $("verificationState").textContent=connection.connected&&connection.verifiedAt?
     "IP خروجی از اتصال HTTPS واقعی بررسی شد. آخرین تست: "+new Date(connection.verifiedAt).toLocaleTimeString("fa-IR"):
+    needsReauth?"پروکسی فعال مانده است، اما ورود مجدد پس از راه‌اندازی مرورگر لازم است. ابتدا «قطع» و سپس «اتصال» را بزنید.":
+    held?"پروکسی به‌صورت محافظتی فعال مانده است. برای تلاش دوباره «بررسی IP» و برای استفاده مستقیم «قطع اتصال» را انتخاب کنید.":
     "صرف نمایش وضعیت متصل، تغییر IP را تضمین نمی‌کند.";
   if(connection.connectionError&&!$("appError").textContent) setError("appError",connection.connectionError);
   $("authDiagnostic").textContent=String(connection.authDiagnostic||"");
@@ -65,8 +70,8 @@ async function render(){
   const g=state.gateway||{};
   $("gatewayHost").textContent=(g.gateway&&g.gateway.host)?g.gateway.host:"—";
   $("gatewayState").textContent=g.available?"آماده اتصال":"در دسترس نیست";
-  $("connectBtn").disabled=!g.available||!!connection.connected;
-  $("connectBtn").textContent=connection.connected?"متصل":"اتصال";
+  $("connectBtn").disabled=!g.available||!!connection.connected||held;
+  $("connectBtn").textContent=connection.connected?"متصل":held?"ابتدا قطع اتصال":"اتصال";
 }
 async function refresh(){
   setError("appError","");
@@ -76,7 +81,17 @@ async function refresh(){
     await chrome.storage.local.set({account:state.account});
     await render();
   }catch(e){
-    if(/401|authentication|session/i.test(String(e.message||e))) await logout(false);
+    if(/401|authentication|session/i.test(String(e.message||e))){
+      // An expired portal session must not silently remove an already
+      // installed proxy, which would expose direct browsing.
+      const proxy=await chrome.runtime.sendMessage({action:"status"}).catch(()=>null);
+      if(!proxy?.result?.proxyActive) await logout(false);
+      else {
+        setError("appError","نشست پنل منقضی شده؛ پروکسی هنوز فعال است. برای خروج مستقیم، ابتدا «قطع اتصال» را بزنید.");
+        await render();
+        return;
+      }
+    }
     setError("appError",e.message);
   }
 }
