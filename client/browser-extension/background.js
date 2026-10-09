@@ -194,8 +194,46 @@ chrome.proxy.onProxyError.addListener(details=>{
   })().finally(()=>{proxyErrorRecheck=null;});
   return proxyErrorRecheck;
 });
-chrome.runtime.onInstalled.addListener(()=>clearBrowserProxy().catch(()=>{}));
-chrome.runtime.onStartup.addListener(()=>clearBrowserProxy().catch(()=>{}));
+// Browser restart/update must not silently remove an already selected proxy.
+// Session-only credentials are not copied into persistent storage. A held proxy
+// may block browsing until the user explicitly disconnects and reconnects.
+async function retainProxyOnLifecycle(){
+  const saved=await chrome.storage.local.get(["proxyHost","proxyPort"]);
+  const host=String(saved.proxyHost||"").trim();
+  const port=Number(saved.proxyPort||0);
+  if(!host||!Number.isInteger(port)||port<1||port>65535){
+    await clearBrowserProxy();
+    return;
+  }
+  try{
+    if(!await effectiveProxy(host,port)){
+      await chrome.proxy.settings.set({
+        value:{mode:"fixed_servers",rules:{
+          singleProxy:{scheme:"https",host,port},
+          bypassList:["<local>","127.0.0.1","localhost","::1"]
+        }},scope:"regular"
+      });
+    }
+    await applyPrivacyProtection();
+    const held=await effectiveProxy(host,port);
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:held?
+        "Browser restarted or extension updated: proxy retained but not verified. Recheck or Disconnect explicitly.":
+        "Browser proxy control was not restored; another extension or policy may control browsing."
+    });
+  }catch(e){
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:"Could not restore safe proxy control after restart: "+String(e.message||e)
+    });
+  }
+}
+chrome.runtime.onInstalled.addListener(details=>{
+  if(details&&details.reason==="install")return clearBrowserProxy().catch(()=>{});
+  return retainProxyOnLifecycle().catch(()=>{});
+});
+chrome.runtime.onStartup.addListener(()=>retainProxyOnLifecycle().catch(()=>{}));
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   (async()=>{
