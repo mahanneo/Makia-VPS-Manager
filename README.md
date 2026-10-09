@@ -86,7 +86,7 @@ End users can open the same authenticated Client URL on Android, iPhone/iPad, Wi
 
 ## 🚦 IP-or-domain onboarding and endpoint safety
 
-Read the [step-by-step Persian IP/domain setup and Android, iOS, Windows, Chrome guide](docs/IP-DOMAIN-SETUP-FA.md). The read-only `python3 scripts/endpoint-wizard.py` or `python3 -m app.endpoint_preflight --protocol wireguard --endpoint YOUR_PUBLIC_IP` provides early compatibility checks. SSH, classic WireGuard and OpenVPN allow either endpoint; certificate-bound WSS/Browser Gateway/Stealth/IKEv2 implementations require a hostname with valid TLS identity. PPTP is intentionally unsupported. This preflight is **not** a verified live handshake or an automatic runtime repair.
+Read the [English IP/domain and cross-platform setup guide](docs/IP-DOMAIN-SETUP-EN.md) or the [complete Persian guide](docs/IP-DOMAIN-SETUP-FA.md). The read-only `python3 scripts/endpoint-wizard.py` or `python3 -m app.endpoint_preflight --protocol wireguard --endpoint YOUR_PUBLIC_IP` provides early compatibility checks. SSH, classic WireGuard and OpenVPN allow either endpoint; certificate-bound WSS/Browser Gateway/Stealth/IKEv2 implementations require a hostname with valid TLS identity. PPTP is intentionally unsupported. This preflight is **not** a verified live handshake or an automatic runtime repair.
 
 ## Quick install
 
