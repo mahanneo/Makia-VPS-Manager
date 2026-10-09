@@ -85,19 +85,29 @@ on_exit(){
       "$APP/.venv/bin/pip" install -r "$APP/requirements.txt" >/dev/null 2>&1
     fi
     systemctl daemon-reload
-    nginx -t >/dev/null 2>&1 && systemctl reload nginx
+    if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]]; then
+      nginx -t >/dev/null 2>&1 && systemctl reload nginx
+    fi
     systemctl restart makia-vps-manager
-    systemctl restart makia-policy-enforcer 2>/dev/null
-    systemctl restart makia-metrics-sampler 2>/dev/null
-    systemctl restart makia-protocol-traffic 2>/dev/null
+    if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]]; then
+      systemctl restart makia-policy-enforcer 2>/dev/null
+      systemctl restart makia-metrics-sampler 2>/dev/null
+      systemctl restart makia-protocol-traffic 2>/dev/null
+    fi
     if [[ "${XRAY_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl restart xray 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet xray; then
+        systemctl restart xray 2>/dev/null
+      fi
     fi
     if [[ "${WG_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl restart wg-quick@wg0 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet wg-quick@wg0; then
+        systemctl restart wg-quick@wg0 2>/dev/null
+      fi
     fi
     if [[ "${OVPN_WAS_ACTIVE:-0}" -eq 1 ]]; then
-      systemctl restart openvpn-server@server 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet openvpn-server@server; then
+        systemctl restart openvpn-server@server 2>/dev/null
+      fi
     fi
     if [[ "${STUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       # Rollback must preserve a separately used legacy TCP/9443 listener.
@@ -108,21 +118,31 @@ on_exit(){
     fi
     if [[ "${WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl enable --now makia-wstunnel 2>/dev/null
-      systemctl restart makia-wstunnel 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet makia-wstunnel; then
+        systemctl restart makia-wstunnel 2>/dev/null
+      fi
     fi
     if [[ "${OVPN_WSTUNNEL_WAS_ACTIVE:-0}" -eq 1 ]]; then
       systemctl enable --now openvpn-server@makia-ws 2>/dev/null
-      systemctl restart openvpn-server@makia-ws 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet openvpn-server@makia-ws; then
+        systemctl restart openvpn-server@makia-ws 2>/dev/null
+      fi
       systemctl enable --now makia-openvpn-wstunnel 2>/dev/null
-      systemctl restart makia-openvpn-wstunnel 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet makia-openvpn-wstunnel; then
+        systemctl restart makia-openvpn-wstunnel 2>/dev/null
+      fi
     fi
     if [[ -s "$MTPROXY_ENV_PATH" && -s "$MTPROXY_CONFIG_PATH" && -x /opt/makia-mtproxy/mtg ]]; then
       systemctl enable --now makia-mtproxy 2>/dev/null
-      systemctl restart makia-mtproxy 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet makia-mtproxy; then
+        systemctl restart makia-mtproxy 2>/dev/null
+      fi
     fi
     if [[ -s "$DNS_CONFIG_PATH" ]] && command -v unbound >/dev/null 2>&1; then
       systemctl enable --now unbound 2>/dev/null
-      systemctl restart unbound 2>/dev/null
+      if [[ "${MAKIA_LIVE_SAFE:-0}" != "1" ]] || ! systemctl is-active --quiet unbound; then
+        systemctl restart unbound 2>/dev/null
+      fi
     fi
     restored=0
     for _ in {1..12}; do
