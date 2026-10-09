@@ -117,7 +117,7 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   assert.equal(s.applied,true,"Browser restart must preserve a previously configured proxy");
   assert.equal(s.local.connected,false,"Browser restart must require fresh verification");
   assert.equal((await s.send("status")).result.proxyActive,true);
-  assert.match(s.local.connectionError,/proxy retained/);
+  assert.match(s.local.connectionError,/proxy is held but not verified/);
   await s.update();
   assert.equal(s.applied,true,"Extension update must not silently clear selected proxy");
   assert.equal(s.local.connected,false);
