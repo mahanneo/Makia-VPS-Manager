@@ -68,6 +68,13 @@ def evaluate(protocol: str, endpoint: str, port: int | None = None, *,
     default, transport = PORTS[protocol]
     port = default if port is None else int(port)
     errors, warnings, steps = [], [], []
+    if server_ipv4:
+        try:
+            server_address=ipaddress.IPv4Address(server_ipv4)
+            if not server_address.is_global:
+                errors.append("Server IP must be a publicly routable IPv4 address.")
+        except ipaddress.AddressValueError:
+            errors.append("Server IP must be a valid public IPv4 address.")
     if not 1 <= port <= 65535:
         errors.append("Choose a port between 1 and 65535.")
     if mode == "ip" and protocol in TLS_NAME_REQUIRED:
@@ -81,6 +88,8 @@ def evaluate(protocol: str, endpoint: str, port: int | None = None, *,
                 resolved_ipv4 = []
         if not resolved_ipv4:
             errors.append("Domain has no IPv4 A record. Create an A record pointing to your VPS.")
+        elif any(not ipaddress.IPv4Address(value).is_global for value in resolved_ipv4):
+            errors.append("Domain A record points to a private or non-public IPv4; choose the actual public VPS address.")
         elif server_ipv4 and protocol not in {"xray-direct"} and server_ipv4 not in resolved_ipv4:
             errors.append("Domain A record does not point at the selected server IP; raw VPN protocols must not use an HTTP-only CDN proxy.")
         if protocol in TLS_NAME_REQUIRED:
