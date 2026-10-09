@@ -70,8 +70,8 @@ docker exec -e MAKIA_REF="$CANDIDATE_SHA" -e MAKIA_FORCE_MAIN=0 \
 
 docker exec "$CONTAINER" bash -lc '
   set -Eeuo pipefail
-  test "$(cat /opt/makia-vps-manager/VERSION)" = "1.6.4"
-  curl -fsS http://127.0.0.1:8787/healthz | grep -q "1.6.4"
+  test "$(cat /opt/makia-vps-manager/VERSION)" = "1.6.5"
+  curl -fsS http://127.0.0.1:8787/healthz | grep -q "1.6.5"
   systemctl is-active --quiet makia-vps-manager
   systemctl is-active --quiet nginx
   systemctl is-active --quiet xray
@@ -92,4 +92,4 @@ docker exec -e MAKIA_DATA_DIR=/opt/makia-vps-manager/data "$CONTAINER" \
   /opt/makia-vps-manager/.venv/bin/python /tmp/upgrade_identity_probe.py >/tmp/makia-v151-post-identity.json
 cmp -s /tmp/makia-v151-pre-identity.json /tmp/makia-v151-post-identity.json
 
-echo "UPGRADE 1.5.1 -> 1.6.4 SMOKE: PASS"
+echo "UPGRADE 1.5.1 -> 1.6.5 SMOKE: PASS"
