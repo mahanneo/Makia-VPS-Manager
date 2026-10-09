@@ -106,3 +106,32 @@ def test_automode_direct_accepts_matching_nat_dns(monkeypatch):
     monkeypatch.setattr(protocol_ops.socket,"getaddrinfo",
                         lambda *args:[(socket.AF_INET,socket.SOCK_STREAM,6,"",("8.8.8.8",0))])
     assert protocol_ops.validate_endpoint_selection("vpn.example.org","auto",direct=True)=="vpn.example.org"
+
+
+def test_expired_cert_is_not_recommended(monkeypatch):
+    monkeypatch.setenv("MAKIA_PUBLIC_IPV4","8.8.8.8")
+    monkeypatch.setattr(endpoint_advisor.protocol_ops,"_local_ipv4_candidates",lambda:[])
+    monkeypatch.setattr(endpoint_advisor,"get_setting",lambda *args:"vpn.example.org")
+    from app import panel_ops
+    monkeypatch.setattr(panel_ops,"domain_status",lambda domain:{
+        "resolved_ipv4":["8.8.8.8"],"certificate":True,
+        "https_listener":True,"certificate_days_left":-1
+    })
+    info=endpoint_advisor.connection_setup()
+    assert info["recommended_mode"]=="ip"
+    assert not info["domain_tls_ready"]
+    assert any("منقضی" in w for w in info["warnings"])
+
+
+def test_mixed_dns_records_are_not_considered_all_ready(monkeypatch):
+    monkeypatch.setenv("MAKIA_PUBLIC_IPV4","8.8.8.8")
+    monkeypatch.setattr(endpoint_advisor.protocol_ops,"_local_ipv4_candidates",lambda:[])
+    monkeypatch.setattr(endpoint_advisor,"get_setting",lambda *args:"vpn.example.org")
+    from app import panel_ops
+    monkeypatch.setattr(panel_ops,"domain_status",lambda domain:{
+        "resolved_ipv4":["8.8.8.8","1.1.1.1"],"certificate":True,
+        "https_listener":True,"certificate_days_left":40
+    })
+    info=endpoint_advisor.connection_setup()
+    assert info["domain_dns_matches_server"] is False
+    assert info["recommended_mode"]=="ip"
