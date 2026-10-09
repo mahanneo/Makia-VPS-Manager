@@ -11,7 +11,7 @@ This candidate retains a proxy that Chrome confirms is controlled by Makia, repo
 
 If Chrome never granted effective control of proxy settings (for instance, policy or another extension owns it), Makia cannot enforce a browser-wide kill switch and reports the failure instead of claiming protection. The UI distinguishes an active-but-unverified proxy from an established verified connection.
 
-A portal authorization failure alone no longer triggers automatic proxy removal while an effective Makia proxy remains installed. Browser restart/update now attempts to preserve the selected HTTPS proxy and marks the old verified exit as stale; credentials remain session-only.
+A portal authorization failure alone no longer triggers automatic proxy removal while an effective Makia proxy remains installed. Browser restart/update now attempts to preserve the selected HTTPS proxy and marks the old verified exit as stale; credentials remain session-only. After restart, the UI instructs the user to disconnect explicitly and reconnect rather than repeatedly reverify without credentials.
 
 ## Validation gates
 
