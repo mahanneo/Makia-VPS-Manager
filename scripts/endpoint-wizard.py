@@ -3,7 +3,10 @@
 from pathlib import Path
 import sys
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+SOURCE_ROOT=Path(__file__).resolve().parents[1]
+if not (SOURCE_ROOT/"app"/"endpoint_preflight.py").exists():
+    SOURCE_ROOT=Path("/opt/makia-vps-manager")
+sys.path.insert(0,str(SOURCE_ROOT))
 from app.endpoint_preflight import ALL, evaluate
 
 OPTIONS=[
