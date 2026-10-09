@@ -172,6 +172,18 @@ else
   fail "Stunnel tooling" "not installed"
 fi
 
+# A Makia-owned Stealth listener can be healthy while Ubuntu's legacy
+# stunnel4 SysV unit remains failed or enabled against the same config.
+# Do not auto-stop either owner: a legacy process may still serve a
+# different port (for example TCP/9443) with existing client packages.
+if [[ -f /etc/stunnel/makia-openvpn.conf ]] && systemctl is-active --quiet makia-stealth; then
+  if systemctl is-failed --quiet stunnel4 2>/dev/null; then
+    warn "Legacy Stunnel conflict" "stunnel4.service failed beside working makia-stealth; check duplicate autostart/ports and existing client use before planned retirement. Do NOT restart or stop a live listener."
+  elif systemctl is-enabled --quiet stunnel4 2>/dev/null; then
+    warn "Legacy Stunnel autostart" "stunnel4 remains enabled alongside Makia Stealth; review port ownership before next reboot (do not disable a legacy client listener blindly)."
+  fi
+fi
+
 if command -v ipsec >/dev/null 2>&1; then
   ok "IKEv2 tooling" "strongSwan installed"
   if grep -q '# BEGIN MAKIA IKEV2' /etc/ipsec.conf 2>/dev/null; then
