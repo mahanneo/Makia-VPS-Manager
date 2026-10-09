@@ -47,6 +47,9 @@ def main():
         return 2
     print("\nنتیجه:", "مناسب برای ادامه تنظیمات" if result.ok else "نیازمند اصلاح قبل از ساخت کانفیگ")
     print(f"آدرس: {result.endpoint} | پورت: {result.port}/{result.transport}")
+    print("گواهی TLS لازم است:", "بله" if result.needs_tls_certificate else "خیر")
+    print("IP مستقیم پشتیبانی می‌شود:", "بله" if result.direct_ip_supported else "در حالت فعلی خیر")
+    print("راهنما:", result.user_message_fa)
     for label,items in (("اشکال",result.errors),("هشدار",result.warnings),("قدم بعد",result.next_steps)):
         for item in items:
             print(f"- {label}: {item}")
