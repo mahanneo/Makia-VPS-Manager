@@ -233,3 +233,20 @@ def test_stars_invoice_has_correct_currency_and_immutable_amount(shopdb,monkeypa
     shop._invoice(order,712)
     assert calls[-1][0]=="sendInvoice"
     assert calls[-1][1]["chat_id"]==712
+
+
+def test_manual_offer_without_makia_plan_can_list_and_never_autoprovision(shopdb,monkeypatch):
+    now=int(time.time())
+    with db.connect() as con:
+        con.execute("INSERT INTO tg_shop_offers(plan_id,title,summary,icon,profile,endpoint,"
+                    "price_stars,active,sort_order,created_at,updated_at)"
+                    " VALUES(0,'IKEv2 Manual','Manual only','🔐','manual:ikev2','',99,1,2,?,?)",
+                    (now,now))
+    matches=[x for x in shop._catalog() if x["profile"]=="manual:ikev2"]
+    assert len(matches)==1
+    item=shop._create_order(1002,matches[0]["id"])
+    assert item["price_stars"]==99
+    assert json.loads(item["plan_json"])["kind"]=="manual:ikev2"
+    monkeypatch.setenv("MAKIA_SHOP_COMMERCE_TOKEN","very-private-scoped-token")
+    assert shop._provision(item) is None
+    assert item["status"]=="pending_invoice"
