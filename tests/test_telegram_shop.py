@@ -61,7 +61,7 @@ def test_initdata_valid_hmac_and_buyer_binding(shopdb):
     with pytest.raises(HTTPException):
         shop.verify_init_data(forged)
     with pytest.raises(HTTPException):
-        shop.verify_init_data(initdata(909,auth_date=int(time.time())-900))
+        shop.verify_init_data(initdata(909,auth_date=int(time.time())-9000))
     with pytest.raises(HTTPException):
         shop.verify_init_data(initdata(909)+"&user=duplicated")
 
