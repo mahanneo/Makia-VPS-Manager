@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#090e20"><title>MAKiA — Access Atelier</title>
+<script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+<style>
+:root{--bg:#090e20;--card:#14223c;--line:#334564;--ink:#f2f6ff;--sub:#a4b2cc;--mint:#86ead2;--blue:#64b7ff}
+*{box-sizing:border-box}body{font-family:system-ui,Tahoma,sans-serif;color:var(--ink);background:radial-gradient(ellipse at 5% 0%,#183b60 0,transparent 44%),radial-gradient(ellipse at 100% 25%,#302253 0,transparent 42%),var(--bg);min-height:100dvh;margin:0}
+button{font:inherit;cursor:pointer}button:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+.container{max-width:670px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(110px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:35px}
+.logo{display:flex;align-items:center;gap:12px}.logo-icon{display:grid;place-items:center;width:49px;height:49px;background:linear-gradient(135deg,#228ddb,#8264cb);border-radius:16px;font-size:26px;box-shadow:0 8px 30px #2585b85a}.logo strong{font-size:20px;letter-spacing:3px}.logo small{display:block;direction:ltr;color:var(--sub);letter-spacing:2px;font-size:9px;margin-top:4px}
+.live{border:1px solid #28605b;color:#83e7cc;padding:8px 10px;border-radius:22px;font-size:11px;background:#143736}
+.headline small{color:var(--mint);letter-spacing:2px;font-size:11px;font-weight:800}.headline h1{font-size:clamp(30px,8vw,49px);line-height:1.35;margin:13px 0 10px;font-weight:900;letter-spacing:-1px}.headline em{font-style:normal;color:var(--mint)}.headline p{font-size:14px;color:var(--sub);line-height:2;margin:0}
+.highlights{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:24px 0 32px}.highlights div{border:1px solid #ffffff1b;background:#ffffff0a;padding:12px 6px;text-align:center;border-radius:16px}.highlights b{display:block;font-size:14px}.highlights small{color:var(--sub);font-size:10px}
+.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.section-title h2{font-size:19px;margin:0}.section-title span{font-size:12px;color:var(--sub)}
+.grid{display:grid;gap:14px}.product{border:1px solid var(--line);border-radius:21px;background:linear-gradient(155deg,#1a2b47,#111a30);padding:19px;box-shadow:0 12px 27px #0003}
+.product-top{display:flex;align-items:center;gap:12px}.prod-icon{width:52px;height:52px;border-radius:16px;background:#243958;display:grid;place-items:center;font-size:24px;flex:none}
+.product h3{margin:0 0 7px;font-size:16px}.product p{font-size:13px;line-height:1.8;color:var(--sub);margin:0}
+.action{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:19px}.price{direction:ltr;color:var(--mint);font-size:21px;font-weight:900;white-space:nowrap}
+.buy{border:0;border-radius:13px;padding:13px 16px;background:linear-gradient(100deg,#88ebcf,#73b9ff);color:#11223b;font-weight:800;font-size:13px}.buy:disabled{opacity:.5}
+.empty{background:#ffffff0b;border:1px dashed var(--line);border-radius:18px;padding:20px;color:var(--sub);font-size:14px;line-height:1.9}
+.panel{display:none}.panel.visible{display:block}.order{background:#15233e;border:1px solid var(--line);border-radius:17px;padding:17px;margin-bottom:12px}.order h3{margin:0 0 8px;font-size:15px}.order small{color:var(--sub)}
+.copy{margin-top:13px;border:1px solid var(--line);background:none;border-radius:9px;color:var(--blue);padding:9px 13px}
+.help-text{line-height:2.1;color:var(--sub);font-size:14px}.help-text b{color:var(--ink)}
+.bottom{position:fixed;bottom:0;left:0;right:0;background:#0c1529ee;border-top:1px solid #ffffff18;backdrop-filter:blur(18px);display:flex;justify-content:center;padding:12px 16px calc(12px + env(safe-area-inset-bottom));gap:9px}
+.nav{width:150px;max-width:32%;border:none;border-radius:13px;background:transparent;color:var(--sub);padding:9px;font-size:12px}.nav span{display:block;font-size:21px;margin-bottom:4px}.nav.active{background:#233756;color:white}
+.toast{position:fixed;top:18px;left:18px;right:18px;margin:auto;max-width:560px;background:#244365;color:white;padding:15px;border-radius:14px;display:none;z-index:3;font-size:13px}
+footer{color:#7c8fae;letter-spacing:1.2px;font-size:10px;text-align:center;margin:35px 0}
+@media(min-width:610px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:no-preference){.product{animation:rise .35s ease both}@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}}
+</style>
+</head>
+<body>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div class="container">
+ <header><div class="logo"><div class="logo-icon">✦</div><div><strong>MAKiA</strong><small>ACCESS ATELIER</small></div></div><div class="live">● PRIVATE MARKET</div></header>
+ <main>
+  <section class="panel visible" id="shop">
+   <div class="headline"><small>✦ YOUR ACCESS, REIMAGINED</small><h1>اتصالِ متفاوت،<br><em>تجربه‌ای اختصاصی.</em></h1><p>سرویس مناسب خود را انتخاب کنید، با Stars تلگرام پرداخت کنید و تحویل امن را در همین محیط دریافت کنید.</p></div>
+   <div class="highlights"><div><b>⭐ Stars</b><small>پرداخت امن</small></div><div><b>🔐 Private</b><small>کانفیگ خصوصی</small></div><div><b>◈ Makia</b><small>متصل به پنل</small></div></div>
+   <div class="section-title"><h2>کلکسیون سرویس‌ها</h2><span id="count">در حال بارگذاری</span></div>
+   <div id="catalog" class="grid"><div class="empty">در حال دریافت محصولات…</div></div>
+  </section>
+  <section class="panel" id="orders"><div class="section-title"><h2>سفارش‌های من</h2><span>تاریخچه امن</span></div><div id="order-list" class="empty">در حال بارگذاری…</div></section>
+  <section class="panel" id="help"><div class="section-title"><h2>میز خدمت ماکیا</h2></div><div class="help-text"><p>✦ پرداخت سرویس دیجیتال فقط با <b>Telegram Stars</b> انجام می‌شود و دسترسی پیش از تأیید واقعی پرداخت صادر نمی‌شود.</p><p>✦ در صورت تأخیر، سفارش را از بخش «سفارش‌های من» بررسی کنید یا در گفت‌وگوی ربات فرمان <b dir="ltr">/paysupport</b> را بفرستید.</p><p>✦ کیفیت اتصال وابسته به شبکه و دستگاه است؛ هیچ پروتکلی در همه اپراتورها تضمین‌شده نیست.</p></div></section>
+ </main>
+ <footer>MAKiA · INDEPENDENT ACCESS EXPERIENCE</footer>
+</div>
+<nav class="bottom" aria-label="منوی فروشگاه">
+<button class="nav active" data-tab="shop"><span>◈</span>فروشگاه</button>
+<button class="nav" data-tab="orders"><span>▤</span>سفارش‌های من</button>
+<button class="nav" data-tab="help"><span>♧</span>راهنما</button>
+</nav>
+<script>
+"use strict";
+const app=window.Telegram?.WebApp,auth=app?.initData||"",catalog=document.getElementById("catalog");
+let busy=false;
+function element(tag,cls,value){const e=document.createElement(tag);if(cls)e.className=cls;if(value!==undefined)e.textContent=value;return e}
+function toast(value){const e=document.getElementById("toast");e.textContent=value;e.style.display="block";window.setTimeout(()=>e.style.display="none",4600)}
+async function api(url,method="GET",body){
+ const headers={"X-Telegram-Init-Data":auth};if(body!==undefined)headers["Content-Type"]="application/json";
+ const result=await fetch(url,{method,headers,body:body===undefined?undefined:JSON.stringify(body),credentials:"omit",cache:"no-store"});
+ if(!result.ok)throw Error(result.status===401?"برای ورود معتبر، فروشگاه را از ربات تلگرام باز کنید.":"درخواست انجام نشد. دوباره تلاش کنید.");
+ return result.json()
+}
+function show(name){
+ for(const id of ["shop","orders","help"]){document.getElementById(id).classList.toggle("visible",id===name)}
+ document.querySelectorAll(".nav").forEach(b=>{b.classList.toggle("active",b.dataset.tab===name);b.setAttribute("aria-current",b.dataset.tab===name?"page":"false")});
+ if(name==="orders")loadOrders()
+}
+document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>show(b.dataset.tab)));
+async function purchase(id,button){
+ if(!app||!auth){toast("فروشگاه را از داخل تلگرام باز کنید.");return}
+ if(busy)return;busy=true;button.disabled=true;button.textContent="ساخت فاکتور…";
+ try{const invoice=await api("/api/telegram-shop/checkout","POST",{offer_id:id});
+ if(typeof invoice.invoice_url!=="string"||!invoice.invoice_url.startsWith("https://t.me/"))throw Error("لینک پرداخت معتبر نیست");
+ app.openInvoice(invoice.invoice_url,status=>{if(status==="paid"||status==="pending")show("orders");else if(status==="cancelled")toast("پرداخت لغو شد.")})
+ }catch(e){toast(e.message||"خطا در فاکتور")}finally{busy=false;button.disabled=false;button.textContent="خرید با Stars ↗"}
+}
+async function loadCatalog(){
+ try{const offers=await api("/api/telegram-shop/catalog");catalog.replaceChildren();document.getElementById("count").textContent=offers.length+" سرویس";
+ if(!offers.length){catalog.append(element("div","empty","فعلاً سرویس فعالی برای فروش ثبت نشده است."));return}
+ for(const p of offers){const card=element("article","product"),top=element("div","product-top"),icon=element("div","prod-icon",p.icon||"🔐"),detail=element("div");
+ detail.append(element("h3","",p.title),element("p","",p.summary||"دسترسی اختصاصی ماکیا"));top.append(icon,detail);
+ const row=element("div","action"),price=element("div","price",p.price_stars+" ⭐"),button=element("button","buy","خرید با Stars ↗");button.type="button";button.addEventListener("click",()=>purchase(p.id,button));
+ row.append(price,button);card.append(top,row);catalog.append(card)}
+ }catch(e){catalog.replaceChildren(element("div","empty",e.message))}
+}
+const labels={pending_invoice:"منتظر پرداخت",paid:"پرداخت شد",fulfilling:"در حال صدور",awaiting_fulfillment:"تحویل کارشناسی",delivery_pending:"آماده دریافت",delivered:"تحویل شد",needs_review:"نیاز به بررسی"};
+async function copy(orderId){
+ try{const result=await api("/api/telegram-shop/orders/"+orderId+"/delivery");await navigator.clipboard.writeText(result.credential);toast("کانفیگ در حافظه کپی شد؛ آن را خصوصی نگه دارید.")}
+ catch(e){toast(e.message||"خطا در دریافت کانفیگ")}
+}
+async function loadOrders(){
+ const target=document.getElementById("order-list");
+ if(!auth){target.textContent="فروشگاه را از داخل تلگرام باز کنید.";return}
+ try{const orders=await api("/api/telegram-shop/orders");target.className="";target.replaceChildren();
+ if(!orders.length){target.append(element("div","empty","هنوز سفارشی ثبت نکرده‌اید."));return}
+ for(const o of orders){const card=element("article","order");card.append(element("h3","",o.title+" · #"+o.id),element("small","",o.price_stars+" ⭐ · "+(labels[o.status]||o.status)));
+ if(o.status==="delivery_pending"||o.status==="delivered"){const btn=element("button","copy","📋 کپی کانفیگ");btn.addEventListener("click",()=>copy(o.id));card.append(btn)}target.append(card)}
+ }catch(e){target.className="empty";target.textContent=e.message}
+}
+if(app){app.ready();app.expand();app.setHeaderColor?.("#090e20");app.setBackgroundColor?.("#090e20")}
+loadCatalog();
+</script>
+</body></html>
