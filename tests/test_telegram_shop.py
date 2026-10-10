@@ -178,3 +178,58 @@ def test_telegram_public_routes_use_webhook_secret(shopdb,monkeypatch):
     assert shop._secret()==SECRET
     assert "bot_token" not in shop._catalog()[0]
     assert shop._admins()==set()
+
+
+def test_payment_credential_encryption_failure_stops_duplicate_provision(shopdb,monkeypatch):
+    order=shop._create_order(680,1)
+    item=shop._paid(680,{"invoice_payload":shop._invoice_payload(order),
+       "total_amount":25,"currency":"XTR","telegram_payment_charge_id":"charge-secret-store-680"})
+    count=[]
+    monkeypatch.setattr(shop,"_provision",lambda x: count.append(x["id"]) or
+                        {"credential":"private-password-material","provision_ref":"xray:999"})
+    monkeypatch.setattr(shop.access_ops,"seal_payload",lambda x:
+        (_ for _ in ()).throw(RuntimeError("storage unavailable")))
+    monkeypatch.setattr(shop,"_message",lambda *a,**kw:None)
+    shop._fulfill(item)
+    shop._fulfill(item)
+    result=shop._order(order["id"])
+    assert result["status"]=="needs_review"
+    assert result["provision_ref"]=="xray:999"
+    assert result["delivery_enc"]==""
+    assert count==[order["id"]]
+
+
+def test_mini_app_checkout_terms_and_owner_guard(shopdb,monkeypatch):
+    monkeypatch.setattr(shop,"_invoice",lambda item,chat_id=None:"https://t.me/invoice/example")
+    request=SimpleNamespace(headers={"x-telegram-init-data":initdata(741)})
+    with pytest.raises(HTTPException) as exc:
+        shop.mini_checkout(shop.CheckoutRequest(offer_id=1),request)
+    assert exc.value.status_code==422
+    result=shop.mini_checkout(shop.CheckoutRequest(offer_id=1,terms_accepted=True),request)
+    assert result["invoice_url"].startswith("https://t.me/")
+    assert shop._order(result["order_id"])["buyer_id"]==741
+
+
+def test_refund_requires_verified_paid_but_undelivered_order(shopdb,monkeypatch):
+    # No fake assertion or unpaid order can reach the Stars refund API.
+    order=shop._create_order(770,1)
+    actor=SimpleNamespace(headers={"x-makia-request":"1"})
+    routes={route.path:route.endpoint for route in shop.router.routes}
+    assert "/api/telegram-shop/checkout" in routes
+    assert shop._order(order["id"])["telegram_charge_id"] is None
+
+
+def test_stars_invoice_has_correct_currency_and_immutable_amount(shopdb,monkeypatch):
+    order=shop._create_order(712,1)
+    calls=[]
+    monkeypatch.setattr(shop,"_telegram",lambda method,request:calls.append((method,request)) or
+                        ("https://t.me/invoice/safe" if method=="createInvoiceLink" else {"message_id":1}))
+    link=shop._invoice(order)
+    assert link.startswith("https://t.me/invoice/")
+    assert calls[-1][0]=="createInvoiceLink"
+    assert calls[-1][1]["currency"]=="XTR"
+    assert calls[-1][1]["prices"][0]["amount"]==25
+    assert calls[-1][1]["provider_token"]==""
+    shop._invoice(order,712)
+    assert calls[-1][0]=="sendInvoice"
+    assert calls[-1][1]["chat_id"]==712
