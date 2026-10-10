@@ -34,7 +34,7 @@ code{direction:ltr;display:inline-block;color:var(--a)}
 <section>
 <h2>◈ طراحی و قیمت‌گذاری محصول</h2>
 <form id="offerForm">
- <div class="field"><label for="plan">پلن مرجع در پنل Makia</label><select id="plan" required><option value="">انتخاب پلن…</option></select></div>
+ <div class="field"><label for="plan">پلن مرجع در پنل Makia</label><select id="plan" required><option value="">انتخاب پلن…</option><option value="0">سرویس مستقل (تحویل دستی)</option></select></div>
  <div class="field"><label for="profile">نوع تحویل / پروفایل</label><input id="profile" placeholder="xray:inbound-tag یا outline یا manual:ssh" required></div>
  <div class="field"><label for="title">نام سرویس</label><input id="title" placeholder="مثلاً اتصال اختصاصی یک‌ماهه" required maxlength="80"></div>
  <div class="field"><label for="price">قیمت دقیق به Stars ⭐</label><input id="price" type="number" min="1" max="1000000" step="1" required placeholder="250"></div>
@@ -45,7 +45,7 @@ code{direction:ltr;display:inline-block;color:var(--a)}
  <div class="field" style="justify-content:center"><label><input id="active" type="checkbox"> فعال در فروشگاه</label></div>
  <div class="field full"><div class="actions"><button class="btn" type="submit" id="save">ذخیره محصول</button><button class="btn secondary" type="button" id="reset">محصول جدید</button></div></div>
 </form>
-<p class="hint">در نسخه فعلی، <b>Xray (با inbound مشخص)</b>، Outline، WireGuard و OpenVPN می‌توانند به Commerce API وصل شوند. SSH یا سایر مدل‌ها را با <code>manual:ssh</code> و نوع مناسب به صف تحویل دستی بفرستید. برای صدور خودکار، توکن مستقل <code>commerce:provision</code> لازم است. هیچ مبلغی از نام پلن یا قیمت تومانی حدس زده نمی‌شود.</p>
+<p class="hint">در نسخه فعلی، <b>Xray (با inbound مشخص)</b>، Outline، WireGuard و OpenVPN می‌توانند به Commerce API وصل شوند. SSH یا سایر مدل‌ها را با <code>manual:ssh</code> و نوع مناسب به صف تحویل دستی بفرستید. برای سایر پروتکل‌ها پلن «سرویس مستقل» و پروفایل manual:ikev2 یا manual:openvpn_wstunnel را انتخاب کنید؛ تحویل فقط پس از پرداخت و بررسی مدیر انجام می‌شود. برای صدور خودکار، توکن مستقل <code>commerce:provision</code> لازم است. هیچ مبلغی از نام پلن یا قیمت تومانی حدس زده نمی‌شود.</p>
 </section>
 <section><h2>🛍 محصولات ثبت‌شده</h2><div class="tablewrap"><table><thead><tr><th>محصول</th><th>پروفایل</th><th>قیمت</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody id="products"><tr><td colspan="5">در حال دریافت…</td></tr></tbody></table></div></section>
 <section><h2>📦 صف سفارش‌ها</h2><div class="actions" style="margin-bottom:16px"><button id="refresh" class="btn secondary" type="button">↻ به‌روزرسانی</button></div><div class="tablewrap"><table><thead><tr><th>سفارش / خریدار</th><th>محصول</th><th>پرداخت</th><th>وضعیت</th><th>پیگیری</th></tr></thead><tbody id="orders"><tr><td colspan="5">در حال دریافت…</td></tr></tbody></table></div>
@@ -104,14 +104,14 @@ async function load(){
  req("/api/telegram-shop/admin/offers"),req("/api/telegram-shop/admin/orders")]);
  $("bot").textContent=status.enabled?"فعال":"غیرفعال";$("total").textContent=status.orders_total;$("attention").textContent=status.needs_attention;
  plans=p;offers=offerRows;
- const select=$("plan"),selected=select.value;select.replaceChildren(e("option","انتخاب پلن…"));select.firstChild.value="";
+ const select=$("plan"),selected=select.value;select.replaceChildren(e("option","انتخاب پلن…"));select.firstChild.value="";const manual=e("option","سرویس مستقل (تحویل دستی)");manual.value="0";select.append(manual);
  for(const plan of plans){const opt=e("option",plan.name+" · "+plan.protocol_kind);opt.value=plan.id;select.append(opt)}select.value=selected;
  const tbody=$("products");tbody.replaceChildren();for(const row of offers)tbody.append(rowOffer(row));
  const orders=$("orders");orders.replaceChildren();for(const row of orderRows)orders.append(rowOrder(row));
  }catch(ex){msg("دسترسی یا API خطا دارد: "+ex.message)}
 }
 $("refresh").addEventListener("click",load);
-$("plan").addEventListener("change",()=>{const p=plans.find(x=>String(x.id)===$("plan").value);if(!p)return;
+$("plan").addEventListener("change",()=>{if($("plan").value==="0"){$("profile").value="manual:ikev2";return}const p=plans.find(x=>String(x.id)===$("plan").value);if(!p)return;
  if(!$("title").value)$("title").value=p.name;
  $("profile").value=p.protocol_kind==="xray"?"xray:YOUR_INBOUND_TAG":
  ["outline","wireguard","openvpn"].includes(p.protocol_kind)?p.protocol_kind:"manual:"+p.protocol_kind
