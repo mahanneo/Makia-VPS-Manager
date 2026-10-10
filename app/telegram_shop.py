@@ -166,7 +166,7 @@ def _catalog():
     for row in rows:
         item = dict(row)
         plan = get_service_plan(item["plan_id"])
-        if plan and plan.get("active"):
+        if item["plan_id"]==0 or (plan and plan.get("active")):
             out.append(item)
     return out
 
@@ -190,12 +190,16 @@ def _create_order(buyer_id, offer_id):
     offer = next((x for x in _catalog() if x["id"] == int(offer_id)), None)
     if not offer:
         raise HTTPException(404, "offer unavailable")
-    plan = get_service_plan(offer["plan_id"])
-    if not plan or not plan.get("active"):
+    plan = get_service_plan(offer["plan_id"]) if offer["plan_id"] else None
+    if offer["plan_id"] and (not plan or not plan.get("active")):
         raise HTTPException(409, "linked plan is unavailable")
-    config = plan.get("config") or {}
-    # A snapshot freezes pricing, profile, quotas and duration at checkout.
-    snapshot = {"name": plan["name"], "kind": plan["protocol_kind"],
+    # Manual custom offers can map to any already-supported Makia protocol,
+    # without pretending they have an automated commerce provisioner.
+    if not plan and not offer["profile"].startswith("manual:"):
+        raise HTTPException(409, "manual offer has no valid profile")
+    config = plan.get("config") or {} if plan else {}
+    snapshot = {"name": plan["name"] if plan else offer["title"],
+                "kind": plan["protocol_kind"] if plan else offer["profile"],
                 "config": config}
     ts = _timestamp()
     with connect() as con:
@@ -651,7 +655,7 @@ async def webhook(request:Request):
 
 
 class OfferWrite(BaseModel):
-    plan_id:int=Field(gt=0)
+    plan_id:int=Field(ge=0)
     title:str=Field(min_length=3,max_length=80)
     summary:str=Field(default="",max_length=360)
     icon:str=Field(default="🔐",max_length=8)
@@ -696,14 +700,18 @@ def register_admin(app, require_admin, require_mutation, audit_func, ip_func):
     @app.post("/api/telegram-shop/admin/offers")
     def admin_offer_new(payload:OfferWrite,request:Request):
         actor=require_admin(request);require_mutation(request)
-        plan=get_service_plan(payload.plan_id)
-        if not plan: raise HTTPException(404,"Makia service plan not found")
-        kind=plan["protocol_kind"]
+        plan=get_service_plan(payload.plan_id) if payload.plan_id else None
+        if payload.plan_id and not plan:
+            raise HTTPException(404,"Makia service plan not found")
+        kind=plan["protocol_kind"] if plan else ""
         profile=payload.profile.strip()
-        if profile not in {f"manual:{kind}",kind} and not (
+        if not plan:
+            if not re.fullmatch(r"manual:[a-z0-9_-]{2,48}",profile):
+                raise HTTPException(422,"custom protocol requires manual:<kind>")
+        elif profile not in {f"manual:{kind}",kind} and not (
             kind=="xray" and re.fullmatch(r"xray:[A-Za-z0-9_.:-]{1,100}",profile)):
             raise HTTPException(422,"profile must match its Makia plan kind")
-        if kind=="xray" and not profile.startswith("xray:"):
+        if kind=="xray" and not profile.startswith("xray:") and profile!="manual:xray":
             raise HTTPException(422,"Xray requires a specific inbound: xray:<tag>")
         if profile in SUPPORTED_AUTO or profile.startswith("xray:"):
             if profile!="outline" and not payload.endpoint.strip():
@@ -723,14 +731,18 @@ def register_admin(app, require_admin, require_mutation, audit_func, ip_func):
     @app.put("/api/telegram-shop/admin/offers/{offer_id}")
     def admin_offer_update(offer_id:int,payload:OfferWrite,request:Request):
         actor=require_admin(request);require_mutation(request)
-        plan=get_service_plan(payload.plan_id)
-        if not plan:raise HTTPException(404,"Makia service plan not found")
-        kind=str(plan["protocol_kind"])
+        plan=get_service_plan(payload.plan_id) if payload.plan_id else None
+        if payload.plan_id and not plan:
+            raise HTTPException(404,"Makia service plan not found")
+        kind=str(plan["protocol_kind"]) if plan else ""
         profile=payload.profile.strip()
-        if profile not in {f"manual:{kind}",kind} and not (
+        if not plan:
+            if not re.fullmatch(r"manual:[a-z0-9_-]{2,48}",profile):
+                raise HTTPException(422,"custom protocol requires manual:<kind>")
+        elif profile not in {f"manual:{kind}",kind} and not (
             kind=="xray" and re.fullmatch(r"xray:[A-Za-z0-9_.:-]{1,100}",profile)):
             raise HTTPException(422,"profile must match its Makia plan kind")
-        if kind=="xray" and not profile.startswith("xray:"):
+        if kind=="xray" and not profile.startswith("xray:") and profile!="manual:xray":
             raise HTTPException(422,"Xray requires a specific inbound")
         if profile in SUPPORTED_AUTO or profile.startswith("xray:"):
             if profile!="outline" and not payload.endpoint.strip():
