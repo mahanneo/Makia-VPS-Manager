@@ -31,6 +31,7 @@ def main():
         raise SystemExit("Use an HTTPS Mini App URL ending /telegram/shop")
     api="https://api.telegram.org/bot"+token+"/"
     result=_json_request(api+"getMe")
+    bot_name=str((result.get("result") or {}).get("username") or "")
     if not result.get("ok") or not (result.get("result") or {}).get("is_bot"):
         raise SystemExit("Telegram getMe could not verify the bot")
     host=public.split("/telegram/shop")[0]
@@ -57,7 +58,7 @@ def main():
                        "web_app":{"url":public}}
     })
     print("Makia Telegram Shop setup verified; webhook, commands and Mini App menu configured.")
-    print("Bot username:",(result.get("result") or {}).get("username","(available in @BotFather)"))
+    print("Bot username:",bot_name or "(available in @BotFather)")
     print("Webhook path: /telegram/shop/webhook")
 
 
