@@ -652,6 +652,12 @@ class ManualDelivery(BaseModel):
 
 
 def register_admin(app, require_admin, require_mutation, audit_func, ip_func):
+    @app.get("/telegram/shop/admin")
+    def admin_page(request:Request):
+        require_admin(request)
+        return FileResponse(BASE/"templates"/"telegram_shop_admin.html",
+                            media_type="text/html",headers={"Cache-Control":"no-store"})
+
     @app.get("/api/telegram-shop/admin/status")
     def admin_status(request:Request):
         require_admin(request)
@@ -699,6 +705,32 @@ def register_admin(app, require_admin, require_mutation, audit_func, ip_func):
         audit_func(actor,"tg_shop_offer_create",str(cur.lastrowid),f"plan={payload.plan_id}",ip_func(request))
         return {"ok":True,"offer_id":cur.lastrowid}
 
+    @app.put("/api/telegram-shop/admin/offers/{offer_id}")
+    def admin_offer_update(offer_id:int,payload:OfferWrite,request:Request):
+        actor=require_admin(request);require_mutation(request)
+        plan=get_service_plan(payload.plan_id)
+        if not plan:raise HTTPException(404,"Makia service plan not found")
+        kind=str(plan["protocol_kind"])
+        profile=payload.profile.strip()
+        if profile not in {f"manual:{kind}",kind} and not (
+            kind=="xray" and re.fullmatch(r"xray:[A-Za-z0-9_.:-]{1,100}",profile)):
+            raise HTTPException(422,"profile must match its Makia plan kind")
+        if kind=="xray" and not profile.startswith("xray:"):
+            raise HTTPException(422,"Xray requires a specific inbound")
+        if profile in SUPPORTED_AUTO or profile.startswith("xray:"):
+            if profile!="outline" and not payload.endpoint.strip():
+                raise HTTPException(422,"public endpoint is required for auto-provision")
+        with connect() as con:
+            changed=con.execute(
+                """UPDATE tg_shop_offers SET plan_id=?,title=?,summary=?,icon=?,profile=?,
+                   endpoint=?,price_stars=?,active=?,sort_order=?,updated_at=? WHERE id=?""",
+                (payload.plan_id,payload.title.strip(),payload.summary.strip(),
+                 payload.icon,profile,payload.endpoint.strip(),payload.price_stars,
+                 int(payload.active),payload.sort_order,_timestamp(),offer_id)).rowcount
+        if not changed:raise HTTPException(404,"offer not found")
+        audit_func(actor,"tg_shop_offer_update",str(offer_id),f"plan={payload.plan_id}",ip_func(request))
+        return {"ok":True,"offer_id":offer_id}
+
     @app.post("/api/telegram-shop/admin/offers/{offer_id}/state")
     def admin_offer_state(offer_id:int,request:Request,active:bool=False):
         actor=require_admin(request);require_mutation(request)
@@ -734,6 +766,35 @@ def register_admin(app, require_admin, require_mutation, audit_func, ip_func):
         sent=_send_delivery(_order(order_id))
         audit_func(actor,"tg_shop_manual_deliver",str(order_id),f"sent={sent}",ip_func(request))
         return {"ok":True,"sent":sent}
+
+    @app.post("/api/telegram-shop/admin/orders/{order_id}/refund")
+    def admin_refund(order_id:int,request:Request):
+        actor=require_admin(request);require_mutation(request)
+        item=_order(order_id)
+        if not item or not item.get("telegram_charge_id"):
+            raise HTTPException(409,"no confirmed Telegram Stars payment")
+        # Refund is only automatic while nothing has been provisioned or issued.
+        if item["status"]!="awaiting_fulfillment" or item["delivery_enc"] or item["provision_ref"]:
+            raise HTTPException(409,"review/revoke delivered access before any refund")
+        with connect() as con:
+            claimed=con.execute(
+                "UPDATE tg_shop_orders SET status='refunding',updated_at=? "
+                "WHERE id=? AND status='awaiting_fulfillment' AND delivery_enc=''",
+                (_timestamp(),order_id)).rowcount
+        if not claimed:raise HTTPException(409,"refund already in progress")
+        try:
+            _telegram("refundStarPayment",{
+                "user_id":item["buyer_id"],
+                "telegram_payment_charge_id":item["telegram_charge_id"]})
+        except Exception:
+            # Unknown result: prevent retry without human charge reconciliation.
+            _update_order(order_id,"refund_review",error_code="refund_unknown")
+            raise HTTPException(502,"refund result is unknown; review Telegram transactions")
+        _update_order(order_id,"refunded")
+        audit_func(actor,"tg_shop_refund",str(order_id),"XTR refund confirmed",ip_func(request))
+        try:_message(item["buyer_id"],f"↩️ پرداخت سفارش #{order_id} به Stars بازگردانده شد.")
+        except Exception:pass
+        return {"ok":True,"status":"refunded"}
 
     @app.post("/api/telegram-shop/admin/orders/{order_id}/resend")
     def admin_resend(order_id:int,request:Request):
