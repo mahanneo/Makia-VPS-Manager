@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from . import access_ops, integration_ops
@@ -114,7 +115,8 @@ def _telegram(method, payload):
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]{1,50}", method):
         raise ValueError("invalid Telegram API method")
     result = integration_ops._json_request(
-        f"{API_BASE}/bot{_token()}/{method}", method="POST", body=payload, timeout=12
+        f"{API_BASE}/bot{_token()}/{method}", method="POST", body=payload,
+        timeout=6 if method=="answerPreCheckoutQuery" else 12
     )
     if not result.get("ok"):
         raise integration_ops.IntegrationError("Telegram " + method + " rejected request")
@@ -262,7 +264,8 @@ def _paid(user_id, payment):
         return None
     if payment.get("currency") != "XTR" or payment.get("total_amount") != item["price_stars"]:
         return None
-    if not re.fullmatch(r"[A-Za-z0-9_:-]{8,240}", charge):
+    # Charge IDs are opaque; reject only controls and unreasonable length.
+    if not 1<=len(charge)<=512 or any(ord(ch)<33 or ord(ch)==127 for ch in charge):
         return None
     ts = _timestamp()
     with connect() as con:
@@ -521,7 +524,7 @@ def process_update(payload):
     else: _home(actor)
 
 
-def verify_init_data(raw, max_age=300):
+def verify_init_data(raw, max_age=7200):
     """Verify Telegram Mini App HMAC before trusting identity or order action."""
     _require_enabled()
     if not isinstance(raw,str) or not 10<len(raw)<8192:
@@ -622,12 +625,15 @@ async def webhook(request:Request):
     except ValueError: raise HTTPException(400,"invalid content length")
     if size>262144:
         raise HTTPException(413,"update too large")
+    raw=await request.body()
+    if len(raw)>262144:raise HTTPException(413,"update too large")
     try:
-        update=await request.json()
+        update=json.loads(raw)
     except Exception:
         raise HTTPException(400,"invalid Telegram update")
     try:
-        process_update(update)
+        # Do not block all FastAPI requests on slower provisioning operations.
+        await run_in_threadpool(process_update,update)
     except Exception:
         # Telegram can redeliver; the order state always remains reviewable.
         # Never expose credentials, charge IDs or bot token via errors.
