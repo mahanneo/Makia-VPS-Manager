@@ -2539,6 +2539,7 @@ document.addEventListener('click',e=>{
     if(a==='command')openCommandPalette();
     else if(a==='refresh')currentView();
     else if(a==='create-access')openProvisionWizard();
+    else if(a==='telegram-shop-studio')window.location.assign('/telegram/shop/admin');
     else if(a==='sidebar-open'){document.body.classList.add('menu-open');shell.setAttribute('aria-expanded','true')}
     else if(a==='sidebar-close'){document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false')}
     else if(a==='sidebar-group'){

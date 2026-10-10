@@ -52,7 +52,7 @@ def test_every_literal_data_action_has_dispatch_handler():
 
 def test_every_shell_action_has_dispatch_handler():
     actions=set(re.findall(r'data-shell-action=["\']([a-z0-9-]+)["\']',SHELL))
-    expected={"create-access","command","refresh","sidebar-open","sidebar-close","sidebar-group"}
+    expected={"create-access","command","refresh","sidebar-open","sidebar-close","sidebar-group","telegram-shop-studio"}
     assert actions==expected
     for action in actions:
         assert f"a==='{action}'" in JS

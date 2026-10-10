@@ -11,13 +11,14 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, get_profile, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight, telegram_shop
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
 app.mount("/static",StaticFiles(directory=BASE/"static"),name="static")
 templates=Jinja2Templates(directory=BASE/"templates")
 app.include_router(client_portal.router)
+app.include_router(telegram_shop.router)
 
 @app.middleware("http")
 async def security_headers(request:Request,call_next):
@@ -31,6 +32,10 @@ async def security_headers(request:Request,call_next):
         request.url.path.startswith("/client/") or
         request.url.path.startswith("/access/") or
         request.url.path=="/integrations/telegram/webhook" or
+        request.url.path=="/telegram/shop" or
+        request.url.path=="/telegram/shop/webhook" or
+        (request.url.path.startswith("/api/telegram-shop/") and
+         not request.url.path.startswith("/api/telegram-shop/admin/")) or
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
@@ -64,6 +69,16 @@ async def security_headers(request:Request,call_next):
         "img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
         "connect-src 'self'; form-action 'self'"
     )
+    if request.url.path=="/telegram/shop":
+        # Telegram's official Mini App JS bridge is loaded ONLY for this page.
+        response.headers["Content-Security-Policy"]=(
+            "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
+            "img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' https://telegram.org; "
+            "connect-src 'self'; form-action 'none'"
+        )
+    if request.url.path.startswith("/api/telegram-shop/") or request.url.path=="/telegram/shop":
+        response.headers["Cache-Control"]="no-store"
     if request.url.path.startswith("/api/") or request.url.path in {"/","/login","/login/2fa"}:
         response.headers["Cache-Control"]="no-store"
     if request.headers.get("x-forwarded-proto","").lower()=="https" or request.url.scheme=="https":
@@ -74,6 +89,7 @@ async def security_headers(request:Request,call_next):
 def startup():
     init_db()
     client_store.init_client_db()
+    telegram_shop.init_shop_db()
     if get_setting("ui_generation","")!="glass-v1":
         set_setting("theme","glass")
         set_setting("ui_generation","glass-v1")
@@ -182,6 +198,7 @@ def public_host(request:Request):
 
 
 client_admin.register_client_admin(app,require_user,require_mutation,require_local_admin,audit,ip)
+telegram_shop.register_admin(app,require_local_admin,require_mutation,audit,ip)
 
 
 def _setting_int(key,default,minimum=None,maximum=None):

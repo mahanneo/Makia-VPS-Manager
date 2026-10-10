@@ -1,16 +1,16 @@
-"""Release 1.6.5 must not restart active VPN clients for a backend hotfix."""
+"""Release 1.6.6 must not restart active VPN clients for a backend hotfix."""
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 
 
 def test_release_version_server_and_ci_agree():
-    assert (ROOT/"VERSION").read_text().strip()=="1.6.5"
+    assert (ROOT/"VERSION").read_text().strip()=="1.6.6"
     config=(ROOT/"app/config.py").read_text()
-    assert 'VERSION = "1.6.5"' in config
+    assert 'VERSION = "1.6.6"' in config
     ci=(ROOT/".github/workflows/ci.yml").read_text()
-    assert "grep -Fxq '1.6.5' VERSION" in ci
-    assert 'grep -q \'VERSION = "1.6.5"\' app/config.py' in ci
+    assert "grep -Fxq '1.6.6' VERSION" in ci
+    assert 'grep -q \'VERSION = "1.6.6"\' app/config.py' in ci
 
 
 def test_live_safe_forward_rollout_preserves_gateway_and_network():
