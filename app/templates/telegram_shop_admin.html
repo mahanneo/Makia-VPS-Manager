@@ -1,0 +1,120 @@
+<!doctype html><html lang="fa" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>MAKiA — Telegram Commerce Studio</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--surface:#16223a;--edge:#324361;--text:#f4f7ff;--sub:#a2b2cc;--a:#70e4c7;--b:#7aaffd}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top left,#283e61 0,transparent 50%),var(--bg);color:var(--text);font-family:system-ui,Tahoma,sans-serif}
+main{max-width:1150px;margin:auto;padding:26px 20px 75px}header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:15px;margin-bottom:34px}
+h1{font-size:clamp(22px,4vw,36px);margin:0}h1 span{color:var(--a)}.sub{font-size:13px;color:var(--sub);line-height:1.9}
+a{color:var(--b)}button,input,textarea,select{font:inherit}button{cursor:pointer}
+.btn{background:linear-gradient(95deg,#86ecd1,#77aefc);color:#07152a;border:0;padding:12px 17px;font-weight:800;border-radius:12px}.btn.secondary{background:#253957;color:var(--text)}.btn.danger{background:#3c2538;color:#ffb3c5}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:18px 0 28px}
+.card,section{border:1px solid var(--edge);background:linear-gradient(150deg,#192945,#131d31);border-radius:18px;padding:22px;box-shadow:0 8px 30px #0002}
+.card b{display:block;font-size:25px;margin-bottom:8px}.card span{color:var(--sub);font-size:13px}
+section{margin:20px 0}section h2{font-size:19px;margin:0 0 19px}
+form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.field{display:flex;flex-direction:column;gap:7px}
+.field.full{grid-column:1/-1}label{font-size:13px;color:#d0d9ec}input,textarea,select{border:1px solid #3a4b69;background:#0e172b;color:var(--text);padding:12px;border-radius:10px;min-width:0}
+textarea{min-height:85px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.hint{font-size:12px;line-height:1.9;color:var(--sub)}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:800px}th,td{padding:13px 12px;border-bottom:1px solid #36435d;text-align:right;font-size:12px;vertical-align:top}th{color:var(--sub)}td{max-width:230px;overflow-wrap:anywhere}
+td button{padding:7px 10px;border:1px solid #536789;border-radius:8px;background:#243855;color:#f2f5ff;margin:2px}
+code{direction:ltr;display:inline-block;color:var(--a)}
+#notice{position:fixed;top:10px;left:15px;right:15px;max-width:620px;margin:auto;padding:14px;background:#29466a;border-radius:12px;display:none;z-index:2;font-size:13px}
+@media(max-width:620px){form{grid-template-columns:1fr}main{padding:19px 13px 65px}.card,section{padding:17px}}
+</style></head><body><div id="notice" role="status" aria-live="polite"></div>
+<main>
+<header><div><div style="font-size:11px;letter-spacing:3px;color:#86ecd1" dir="ltr">✦ MAKiA · COMMERCE STUDIO</div><h1>مدیریت <span>فروشگاه تلگرام</span></h1><p class="sub">کاتالوگ متصل به پلن‌ها، فاکتور Stars و سفارش‌های قابل پیگیری؛ مستقل از ربات اعلان مدیر</p></div>
+<div><a href="/" class="btn secondary" style="text-decoration:none">↩ بازگشت به پنل ماکیا</a></div></header>
+<div class="cards">
+ <div class="card"><b id="bot">—</b><span>آمادگی ربات</span></div>
+ <div class="card"><b id="total">—</b><span>کل سفارش‌ها</span></div>
+ <div class="card"><b id="attention">—</b><span>نیازمند بررسی</span></div>
+ <div class="card"><b>⭐ XTR</b><span>پرداخت دیجیتال مجاز تلگرام</span></div>
+</div>
+<section>
+<h2>◈ طراحی و قیمت‌گذاری محصول</h2>
+<form id="offerForm">
+ <div class="field"><label for="plan">پلن مرجع در پنل Makia</label><select id="plan" required><option value="">انتخاب پلن…</option></select></div>
+ <div class="field"><label for="profile">نوع تحویل / پروفایل</label><input id="profile" placeholder="xray:inbound-tag یا outline یا manual:ssh" required></div>
+ <div class="field"><label for="title">نام سرویس</label><input id="title" placeholder="مثلاً اتصال اختصاصی یک‌ماهه" required maxlength="80"></div>
+ <div class="field"><label for="price">قیمت دقیق به Stars ⭐</label><input id="price" type="number" min="1" max="1000000" step="1" required placeholder="250"></div>
+ <div class="field"><label for="endpoint">IP یا دامنه اتصال (برای تحویل خودکار)</label><input id="endpoint" dir="ltr" placeholder="p.mahinet.shop"></div>
+ <div class="field"><label for="icon">نماد محصول</label><input id="icon" maxlength="8" value="🔐"></div>
+ <div class="field full"><label for="summary">توضیح کوتاه برای مشتری</label><textarea id="summary" maxlength="360" placeholder="ویژگی‌ها، دستگاه مناسب و محدودیت‌های واقعی سرویس"></textarea></div>
+ <div class="field"><label for="order">اولویت نمایش</label><input id="order" type="number" min="0" max="10000" value="100"></div>
+ <div class="field" style="justify-content:center"><label><input id="active" type="checkbox"> فعال در فروشگاه</label></div>
+ <div class="field full"><div class="actions"><button class="btn" type="submit" id="save">ذخیره محصول</button><button class="btn secondary" type="button" id="reset">محصول جدید</button></div></div>
+</form>
+<p class="hint">در نسخه فعلی، <b>Xray (با inbound مشخص)</b>، Outline، WireGuard و OpenVPN می‌توانند به Commerce API وصل شوند. SSH یا سایر مدل‌ها را با <code>manual:ssh</code> و نوع مناسب به صف تحویل دستی بفرستید. برای صدور خودکار، توکن مستقل <code>commerce:provision</code> لازم است. هیچ مبلغی از نام پلن یا قیمت تومانی حدس زده نمی‌شود.</p>
+</section>
+<section><h2>🛍 محصولات ثبت‌شده</h2><div class="tablewrap"><table><thead><tr><th>محصول</th><th>پروفایل</th><th>قیمت</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody id="products"><tr><td colspan="5">در حال دریافت…</td></tr></tbody></table></div></section>
+<section><h2>📦 صف سفارش‌ها</h2><div class="actions" style="margin-bottom:16px"><button id="refresh" class="btn secondary" type="button">↻ به‌روزرسانی</button></div><div class="tablewrap"><table><thead><tr><th>سفارش / خریدار</th><th>محصول</th><th>پرداخت</th><th>وضعیت</th><th>پیگیری</th></tr></thead><tbody id="orders"><tr><td colspan="5">در حال دریافت…</td></tr></tbody></table></div>
+<p class="hint">🔒 تحویل دستی فقط برای سفارش دارای شناسه پرداخت قطعی انجام می‌شود. اگر ساخت خودکار با وضعیت نامشخص متوقف شد، ابتدا دسترسی احتمالی موجود در پنل را بررسی کنید؛ ساخت تکراری ممنوع است. استرداد Stars برای سفارش پرداخت‌شده و هنوز تحویل‌نشده فعال است.</p>
+</section></main>
+<script>
+"use strict";
+let offers=[],plans=[],editId=null;
+const $=id=>document.getElementById(id);
+function msg(value){$("notice").textContent=value;$("notice").style.display="block";setTimeout(()=>$("notice").style.display="none",5000)}
+async function req(path,method="GET",value){
+ const headers={"X-Makia-Request":"1"};if(value!==undefined)headers["Content-Type"]="application/json";
+ const r=await fetch(path,{method,headers,credentials:"same-origin",body:value===undefined?undefined:JSON.stringify(value),cache:"no-store"});
+ if(!r.ok){let body={};try{body=await r.json()}catch{}throw Error(body.detail||"HTTP "+r.status)}
+ return r.json()
+}
+function e(tag,value){const el=document.createElement(tag);if(value!==undefined)el.textContent=String(value);return el}
+function cell(value){const x=e("td",value);return x}
+function readForm(){
+ return {plan_id:Number($("plan").value),title:$("title").value,summary:$("summary").value,icon:$("icon").value||"🔐",profile:$("profile").value,endpoint:$("endpoint").value,price_stars:Number($("price").value),sort_order:Number($("order").value),active:$("active").checked}
+}
+function reset(){editId=null;$("offerForm").reset();$("save").textContent="ذخیره محصول"}
+$("reset").addEventListener("click",reset);
+$("offerForm").addEventListener("submit",async event=>{event.preventDefault();
+ try{const path=editId?"/api/telegram-shop/admin/offers/"+editId:"/api/telegram-shop/admin/offers";
+ await req(path,editId?"PUT":"POST",readForm());msg("محصول با موفقیت ذخیره شد");reset();await load()}catch(ex){msg(ex.message)}
+});
+function rowOffer(o){const tr=e("tr");tr.append(cell(o.icon+" "+o.title),cell(o.profile),cell(o.price_stars+" ⭐"),cell(o.active?"فعال":"غیرفعال"));
+ const actions=e("td"),edit=e("button","ویرایش"),toggle=e("button",o.active?"غیرفعال کردن":"فعال کردن");
+ edit.addEventListener("click",()=>{editId=o.id;$("plan").value=o.plan_id;$("title").value=o.title;$("summary").value=o.summary;$("icon").value=o.icon;$("profile").value=o.profile;$("endpoint").value=o.endpoint;$("price").value=o.price_stars;$("order").value=o.sort_order;$("active").checked=!!o.active;$("save").textContent="ثبت تغییرات";window.scrollTo({top:170,behavior:"smooth"})});
+ toggle.addEventListener("click",async()=>{try{await req("/api/telegram-shop/admin/offers/"+o.id+"/state?active="+(!o.active),"POST");await load()}catch(ex){msg(ex.message)}});
+ actions.append(edit,toggle);tr.append(actions);return tr
+}
+function rowOrder(o){
+ const tr=e("tr");tr.append(cell("#"+o.id+" · TG "+o.buyer_id),cell(o.title),cell(o.price_stars+" ⭐"),cell(o.status));
+ const act=e("td");
+ if(["awaiting_fulfillment","needs_review"].includes(o.status)){
+  const btn=e("button","تحویل دستی");
+  btn.addEventListener("click",async()=>{const config=prompt("فقط پس از بررسی پرداخت و عدم ساخت تکراری، کانفیگ کامل را وارد کنید:");if(!config)return;
+  if(!confirm("تحویل خصوصی کانفیگ به خریدار تأیید شود؟"))return;
+  try{await req("/api/telegram-shop/admin/orders/"+o.id+"/deliver","POST",{credential:config});msg("درخواست تحویل ثبت شد");await load()}catch(err){msg(err.message)}});
+  act.append(btn)
+ }
+ if(["delivered","delivery_pending"].includes(o.status)){
+  const btn=e("button","ارسال مجدد");btn.addEventListener("click",async()=>{try{await req("/api/telegram-shop/admin/orders/"+o.id+"/resend","POST");msg("درخواست ارسال مجدد ثبت شد");await load()}catch(err){msg(err.message)}});act.append(btn)
+ }
+ if(o.status==="awaiting_fulfillment"){
+  const btn=e("button","استرداد Stars");btn.addEventListener("click",async()=>{if(!confirm("سرویس تحویل نشده است و Stars بازگردانده شود؟"))return;
+  try{await req("/api/telegram-shop/admin/orders/"+o.id+"/refund","POST");msg("استرداد انجام شد");await load()}catch(err){msg(err.message)}});act.append(btn)
+ }
+ tr.append(act);return tr
+}
+async function load(){
+ try{const [status,p,offerRows,orderRows]=await Promise.all([
+ req("/api/telegram-shop/admin/status"),req("/api/plans?active_only=true"),
+ req("/api/telegram-shop/admin/offers"),req("/api/telegram-shop/admin/orders")]);
+ $("bot").textContent=status.enabled?"فعال":"غیرفعال";$("total").textContent=status.orders_total;$("attention").textContent=status.needs_attention;
+ plans=p;offers=offerRows;
+ const select=$("plan"),selected=select.value;select.replaceChildren(e("option","انتخاب پلن…"));select.firstChild.value="";
+ for(const plan of plans){const opt=e("option",plan.name+" · "+plan.protocol_kind);opt.value=plan.id;select.append(opt)}select.value=selected;
+ const tbody=$("products");tbody.replaceChildren();for(const row of offers)tbody.append(rowOffer(row));
+ const orders=$("orders");orders.replaceChildren();for(const row of orderRows)orders.append(rowOrder(row));
+ }catch(ex){msg("دسترسی یا API خطا دارد: "+ex.message)}
+}
+$("refresh").addEventListener("click",load);
+$("plan").addEventListener("change",()=>{const p=plans.find(x=>String(x.id)===$("plan").value);if(!p)return;
+ if(!$("title").value)$("title").value=p.name;
+ $("profile").value=p.protocol_kind==="xray"?"xray:YOUR_INBOUND_TAG":
+ ["outline","wireguard","openvpn"].includes(p.protocol_kind)?p.protocol_kind:"manual:"+p.protocol_kind
+});
+load();
+</script></body></html>
