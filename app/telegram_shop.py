@@ -381,9 +381,18 @@ def _fulfill(item):
         try: _message(item["buyer_id"],f"✅ پرداخت سفارش #{item['id']} تأیید شد.\nصدور دسترسی در صف بررسی تیم ماکیا است.")
         except Exception: pass
         return
-    _update_order(item["id"], "delivery_pending",
-                  delivery_enc=access_ops.seal_payload({"credential": result["credential"]}),
-                  provision_ref=str(result.get("provision_ref") or ""))
+    try:
+        sealed=access_ops.seal_payload({"credential": result["credential"]})
+        _update_order(item["id"], "delivery_pending",
+                      delivery_enc=sealed,
+                      provision_ref=str(result.get("provision_ref") or ""))
+    except Exception:
+        # Account may already exist. Never retry provisioning if encryption/
+        # persistence failed, and do not expose plaintext credentials in logs.
+        _update_order(item["id"], "needs_review",error_code="delivery_storage_unknown",
+                      provision_ref=str(result.get("provision_ref") or ""))
+        _notify_admins(item, "سرویس ایجاد شد | نگهداری امن کانفیگ نیاز به بررسی دارد")
+        return
     if not _send_delivery(_order(item["id"])):
         _notify_admins(item, "سرویس ساخته شده | ارسال به مشتری بررسی شود")
 
