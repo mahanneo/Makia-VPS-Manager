@@ -40,6 +40,7 @@ footer{color:#7c8fae;letter-spacing:1.2px;font-size:10px;text-align:center;margi
   <section class="panel visible" id="shop">
    <div class="headline"><small>✦ YOUR ACCESS, REIMAGINED</small><h1>اتصالِ متفاوت،<br><em>تجربه‌ای اختصاصی.</em></h1><p>سرویس مناسب خود را انتخاب کنید، با Stars تلگرام پرداخت کنید و تحویل امن را در همین محیط دریافت کنید.</p></div>
    <div class="highlights"><div><b>⭐ Stars</b><small>پرداخت امن</small></div><div><b>🔐 Private</b><small>کانفیگ خصوصی</small></div><div><b>◈ Makia</b><small>متصل به پنل</small></div></div>
+   <label style="display:flex;align-items:flex-start;gap:10px;color:#a4b2cc;font-size:12px;line-height:1.8;margin:0 0 23px"><input id="terms" type="checkbox" style="accent-color:#86ead2;width:18px;height:18px;flex:none;margin-top:4px"> <span>قوانین خرید خدمات دیجیتال ماکیا، پرداخت با Telegram Stars، محدودیت‌های شبکه و شرایط پشتیبانی را مطالعه کردم و می‌پذیرم.</span></label>
    <div class="section-title"><h2>کلکسیون سرویس‌ها</h2><span id="count">در حال بارگذاری</span></div>
    <div id="catalog" class="grid"><div class="empty">در حال دریافت محصولات…</div></div>
   </section>
@@ -73,8 +74,9 @@ function show(name){
 document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>show(b.dataset.tab)));
 async function purchase(id,button){
  if(!app||!auth){toast("فروشگاه را از داخل تلگرام باز کنید.");return}
+ if(!document.getElementById("terms").checked){toast("لطفاً ابتدا قوانین خرید را تأیید کنید.");return}
  if(busy)return;busy=true;button.disabled=true;button.textContent="ساخت فاکتور…";
- try{const invoice=await api("/api/telegram-shop/checkout","POST",{offer_id:id});
+ try{const invoice=await api("/api/telegram-shop/checkout","POST",{offer_id:id,terms_accepted:true});
  if(typeof invoice.invoice_url!=="string"||!invoice.invoice_url.startsWith("https://t.me/"))throw Error("لینک پرداخت معتبر نیست");
  app.openInvoice(invoice.invoice_url,status=>{if(status==="paid"||status==="pending")show("orders");else if(status==="cancelled")toast("پرداخت لغو شد.")})
  }catch(e){toast(e.message||"خطا در فاکتور")}finally{busy=false;button.disabled=false;button.textContent="خرید با Stars ↗"}
