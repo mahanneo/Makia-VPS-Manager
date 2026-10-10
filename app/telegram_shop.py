@@ -210,7 +210,8 @@ def _create_order(buyer_id, offer_id):
              offer["endpoint"], offer["price_stars"],
              json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
              secrets.token_urlsafe(22), ts, ts))
-        return _order(cur.lastrowid)
+        order_id = cur.lastrowid
+    return _order(order_id)
 
 
 def _invoice_payload(item):
@@ -445,7 +446,7 @@ def _handle_callback(callback):
         if offer:
             _message(actor, f"{offer['icon']} {offer['title']}\n\n"
                 f"{offer['summary']}\n\n⭐ قیمت: {offer['price_stars']} Stars",
-                _keyboard([[{"text":"💳 پرداخت با Stars","callback_data":f"buy:{offer_id}"}],
+                _keyboard([[{"text":"✅ پذیرش قوانین و پرداخت با Stars","callback_data":f"buy:{offer_id}"}],
                            [{"text":"↩️ فهرست سرویس‌ها","callback_data":"catalog"}]]))
     elif re.fullmatch(r"buy:\d{1,8}",data):
         try:
@@ -488,7 +489,8 @@ def process_update(payload):
     if payment:
         item=_paid(actor,payment)
         if item:
-            _message(actor,f"💚 پرداخت سفارش #{item['id']} با موفقیت ثبت شد.")
+            try: _message(actor,f"💚 پرداخت سفارش #{item['id']} با موفقیت ثبت شد.")
+            except Exception: pass
             _fulfill(item)
         return
     text=str(msg.get("text") or "").split(maxsplit=1)[0].split("@",1)[0].lower()
@@ -502,6 +504,14 @@ def process_update(payload):
             "تحویل پس از تأیید پرداخت و بررسی آمادگی پروتکل صورت می‌گیرد. "
             "در صورت خطا یا اختلاف مالی با /paysupport ارتباط بگیرید. "
             "برای سفارش خود از قوانین سرویس و مقررات تلگرام پیروی کنید.")
+    elif text == "/admin" and actor in _admins():
+        with connect() as con:
+            rows=con.execute("SELECT id,title,status,price_stars FROM tg_shop_orders "
+                "WHERE status IN ('needs_review','awaiting_fulfillment','delivery_pending') "
+                "ORDER BY id DESC LIMIT 10").fetchall()
+        summary="\n".join(f"#{r['id']} {r['title']} · {r['price_stars']} ⭐ · {r['status']}" for r in rows)
+        _message(actor,"🧭 پنل سفارش‌های ماکیا\n\n"+(summary or "سفارش نیازمند بررسی وجود ندارد.")+
+            "\n\nصدور یا تحویل دستی فقط از بخش مدیریت احرازهویت‌شده پنل Makia انجام می‌شود.")
     elif text == "/redeliver":
         with connect() as con:
             rows=con.execute("SELECT id FROM tg_shop_orders WHERE buyer_id=? AND "
@@ -562,11 +572,14 @@ def public_catalog():
 
 class CheckoutRequest(BaseModel):
     offer_id:int=Field(gt=0)
+    terms_accepted:bool=False
 
 
 @router.post("/api/telegram-shop/checkout")
 def mini_checkout(payload:CheckoutRequest,request:Request):
     actor=_mini_user(request)
+    if not payload.terms_accepted:
+        raise HTTPException(422,"accept terms before checkout")
     item=_create_order(actor,payload.offer_id)
     try:
         link=_invoice(item)
@@ -584,6 +597,20 @@ def mini_orders(request:Request):
     return [dict(x) for x in rows]
 
 
+@router.get("/api/telegram-shop/orders/{order_id}/delivery")
+def mini_delivery(order_id:int,request:Request):
+    actor=_mini_user(request)
+    item=_order_for(actor,order_id)
+    if item["status"] not in {"delivered","delivery_pending"} or not item["delivery_enc"]:
+        raise HTTPException(409,"access is not ready")
+    try:
+        credential=access_ops.open_payload(item["delivery_enc"]).get("credential")
+    except Exception:
+        raise HTTPException(500,"stored delivery unavailable")
+    if not credential:raise HTTPException(500,"stored delivery unavailable")
+    return {"order_id":order_id,"credential":credential}
+
+
 @router.post("/telegram/shop/webhook")
 async def webhook(request:Request):
     _require_enabled()
@@ -591,7 +618,9 @@ async def webhook(request:Request):
     received=request.headers.get("x-telegram-bot-api-secret-token","")
     if not re.fullmatch(r"[A-Za-z0-9_-]{24,128}", expected or "") or not hmac.compare_digest(expected,received):
         raise HTTPException(403,"invalid Telegram webhook secret")
-    if int(request.headers.get("content-length") or 0)>262144:
+    try: size=int(request.headers.get("content-length") or 0)
+    except ValueError: raise HTTPException(400,"invalid content length")
+    if size>262144:
         raise HTTPException(413,"update too large")
     try:
         update=await request.json()
