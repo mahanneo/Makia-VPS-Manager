@@ -8,6 +8,8 @@ User=root
 WorkingDirectory=/opt/makia-vps-manager
 Environment=MAKIA_DATA_DIR=/opt/makia-vps-manager/data
 EnvironmentFile=-/etc/makia-vps-manager/makia.env
+# Dedicated customer-bot secrets remain root-only and opt-in.
+EnvironmentFile=-/etc/makia-vps-manager/telegram-shop.env
 ExecStart=/opt/makia-vps-manager/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8787 --proxy-headers
 Restart=on-failure
 RestartSec=3
