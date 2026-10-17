@@ -128,5 +128,32 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   await s.install();
   assert.equal(s.applied,false,"First install without an assigned proxy stays direct");
 
-  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 12 scenario groups PASS");
+  // Opening a popup must not reuse a stale successful IP check as proof of egress.
+  s=await scenario();
+  assert.equal((await s.send("connect",s.proxy)).ok,true);
+  s.local.verifiedAt=Date.now()-130000;
+  s.setBlocked(true);
+  const stale=await s.send("status");
+  assert.equal(stale.result.connected,false,"Expired egress verification cannot remain green");
+  assert.equal(stale.result.proxyActive,true,"Failed recheck must keep the proxy held");
+  assert.equal(s.applied,true);
+  assert.match(stale.result.connectionError,/Recent Browser Gateway egress verification failed/);
+  await s.send("disconnect");
+
+  // A previous valid connection must not remain Connected when its proxy
+  // authentication token has expired, even with the same Chrome proxy setting.
+  s=await scenario();
+  const timedProxy={...s.proxy,expires_at:Math.floor(Date.now()/1000)+300};
+  assert.equal((await s.send("connect",timedProxy)).ok,true);
+  s.local.credentialExpiresAt=Math.floor(Date.now()/1000)-1;
+  const expired=await s.send("status");
+  assert.equal(expired.result.connected,false,"Expired credential cannot remain Connected");
+  assert.equal(expired.result.proxyActive,true);
+  assert.equal(s.applied,true,"Expiry must not silently route direct");
+  assert.match(expired.result.connectionError,/credential expired/i);
+  assert.equal((await s.send("verify")).ok,false,"An expired credential must fail a new verification");
+  assert.equal(s.applied,true);
+  await s.send("disconnect");
+
+  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 14 scenario groups PASS");
 })().catch(e=>{console.error(e);process.exitCode=1;});
