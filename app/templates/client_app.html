@@ -20,7 +20,7 @@
       <div><strong>MAKIA</strong><small>CLIENT</small></div>
     </div>
     <div class="mc-top-actions">
-      <span class="mc-network" id="networkState" aria-live="polite">آنلاین</span>
+      <span class="mc-network" id="networkState" aria-live="polite">وضعیت اینترنت دستگاه: در حال بررسی</span>
       <span class="mc-user">{{ display_name }}</span>
       <button class="mc-ghost" id="installClient" type="button">نصب برنامه</button>
       <button class="mc-danger" id="disconnectDirect" type="button" hidden>قطع اتصال</button>
@@ -36,6 +36,11 @@
         <p id="clientStatusText">در حال دریافت وضعیت اشتراک…</p>
       </div>
       <div class="mc-status-pill" id="accountState"><span></span> در حال بررسی</div>
+    </section>
+
+    <section class="mc-section mc-connect-note" aria-label="تفاوت وضعیت حساب و اتصال VPN">
+      <strong>وضعیت حساب یا آنلاین بودن مرورگر به معنی اتصال VPN نیست.</strong>
+      <p>این صفحه برای مدیریت اشتراک و تحویل پروفایل است. برای عبور واقعی ترافیک، کلاینت/Connector سازگار را اجرا کنید. برای VPN مرورگر Chrome/Edge از افزونه اختصاصی Makia و تأیید IP خروجی استفاده کنید؛ اتصال کامل دستگاه با نصب صرف PWA ایجاد نمی‌شود.</p>
     </section>
 
     <section class="mc-grid mc-grid-4">
