@@ -4,7 +4,8 @@ const IP_PROBES=[
   {url:"https://api4.ipify.org?format=json",json:true},
   {url:"https://checkip.amazonaws.com/",json:false}
 ];
-const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","connectionError","authDiagnostic"];
+const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","credentialExpiresAt","connectionError","authDiagnostic"];
+const VERIFICATION_FRESH_MS=120000; // A previous successful IP probe is not perpetual connectivity.
 
 function publicIp(value){
   const ip=String(value||"").trim();
@@ -51,7 +52,7 @@ async function clearBrowserProxy(){
   await chrome.storage.session.remove(["proxyAuth","proxyEndpoint"]);
   await chrome.storage.local.set({
     connected:false,activeLabel:"",proxyHost:"",proxyPort:0,
-    exitIp:"",directIp:"",verifiedAt:0,connectionError:"",authDiagnostic:""
+    exitIp:"",directIp:"",verifiedAt:0,credentialExpiresAt:0,connectionError:"",authDiagnostic:""
   });
 }
 async function effectiveProxy(expectedHost,expectedPort){
@@ -89,6 +90,8 @@ async function verifyBrowserProxy(){
   const s=await chrome.storage.local.get(CONNECTION_KEYS);
   if(!s.proxyHost||!s.proxyPort||!await effectiveProxy(s.proxyHost,s.proxyPort))
     throw new Error("Chrome/Edge did not apply the Makia proxy (another extension or policy may control it).");
+  if(Number(s.credentialExpiresAt||0)>0&&Date.now()>=Number(s.credentialExpiresAt)*1000)
+    throw new Error("Browser Gateway credential expired. Disconnect and connect again.");
   const exitIp=await fetchPublicIp();
   if(s.directIp&&exitIp===s.directIp)
     throw new Error("Public IP has not changed. Browser traffic is not verified through Makia.");
@@ -115,6 +118,7 @@ async function setBrowserProxy(proxy){
 
   // Capture an optional direct baseline BEFORE changing the proxy.
   const directIp=await fetchPublicIp().catch(()=>"");
+  const credentialExpiresAt=Number(proxy.expires_at||0);
   await chrome.storage.session.set({
     proxyAuth:{username:String(proxy.username||""),password:String(proxy.password||"")},
     proxyEndpoint:{host,port}
@@ -130,7 +134,8 @@ async function setBrowserProxy(proxy){
   });
   await chrome.storage.local.set({
     connected:false,activeLabel:"Makia Browser VPN",
-    proxyHost:host,proxyPort:port,directIp,exitIp:"",verifiedAt:0,connectionError:""
+    proxyHost:host,proxyPort:port,directIp,exitIp:"",verifiedAt:0,
+    credentialExpiresAt,connectionError:""
   });
   // Fail closed: never display "connected" until a real HTTPS request
   // succeeds through the installed proxy and an effective setting is observed.
@@ -277,6 +282,25 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
         s.exitIp="";
         s.verifiedAt=0;
         s.connectionError="Browser proxy is no longer controlled by Makia.";
+      }else if(s.connected&&proxyActive){
+        const expired=Number(s.credentialExpiresAt||0)>0&&
+          Date.now()>=Number(s.credentialExpiresAt)*1000;
+        if(expired){
+          const message="Browser Gateway credential expired. Proxy is held; disconnect then connect for a fresh credential.";
+          await chrome.storage.local.set({connected:false,exitIp:"",verifiedAt:0,connectionError:message});
+          s.connected=false;s.exitIp="";s.verifiedAt=0;s.connectionError=message;
+        }else if(!Number(s.verifiedAt)||Date.now()-Number(s.verifiedAt)>VERIFICATION_FRESH_MS){
+          // Never reuse yesterday's IP verification to claim current egress.
+          try{
+            const fresh=await verifyBrowserProxy();
+            s.connected=true;s.exitIp=fresh.exitIp;s.verifiedAt=fresh.verifiedAt;s.connectionError="";
+          }catch(e){
+            const message="Recent Browser Gateway egress verification failed: "+
+              String(e.message||e)+". Proxy remains installed to prevent direct fallback.";
+            await chrome.storage.local.set({connected:false,exitIp:"",verifiedAt:0,connectionError:message});
+            s.connected=false;s.exitIp="";s.verifiedAt=0;s.connectionError=message;
+          }
+        }
       }
       return {ok:true,result:{...s,proxyActive}};
     }
