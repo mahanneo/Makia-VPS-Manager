@@ -126,7 +126,7 @@ async function connectGateway(){
   $("connectBtn").textContent="در حال اتصال…";
   try{
     const data=await api("/client/extension/browser-gateway/credential",{method:"POST"});
-    const response=await chrome.runtime.sendMessage({action:"connect",proxy:data.proxy});
+    const response=await chrome.runtime.sendMessage({action:"connect",proxy:{...data.proxy,expires_at:data.expires_at}});
     if(!response||!response.ok) throw new Error((response&&response.error)||"اتصال ناموفق بود");
     await refresh();
   }catch(e){
