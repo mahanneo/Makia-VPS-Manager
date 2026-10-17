@@ -350,6 +350,12 @@ jobs:
           grep -q 'Browser Extension Build' .github/workflows/browser-extension.yml
           python -m pytest -q tests/test_browser_gateway.py tests/test_browser_extension_contract.py
 
+      - name: Browser extension real-egress state-machine contract
+        run: |
+          node --check client/browser-extension/background.js
+          node --check client/browser-extension/popup.js
+          node client/browser-extension/test_verified_egress.cjs
+
       - name: OpenVPN WStunnel 443 contract
         run: |
           test -f systemd/makia-openvpn-wstunnel.service
