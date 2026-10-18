@@ -110,7 +110,7 @@ def test_web_login_remember_cookie_and_unchecked_short_session(client_db,monkeyp
         assert "makia_client_session=" in remember_cookie
         assert "HttpOnly" in remember_cookie and "Secure" in remember_cookie
         assert "samesite=strict" in remember_cookie.lower()
-        remember_age=int(re.search(r"Max-Age=(\\d+)",remember_cookie,re.I).group(1))
+        remember_age=int(re.search(r"Max-Age=(\d+)",remember_cookie,re.I).group(1))
         assert 29*86400<remember_age<=30*86400
         assert browser.get("/client/app").status_code==200
         browser.post("/client/logout",follow_redirects=False)
@@ -120,7 +120,7 @@ def test_web_login_remember_cookie_and_unchecked_short_session(client_db,monkeyp
             },follow_redirects=False
         )
         assert short.status_code==302
-        short_age=int(re.search(r"Max-Age=(\\d+)",short.headers["set-cookie"],re.I).group(1))
+        short_age=int(re.search(r"Max-Age=(\d+)",short.headers["set-cookie"],re.I).group(1))
         assert 0<short_age<=12*3600
         assert browser.get("/client/app").status_code==200
 
