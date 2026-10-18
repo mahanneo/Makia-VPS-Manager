@@ -1,6 +1,6 @@
 # Makia Client — Remember this device and one-click browser reconnect (UAT candidate)
 
-**Candidate**: Browser VPN 1.6.4.5 stacked on verified-egress PR #106. Makia server 1.6.5 remains the production version; these server API changes are not deployed until an approved future release. This candidate affects the Client Portal/PWA and Chrome/Edge extension only, not administrative authentication, VPN protocol accounts, daemon listeners or MahiNet/Outline.
+**Status:** Browser VPN 1.6.4.5 remains a UAT candidate on PR #119 (based on official main 1.6.5). An authorized **limited live Client Web pilot** installed only `app/client_portal.py`, `app/templates/client_login.html` and `app/static/client.css` after a verified rollback backup (details in PR #119); the original app reports 1.6.5. This is NOT a tagged 1.6.6 release, and extension live Chrome Reload / remembered-login restart / authenticated-egress UAT remain outstanding. It does not change administrator authentication, VPN protocol listeners, MahiNet or Outline.
 
 ## User behavior
 
