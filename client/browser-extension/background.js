@@ -52,7 +52,7 @@ async function clearBrowserProxy(){
   await chrome.storage.session.remove(["proxyAuth","proxyEndpoint"]);
   await chrome.storage.local.set({
     connected:false,activeLabel:"",proxyHost:"",proxyPort:0,
-    exitIp:"",directIp:"",verifiedAt:0,credentialExpiresAt:0,connectionError:"",authDiagnostic:""
+    exitIp:"",directIp:"",verifiedAt:0,credentialExpiresAt:0,controlHost:"",connectionError:"",authDiagnostic:""
   });
 }
 async function effectiveProxy(expectedHost,expectedPort){
