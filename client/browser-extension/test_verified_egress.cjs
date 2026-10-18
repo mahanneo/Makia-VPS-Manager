@@ -42,7 +42,7 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
     });
   }
   return {send,local,session,proxyError:(error)=>onProxyError({error}),
-    restart:()=>onStartup(),update:()=>onInstalled({reason:"update"}),
+    restart:()=>{delete session.proxyAuth;delete session.proxyEndpoint;return onStartup();},update:()=>onInstalled({reason:"update"}),
     install:()=>onInstalled({reason:"install"}),setBlocked:(yes)=>{failNextProxyProbe=yes;},
     proxy:{scheme:"https",host:"p.mahinet.shop",port:9444,username:"test",password:"test-secret"},
     get applied(){return applied;}};
