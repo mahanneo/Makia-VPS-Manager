@@ -155,5 +155,38 @@ async function scenario({direct="198.51.100.9",proxied="212.100.171.183",effecti
   assert.equal(s.applied,true);
   await s.send("disconnect");
 
-  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 14 scenario groups PASS");
+  // User-initiated credential renewal after browser restart keeps the HTTPS
+  // proxy installed at every step; no direct fallback or remembered password.
+  s=await scenario();
+  const renewable={...s.proxy,expires_at:Math.floor(Date.now()/1000)+300,control_host:"p.mahinet.shop"};
+  assert.equal((await s.send("connect",renewable)).ok,true);
+  await s.restart();
+  assert.equal(s.applied,true);
+  assert.equal(s.local.connected,false);
+  assert.equal((await s.send("reconnect",{...renewable,host:"evil.example"})).ok,false);
+  assert.equal(s.applied,true);
+  assert.equal((await s.send("reconnect",{...renewable,expires_at:1})).ok,false);
+  assert.equal(s.applied,true);
+  const renewed=await s.send("reconnect",{...renewable,password:"fresh-proxy-only"});
+  assert.equal(renewed.ok,true,JSON.stringify(renewed));
+  assert.equal(s.local.connected,true);
+  assert.equal(s.local.exitIp,"212.100.171.183");
+  assert.equal(s.session.proxyAuth.password,"fresh-proxy-only");
+  assert.equal(s.applied,true);
+  await s.send("disconnect");
+
+  // If re-auth works but the actual exit check fails, retain the held proxy,
+  // display unverified, and leave manual disconnect available.
+  s=await scenario();
+  assert.equal((await s.send("connect",renewable)).ok,true);
+  await s.restart();
+  s.setBlocked(true);
+  const failedRenew=await s.send("reconnect",renewable);
+  assert.equal(failedRenew.ok,false);
+  assert.equal(s.applied,true);
+  assert.equal(s.local.connected,false);
+  assert.equal((await s.send("status")).result.proxyActive,true);
+  await s.send("disconnect");
+
+  console.log("BROWSER VERIFIED-EGRESS CONTRACT: 16 scenario groups PASS");
 })().catch(e=>{console.error(e);process.exitCode=1;});
