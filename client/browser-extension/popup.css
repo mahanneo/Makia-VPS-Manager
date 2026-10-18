@@ -3,3 +3,9 @@
 .egress{margin-top:12px;padding:13px 15px}.egressHead{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#98a9d3}.egress strong{display:block;text-align:left;font-family:ui-monospace,Consolas,monospace;font-size:16px;letter-spacing:.2px;margin-top:4px}.egress p{font-size:10px;margin:6px 0 0;color:#9aa9cd;line-height:1.6}
 
 .authDiagnostic{font-size:10px;color:#a2aecb;margin:5px 1px;line-height:1.6;overflow-wrap:anywhere}
+
+/* Explicit persisted-session choice; never store the account password. */
+.rememberChoice{display:flex;align-items:center;gap:9px;cursor:pointer;line-height:1.6;margin-top:13px}
+.rememberChoice input[type=checkbox]{width:17px;height:17px;flex:0 0 17px;margin:0;accent-color:#7b8dff}
+.rememberChoice span{font-size:11px;color:#d9e1fa}
+.rememberChoice small{display:block;font-size:10px;color:#9ba9cc;font-weight:400}
