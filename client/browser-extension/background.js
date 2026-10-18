@@ -4,7 +4,7 @@ const IP_PROBES=[
   {url:"https://api4.ipify.org?format=json",json:true},
   {url:"https://checkip.amazonaws.com/",json:false}
 ];
-const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","credentialExpiresAt","connectionError","authDiagnostic"];
+const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","credentialExpiresAt","connectionError","authDiagnostic","controlHost"];
 const VERIFICATION_FRESH_MS=120000; // A previous successful IP probe is not perpetual connectivity.
 
 function publicIp(value){
@@ -52,7 +52,7 @@ async function clearBrowserProxy(){
   await chrome.storage.session.remove(["proxyAuth","proxyEndpoint"]);
   await chrome.storage.local.set({
     connected:false,activeLabel:"",proxyHost:"",proxyPort:0,
-    exitIp:"",directIp:"",verifiedAt:0,credentialExpiresAt:0,connectionError:"",authDiagnostic:""
+    exitIp:"",directIp:"",verifiedAt:0,credentialExpiresAt:0,controlHost:"",connectionError:"",authDiagnostic:""
   });
 }
 async function effectiveProxy(expectedHost,expectedPort){
@@ -119,6 +119,8 @@ async function setBrowserProxy(proxy){
   // Capture an optional direct baseline BEFORE changing the proxy.
   const directIp=await fetchPublicIp().catch(()=>"");
   const credentialExpiresAt=Number(proxy.expires_at||0);
+  const controlHost=String(proxy.control_host||host).toLowerCase();
+  if(!/^[a-z0-9.-]+$/.test(controlHost))throw new Error("Invalid Makia control-plane host");
   await chrome.storage.session.set({
     proxyAuth:{username:String(proxy.username||""),password:String(proxy.password||"")},
     proxyEndpoint:{host,port}
@@ -128,14 +130,14 @@ async function setBrowserProxy(proxy){
     value:{
       mode:"fixed_servers",
       rules:{singleProxy:{scheme:"https",host,port},
-        bypassList:["<local>","127.0.0.1","localhost","::1"]}
+        bypassList:[controlHost,"<local>","127.0.0.1","localhost","::1"]}
     },
     scope:"regular"
   });
   await chrome.storage.local.set({
     connected:false,activeLabel:"Makia Browser VPN",
     proxyHost:host,proxyPort:port,directIp,exitIp:"",verifiedAt:0,
-    credentialExpiresAt,connectionError:""
+    credentialExpiresAt,controlHost,connectionError:""
   });
   // Fail closed: never display "connected" until a real HTTPS request
   // succeeds through the installed proxy and an effective setting is observed.
@@ -206,19 +208,24 @@ async function retainProxyOnLifecycle(){
   const saved=await chrome.storage.local.get(["proxyHost","proxyPort"]);
   const host=String(saved.proxyHost||"").trim();
   const port=Number(saved.proxyPort||0);
+  const controlHost=String(saved.controlHost||host).toLowerCase();
   if(!host||!Number.isInteger(port)||port<1||port>65535){
     await clearBrowserProxy();
     return;
   }
   try{
-    if(!await effectiveProxy(host,port)){
-      await chrome.proxy.settings.set({
-        value:{mode:"fixed_servers",rules:{
-          singleProxy:{scheme:"https",host,port},
-          bypassList:["<local>","127.0.0.1","localhost","::1"]
-        }},scope:"regular"
-      });
-    }
+    // Reassert the same held proxy after extension upgrades too: older builds
+    // did not bypass the Makia control-plane and could not obtain fresh creds.
+    // Only this exact HTTPS controller host is bypassed, not general browsing.
+    if(!/^[a-z0-9.-]+$/.test(controlHost))
+      throw new Error("Invalid Makia control-plane host");
+    await chrome.proxy.settings.set({
+      value:{mode:"fixed_servers",rules:{
+        singleProxy:{scheme:"https",host,port},
+        bypassList:[controlHost,"<local>","127.0.0.1","localhost","::1"]
+      }},scope:"regular"
+    });
+    await chrome.storage.local.set({controlHost});
     await applyPrivacyProtection();
     const held=await effectiveProxy(host,port);
     await chrome.storage.local.set({
@@ -250,6 +257,40 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       await clearBrowserProxy();
       try{
         const verified=await setBrowserProxy(message.proxy);
+        return {ok:true,result:verified};
+      }catch(e){
+        await disconnectWithError(e.message);
+        throw e;
+      }
+    }
+    if(message&&message.action==="reconnect"){
+      // User-initiated credential renewal on an already-held proxy. Never
+      // briefly clear the proxy or silently fall back to direct browsing.
+      const saved=await chrome.storage.local.get(CONNECTION_KEYS);
+      const next=message.proxy||{};
+      const host=String(next.host||"").trim().toLowerCase();
+      const port=Number(next.port||0);
+      if(next.scheme!=="https"||!host||host!==saved.proxyHost||port!==Number(saved.proxyPort)||
+         !await effectiveProxy(host,port))
+        throw new Error("Makia cannot renew: the expected proxy is not held by this extension.");
+      if(!String(next.username||"")||!String(next.password||"")||
+         Number(next.expires_at||0)*1000<=Date.now())
+        throw new Error("Fresh Browser Gateway credentials are required.");
+      // Preserve the old control-plane exception (which is needed to fetch
+      // the new token) and never widen browser bypass destinations.
+      const controlHost=String(next.control_host||host).toLowerCase();
+      if(!/^[a-z0-9.-]+$/.test(controlHost)||controlHost!==saved.controlHost)
+        throw new Error("Control-plane host changed; explicit disconnect required.");
+      await chrome.storage.session.set({
+        proxyAuth:{username:String(next.username),password:String(next.password)},
+        proxyEndpoint:{host,port}
+      });
+      await chrome.storage.local.set({
+        connected:false,exitIp:"",verifiedAt:0,
+        credentialExpiresAt:Number(next.expires_at),connectionError:""
+      });
+      try{
+        const verified=await verifyBrowserProxy();
         return {ok:true,result:verified};
       }catch(e){
         await disconnectWithError(e.message);

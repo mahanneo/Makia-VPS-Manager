@@ -16,3 +16,9 @@
 .mc-login-guide strong{display:block;color:var(--mc-text);margin-bottom:4px}.mc-login-guide p{margin:0}.mc-login-guide.is-highlight{border-color:var(--mc-accent);box-shadow:0 0 0 3px #5ad3ff16}
 .mc-inline-link{color:var(--mc-accent);font-weight:800;text-decoration:none}.mc-inline-link:hover{text-decoration:underline}
 @media(max-width:640px){.mc-mobile-entry{align-items:stretch;flex-direction:column}.mc-mobile-entry .mc-ghost{width:100%}.mc-login-body{padding:14px}.mc-login-shell{width:100%}}
+
+/* Remembered Client Portal login: explicit choice, no password persisted. */
+.mc-form label.mc-remember{display:flex;align-items:center;gap:10px;cursor:pointer;line-height:1.7}
+.mc-form .mc-remember input[type=checkbox]{width:18px;height:18px;flex:0 0 18px;accent-color:#728cff;cursor:pointer;margin:0}
+.mc-form .mc-remember span{min-width:0}
+.mc-form .mc-remember small{display:block;color:#94a3b8;font-size:11px;font-weight:400}
