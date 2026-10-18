@@ -4,8 +4,6 @@ permissions:
   contents: write
 
 on:
-  release:
-    types: [published]
   pull_request:
     paths:
       - "client/browser-extension/**"
@@ -71,7 +69,7 @@ jobs:
             zip -qr ../Makia-Browser-VPN-1.6.4.5.zip .
           )
           sha256sum dist-browser/Makia-Browser-VPN-1.6.4.5.zip | tee dist-browser/SHA256-Browser-VPN-1.6.4.5.txt
-          printf 'browser_version=1.6.4.5\nserver_version=1.6.4\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO-Browser.txt
+          printf 'browser_version=1.6.4.5\nserver_version=1.6.5\ncommit=%s\n' "$GITHUB_SHA" >dist-browser/BUILD-INFO-Browser.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -82,22 +80,5 @@ jobs:
             dist-browser/BUILD-INFO-Browser.txt
           if-no-files-found: error
 
-      # Only a deliberately published GitHub Release may ship the extension.
-      # Pushing to main must not silently overwrite an existing stable asset.
-      - name: Publish browser package for approved GitHub Release
-        if: github.event_name == 'release'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          server_version="$(cat VERSION)"
-          if [ "$RELEASE_TAG" != "v$server_version" ]; then
-            echo "::error::Release tag $RELEASE_TAG does not match server VERSION $server_version"
-            exit 1
-          fi
-          gh release upload "$RELEASE_TAG" \
-            dist-browser/Makia-Browser-VPN-1.6.4.5.zip \
-            dist-browser/SHA256-Browser-VPN-1.6.4.5.txt \
-            dist-browser/BUILD-INFO-Browser.txt --clobber
+      # Browser artifacts are uploaded to this workflow only. Public release
+      # requires separate Chrome/Edge UAT and explicit manual promotion.
