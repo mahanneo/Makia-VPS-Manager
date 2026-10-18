@@ -25,7 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest httpx
       - name: Python compile
         run: python -m compileall -q app tests scripts/restore-portable.py scripts/configure-owner.py
       - name: Import application smoke test
@@ -35,6 +35,12 @@ jobs:
         run: pytest -q
       - name: Bash syntax
         run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh tests/upgrade_v130_smoke.sh
+      - name: Browser extension verified egress and remembered reconnect
+        run: |
+          node --check client/browser-extension/background.js
+          node --check client/browser-extension/popup.js
+          node client/browser-extension/test_verified_egress.cjs
+
       - name: WStunnel installer smoke
         run: |
           WSTUNNEL_DEST=/tmp/wstunnel-test bash scripts/install-wstunnel.sh
