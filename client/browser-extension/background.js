@@ -214,14 +214,18 @@ async function retainProxyOnLifecycle(){
     return;
   }
   try{
-    if(!await effectiveProxy(host,port)){
-      await chrome.proxy.settings.set({
-        value:{mode:"fixed_servers",rules:{
-          singleProxy:{scheme:"https",host,port},
-          bypassList:[controlHost,"<local>","127.0.0.1","localhost","::1"]
-        }},scope:"regular"
-      });
-    }
+    // Reassert the same held proxy after extension upgrades too: older builds
+    // did not bypass the Makia control-plane and could not obtain fresh creds.
+    // Only this exact HTTPS controller host is bypassed, not general browsing.
+    if(!/^[a-z0-9.-]+$/.test(controlHost))
+      throw new Error("Invalid Makia control-plane host");
+    await chrome.proxy.settings.set({
+      value:{mode:"fixed_servers",rules:{
+        singleProxy:{scheme:"https",host,port},
+        bypassList:[controlHost,"<local>","127.0.0.1","localhost","::1"]
+      }},scope:"regular"
+    });
+    await chrome.storage.local.set({controlHost});
     await applyPrivacyProtection();
     const held=await effectiveProxy(host,port);
     await chrome.storage.local.set({
