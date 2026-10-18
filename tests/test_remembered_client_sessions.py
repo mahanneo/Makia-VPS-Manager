@@ -84,3 +84,75 @@ def test_ext_logout_and_account_disable_revoke_remembered_session(client_db):
     token,_=client_store.create_session(account,device["id"],ttl_seconds=client_portal.CLIENT_REMEMBER_TTL)
     client_store.update_account(account,enabled=False)
     assert client_store.session_by_token(token) is None
+
+
+def test_web_login_remember_cookie_and_unchecked_short_session(client_db,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(client_portal,"enabled",lambda:True)
+    account=client_store.create_account(
+        "web-remembered","remember-pass-123",device_limit=2,concurrent_device_limit=2
+    )
+    app=FastAPI()
+    app.include_router(client_portal.router)
+    with TestClient(app,base_url="https://testserver") as browser:
+        remembered=browser.post(
+            "/client/login",data={
+                "username":"web-remembered","password":"remember-pass-123",
+                "remember_device":"1"
+            },follow_redirects=False
+        )
+        assert remembered.status_code==302
+        assert "/client/app" in remembered.headers["location"]
+        remember_cookie=remembered.headers["set-cookie"]
+        assert "makia_client_session=" in remember_cookie
+        assert "HttpOnly" in remember_cookie and "Secure" in remember_cookie
+        assert "SameSite=strict" in remember_cookie
+        assert "Max-Age=2592" in remember_cookie  # prefix of 2,592,000 seconds
+        assert browser.get("/client/app").status_code==200
+        browser.post("/client/logout",follow_redirects=False)
+        short=browser.post(
+            "/client/login",data={
+                "username":"web-remembered","password":"remember-pass-123"
+            },follow_redirects=False
+        )
+        assert short.status_code==302
+        assert "Max-Age=432" in short.headers["set-cookie"]  # 43,200 seconds
+        assert browser.get("/client/app").status_code==200
+
+
+def test_extension_remember_api_has_30_day_opt_in_and_revocable_token(client_db,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(client_portal,"enabled",lambda:True)
+    account_id=client_store.create_account(
+        "ext-remembered","remember-pass-123",device_limit=2,concurrent_device_limit=2
+    )
+    app=FastAPI()
+    app.include_router(client_portal.router)
+    with TestClient(app) as browser:
+        headers={"x-makia-extension":"1","user-agent":"Chrome test"}
+        first=browser.post("/client/extension/login",headers=headers,json={
+            "username":"ext-remembered","password":"remember-pass-123",
+            "remember_device":True
+        })
+        assert first.status_code==200,first.text
+        payload=first.json()
+        assert payload["remember_device"] is True
+        assert 29*86400<payload["expires_at"]-int(time.time())<=30*86400
+        assert client_store.session_by_token(payload["token"])["account_id"]==account_id
+        second=browser.post("/client/extension/login",headers=headers,json={
+            "username":"ext-remembered","password":"remember-pass-123",
+            "device_key":payload["device_key"],"remember_device":False
+        })
+        assert second.status_code==200,second.text
+        short=second.json()
+        assert short["remember_device"] is False
+        assert 0<short["expires_at"]-int(time.time())<=12*3600
+        logout=browser.post("/client/extension/logout",headers={
+            **headers,"authorization":"Bearer "+payload["token"]
+        })
+        assert logout.status_code==200
+        assert client_store.session_by_token(payload["token"]) is None
