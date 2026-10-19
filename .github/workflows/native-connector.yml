@@ -41,7 +41,8 @@ jobs:
       - name: Connector syntax and regression tests
         shell: pwsh
         run: |
-          python -m py_compile client/windows/makia_client_connector.py client/windows/test_connector.py app/client_connector.py app/client_portal.py
+          python -m py_compile client/windows/makia_client_connector.py client/windows/makia_desktop.py client/windows/test_connector.py app/client_connector.py app/client_desktop.py app/client_portal.py
+          python -m unittest client.windows.test_desktop
           python -m unittest client.windows.test_connector
           node --check app/static/client.js
 
@@ -50,6 +51,8 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check "pyinstaller==6.16.0"
           pyinstaller --noconfirm --clean --onefile --name MakiaClientConnector --uac-admin client/windows/makia_client_connector.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name MakiaDesktop client/windows/makia_desktop.py
+          if (!(Test-Path dist\MakiaDesktop.exe)) { throw "Desktop EXE missing" }
 
       - name: Fetch pinned sing-box 1.14.2
         shell: pwsh
@@ -65,6 +68,7 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item dist\MakiaClientConnector.exe package\MakiaClientConnector.exe
+          Copy-Item dist\MakiaDesktop.exe package\MakiaDesktop.exe
           Copy-Item $bin.FullName package\sing-box.exe
           Copy-Item client\windows\install.ps1 package\install.ps1
           Copy-Item client\windows\uninstall.ps1 package\uninstall.ps1
@@ -91,20 +95,30 @@ jobs:
       - name: Smoke package and real installer
         shell: pwsh
         run: |
+          if (!(Test-Path package\MakiaDesktop.exe)) { throw "desktop application missing" }
+          $desktopSmoke=Join-Path $env:RUNNER_TEMP "makia-desktop-smoke.json"
+          $desktopProcess=Start-Process -FilePath (Resolve-Path package\MakiaDesktop.exe).Path -ArgumentList @("--smoke-output",$desktopSmoke) -PassThru -Wait
+          if ($desktopProcess.ExitCode -ne 0 -or !(Test-Path $desktopSmoke)) { throw "packaged desktop EXE did not start" }
+          $desktopResult=Get-Content $desktopSmoke -Raw | ConvertFrom-Json
+          if ($desktopResult.app -ne "Makia Desktop" -or !$desktopResult.dpapi -or !$desktopResult.windows) {
+            throw "desktop native/DPAPI smoke failed"
+          }
           package\MakiaClientConnector.exe --status
           if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
           package\sing-box.exe version
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
+          $env:MAKIA_INSTALL_SKIP_SHORTCUT="1"
           try {
             powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
+            $desktop=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaDesktop.exe"
             $runtime=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\sing-box.exe"
             $ws=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wstunnel.exe"
-            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws)) { throw "installed Windows runtime incomplete" }
+            if (!(Test-Path $installed) -or !(Test-Path $desktop) -or !(Test-Path $runtime) -or !(Test-Path $ws)) { throw "installed Windows runtime incomplete" }
             $probe=(package\MakiaClientConnector.exe --self-test | ConvertFrom-Json)
             if (!$probe.ok -or !$probe.sing_box -or !$probe.wstunnel) { throw "connector self-test missing runtime" }
 
@@ -117,13 +131,14 @@ jobs:
             Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia" -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
             $env:LOCALAPPDATA=$oldLocal
+            Remove-Item Env:MAKIA_INSTALL_SKIP_SHORTCUT -ErrorAction SilentlyContinue
           }
 
       - name: Generate checksums
         shell: pwsh
         run: |
           @(
-            "version=1.6.4"
+            "version=desktop-0.1.0-rc1"
             "commit=$env:GITHUB_SHA"
             "ref=$env:GITHUB_REF"
             "run_id=$env:GITHUB_RUN_ID"
@@ -137,7 +152,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.6.4
+          name: Makia-Desktop-Windows-x64-0.1.0-rc1
           path: package/
           if-no-files-found: error
           retention-days: 90
