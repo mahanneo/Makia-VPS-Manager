@@ -1443,7 +1443,7 @@ def install_component(component):
             ],timeout=120)
             if not installer.is_file() or installer.stat().st_size<1000:
                 raise ProtocolError("Xray installer download is missing or incomplete")
-            _run(["bash",str(installer),"install","--version",XRAY_VALIDATED_VERSION],timeout=600)
+            _run(["env","TERM=xterm","bash",str(installer),"install","--version",XRAY_VALIDATED_VERSION],timeout=600)
         config=Path("/usr/local/etc/xray/config.json")
         config.parent.mkdir(parents=True,exist_ok=True)
         if not config.exists():
