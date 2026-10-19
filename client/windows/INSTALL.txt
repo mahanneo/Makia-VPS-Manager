@@ -56,3 +56,5 @@ revoke the device remotely too if you want to invalidate its server token.
 RELEASE GATE: Source CI and GitHub package build are necessary but NOT
 sufficient. Real Windows native test + actual server API deployment + IP/DNS
 egress, Windows restart, token/session expiry and rollback must PASS.
+
+Browser-only users: this desktop installer is for full-device VPN only. Use Makia Browser VPN in Chrome/Edge instead.
