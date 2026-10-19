@@ -80,7 +80,7 @@ def test_native_login_rejects_web_origin_wrong_header_bad_password_and_expiry(ap
     assert too_large.status_code==413
     client_store.update_account(user,enabled=False)
     disabled=login(app_client)
-    assert disabled.status_code==403
+    assert disabled.status_code==401  # generic bad-credential response avoids disclosing account state
 
 
 def test_desktop_access_excludes_secrets_and_ticket_is_one_time(app_client):
