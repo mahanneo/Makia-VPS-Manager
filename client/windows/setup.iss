@@ -57,12 +57,23 @@ Name: "{autodesktop}\Makia Windows"; Filename: "{app}\MakiaWindows.exe"; Working
 Filename: "{app}\MakiaWindows.exe"; Description: "Open Makia Windows"; Flags: nowait postinstall skipifsilent
 
 [Code]
+// Do not replace or uninstall a full-device runtime while its tunnel is
+// recorded as active. User must disconnect from the app first.
+function TunnelStateExists(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{localappdata}\Makia\Connector\state.json'));
+end;
+
 function InitializeSetup(): Boolean;
 begin
-  Result := True;
-  if CheckForMutexes('MakiaWindowsInstallerInProgress') then
-  begin
-    MsgBox('Another Makia Windows installer is running.', mbError, MB_OK);
-    Result := False;
-  end;
+  Result := not TunnelStateExists();
+  if not Result then
+    MsgBox('Please disconnect the active Makia tunnel before updating. Open Makia Windows and select Disconnect.', mbError, MB_OK);
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := not TunnelStateExists();
+  if not Result then
+    MsgBox('Please disconnect Makia before uninstalling, to avoid leaving a Windows tunnel without its connector.', mbError, MB_OK);
 end;
