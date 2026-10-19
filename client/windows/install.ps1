@@ -11,6 +11,12 @@ foreach ($name in @("MakiaClientConnector.exe","sing-box.exe","wstunnel.exe")) {
   Copy-Item -Force $src (Join-Path $target $name)
 }
 
+# The GUI is optional to retain compatibility with previous connector ZIPs.
+$desktopSource = Join-Path $SourceDir "MakiaDesktop.exe"
+if (Test-Path $desktopSource) {
+  Copy-Item -LiteralPath $desktopSource -Destination (Join-Path $target "MakiaDesktop.exe") -Force
+}
+
 $connector = Join-Path $target "MakiaClientConnector.exe"
 $runtime = Join-Path $target "sing-box.exe"
 $wstunnel = Join-Path $target "wstunnel.exe"
@@ -44,6 +50,29 @@ $state = @{
 [System.IO.File]::WriteAllText((Join-Path $target "install-state.json"),$state,(New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ""
+# One-click Start Menu/Desktop shortcuts for the independent Windows GUI.
+$desktopExe = Join-Path $target "MakiaDesktop.exe"
+if (Test-Path $desktopExe) {
+  $shell = New-Object -ComObject WScript.Shell
+  $startDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+  New-Item -Path $startDir -ItemType Directory -Force | Out-Null
+  $shortcut = $shell.CreateShortcut((Join-Path $startDir "Makia Desktop.lnk"))
+  $shortcut.TargetPath = $desktopExe
+  $shortcut.WorkingDirectory = $target
+  $shortcut.IconLocation = "$desktopExe,0"
+  $shortcut.Description = "Makia Windows VPN - One-click connection"
+  $shortcut.Save()
+  $desktopPath = [Environment]::GetFolderPath("DesktopDirectory")
+  if ($desktopPath) {
+    $shortcut2 = $shell.CreateShortcut((Join-Path $desktopPath "Makia Desktop.lnk"))
+    $shortcut2.TargetPath = $desktopExe
+    $shortcut2.WorkingDirectory = $target
+    $shortcut2.IconLocation = "$desktopExe,0"
+    $shortcut2.Save()
+  }
+  Write-Host "Makia Desktop shortcut created. Launch it from Start." -ForegroundColor Green
+}
+
 Write-Host "Makia Windows Full Device Connector 1.5.1 installed successfully." -ForegroundColor Green
 Write-Host "Connector: $connector"
 Write-Host "Runtime: $runtime"
