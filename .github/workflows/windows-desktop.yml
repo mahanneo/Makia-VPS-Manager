@@ -1,0 +1,117 @@
+name: Makia Windows Desktop UAT Build
+
+on:
+  pull_request:
+    paths:
+      - "client/windows/**"
+      - ".github/workflows/windows-desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: makia-windows-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Unit and Python syntax tests
+        shell: pwsh
+        run: |
+          python -m py_compile client/windows/makia_client_connector.py client/windows/makia_desktop.py client/windows/test_desktop.py
+          python -m unittest client.windows.test_connector client.windows.test_desktop -v
+      - name: Build two separate EXEs (GUI unelevated; tunnel engine prompts UAC)
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "pyinstaller==6.16.0"
+          pyinstaller --noconfirm --clean --onefile --windowed --name MakiaDesktop client/windows/makia_desktop.py
+          pyinstaller --noconfirm --clean --onefile --name MakiaClientConnector --uac-admin client/windows/makia_client_connector.py
+          if (!(Test-Path dist\MakiaDesktop.exe) -or !(Test-Path dist\MakiaClientConnector.exe)) { throw "Missing EXE" }
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist\MakiaDesktop.exe package\MakiaDesktop.exe
+          Copy-Item dist\MakiaClientConnector.exe package\MakiaClientConnector.exe
+      - name: Fetch checksum-pinned sing-box (full device TUN)
+        shell: pwsh
+        run: |
+          $url="https://github.com/SagerNet/sing-box/releases/download/v1.14.2/sing-box-1.14.2-windows-amd64.zip"
+          $zip="$env:RUNNER_TEMP\sing-box.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32") { throw "sing-box checksum mismatch" }
+          Expand-Archive -LiteralPath $zip -DestinationPath "$env:RUNNER_TEMP\sing-box" -Force
+          $binary=Get-ChildItem "$env:RUNNER_TEMP\sing-box" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
+          if (!$binary) { throw "sing-box missing" }
+          Copy-Item $binary.FullName package\sing-box.exe
+      - name: Fetch checksum-pinned WStunnel
+        shell: pwsh
+        run: |
+          $url="https://github.com/erebe/wstunnel/releases/download/v11.0.0/wstunnel_11.0.0_windows_amd64.tar.gz"
+          $zip="$env:RUNNER_TEMP\wstunnel.tar.gz"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "024323c9c2dd1ed1c6f38d417d9b2776e2f0083bba507e80d4a8124c8451b164") { throw "wstunnel checksum mismatch" }
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\wstunnel" | Out-Null
+          tar.exe -xzf $zip -C "$env:RUNNER_TEMP\wstunnel"
+          $binary=Get-ChildItem "$env:RUNNER_TEMP\wstunnel" -Recurse -Filter "wstunnel.exe" | Select-Object -First 1
+          if (!$binary) { throw "wstunnel missing" }
+          Copy-Item $binary.FullName package\wstunnel.exe
+      - name: Pack click-to-install UAT build
+        shell: pwsh
+        run: |
+          Copy-Item client\windows\install.ps1 package\install.ps1
+          Copy-Item client\windows\uninstall.ps1 package\uninstall.ps1
+          Copy-Item client\windows\Install-Makia.cmd package\Install-Makia.cmd
+          Copy-Item client\windows\Uninstall-Makia.cmd package\Uninstall-Makia.cmd
+          Copy-Item client\windows\DESKTOP-UAT.txt package\START-HERE.txt
+          package\sing-box.exe version
+          package\wstunnel.exe --version
+          $probe=package\MakiaClientConnector.exe --self-test | ConvertFrom-Json
+          if (!$probe.ok -or !$probe.sing_box -or !$probe.wstunnel) { throw "Connector package self-test failed" }
+          $oldLocal=$env:LOCALAPPDATA
+          $oldApp=$env:APPDATA
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-desktop-smoke"
+          $env:APPDATA=Join-Path $env:RUNNER_TEMP "makia-desktop-smoke-roaming"
+          try {
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            if ($LASTEXITCODE -ne 0) { throw "Installer failed" }
+            $bin=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin"
+            foreach($name in @("MakiaDesktop.exe","MakiaClientConnector.exe","sing-box.exe","wstunnel.exe")) {
+              if (!(Test-Path (Join-Path $bin $name))) { throw "Installer missing: $name" }
+            }
+            if (!(Test-Path (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Makia Desktop.lnk"))) {
+              throw "Start Menu shortcut missing"
+            }
+          } finally {
+            Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $env:APPDATA -ErrorAction SilentlyContinue
+            $env:LOCALAPPDATA=$oldLocal
+            $env:APPDATA=$oldApp
+          }
+          @(
+            "version=1.6.5-desktop-rc1"
+            "commit=$env:GITHUB_SHA"
+            "run_id=$env:GITHUB_RUN_ID"
+            "status=UNSIGNED_UAT_ONLY"
+          ) | Set-Content -Encoding ascii package\BUILD-INFO.txt
+          $lines=Get-ChildItem package -File | Sort-Object Name | ForEach-Object {
+            $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          }
+          $lines | Set-Content -Encoding ascii package\SHA256SUMS.txt
+          Get-Content package\SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Makia-Windows-Desktop-1.6.5-rc1-x64-TEST-ONLY
+          path: package/
+          retention-days: 90
+          if-no-files-found: error
+
+# No release, tag, production install, or automatic merge from a PR build.
