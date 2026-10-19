@@ -41,8 +41,10 @@ jobs:
       - name: Connector syntax and regression tests
         shell: pwsh
         run: |
-          python -m py_compile client/windows/makia_client_connector.py client/windows/test_connector.py app/client_connector.py app/client_portal.py
-          python -m unittest client.windows.test_connector
+          python -m py_compile client/windows/makia_client_connector.py client/windows/makia_windows.py client/windows/test_connector.py client/windows/test_windows_gui.py app/client_connector.py app/client_portal.py
+          python -m unittest client.windows.test_connector client.windows.test_windows_gui
+          $guiHealth=(python client/windows/makia_windows.py --healthcheck | ConvertFrom-Json)
+          if (!$guiHealth.ok -or $guiHealth.password_stored -or $guiHealth.portal -ne 'https://p.mahinet.shop/client/') { throw 'Native launcher self-test failed' }
           node --check app/static/client.js
 
       - name: Build Windows full-device connector
@@ -50,6 +52,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check "pyinstaller==6.16.0"
           pyinstaller --noconfirm --clean --onefile --name MakiaClientConnector --uac-admin client/windows/makia_client_connector.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name MakiaWindows client/windows/makia_windows.py
 
       - name: Fetch pinned sing-box 1.14.2
         shell: pwsh
@@ -65,6 +68,7 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item dist\MakiaClientConnector.exe package\MakiaClientConnector.exe
+          Copy-Item dist\MakiaWindows.exe package\MakiaWindows.exe
           Copy-Item $bin.FullName package\sing-box.exe
           Copy-Item client\windows\install.ps1 package\install.ps1
           Copy-Item client\windows\uninstall.ps1 package\uninstall.ps1
@@ -94,6 +98,8 @@ jobs:
           package\MakiaClientConnector.exe --status
           if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
           package\sing-box.exe version
+          $launcher=Start-Process -FilePath (Resolve-Path package\MakiaWindows.exe).Path -ArgumentList '--healthcheck' -Wait -PassThru
+          if ($launcher.ExitCode -ne 0) { throw 'Windows GUI launcher healthcheck failed' }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
@@ -123,7 +129,8 @@ jobs:
         shell: pwsh
         run: |
           @(
-            "version=1.6.4"
+            "panel_version=1.6.5"
+            "windows_client_version=1.6.5.1"
             "commit=$env:GITHUB_SHA"
             "ref=$env:GITHUB_REF"
             "run_id=$env:GITHUB_RUN_ID"
@@ -135,10 +142,50 @@ jobs:
           $lines | Set-Content -Encoding ascii package\SHA256SUMS.txt
           Get-Content package\SHA256SUMS.txt
 
+      - name: Build single-file Windows Setup and test install/uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          choco install innosetup --version 6.7.1 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed" }
+          $iscc=Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) {
+            $found=Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if ($found) { $iscc=$found.Source }
+          }
+          if (!(Test-Path $iscc)) { throw 'ISCC.exe not found' }
+          & $iscc 'client\windows\setup.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Setup compilation failed' }
+          $setup=(Resolve-Path 'installer\Makia-Windows-Setup-1.6.5.1-x64.exe').Path
+          if ((Get-Item $setup).Length -lt 1000000) { throw 'Installer unexpectedly small' }
+          $log=Join-Path $env:RUNNER_TEMP 'makia-setup-smoke.log'
+          $install=Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',("/LOG=`"$log`"")) -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "One-click setup failed: $($install.ExitCode)" }
+          $appDir=Join-Path $env:LOCALAPPDATA 'Makia\Connector\bin'
+          foreach ($name in @('MakiaWindows.exe','MakiaClientConnector.exe','sing-box.exe','wstunnel.exe')) {
+            if (!(Test-Path (Join-Path $appDir $name))) { throw "Installer missing $name" }
+          }
+          $entry=(Get-Item 'HKCU:\Software\Classes\makia\shell\open\command').GetValue('')
+          if ($entry -notlike '*MakiaClientConnector.exe*' -or $entry -notlike '*"%1"*') { throw 'makia:// handler invalid' }
+          $health=Start-Process -FilePath (Join-Path $appDir 'MakiaWindows.exe') -ArgumentList '--healthcheck' -Wait -PassThru
+          if ($health.ExitCode -ne 0) { throw 'Installed GUI self-test failed' }
+          $uninstall=Join-Path $appDir 'unins000.exe'
+          if (!(Test-Path $uninstall)) { throw 'Windows uninstaller missing' }
+          $result=Start-Process -FilePath $uninstall -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Windows uninstall failed: $($result.ExitCode)" }
+          if (Test-Path (Join-Path $appDir 'MakiaWindows.exe')) { throw 'Windows uninstaller left executable behind' }
+          if (Test-Path 'HKCU:\Software\Classes\makia') { throw 'Protocol handler remains after uninstall' }
+          $sum=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          "$sum  $(Split-Path $setup -Leaf)" | Set-Content -Encoding ascii installer\SHA256SUMS.txt
+          Write-Host "Setup smoke PASS: $sum"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.6.4
-          path: package/
+          name: Makia-Windows-OneClick-x64-1.6.5.1-UAT
+          path: |
+            installer/*.exe
+            installer/SHA256SUMS.txt
+            package/
           if-no-files-found: error
           retention-days: 90
 
