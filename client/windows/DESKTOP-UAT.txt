@@ -1,0 +1,47 @@
+MAKIA WINDOWS DESKTOP 1.6.5-desktop-rc1 — WINDOWS X64 TEST BUILD
+================================================================
+
+This is an UNSIGNED TEST build, not a general release or an automatic
+update for active customers. It is separate from the Chrome/Edge extension.
+
+INSTALL
+1. Download the COMPLETE GitHub Actions artifact and Extract All into a
+   regular user-writable folder (do not run the installer from inside ZIP).
+2. Double-click Install-Makia.cmd.
+3. Open "Makia Desktop" from Start Menu or its Desktop shortcut.
+4. Login once using your Makia CLIENT SUBSCRIPTION account, NOT a panel admin
+   or VPS account. Select "remember this Windows account" only on your own PC.
+5. Choose your assigned and available profile; click Connect VPN.
+6. Accept Windows UAC when Windows asks permission to start the full-device
+   connector. Only a successful, different public HTTPS exit IP counts as
+   VERIFIED, not a "started" process.
+7. Click Disconnect VPN in the desktop app to return to the direct route.
+
+REQUIREMENTS & LIMITS
+- Windows 10/11 x64; administrative elevation when starting/stopping TUN.
+- HTTPS panel at https://p.mahinet.shop with an active Client Portal account.
+- The Windows app uses EXISTING 1.6.5 Client Portal endpoints and one-time,
+  device-bound connector tickets, not raw password-based VPN credentials.
+- The existing server 1.6.5 has a 12-hour login limit. Its already-developed
+  opt-in 30-day web/desktop session support requires a separately approved
+  host update; this Windows EXE alone cannot extend the server's expiry.
+- WireGuard needs official WireGuard for Windows installed; OpenVPN profiles
+  need a supported official OpenVPN executable. Xray/Outline/SSH share-link
+  support depends on the pinned sing-box runtime's actual compatibility.
+- Only one VPN tunnel/profile at a time. This is a FULL-DEVICE Windows
+  connector, not the browser-only proxy extension.
+- No account password is persisted. Remembered cookies are encrypted by
+  Windows DPAPI CurrentUser and are unusable from another Windows account.
+- Closing the GUI does NOT silently turn off the currently active VPN.
+- Session revocation/password change/account suspension take effect server
+  side. Logout does not pretend to disconnect an already-running OS tunnel.
+- The Windows EXEs are not code-signed: UAC/SmartScreen may warn. Check
+  BUILD-INFO.txt and SHA256SUMS.txt, and use only the expected GitHub artifact.
+- No automatic installation or changes to the running VPS are made by this
+  package. Test on ONE authorised device before distributing to customers.
+
+LOGS (do not share credentials or complete config files):
+%LOCALAPPDATA%\Makia\Connector\connector.log
+
+UNINSTALL:
+Double-click Uninstall-Makia.cmd. Disconnect before uninstalling.
