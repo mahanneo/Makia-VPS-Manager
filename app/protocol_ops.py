@@ -1430,7 +1430,18 @@ def install_component(component):
     if component=="xray":
         # Official XTLS installer. It installs the core + systemd service and
         # verifies the release artifacts handled by the upstream installer.
-        _run(["bash","-lc",f'bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --version {XRAY_VALIDATED_VERSION} -u nobody'],timeout=600)
+        # Download then invoke the installer as a file: do not rely on nested
+        # bash -lc / bash -c argument forwarding (CI caught a stray "@" arg).
+        with tempfile.TemporaryDirectory(prefix="makia-xray-install-") as work:
+            installer=Path(work)/"install-release.sh"
+            _run([
+                "curl","-fL","--retry","3","--connect-timeout","15",
+                "--max-time","90","-o",str(installer),
+                "https://github.com/XTLS/Xray-install/raw/main/install-release.sh",
+            ],timeout=120)
+            if not installer.is_file() or installer.stat().st_size<1000:
+                raise ProtocolError("Xray installer download is missing or incomplete")
+            _run(["bash",str(installer),"install","--version",XRAY_VALIDATED_VERSION,"-u","nobody"],timeout=600)
         config=Path("/usr/local/etc/xray/config.json")
         config.parent.mkdir(parents=True,exist_ok=True)
         if not config.exists():
