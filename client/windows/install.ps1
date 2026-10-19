@@ -60,7 +60,7 @@ if (Test-Path $desktopExe) {
   $shortcut.TargetPath = $desktopExe
   $shortcut.WorkingDirectory = $target
   $shortcut.IconLocation = "$desktopExe,0"
-  $shortcut.Description = "Makia Windows VPN — One-click connection"
+  $shortcut.Description = "Makia Windows VPN - One-click connection"
   $shortcut.Save()
   $desktopPath = [Environment]::GetFolderPath("DesktopDirectory")
   if ($desktopPath) {
