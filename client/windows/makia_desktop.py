@@ -402,4 +402,12 @@ class App:
 if __name__=="__main__":
     if sys.platform!="win32":
         raise SystemExit("Makia Desktop requires Windows")
-    App().run()
+    # Headless packaged-EXE smoke for Windows CI. Never contacts the VPS or
+    # opens a tunnel and never includes a token or saved device identifier.
+    if len(sys.argv)==3 and sys.argv[1]=="--smoke-output":
+        Path(sys.argv[2]).write_text(json.dumps({
+            "app":"Makia Desktop","version":VERSION,"gui":"tkinter",
+            "windows":True,"dpapi":hasattr(ctypes.windll.crypt32,"CryptProtectData")
+        }),encoding="utf-8")
+    else:
+        App().run()
