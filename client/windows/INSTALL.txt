@@ -17,6 +17,7 @@ INSTALL:
 6. Disconnect via the Makia Windows GUI before updating or uninstalling.
 
 IMPORTANT:
+Browser-only users do NOT need to install this package; install the Makia Browser VPN extension in Chrome/Edge instead.
 - This package is a real full-device connector, NOT the separate Chrome/Edge
   Makia Browser VPN extension. For browser-only users, use that extension.
 - The GUI opens the official HTTPS Client Portal. The one-click EXE contains no
