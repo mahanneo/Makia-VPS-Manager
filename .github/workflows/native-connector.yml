@@ -96,6 +96,13 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path package\MakiaDesktop.exe)) { throw "desktop application missing" }
+          $desktopSmoke=Join-Path $env:RUNNER_TEMP "makia-desktop-smoke.json"
+          $desktopProcess=Start-Process -FilePath (Resolve-Path package\MakiaDesktop.exe).Path -ArgumentList @("--smoke-output",$desktopSmoke) -PassThru -Wait
+          if ($desktopProcess.ExitCode -ne 0 -or !(Test-Path $desktopSmoke)) { throw "packaged desktop EXE did not start" }
+          $desktopResult=Get-Content $desktopSmoke -Raw | ConvertFrom-Json
+          if ($desktopResult.app -ne "Makia Desktop" -or !$desktopResult.dpapi -or !$desktopResult.windows) {
+            throw "desktop native/DPAPI smoke failed"
+          }
           package\MakiaClientConnector.exe --status
           if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
           package\sing-box.exe version
