@@ -1,30 +1,42 @@
-Makia Windows Full Device Connector 1.6.1
+MAKIA WINDOWS 1.6.5.1 — FULL DEVICE CONNECTOR / UAT CANDIDATE
 
-Purpose:
-This package is only for full-device VPN on Windows.
+One-click Windows 10/11 x64 installer:
+  installer/Makia-Windows-Setup-1.6.5.1-x64.exe
+  installer/SHA256SUMS.txt
 
-Browser-only users:
-Do NOT install this package.
-Use Makia Browser VPN from Chrome/Edge instead. Browser VPN connects directly to the Makia Browser Gateway and needs no EXE, Registry Native Messaging host or local sing-box.
+INSTALL:
+1. Disconnect your previous Makia full-device connection if present.
+2. Double-click the Setup EXE. It installs for the current Windows user
+   and adds Makia Windows to Start Menu (optional Desktop shortcut).
+3. Launch "Makia Windows". Click "Login / Select a profile and connect".
+4. A secure browser opens the existing https://p.mahinet.shop/client/ portal.
+   Sign in with your OWN Makia Client user account and choose a supported
+   profile; click "Direct Connect" and approve the first makia:// launch/UAC.
+5. Check the public IP after the connection. The native launcher reports only
+   the local connector state; it never claims verified internet egress.
+6. Disconnect via the Makia Windows GUI before updating or uninstalling.
 
-Install:
-1. Extract the ZIP once.
-2. Double-click Install-Makia.cmd.
-3. Return to the authenticated Makia Client Portal.
-4. Use Direct Connect on a supported profile.
-5. Windows may show UAC when starting a full-device tunnel.
+IMPORTANT:
+Browser-only users do NOT need to install this package; install the Makia Browser VPN extension in Chrome/Edge instead.
+- This package is a real full-device connector, NOT the separate Chrome/Edge
+  Makia Browser VPN extension. For browser-only users, use that extension.
+- The GUI opens the official HTTPS Client Portal. The one-click EXE contains no
+  baked-in customer username, password, bearer token or static VPN profile.
+- Login persistence on the web requires the *server-side* remembered-login
+  change in PR #119; the existing live 1.6.5 server still has 12-hour sessions.
+- The full-device connector bundles pinned sing-box and WStunnel binaries.
+  WireGuard/OpenVPN may additionally require their official desktop clients
+  and drivers; no such drivers are silently installed.
+- Setup is per-user. Elevated permission (UAC) may be requested when launching
+  the full-device connector or its tunnel, not for the GUI itself.
+- An unsigned UAT build may trigger Windows SmartScreen. Only install verified
+  hashes from the authorized repository; do NOT turn off Defender/SmartScreen.
+- Real WireGuard/OpenVPN/Xray/SSH protocol behavior and Windows restart
+  routing must pass UAT before a stable public release.
+- No VPN server listener or live subscriber is changed by installing this UI.
 
-Included:
-- MakiaClientConnector.exe
-- sing-box.exe
-- install.ps1 / uninstall.ps1
-- Install-Makia.cmd / Uninstall-Makia.cmd
+ADVANCED/MANUAL ZIP: Previous portable package scripts remain available to
+operators. Normal users should use the single Setup EXE instead.
 
-Logs:
-%LOCALAPPDATA%\Makia\Connector\connector.log
-
-Uninstall:
-Double-click Uninstall-Makia.cmd.
-
-Security:
-Direct Connect uses short-lived, one-time, device-bound tickets. Complete VPN credentials are not embedded in makia:// URLs.
+SUPPORT LOG: %LOCALAPPDATA%\Makia\Connector\connector.log
+UNINSTALL: Windows Settings > Apps > Makia Windows > Uninstall, after Disconnect.
