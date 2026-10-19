@@ -111,7 +111,9 @@ def api_request(controller,path,token="",body=None,timeout=15):
     request=urllib.request.Request(origin(controller)+path,data=raw,headers=headers,
                                    method="POST" if body is not None else "GET")
     try:
-        with urllib.request.urlopen(request,timeout=timeout) as response:
+        # Do not inherit an unrelated browser/system HTTP proxy as proof of VPN.
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request,timeout=timeout) as response:
             if response.status!=200:
                 raise RuntimeError("Makia API HTTP "+str(response.status))
             return json.loads(response.read(512*1024).decode("utf-8"))
@@ -130,7 +132,7 @@ def check_ip():
     for url in IP_ENDPOINTS:
         try:
             req=urllib.request.Request(url,headers={"User-Agent":"MakiaDesktop/0.1"})
-            with urllib.request.urlopen(req,timeout=6) as response:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=6) as response:
                 ip=str(json.loads(response.read(1000).decode("utf-8")).get("ip") or "")
                 if re.fullmatch(r"[0-9a-fA-F:.]{3,45}",ip):
                     return ip
@@ -283,6 +285,7 @@ class App:
             elif label in ("login","resume","refresh"):
                 self.account=value.get("account") or {}
                 self.items=value.get("items") or []
+                if value.get("username"):self.username.set(value["username"])
                 self.show_home()
                 self.message.set("حساب آماده است. سرویس را انتخاب کنید؛ اتصال فقط بعد از تست IP تأیید می‌شود.")
             elif label=="connect":
@@ -313,8 +316,7 @@ class App:
         self.expires=int(result["expires_at"])
         self.remember=remember
         save_record(self.controller,self.device_key,self.token,self.expires,remember)
-        self.username.set(username)
-        return self.load_account()
+        return {**self.load_account(),"username":username}
 
     def load_account(self):
         account=api_request(self.controller,"/client/desktop/me",self.token)
