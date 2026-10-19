@@ -22,4 +22,6 @@ foreach ($shortcutPath in @(
 }
 Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia"
 Remove-Item -Recurse -Force "$root\bin"
-Write-Host "Makia Desktop and Full Device Connector removed. Saved sign-in data remains under %LOCALAPPDATA%\Makia\Desktop until deliberately deleted by the user."
+# Uninstall deletes the locally saved DPAPI bearer session as well.
+Remove-Item -LiteralPath (Join-Path $env:LOCALAPPDATA "Makia\Desktop\device.json") -Force -ErrorAction SilentlyContinue
+Write-Host "Makia Desktop and Full Device Connector removed. Local saved sign-in was removed; revoke this device in Makia Client if another copy remains."
