@@ -1431,7 +1431,9 @@ def install_component(component):
         # Official XTLS installer. It installs the core + systemd service and
         # verifies the release artifacts handled by the upstream installer.
         # Download then invoke the installer as a file: do not rely on nested
-        # bash -lc / bash -c argument forwarding (CI caught a stray "@" arg).
+        # bash -lc / bash -c forwarding. Upstream no longer accepts -u;
+        # its default install user is nobody on fresh installs, and it keeps
+        # the existing systemd user when Xray is already installed.
         with tempfile.TemporaryDirectory(prefix="makia-xray-install-") as work:
             installer=Path(work)/"install-release.sh"
             _run([
@@ -1441,7 +1443,7 @@ def install_component(component):
             ],timeout=120)
             if not installer.is_file() or installer.stat().st_size<1000:
                 raise ProtocolError("Xray installer download is missing or incomplete")
-            _run(["bash",str(installer),"install","--version",XRAY_VALIDATED_VERSION,"-u","nobody"],timeout=600)
+            _run(["bash",str(installer),"install","--version",XRAY_VALIDATED_VERSION],timeout=600)
         config=Path("/usr/local/etc/xray/config.json")
         config.parent.mkdir(parents=True,exist_ok=True)
         if not config.exists():
