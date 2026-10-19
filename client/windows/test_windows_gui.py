@@ -32,9 +32,11 @@ class WindowsLauncherTests(unittest.TestCase):
             self.assertNotIn("تأییدشده",ui.local_state())
 
     def test_gui_connector_is_same_installation_directory(self):
-        with patch.object(ui.sys,"executable",r"C:\Users\Test\AppData\Local\Makia\Connector\bin\MakiaWindows.exe"):
-            self.assertEqual(ui.connector_path().name,"MakiaClientConnector.exe")
-            self.assertEqual(ui.connector_path().parent,Path(ui.sys.executable).parent)
+        with tempfile.TemporaryDirectory() as root:
+            gui=Path(root)/"MakiaWindows.exe"
+            with patch.object(ui.sys,"executable",str(gui)):
+                self.assertEqual(ui.connector_path().name,"MakiaClientConnector.exe")
+                self.assertEqual(ui.connector_path().parent,gui.parent.resolve())
 
 
 if __name__=="__main__":
