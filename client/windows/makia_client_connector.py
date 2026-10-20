@@ -260,7 +260,7 @@ def start_openvpn_verified(exe,profile,timeout=45):
     deadline=time.monotonic()+max(3,int(timeout))
     while time.monotonic()<deadline:
         output=runtime_log.read_text(encoding="utf-8",errors="replace") if runtime_log.is_file() else ""
-        if re.search(r"Initialization Sequence Completed(?:\\r?\\n|$)",output):
+        if re.search(r"Initialization Sequence Completed(?:\r?\n|$)",output):
             return proc.pid
         if proc.poll() is not None:
             break
