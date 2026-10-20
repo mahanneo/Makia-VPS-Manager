@@ -997,7 +997,7 @@ def native_windows_ikev2_profile(request:Request):
     except native_windows.NativeWindowsError as exc:
         raise HTTPException(409,str(exc)) from exc
     return Response(
-        text,media_type="text/plain; charset=utf-8",
+        "\ufeff"+text,media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition":'attachment; filename="Makia-IKEv2-Windows.ps1"',
             "Cache-Control":"no-store",
