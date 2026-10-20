@@ -1,4 +1,4 @@
-Makia Windows Full Device Connector 1.6.1
+Makia Windows Full Device Connector installer 1.6.4.1
 
 Purpose:
 This package is only for full-device VPN on Windows.
@@ -9,7 +9,8 @@ Use Makia Browser VPN from Chrome/Edge instead. Browser VPN connects directly to
 
 Install:
 1. Extract the ZIP once.
-2. Double-click Install-Makia.cmd.
+2. Extract to a folder (spaces in the path are supported). Double-click Install-Makia.cmd. Do not run files from inside ZIP.
+   Run as the Windows user who will use Makia; the makia:// handler is registered per user.
 3. Return to the authenticated Makia Client Portal.
 4. Use Direct Connect on a supported profile.
 5. Windows may show UAC when starting a full-device tunnel.
@@ -17,6 +18,7 @@ Install:
 Included:
 - MakiaClientConnector.exe
 - sing-box.exe
+- wstunnel.exe
 - install.ps1 / uninstall.ps1
 - Install-Makia.cmd / Uninstall-Makia.cmd
 

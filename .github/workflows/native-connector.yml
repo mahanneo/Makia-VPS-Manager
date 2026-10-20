@@ -96,34 +96,67 @@ jobs:
           package\sing-box.exe version
 
           $oldLocal=$env:LOCALAPPDATA
-          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
+          $oldNoninteractive=$env:MAKIA_INSTALL_NONINTERACTIVE
+          $spaceDir=Join-Path $env:RUNNER_TEMP "Makia Client Connector Windows UAT"
+          Copy-Item -LiteralPath (Resolve-Path package).Path -Destination $spaceDir -Recurse -Force
+          $env:MAKIA_INSTALL_NONINTERACTIVE="1"
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-spaced-path-smoke"
           try {
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
-            if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
+            # Reproduce the exact failure: run the real CMD wrapper from an
+            # extracted directory that CONTAINS SPACES and ends in a backslash.
+            Push-Location $spaceDir
+            try {
+              & cmd.exe /d /c Install-Makia.cmd
+              if ($LASTEXITCODE -ne 0) { throw "Real Install-Makia.cmd failed for spaced directory" }
+            } finally { Pop-Location }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
             $runtime=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\sing-box.exe"
             $ws=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wstunnel.exe"
-            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws)) { throw "installed Windows runtime incomplete" }
+            if (!(Test-Path -LiteralPath $installed -PathType Leaf) -or
+                !(Test-Path -LiteralPath $runtime -PathType Leaf) -or
+                !(Test-Path -LiteralPath $ws -PathType Leaf)) { throw "installed Windows runtime incomplete" }
+            $state=Get-Content -LiteralPath (Join-Path (Split-Path $installed) "install-state.json") -Raw | ConvertFrom-Json
+            if ($state.version -ne "1.6.4.1") { throw "Installer metadata version mismatch" }
             $probe=(package\MakiaClientConnector.exe --self-test | ConvertFrom-Json)
             if (!$probe.ok -or !$probe.sing_box -or !$probe.wstunnel) { throw "connector self-test missing runtime" }
-
             $registered=(Get-Item "HKCU:\Software\Classes\makia\shell\open\command").GetValue("")
             if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe") -or !$registered.Contains("%1")) {
-              throw "makia:// registration invalid: $registered"
+              throw "makia:// registration invalid"
+            }
+
+            # A broken extraction must fail before touching an installed bin.
+            $previous=(Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash
+            $incomplete=Join-Path $env:RUNNER_TEMP "Makia Missing Binary Package"
+            New-Item -ItemType Directory -Path $incomplete -Force | Out-Null
+            Copy-Item package\install.ps1 (Join-Path $incomplete "install.ps1")
+            Copy-Item package\MakiaClientConnector.exe (Join-Path $incomplete "MakiaClientConnector.exe")
+            Copy-Item package\sing-box.exe (Join-Path $incomplete "sing-box.exe")
+            # Run the intentionally broken package as a separate child process.
+            # Capture stderr instead of letting expected errors abort the CI shell.
+            $missingScript=Join-Path $incomplete "install.ps1"
+            $missingStdout=Join-Path $env:RUNNER_TEMP "missing-package-stdout.txt"
+            $missingStderr=Join-Path $env:RUNNER_TEMP "missing-package-stderr.txt"
+            $missingRun=Start-Process -FilePath "powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+$missingScript+'"') -Wait -PassThru -RedirectStandardOutput $missingStdout -RedirectStandardError $missingStderr
+            if ($missingRun.ExitCode -eq 0) { throw "Incomplete package was installed" }
+            if (!(Select-String -LiteralPath $missingStderr -SimpleMatch "Missing wstunnel.exe" -Quiet)) { throw "Expected missing wstunnel preflight error was not reported" }
+            if ((Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash -ne $previous) {
+              throw "Previous connector was modified by incomplete package"
             }
           }
           finally {
             Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia" -ErrorAction SilentlyContinue
             Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
             $env:LOCALAPPDATA=$oldLocal
+            if ($null -eq $oldNoninteractive) { Remove-Item Env:\MAKIA_INSTALL_NONINTERACTIVE -ErrorAction SilentlyContinue }
+            else { $env:MAKIA_INSTALL_NONINTERACTIVE=$oldNoninteractive }
           }
 
       - name: Generate checksums
         shell: pwsh
         run: |
           @(
-            "version=1.6.4"
+            "version=1.6.4.1"
             "commit=$env:GITHUB_SHA"
             "ref=$env:GITHUB_REF"
             "run_id=$env:GITHUB_RUN_ID"
@@ -137,7 +170,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.6.4
+          name: Makia-Client-Connector-Windows-x64-1.6.4.1
           path: package/
           if-no-files-found: error
           retention-days: 90
