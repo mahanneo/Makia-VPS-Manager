@@ -53,7 +53,7 @@ if (!$existingOpenVpn -and !$SkipOpenVpnSetup) {
 }
 
 New-Item -ItemType Directory -Force -Path $target | Out-Null
-foreach ($name in @("MakiaClientConnector.exe","sing-box.exe","wstunnel.exe")) {
+foreach ($name in @("MakiaClientConnector.exe","sing-box.exe","wstunnel.exe","wintun.dll","WINTUN-LICENSE.txt")) {
   $src = Join-Path $SourceDir $name
   if (!(Test-Path -LiteralPath $src)) { throw "Missing $name in Makia package" }
   Copy-Item -LiteralPath $src -Destination (Join-Path $target $name) -Force
@@ -61,6 +61,7 @@ foreach ($name in @("MakiaClientConnector.exe","sing-box.exe","wstunnel.exe")) {
 $connector = Join-Path $target "MakiaClientConnector.exe"
 $runtime = Join-Path $target "sing-box.exe"
 $wstunnel = Join-Path $target "wstunnel.exe"
+$wintun = Join-Path $target "wintun.dll"
 
 $base = "HKCU:\Software\Classes\makia"
 New-Item -Force -Path $base | Out-Null
@@ -71,7 +72,7 @@ Set-Item -Path "$base\DefaultIcon" -Value ('"' + $connector + '",0')
 New-Item -Force -Path "$base\shell\open\command" | Out-Null
 Set-Item -Path "$base\shell\open\command" -Value ('"' + $connector + '" "%1"')
 
-foreach ($path in @($connector,$runtime,$wstunnel)) {
+foreach ($path in @($connector,$runtime,$wstunnel,$wintun)) {
   if (!(Test-Path -LiteralPath $path)) { throw "Makia Windows installation missing: $path" }
 }
 $registered = (Get-Item "$base\shell\open\command").GetValue("")
@@ -84,6 +85,7 @@ $state = @{
   connector = $connector
   runtime = $runtime
   wstunnel = $wstunnel
+  wintun = $wintun
   openvpn = if ($existingOpenVpn) { $existingOpenVpn } else { "skipped-in-ci" }
   installed_at = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json -Depth 3
