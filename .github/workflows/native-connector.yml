@@ -163,6 +163,29 @@ jobs:
             $env:LOCALAPPDATA=$oldLocal
           }
 
+      - name: Fresh signed OpenVPN runtime and Makia one-installer UAT on disposable Windows runner
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          $oldLocal=$env:LOCALAPPDATA
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-one-installer-uat"
+          try {
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            if ($LASTEXITCODE -ne 0) { throw "Clean signed OpenVPN/Makia setup failed" }
+            $probe=(& (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe") --self-test | ConvertFrom-Json)
+            if (!$probe.ok -or !$probe.outline_ready -or !$probe.openvpn) {
+              throw "One-installer did not prepare Outline/Wintun and OpenVPN"
+            }
+            if (!(Test-Path (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wintun.dll"))) {
+              throw "Bundled Wintun driver is missing after real setup"
+            }
+            Write-Host "REAL ONE-INSTALLER WINDOWS RUNTIME PREFLIGHT PASS"
+          } finally {
+            Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
+            $env:LOCALAPPDATA=$oldLocal
+          }
+
       - name: Generate checksums
         shell: pwsh
         run: |
