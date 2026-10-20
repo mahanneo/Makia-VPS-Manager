@@ -1220,7 +1220,7 @@ async function openChangeProtocol(){
   }).join('');
   modalRoot.innerHTML=[
     '<div class="modal-backdrop change-protocol-backdrop"><div class="modal change-protocol-modal">',
-      '<div class="change-protocol-head"><div class="change-protocol-mark">↻</div><div><span class="eyebrow">CONNECTION MODE</span><h3>Change Protocol</h3><p>پروتکل یا Transport موردنظر را انتخاب کن. هر گزینه به Backend واقعی Makia وصل است.</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="change-protocol-head"><div class="change-protocol-mark">↻</div><div><span class="eyebrow">CONNECTION MODE</span><h3>Change Protocol</h3><p>پروتکل یا Transport موردنظر را انتخاب کن. فقط وضعیت READY به Backend عملیاتی وصل است؛ گزینه BLOCKED برای جلوگیری از ساخت اتصال جعلی غیرفعال است.</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
       '<div class="change-protocol-list">'+rows+'</div>',
       '<div class="change-protocol-foot"><span>Listener خام TCP/443 فقط یک Owner دارد. WStunnel 443 جدید Listener جدا نمی‌سازد؛ از مسیر WebSocket مخفی داخل Nginx/HTTPS موجود عبور می‌کند و با پنل روی 443 هم‌زیست است.</span><button class="ghost" data-action="modal-close">Cancel</button></div>',
     '</div></div>'
