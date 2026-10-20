@@ -7,6 +7,11 @@ if [[ ! -f /run/.containerenv && ! -f /.dockerenv ]]; then
   echo "CI fixture must run inside a disposable container" >&2
   exit 2
 fi
+# The minimal historical CI guest has curl but no unzip and stale APT indexes.
+# Prepare only fixture prerequisites inside that disposable guest.
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq unzip
 tmp="$(mktemp /tmp/makia-xray-fixture-XXXXXX.sh)"
 trap 'rm -f "$tmp"' EXIT
 curl -fsSL --retry 3 --output "$tmp"   https://raw.githubusercontent.com/XTLS/Xray-install/e741a4f56d368afbb9e5be3361b40c4552d3710d/install-release.sh
