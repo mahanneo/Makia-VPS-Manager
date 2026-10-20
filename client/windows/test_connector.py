@@ -76,7 +76,7 @@ class ConnectorTests(unittest.TestCase):
             def poll(self): return None
         def spawn(*args,**kwargs):
             (mod.ROOT/"openvpn-runtime.log").write_text(
-                "2026-10-20 10:00:00 Initialization Sequence Completed\\n",encoding="utf-8"
+                "2026-10-20 10:00:00 Initialization Sequence Completed\n",encoding="utf-8"
             )
             return Active()
         with patch.object(mod.subprocess,"Popen",side_effect=spawn):
