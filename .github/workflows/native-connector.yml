@@ -88,23 +88,86 @@ jobs:
           Copy-Item $bin.FullName package\wstunnel.exe
           package\wstunnel.exe --version
 
+      - name: Fetch official signed OpenVPN Community driver and CLI (bundled dependency)
+        shell: pwsh
+        run: |
+          $name="OpenVPN-2.6.23-I002-amd64.msi"
+          $url="https://build.openvpn.net/downloads/releases/$name"
+          Invoke-WebRequest -Uri $url -OutFile "package/$name" -TimeoutSec 120
+          $msi=Resolve-Path "package/$name"
+          if ((Get-Item $msi).Length -lt 5000000) { throw "Incomplete vendor OpenVPN MSI download" }
+          $signature=Get-AuthenticodeSignature -LiteralPath $msi
+          if ($signature.Status -ne 'Valid' -or
+              !$signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch 'OpenVPN') {
+            throw "OpenVPN vendor Authenticode verification failed"
+          }
+          $digest=(Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path package).Path "$name.sha256"),$digest,
+            (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "Signed vendor OpenVPN MSI verified (SHA256 $digest)"
+
+      - name: Fetch official signed WireGuardNT runtime for one-app tunnel services
+        shell: pwsh
+        run: |
+          $name="wireguard-amd64-1.1.1.msi"
+          $url="https://download.wireguard.com/windows-client/$name"
+          Invoke-WebRequest -Uri $url -OutFile "package/$name" -TimeoutSec 120
+          $msi=Resolve-Path "package/$name"
+          if ((Get-Item $msi).Length -lt 1000000) { throw "Incomplete WireGuard MSI" }
+          $signature=Get-AuthenticodeSignature -LiteralPath $msi
+          if ($signature.Status -ne 'Valid' -or
+              !$signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch 'WireGuard') {
+            throw "WireGuard vendor Authenticode verification failed"
+          }
+          $digest=(Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path package).Path "$name.sha256"),$digest,
+            (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "Signed vendor WireGuard MSI verified (SHA256 $digest)"
+
+      - name: Bundle SHA256-pinned signed Wintun for Outline and sing-box TUN
+        shell: pwsh
+        run: |
+          $url="https://www.wintun.net/builds/wintun-0.14.1.zip"
+          $zip=Join-Path $env:RUNNER_TEMP "wintun-0.14.1.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 90
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51") {
+            throw "Official Wintun checksum mismatch: $hash"
+          }
+          $dir=Join-Path $env:RUNNER_TEMP "makia-wintun"
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $dll=Get-ChildItem $dir -Recurse -File -Filter wintun.dll | Where-Object {
+            $_.FullName -match '[/\\]amd64[/\\]'
+          } | Select-Object -First 1
+          if (!$dll) { throw "Official signed amd64 wintun.dll missing" }
+          $sig=Get-AuthenticodeSignature -LiteralPath $dll.FullName
+          if ($sig.Status -ne "Valid") { throw "Wintun DLL signature invalid" }
+          Copy-Item -LiteralPath $dll.FullName package\wintun.dll
+          # Preserve upstream license/distribution terms in the finished archive.
+          $license=Get-ChildItem $dir -Recurse -File | Where-Object { $_.Name -match 'LICENSE|COPYING' } | Select-Object -First 1
+          if ($license) { Copy-Item -LiteralPath $license.FullName package\WINTUN-LICENSE.txt }
+          else { throw "Official Wintun distribution license missing" }
+
       - name: Smoke package and real installer
         shell: pwsh
         run: |
           package\MakiaClientConnector.exe --status
           if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
           package\sing-box.exe version
+          if (!(Test-Path package\wintun.dll)) { throw "Outline and sing-box TUN driver missing" }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
           try {
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -SkipVendorSetup
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
             $runtime=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\sing-box.exe"
             $ws=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wstunnel.exe"
-            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws)) { throw "installed Windows runtime incomplete" }
+            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws) -or !(Test-Path (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wintun.dll")) ) { throw "installed Windows runtime incomplete" }
             $probe=(package\MakiaClientConnector.exe --self-test | ConvertFrom-Json)
             if (!$probe.ok -or !$probe.sing_box -or !$probe.wstunnel) { throw "connector self-test missing runtime" }
 
@@ -119,11 +182,34 @@ jobs:
             $env:LOCALAPPDATA=$oldLocal
           }
 
+      - name: Fresh signed OpenVPN runtime and Makia one-installer UAT on disposable Windows runner
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          $oldLocal=$env:LOCALAPPDATA
+          $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-one-installer-uat"
+          try {
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            if ($LASTEXITCODE -ne 0) { throw "Clean signed OpenVPN/Makia setup failed" }
+            $probe=(& (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe") --self-test | ConvertFrom-Json)
+            if (!$probe.ok -or !$probe.outline_ready -or !$probe.openvpn -or !$probe.wireguard) {
+              throw "One-installer did not prepare Outline/Wintun, OpenVPN and WireGuard"
+            }
+            if (!(Test-Path (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wintun.dll"))) {
+              throw "Bundled Wintun driver is missing after real setup"
+            }
+            Write-Host "REAL ONE-INSTALLER WINDOWS RUNTIME PREFLIGHT PASS"
+          } finally {
+            Remove-Item -Recurse -Force "HKCU:\Software\Classes\makia" -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $env:LOCALAPPDATA -ErrorAction SilentlyContinue
+            $env:LOCALAPPDATA=$oldLocal
+          }
+
       - name: Generate checksums
         shell: pwsh
         run: |
           @(
-            "version=1.6.4"
+            "version=1.6.5.1-uat"
             "commit=$env:GITHUB_SHA"
             "ref=$env:GITHUB_REF"
             "run_id=$env:GITHUB_RUN_ID"
@@ -137,7 +223,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Makia-Client-Connector-Windows-x64-1.6.4
+          name: Makia-Client-Connector-Windows-x64-1.6.5.1-UAT
           path: package/
           if-no-files-found: error
           retention-days: 90

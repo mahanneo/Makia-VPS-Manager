@@ -1,30 +1,58 @@
-Makia Windows Full Device Connector 1.6.1
+Makia Windows Full Device Connector 1.6.5.1 — UAT candidate
 
-Purpose:
-This package is only for full-device VPN on Windows.
+ONE-APP INSTALLER (Windows 10/11 x64)
+1. Extract the entire downloaded Makia Windows ZIP to a permanent folder.
+2. Double-click Install-Makia.cmd once. Approve the Windows UAC prompt when required
+   to install the signed, bundled OpenVPN network driver/runtime.
+3. Return to the authenticated Makia web Client Portal at https://p.mahinet.shop/client/ .
+4. Select your actual assigned service and click «اتصال مستقیم».
+5. To disconnect, use «قطع اتصال مستقیم» in the portal.
 
-Browser-only users:
-Do NOT install this package.
-Use Makia Browser VPN from Chrome/Edge instead. Browser VPN connects directly to the Makia Browser Gateway and needs no EXE, Registry Native Messaging host or local sing-box.
+No separate Outline Client or OpenVPN application download is needed for the
+supported Makia package. Windows itself does NOT natively implement OpenVPN,
+Outline/Shadowsocks, WireGuard or VLESS. To provide full-device VPN, Makia bundles
+sing-box and its signed Wintun network driver for Outline/Xray/SSH, the official
+OpenVPN Community MSI for OpenVPN and its signed Windows driver, and wstunnel for
+the existing OpenVPN-over-WSS/443 profile. The official OpenVPN and WireGuard MSIs may install their
+vendor system services/GUI as part of the required system runtime, but the customer only
+needs to operate Makia's connection and disconnect controls.
 
-Install:
-1. Extract the ZIP once.
-2. Double-click Install-Makia.cmd.
-3. Return to the authenticated Makia Client Portal.
-4. Use Direct Connect on a supported profile.
-5. Windows may show UAC when starting a full-device tunnel.
+SECURITY / INTEGRITY:
+- OpenVPN 2.6.23-I002 AMD64 is fetched from the official upstream OpenVPN release.
+  Makia build checks its valid publisher signature and writes a SHA256 manifest.
+  Setup checks both before the system vendor MSI is executed. The package must
+  contain this MSI and its .sha256 manifest; don't download a random replacement.
+- Wintun 0.14.1 archive is checked against the official SHA256 published by
+  wintun.net; the official signed amd64 wintun.dll and upstream license are bundled.
+- sing-box 1.14.2 and wstunnel 11.0.0 use pinned upstream SHA256 checks in CI.
+- An existing compatible OpenVPN installation is not overwritten merely because
+  Makia is installed. Do not delete or replace existing system VPN drivers manually.
+- A real new OpenVPN/Wintun driver installation requires administrator approval.
+- This release does NOT create a nonexistent IKEv2/SSTP server or use obsolete
+  PPTP; native Windows RAS is a different protocol and needs actual server support.
+- WireGuard 1.1.1 official signed Windows tunnel service MSI is included inside
+  Makia's one-installer package and installed only when absent.
+  Its driver/service is required by Windows; no manual client download or
+  GUI interaction is needed. Live WireGuard traffic still requires host UAT.
 
-Included:
-- MakiaClientConnector.exe
-- sing-box.exe
-- install.ps1 / uninstall.ps1
-- Install-Makia.cmd / Uninstall-Makia.cmd
+INSTALLED LOCATION (per logged-in Windows user):
+%LOCALAPPDATA%\Makia\Connector\bin\MakiaClientConnector.exe
+%LOCALAPPDATA%\Makia\Connector\bin\sing-box.exe
+%LOCALAPPDATA%\Makia\Connector\bin\wintun.dll
+%LOCALAPPDATA%\Makia\Connector\bin\wstunnel.exe
+Makia keeps local connection state in %LOCALAPPDATA%\Makia\Connector\state.json
+and sanitized local error diagnostics in connector.log. The one-time
+makia:// URI handler is registered in HKCU.
 
-Logs:
-%LOCALAPPDATA%\Makia\Connector\connector.log
+TEST:
+- With no active VPN, run MakiaClientConnector.exe --self-test.
+- Verify outline_ready, openvpn, and wireguard are all true.
+- Use an explicitly dedicated test account for real OpenVPN and Outline
+  access, check successful tunnel handshake and actual different HTTPS egress IP,
+  DNS, app browsing, reconnect, failure, restart, and clean disconnect.
+- A process launch or state.json alone is NOT proof of VPN data egress.
+- Existing active Makia VPN sessions on live VPS must remain unchanged.
 
-Uninstall:
-Double-click Uninstall-Makia.cmd.
-
-Security:
-Direct Connect uses short-lived, one-time, device-bound tickets. Complete VPN credentials are not embedded in makia:// URLs.
+Browser-only users should use the Makia Browser VPN Chrome/Edge extension instead; no Windows Full Device Connector required.
+This package is a candidate; don't distribute as official stable before Windows
+driver-install, live server and rollback UAT.
