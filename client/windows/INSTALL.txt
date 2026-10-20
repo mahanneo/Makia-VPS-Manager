@@ -53,6 +53,6 @@ TEST:
 - A process launch or state.json alone is NOT proof of VPN data egress.
 - Existing active Makia VPN sessions on live VPS must remain unchanged.
 
-Browser-only customers use Makia Browser VPN Chrome/Edge extension instead.
+Browser-only users should use the Makia Browser VPN Chrome/Edge extension instead; no Windows Full Device Connector required.
 This package is a candidate; don't distribute as official stable before Windows
 driver-install, live server and rollback UAT.
