@@ -107,6 +107,25 @@ jobs:
             (New-Object System.Text.UTF8Encoding($false)))
           Write-Host "Signed vendor OpenVPN MSI verified (SHA256 $digest)"
 
+      - name: Fetch official signed WireGuardNT runtime for one-app tunnel services
+        shell: pwsh
+        run: |
+          $name="wireguard-amd64-1.1.1.msi"
+          $url="https://download.wireguard.com/windows-client/$name"
+          Invoke-WebRequest -Uri $url -OutFile "package/$name" -TimeoutSec 120
+          $msi=Resolve-Path "package/$name"
+          if ((Get-Item $msi).Length -lt 1000000) { throw "Incomplete WireGuard MSI" }
+          $signature=Get-AuthenticodeSignature -LiteralPath $msi
+          if ($signature.Status -ne 'Valid' -or
+              !$signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch 'WireGuard') {
+            throw "WireGuard vendor Authenticode verification failed"
+          }
+          $digest=(Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path package).Path "$name.sha256"),$digest,
+            (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "Signed vendor WireGuard MSI verified (SHA256 $digest)"
+
       - name: Bundle SHA256-pinned signed Wintun for Outline and sing-box TUN
         shell: pwsh
         run: |
@@ -173,8 +192,8 @@ jobs:
             powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
             if ($LASTEXITCODE -ne 0) { throw "Clean signed OpenVPN/Makia setup failed" }
             $probe=(& (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe") --self-test | ConvertFrom-Json)
-            if (!$probe.ok -or !$probe.outline_ready -or !$probe.openvpn) {
-              throw "One-installer did not prepare Outline/Wintun and OpenVPN"
+            if (!$probe.ok -or !$probe.outline_ready -or !$probe.openvpn -or !$probe.wireguard) {
+              throw "One-installer did not prepare Outline/Wintun, OpenVPN and WireGuard"
             }
             if (!(Test-Path (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wintun.dll"))) {
               throw "Bundled Wintun driver is missing after real setup"
