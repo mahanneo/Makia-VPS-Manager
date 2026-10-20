@@ -103,7 +103,7 @@ jobs:
             throw "OpenVPN vendor Authenticode verification failed"
           }
           $digest=(Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
-          [IO.File]::WriteAllText((Join-Path (Resolve-Path package).Path "$name.sha256"),$digest+"\n",
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path package).Path "$name.sha256"),$digest,
             (New-Object System.Text.UTF8Encoding($false)))
           Write-Host "Signed vendor OpenVPN MSI verified (SHA256 $digest)"
 
