@@ -246,6 +246,34 @@ def start_process(cmd):
     return p.pid
 
 
+def start_openvpn_verified(exe,profile,timeout=45):
+    """Do not claim OpenVPN connected until its runtime reports a real tunnel."""
+    ROOT.mkdir(parents=True,exist_ok=True)
+    runtime_log=ROOT/"openvpn-runtime.log"
+    runtime_log.write_text("",encoding="utf-8")
+    flags=getattr(subprocess,"CREATE_NEW_PROCESS_GROUP",0)|getattr(subprocess,"DETACHED_PROCESS",0)
+    proc=subprocess.Popen(
+        [exe,"--config",str(profile),"--verb","3","--log",str(runtime_log)],
+        stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,creationflags=flags,
+    )
+    deadline=time.monotonic()+max(3,int(timeout))
+    while time.monotonic()<deadline:
+        output=runtime_log.read_text(encoding="utf-8",errors="replace") if runtime_log.is_file() else ""
+        if re.search(r"Initialization Sequence Completed(?:\\r?\\n|$)",output):
+            return proc.pid
+        if proc.poll() is not None:
+            break
+        time.sleep(0.5)
+    if proc.poll() is None:
+        proc.terminate()
+        try: proc.wait(timeout=5)
+        except subprocess.TimeoutExpired: proc.kill()
+    raise RuntimeError(
+        "OpenVPN did not confirm tunnel initialization; no connection was saved. "
+        "Check Makia local OpenVPN runtime log."
+    )
+
 def wait_tcp(host,port,timeout=12):
     deadline=time.time()+float(timeout)
     while time.time()<deadline:
@@ -311,7 +339,7 @@ def connect_delivery(d,dry_run=False):
             return {"ok":True,"mode":"openvpn","binary":bool(exe),"profile":str(path)}
         if not exe:
             raise RuntimeError("The bundled Makia OpenVPN runtime/driver is missing; run Repair/Install Makia.")
-        pid=start_process([exe,"--config",str(path)])
+        pid=start_openvpn_verified(exe,path)
         STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":"openvpn","connection_mode":"device"}),encoding="utf-8")
         return {"ok":True,"mode":"openvpn","connected":True,"connection_mode":"device"}
     if engine in {"openvpn_wstunnel","openvpn-wstunnel"}:
@@ -357,7 +385,11 @@ def connect_delivery(d,dry_run=False):
         if not wait_tcp("127.0.0.1",local_port,12):
             subprocess.run(["taskkill","/PID",str(wpid),"/T","/F"],capture_output=True,timeout=10,check=False)
             raise RuntimeError("WStunnel did not expose the local OpenVPN endpoint")
-        opid=start_process([openvpn,"--config",str(path)])
+        try:
+            opid=start_openvpn_verified(openvpn,path)
+        except Exception:
+            subprocess.run(["taskkill","/PID",str(wpid),"/T","/F"],capture_output=True,timeout=10,check=False)
+            raise
         STATE.write_text(json.dumps({
             "mode":"multi-process","pids":[wpid,opid],"engine":"openvpn-wstunnel",
             "connection_mode":"device","server":server,"port":port,
