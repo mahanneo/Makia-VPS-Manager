@@ -41,7 +41,12 @@ if (!$existingOpenVpn -and !$SkipOpenVpnSetup) {
   # in the requesting user's HKCU profile, even with separate admin accounts.
   Write-Host "Installing the bundled signed OpenVPN runtime and network driver (one-time UAC)..." -ForegroundColor Cyan
   $arguments = "/i `"$openVpnMsi`" /qn /norestart"
-  $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+  $isElevated=([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if ($isElevated) {
+    $process=Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru
+  } else {
+    $process=Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+  }
   if ($process.ExitCode -notin @(0,3010)) {
     throw "The bundled OpenVPN runtime installation failed (MSI code $($process.ExitCode))"
   }
