@@ -13,8 +13,8 @@ supported Makia package. Windows itself does NOT natively implement OpenVPN,
 Outline/Shadowsocks, WireGuard or VLESS. To provide full-device VPN, Makia bundles
 sing-box and its signed Wintun network driver for Outline/Xray/SSH, the official
 OpenVPN Community MSI for OpenVPN and its signed Windows driver, and wstunnel for
-the existing OpenVPN-over-WSS/443 profile. The vendor OpenVPN MSI may install its
-vendor CLI/GUI as part of the required system runtime, but the customer only
+the existing OpenVPN-over-WSS/443 profile. The official OpenVPN and WireGuard MSIs may install their
+vendor system services/GUI as part of the required system runtime, but the customer only
 needs to operate Makia's connection and disconnect controls.
 
 SECURITY / INTEGRITY:
@@ -30,8 +30,10 @@ SECURITY / INTEGRITY:
 - A real new OpenVPN/Wintun driver installation requires administrator approval.
 - This release does NOT create a nonexistent IKEv2/SSTP server or use obsolete
   PPTP; native Windows RAS is a different protocol and needs actual server support.
-- WireGuard requires its Windows tunnel service and is NOT self-contained yet.
-  Never label WireGuard as a completed one-app feature until bundled/host UAT passes.
+- WireGuard 1.1.1 official signed Windows tunnel service MSI is included inside
+  Makia's one-installer package and installed only when absent.
+  Its driver/service is required by Windows; no manual client download or
+  GUI interaction is needed. Live WireGuard traffic still requires host UAT.
 
 INSTALLED LOCATION (per logged-in Windows user):
 %LOCALAPPDATA%\Makia\Connector\bin\MakiaClientConnector.exe
@@ -44,7 +46,7 @@ makia:// URI handler is registered in HKCU.
 
 TEST:
 - With no active VPN, run MakiaClientConnector.exe --self-test.
-- Verify outline_ready is true and openvpn is true.
+- Verify outline_ready, openvpn, and wireguard are all true.
 - Use an explicitly dedicated test account for real OpenVPN and Outline
   access, check successful tunnel handshake and actual different HTTPS egress IP,
   DNS, app browsing, reconnect, failure, restart, and clean disconnect.
