@@ -88,6 +88,25 @@ jobs:
           Copy-Item $bin.FullName package\wstunnel.exe
           package\wstunnel.exe --version
 
+      - name: Fetch official signed OpenVPN Community driver and CLI (bundled dependency)
+        shell: pwsh
+        run: |
+          $name="OpenVPN-2.6.23-I002-amd64.msi"
+          $url="https://build.openvpn.net/downloads/releases/$name"
+          Invoke-WebRequest -Uri $url -OutFile "package/$name" -TimeoutSec 120
+          $msi=Resolve-Path "package/$name"
+          if ((Get-Item $msi).Length -lt 5000000) { throw "Incomplete vendor OpenVPN MSI download" }
+          $signature=Get-AuthenticodeSignature -LiteralPath $msi
+          if ($signature.Status -ne 'Valid' -or
+              !$signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch 'OpenVPN') {
+            throw "OpenVPN vendor Authenticode verification failed"
+          }
+          $digest=(Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path package).Path "$name.sha256"),$digest+"\n",
+            (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "Signed vendor OpenVPN MSI verified (SHA256 $digest)"
+
       - name: Smoke package and real installer
         shell: pwsh
         run: |
@@ -98,7 +117,7 @@ jobs:
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
           try {
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -SkipOpenVpnSetup
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
