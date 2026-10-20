@@ -6,6 +6,19 @@ param([string]$SourceDir = $PSScriptRoot)
 $ErrorActionPreference = "Stop"
 $version = "1.6.4.1"
 $names = @("MakiaClientConnector.exe","sing-box.exe","wstunnel.exe")
+# Windows PowerShell 5.1 may inherit a restricted module path from pwsh.
+# Use the built-in .NET SHA256 implementation instead of Get-FileHash.
+function Get-ConnectorSha256([string]$FilePath) {
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [System.IO.File]::OpenRead($FilePath)
+  try {
+    return [System.BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-","")
+  } finally {
+    $stream.Dispose()
+    $sha.Dispose()
+  }
+}
+
 
 if ([string]::IsNullOrWhiteSpace($SourceDir)) { throw "Package directory was not provided." }
 # Also accept a caller-supplied directory for automated smoke tests.
@@ -46,8 +59,7 @@ try {
     $src = Join-Path $sourcePath $name
     $dest = Join-Path $staging $name
     Copy-Item -LiteralPath $src -Destination $dest -ErrorAction Stop
-    if ((Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash -ne
-        (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash) {
+    if ((Get-ConnectorSha256 $src) -ne (Get-ConnectorSha256 $dest)) {
       throw "Staged $name did not match the package checksum."
     }
   }
