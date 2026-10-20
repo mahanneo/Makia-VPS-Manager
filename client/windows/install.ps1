@@ -66,49 +66,7 @@ if (!(Test-Path -LiteralPath $wireguardMsi) -or !(Test-Path -LiteralPath $wiregu
   throw "Makia package is incomplete: verified WireGuard tunnel service MSI is missing."
 }
 $wireguardExpected=((Get-Content -LiteralPath $wireguardShaFile -Raw).Trim()).ToLowerInvariant()
-if ($wireguardExpected -notmatch '^[a-f0-9]{64}
-foreach ($name in @("MakiaClientConnector.exe","sing-box.exe","wstunnel.exe","wintun.dll","WINTUN-LICENSE.txt")) {
-  $src = Join-Path $SourceDir $name
-  if (!(Test-Path -LiteralPath $src)) { throw "Missing $name in Makia package" }
-  Copy-Item -LiteralPath $src -Destination (Join-Path $target $name) -Force
-}
-$connector = Join-Path $target "MakiaClientConnector.exe"
-$runtime = Join-Path $target "sing-box.exe"
-$wstunnel = Join-Path $target "wstunnel.exe"
-$wintun = Join-Path $target "wintun.dll"
-
-$base = "HKCU:\Software\Classes\makia"
-New-Item -Force -Path $base | Out-Null
-Set-Item -Path $base -Value "URL:Makia Client Connector"
-New-ItemProperty -Path $base -Name "URL Protocol" -Value "" -PropertyType String -Force | Out-Null
-New-Item -Force -Path "$base\DefaultIcon" | Out-Null
-Set-Item -Path "$base\DefaultIcon" -Value ('"' + $connector + '",0')
-New-Item -Force -Path "$base\shell\open\command" | Out-Null
-Set-Item -Path "$base\shell\open\command" -Value ('"' + $connector + '" "%1"')
-
-foreach ($path in @($connector,$runtime,$wstunnel,$wintun)) {
-  if (!(Test-Path -LiteralPath $path)) { throw "Makia Windows installation missing: $path" }
-}
-$registered = (Get-Item "$base\shell\open\command").GetValue("")
-if ([string]::IsNullOrWhiteSpace($registered) -or !$registered.Contains("MakiaClientConnector.exe")) {
-  throw "makia:// registration failed"
-}
-$state = @{
-  version = "1.6.5.1"
-  mode = "full-device"
-  connector = $connector
-  runtime = $runtime
-  wstunnel = $wstunnel
-  wintun = $wintun
-  openvpn = if ($existingOpenVpn) { $existingOpenVpn } else { "skipped-in-ci" }
-  wireguard = if (Test-Path -LiteralPath $wireguardExe) { $wireguardExe } else { "skipped-in-ci" }
-  installed_at = (Get-Date).ToUniversalTime().ToString("o")
-} | ConvertTo-Json -Depth 3
-[System.IO.File]::WriteAllText((Join-Path $target "install-state.json"),$state,(New-Object System.Text.UTF8Encoding($false)))
-Write-Host "Makia Windows Connector 1.6.5.1 installed. Open the Makia Client Portal and click Direct Connect." -ForegroundColor Green
-Write-Host "Connector: $connector"
-Write-Host "Outline is handled by Makia's bundled sing-box runtime. Browser-only users need only the Makia extension."
-) { throw "Invalid WireGuard SHA256 manifest" }
+if ($wireguardExpected -notmatch '^[a-f0-9]{64}$') { throw "Invalid WireGuard SHA256 manifest" }
 if ((Get-FileHash -LiteralPath $wireguardMsi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $wireguardExpected) {
   throw "WireGuard package checksum mismatch; installation cancelled"
 }
@@ -169,6 +127,7 @@ $state = @{
   wstunnel = $wstunnel
   wintun = $wintun
   openvpn = if ($existingOpenVpn) { $existingOpenVpn } else { "skipped-in-ci" }
+  wireguard = if (Test-Path -LiteralPath $wireguardExe) { $wireguardExe } else { "skipped-in-ci" }
   installed_at = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json -Depth 3
 [System.IO.File]::WriteAllText((Join-Path $target "install-state.json"),$state,(New-Object System.Text.UTF8Encoding($false)))
