@@ -1,7 +1,7 @@
 # Makia Windows Full Device Connector — one installer, bundled OpenVPN runtime.
 # The user installs Makia once. The signed OpenVPN dependency supplies its
 # required Windows network driver; OpenVPN/Outline do not exist in Windows RAS.
-param([string]$SourceDir = $PSScriptRoot,[switch]$SkipOpenVpnSetup)
+param([string]$SourceDir = $PSScriptRoot,[switch]$SkipVendorSetup)
 
 $ErrorActionPreference = "Stop"
 $target = Join-Path $env:LOCALAPPDATA "Makia\Connector\bin"
@@ -36,7 +36,7 @@ if ($signature.Status -ne 'Valid' -or
 }
 
 $existingOpenVpn = Get-OpenVpnExe
-if (!$existingOpenVpn -and !$SkipOpenVpnSetup) {
+if (!$existingOpenVpn -and !$SkipVendorSetup) {
   # Only the vendor driver/runtime install needs UAC; Makia's URI handler stays
   # in the requesting user's HKCU profile, even with separate admin accounts.
   Write-Host "Installing the bundled signed OpenVPN runtime and network driver (one-time UAC)..." -ForegroundColor Cyan
@@ -53,7 +53,7 @@ if (!$existingOpenVpn -and !$SkipOpenVpnSetup) {
   $existingOpenVpn = Get-OpenVpnExe
   if (!$existingOpenVpn) { throw "OpenVPN executable missing after successful installer; setup incomplete" }
 }
-if (!$existingOpenVpn -and !$SkipOpenVpnSetup) {
+if (!$existingOpenVpn -and !$SkipVendorSetup) {
   throw "OpenVPN runtime/driver is unavailable"
 }
 
@@ -118,7 +118,7 @@ if ($wireguardSignature.Status -ne 'Valid' -or !$wireguardSignature.SignerCertif
   throw "WireGuard publisher signature is not valid; installation cancelled"
 }
 $wireguardExe=Join-Path $env:ProgramFiles "WireGuard\wireguard.exe"
-if (!(Test-Path -LiteralPath $wireguardExe) -and !$SkipOpenVpnSetup) {
+if (!(Test-Path -LiteralPath $wireguardExe) -and !$SkipVendorSetup) {
   Write-Host "Installing signed WireGuard tunnel service from the complete Makia package..." -ForegroundColor Cyan
   $arguments='/i "'+$wireguardMsi+'" /qn /norestart DO_NOT_LAUNCH=1'
   if ($isElevated) {
@@ -130,7 +130,7 @@ if (!(Test-Path -LiteralPath $wireguardExe) -and !$SkipOpenVpnSetup) {
     throw "WireGuard tunnel service installation failed (MSI code $($process.ExitCode))"
   }
 }
-if (!(Test-Path -LiteralPath $wireguardExe) -and !$SkipOpenVpnSetup) {
+if (!(Test-Path -LiteralPath $wireguardExe) -and !$SkipVendorSetup) {
   throw "WireGuardNT executable missing after signed Makia vendor setup."
 }
 
