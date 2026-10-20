@@ -161,7 +161,7 @@ jobs:
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
           try {
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -SkipOpenVpnSetup
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File package\install.ps1 -SourceDir (Resolve-Path package).Path -SkipVendorSetup
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
 
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
