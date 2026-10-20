@@ -576,16 +576,16 @@ def main():
             page.locator(".protocol-modes-panel").wait_for()
             page.locator('[data-action="change-protocol"]').click()
             page.locator(".change-protocol-modal").wait_for()
-            assert page.locator(".change-protocol-row").count()==7
+            assert page.locator(".change-protocol-row").count()==9
             switcher_text=page.locator(".change-protocol-modal").inner_text()
-            for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
+            for label in ["IKEv2","SSTP","L2TP/IPsec","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in switcher_text
-            assert "Backend واقعی Makia" in switcher_text
+            assert "فقط وضعیت READY" in switcher_text
             page.locator('.change-protocol-modal [data-action="modal-close"]').last.click()
             assert page.locator(".change-protocol-modal").count()==0
-            assert page.locator(".protocol-mode-card").count()==7
+            assert page.locator(".protocol-mode-card").count()==9
             mode_text=page.locator(".protocol-modes-panel").inner_text()
-            for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
+            for label in ["IKEv2","SSTP","L2TP/IPsec","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in mode_text
             assert page.locator('[data-action="ikev2-setup"]').count()==1
             assert page.locator('[data-action="openvpn-mode"][data-proto="udp"]').count()==1

@@ -1142,7 +1142,7 @@ async function protocols(renderToken=window.__viewRenderToken){
     const assigned=(m.ports||[]).filter(Boolean);
     const ports=assigned.length?assigned.join(', '):(suggested?('suggested '+suggested):'—');
     const actions={
-      ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button><button class="soft" data-action="ikev2-users">Users</button>',
+      ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button><button class="soft" data-action="ikev2-users">Users</button>'+(m.ready?'<button class="soft" data-action="ikev2-windows">دانلود نصب ویندوز</button>':''),
       wireguard:'<button class="ghost" data-action="nav" data-view="wireguard">Manage</button>',
       udp:'<button class="ghost" data-action="openvpn-mode" data-proto="udp">Use UDP</button>',
       tcp:'<button class="ghost" data-action="openvpn-tcp-fallback">Enable TCP fallback</button>',
@@ -1150,7 +1150,7 @@ async function protocols(renderToken=window.__viewRenderToken){
       'wstunnel-openvpn':'<button class="ghost" data-action="openvpn-wstunnel-setup">1) Configure / Repair 443</button><button class="soft" data-action="wizard-open" data-kind="openvpn_wstunnel">2) ساخت کاربر WStunnel</button>',
       wstunnel:'<button class="ghost" data-action="wstunnel-setup">Configure WG</button>'
     }[m.id]||'';
-    return '<article class="protocol-mode-card '+(m.ready?'ready':'')+'"><div class="protocol-mode-top"><div class="protocol-mode-icon">'+protocolGlyph(m.id==='udp'||m.id==='tcp'?'openvpn':m.id)+'</div><div><b>'+htmlEsc(m.label)+'</b><span>'+htmlEsc(m.transport||'')+'</span></div><span class="status-chip '+(m.ready?'ok':'warn')+'">'+(m.ready?'READY':'SETUP')+'</span></div><div class="protocol-mode-meta"><span>Port</span><b>'+htmlEsc(ports)+'</b></div><div class="toolbar">'+actions+'</div></article>';
+    return '<article class="protocol-mode-card '+(m.ready?'ready':'')+'"><div class="protocol-mode-top"><div class="protocol-mode-icon">'+protocolGlyph(m.id==='udp'||m.id==='tcp'?'openvpn':m.id)+'</div><div><b>'+htmlEsc(m.label)+'</b><span>'+htmlEsc(m.transport||'')+'</span></div><span class="status-chip '+(m.ready?'ok':'warn')+'">'+(m.ready?'READY':m.blocked?'BLOCKED':'SETUP')+'</span></div><div class="protocol-mode-meta"><span>Port</span><b>'+htmlEsc(ports)+'</b></div>'+(m.reason?'<p class="port-safe-note">'+htmlEsc(m.reason)+'</p>':'')+'<div class="toolbar">'+actions+'</div></article>';
   }).join('');
   const fallbackPortRows=[
     {id:'ssh',label:'SSH',transport:'TCP',ports:[22],runtime:Boolean(ssh.service_active)},
@@ -1173,7 +1173,7 @@ async function protocols(renderToken=window.__viewRenderToken){
   ].map(e=>'<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc(e[0].slice(0,1))+'</div><div><b>'+htmlEsc(e[0])+'</b><span>'+(e[1]?'نصب شده':'نصب نشده')+'</span></div><span class="status-chip '+(e[2]?'ok':e[1]?'warn':'bad')+'">'+(e[2]?'در حال اجرا':e[1]?'متوقف':'Missing')+'</span><button class="ghost" data-action="nav" data-view="'+e[3]+'">تنظیمات</button></div>').join('');
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">⌘</span><div><h2>مدیریت پورت‌ها</h2><p>نمایش پورت‌های فعال و کنترل Engineهای شبکه بدون تداخل TCP / UDP</p></div></div><div class="protocol-header-actions"><button class="primary" data-action="change-protocol">Change Protocol</button><button class="ghost" data-action="endpoint-matrix">بررسی Endpoint</button><button class="ghost" data-action="protocol-refresh">بروزرسانی</button></div></section>',
-    '<section class="panel protocol-modes-panel"><div class="panel-head"><div><h3>Connection Modes</h3><span>IKEV2 · WIREGUARD · UDP · TCP · STEALTH · WSTUNNEL 443</span></div></div><div class="protocol-mode-grid">'+(protocolModeCards||'<div class="empty">Mode data unavailable.</div>')+'</div><div class="port-safe-note">WStunnel 443 جدید OpenVPN را داخل WebSocket/TLS از همان HTTPS/443 پنل عبور می‌دهد؛ WStunnel WG قدیمی همچنان Mode جداگانه است.</div></section>',
+    '<section class="panel protocol-modes-panel"><div class="panel-head"><div><h3>Connection Modes</h3><span>IKEv2 · SSTP / L2TP readiness · WIREGUARD · UDP · TCP · STEALTH · WSTUNNEL 443</span></div></div><div class="protocol-mode-grid">'+(protocolModeCards||'<div class="empty">Mode data unavailable.</div>')+'</div><div class="port-safe-note">WStunnel 443 جدید OpenVPN را داخل WebSocket/TLS از همان HTTPS/443 پنل عبور می‌دهد؛ WStunnel WG قدیمی همچنان Mode جداگانه است.</div></section>',
     '<section class="panel port-plan-panel"><div class="panel-head"><div><h3>TCP Port Ownership</h3><span>REAL LISTENER PREFLIGHT</span></div></div><div class="port-plan-grid">'+((modesData.port_plan?.rows||[]).map(r=>'<article><span>'+htmlEsc(r.service)+'</span><b>TCP/'+Number(r.port||0)+'</b><small class="'+(r.occupied?'warn-text':'ok-text')+'">'+(r.occupied?('Owned: '+htmlEsc(r.owner||'host service')):'Free now')+'</small></article>').join('')||'<div class="empty">Port plan unavailable.</div>')+'</div>'+((modesData.port_plan?.blockers?.openvpn_tcp||[]).length?'<div class="wizard-note danger-note"><b>OpenVPN TCP blockers</b><span>'+htmlEsc(modesData.port_plan.blockers.openvpn_tcp.join(' · '))+'</span></div>':'')+((modesData.port_plan?.blockers?.stealth||[]).length?'<div class="wizard-note danger-note"><b>Stealth blockers</b><span>'+htmlEsc(modesData.port_plan.blockers.stealth.join(' · '))+'</span></div>':'')+'<div class="port-safe-note">'+htmlEsc(modesData.port_plan?.note||'TCP/443 has one owner; UDP/443 may coexist independently.')+'</div></section>',
     '<section class="panel port-management-panel"><div class="panel-head"><div><h3>لیست پورت‌های فعال</h3><span>TRANSPORT-AWARE ALLOCATION</span></div></div><div class="port-table-head"><span>پروتکل</span><span>پورت</span><span>نوع اتصال</span><span>وضعیت</span><span>عملیات</span></div><div class="port-table-body">'+(portRows||'<div class="empty">پورت مدیریت‌شده‌ای پیدا نشد.</div>')+'</div><div class="port-safe-note">✓ بررسی تداخل پورت‌ها بر اساس Transport انجام می‌شود؛ TCP/443 و UDP/443 می‌توانند هم‌زمان فعال باشند.</div></section>',
     '<section class="split-grid"><div class="panel"><div class="panel-head"><div><h3>Engineها</h3><span>INSTALL / RUNTIME</span></div></div><div class="service-control-list">'+engineRows+'</div></div><div class="panel"><div class="panel-head"><div><h3>Xray Inbounds</h3><span>'+Number((x.inbounds||[]).length)+' DETECTED</span></div></div><div class="engine-inbounds">'+((x.inbounds||[]).length?(x.inbounds||[]).map(i=>'<div class="engine-inbound"><div><b>'+htmlEsc(String(i.protocol||'').toUpperCase())+'</b><span>'+htmlEsc(i.tag||'Inbound')+'</span></div><div><b>:'+Number(i.port||0)+'</b><span>'+Number(i.clients||0)+' users</span></div></div>').join(''):'<div class="empty compact">Inbound وجود ندارد.</div>')+'</div></div></section>',
@@ -1186,7 +1186,9 @@ async function submitXrayTunnel(){const payload={name:formValue('tnName','').tri
 
 function protocolModeDescription(id){
   return {
-    ikev2:'IPsec/IKEv2 با StrongSwan؛ مناسب Clientهای Native سیستم‌عامل.',
+    ikev2:'IPsec/IKEv2 با StrongSwan؛ نصب مستقیم با VPN داخلی Windows.',
+    sstp:'نیازمند SSTP Server واقعی روی TCP/443؛ بدون قطع HTTPS یا IP/route اختصاصی قابل فعال‌سازی نیست.',
+    'l2tp-ipsec':'نیازمند Backend واقعی PPP/L2TP و IKEv1/IPsec بدون تداخل با IKEv2.',
     wireguard:'WireGuard سریع با Peer، QR، Handshake و Traffic واقعی.',
     udp:'OpenVPN روی UDP؛ حالت کم‌تاخیر با Port قابل انتخاب.',
     tcp:'OpenVPN روی TCP؛ برای شبکه‌هایی که UDP مشکل دارد.',
@@ -1202,7 +1204,7 @@ async function openChangeProtocol(){
     data=await api('/api/protocols/modes');
     window.__protocolModes=data;
   }
-  const order=['ikev2','wireguard','udp','tcp','stealth','wstunnel-openvpn','wstunnel'];
+  const order=['ikev2','sstp','l2tp-ipsec','wireguard','udp','tcp','stealth','wstunnel-openvpn','wstunnel'];
   const byId=Object.fromEntries((data.modes||[]).map(x=>[x.id,x]));
   const rows=order.map(id=>{
     const m=byId[id]||{id,label:id.toUpperCase(),ports:[],transport:'',ready:false,status:{}};
@@ -1212,13 +1214,13 @@ async function openChangeProtocol(){
       '<span class="change-protocol-icon">'+protocolGlyph(iconKind)+'</span>'+
       '<span class="change-protocol-copy"><b>'+htmlEsc(m.label)+'</b><small>'+htmlEsc(protocolModeDescription(id))+'</small></span>'+
       '<span class="change-protocol-port">'+htmlEsc(port)+'</span>'+
-      '<span class="change-protocol-state '+(m.ready?'ok':'')+'">'+(m.ready?'READY':'SETUP')+'</span>'+
+      '<span class="change-protocol-state '+(m.ready?'ok':'')+'">'+(m.ready?'READY':m.blocked?'BLOCKED':'SETUP')+'</span>'+
       '<span class="change-protocol-arrow">›</span>'+
     '</button>';
   }).join('');
   modalRoot.innerHTML=[
     '<div class="modal-backdrop change-protocol-backdrop"><div class="modal change-protocol-modal">',
-      '<div class="change-protocol-head"><div class="change-protocol-mark">↻</div><div><span class="eyebrow">CONNECTION MODE</span><h3>Change Protocol</h3><p>پروتکل یا Transport موردنظر را انتخاب کن. هر گزینه به Backend واقعی Makia وصل است.</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
+      '<div class="change-protocol-head"><div class="change-protocol-mark">↻</div><div><span class="eyebrow">CONNECTION MODE</span><h3>Change Protocol</h3><p>پروتکل یا Transport موردنظر را انتخاب کن. فقط وضعیت READY به Backend عملیاتی وصل است؛ گزینه BLOCKED برای جلوگیری از ساخت اتصال جعلی غیرفعال است.</p></div><button class="close-btn" data-action="modal-close">×</button></div>',
       '<div class="change-protocol-list">'+rows+'</div>',
       '<div class="change-protocol-foot"><span>Listener خام TCP/443 فقط یک Owner دارد. WStunnel 443 جدید Listener جدا نمی‌سازد؛ از مسیر WebSocket مخفی داخل Nginx/HTTPS موجود عبور می‌کند و با پنل روی 443 هم‌زیست است.</span><button class="ghost" data-action="modal-close">Cancel</button></div>',
     '</div></div>'
@@ -1229,6 +1231,7 @@ async function selectProtocolMode(mode){
   const data=window.__protocolModes||{};
   const current=(data.modes||[]).find(x=>x.id===mode)||{};
   closeModal();
+  if(current.blocked){alert(current.reason||'این پروتکل هنوز Runtime تست‌شده روی سرور ندارد؛ فقط نمایش وضعیت است.');return;}
   if(mode==='ikev2'){
     if(current.ready)await openIKEv2Users(); else await setupIKEv2();
     return;
@@ -1246,6 +1249,10 @@ async function setupIKEv2(){
   const cidr=prompt('IKEv2 client CIDR','10.77.0.0/24')||'10.77.0.0/24';
   const dns=prompt('IKEv2 DNS','1.1.1.1')||'1.1.1.1';
   try{await api('/api/protocols/ikev2/bootstrap',{method:'POST',body:JSON.stringify({domain,cidr,dns})});toast('IKEv2 configured');await protocols()}catch(e){alert('IKEv2: '+e.message)}
+}
+async function downloadIKEv2Windows(){
+  try{await fetchDownload('/api/protocols/native-windows/ikev2/profile.ps1',{},'Makia-IKEv2-Windows.ps1');toast('فایل نصب Windows IKEv2 دانلود شد؛ بدون رمز/اطلاعات محرمانه.');}
+  catch(e){alert('Windows IKEv2: '+e.message)}
 }
 async function createIKEv2User(){
   const name=prompt('IKEv2 username','user001');if(!name)return;
@@ -2408,6 +2415,7 @@ async function handleMakiaAction(btn){
   if(action==='change-protocol'){await openChangeProtocol();return}
   if(action==='protocol-mode-select'){await selectProtocolMode(btn.dataset.mode||'');return}
   if(action==='ikev2-setup'){await setupIKEv2();return}
+  if(action==='ikev2-windows'){await downloadIKEv2Windows();return}
   if(action==='ikev2-user'){await createIKEv2User();return}
   if(action==='ikev2-users'){await openIKEv2Users();return}
   if(action==='ikev2-user-delete'){await revokeIKEv2User(dataDec(btn.dataset.name));return}
