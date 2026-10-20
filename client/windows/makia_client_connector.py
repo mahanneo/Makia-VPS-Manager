@@ -149,7 +149,7 @@ def parse_ss(uri):
         host,port=server.rsplit(":",1)
     return {
         "type":"shadowsocks","tag":"proxy","server":host,
-        "server_port":int(port.split("?",1)[0]),"method":method,"password":urllib.parse.unquote(password),
+        "server_port":int(port.split("?",1)[0].rstrip("/")),"method":method,"password":urllib.parse.unquote(password),
     }
 
 def parse_npvt_ssh(uri):
