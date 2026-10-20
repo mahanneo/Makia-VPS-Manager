@@ -132,8 +132,15 @@ jobs:
             Copy-Item package\install.ps1 (Join-Path $incomplete "install.ps1")
             Copy-Item package\MakiaClientConnector.exe (Join-Path $incomplete "MakiaClientConnector.exe")
             Copy-Item package\sing-box.exe (Join-Path $incomplete "sing-box.exe")
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $incomplete "install.ps1")
-            if ($LASTEXITCODE -eq 0) { throw "Incomplete package was installed" }
+            # In pwsh, a nonzero native exit may be treated as an exception.
+            # The missing-binary rejection is EXPECTED; capture its exit code.
+            $savedNativeErrorPreference=$PSNativeCommandUseErrorActionPreference
+            $PSNativeCommandUseErrorActionPreference=$false
+            try {
+              & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $incomplete "install.ps1")
+              $missingPackageExit=$LASTEXITCODE
+            } finally { $PSNativeCommandUseErrorActionPreference=$savedNativeErrorPreference }
+            if ($missingPackageExit -eq 0) { throw "Incomplete package was installed" }
             if ((Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash -ne $previous) {
               throw "Previous connector was modified by incomplete package"
             }
