@@ -260,7 +260,30 @@ def wait_tcp(host,port,timeout=12):
 def connect_delivery(d,dry_run=False):
     engine=str(d.get("engine") or "").lower()
     share=str(d.get("share_link") or "")
-    stop_current()
+    # Preflight required runtimes before stopping any existing active tunnel.
+    # A --dry-run must never disconnect a live session.
+    runtime_kind=(
+        "wireguard" if engine=="wireguard" else
+        "openvpn" if engine in {"openvpn","openvpn_wstunnel","openvpn-wstunnel"} else
+        "sing-box"
+    )
+    required=["wireguard.exe"] if runtime_kind=="wireguard" else (
+        ["openvpn.exe"] if runtime_kind=="openvpn" else ["sing-box.exe"]
+    )
+    if not dry_run:
+        if not find_binary(required):
+            friendly={"wireguard":"WireGuard","openvpn":"OpenVPN","sing-box":"sing-box"}[runtime_kind]
+            raise RuntimeError(
+                friendly+" runtime is missing or Makia setup is incomplete. "
+                "Run Install-Makia.cmd from the complete signed Makia package."
+            )
+        if runtime_kind=="sing-box":
+            exe=find_binary(["sing-box.exe"])
+            if not (Path(exe).parent/"wintun.dll").is_file():
+                raise RuntimeError("Makia Wintun network driver missing. Run the complete Makia installer.")
+        if engine in {"openvpn_wstunnel","openvpn-wstunnel"} and not find_binary(["wstunnel.exe"]):
+            raise RuntimeError("Makia WStunnel runtime is missing; repair Makia installation.")
+        stop_current()
     ROOT.mkdir(parents=True,exist_ok=True)
     if engine=="wireguard":
         raw=base64.b64decode(d.get("native_base64") or "") if d.get("native_base64") else share.encode()
@@ -271,7 +294,7 @@ def connect_delivery(d,dry_run=False):
         if dry_run:
             return {"ok":True,"mode":"wireguard","binary":bool(exe),"profile":str(path)}
         if not exe:
-            raise RuntimeError("WireGuard for Windows is not installed")
+            raise RuntimeError("WireGuard runtime is not configured in this Makia package; install an approved driver-capable Makia build.")
         cp=subprocess.run([exe,"/installtunnelservice",str(path)],capture_output=True,text=True,timeout=30,check=False)
         if cp.returncode!=0:
             raise RuntimeError((cp.stderr or cp.stdout or "WireGuard failed")[-500:])
@@ -287,7 +310,7 @@ def connect_delivery(d,dry_run=False):
         if dry_run:
             return {"ok":True,"mode":"openvpn","binary":bool(exe),"profile":str(path)}
         if not exe:
-            raise RuntimeError("OpenVPN Connect/OpenVPN binary is not installed")
+            raise RuntimeError("The bundled Makia OpenVPN runtime/driver is missing; run Repair/Install Makia.")
         pid=start_process([exe,"--config",str(path)])
         STATE.write_text(json.dumps({"mode":"process","pid":pid,"engine":"openvpn","connection_mode":"device"}),encoding="utf-8")
         return {"ok":True,"mode":"openvpn","connected":True,"connection_mode":"device"}
@@ -401,8 +424,12 @@ def main():
             print(json.dumps({
                 "ok":True,
                 "app":APP,
-                "version":"1.6.4",
+                "version":"1.6.5.1",
                 "sing_box":bool(find_binary(["sing-box.exe"])),
+                "wintun":bool(find_binary(["wintun.dll"])),
+                "outline_ready":bool(find_binary(["sing-box.exe"])) and bool(find_binary(["wintun.dll"])),
+                "openvpn":bool(find_binary(["openvpn.exe"])),
+                "wireguard":bool(find_binary(["wireguard.exe"])),
                 "wstunnel":bool(find_binary(["wstunnel.exe"])),
                 "root":str(ROOT),
             },ensure_ascii=False))
