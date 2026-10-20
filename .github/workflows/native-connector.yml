@@ -132,15 +132,14 @@ jobs:
             Copy-Item package\install.ps1 (Join-Path $incomplete "install.ps1")
             Copy-Item package\MakiaClientConnector.exe (Join-Path $incomplete "MakiaClientConnector.exe")
             Copy-Item package\sing-box.exe (Join-Path $incomplete "sing-box.exe")
-            # In pwsh, a nonzero native exit may be treated as an exception.
-            # The missing-binary rejection is EXPECTED; capture its exit code.
-            $savedNativeErrorPreference=$PSNativeCommandUseErrorActionPreference
-            $PSNativeCommandUseErrorActionPreference=$false
-            try {
-              & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $incomplete "install.ps1")
-              $missingPackageExit=$LASTEXITCODE
-            } finally { $PSNativeCommandUseErrorActionPreference=$savedNativeErrorPreference }
-            if ($missingPackageExit -eq 0) { throw "Incomplete package was installed" }
+            # Run the intentionally broken package as a separate child process.
+            # Capture stderr instead of letting expected errors abort the CI shell.
+            $missingScript=Join-Path $incomplete "install.ps1"
+            $missingStdout=Join-Path $env:RUNNER_TEMP "missing-package-stdout.txt"
+            $missingStderr=Join-Path $env:RUNNER_TEMP "missing-package-stderr.txt"
+            $missingRun=Start-Process -FilePath "powershell.exe" -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+$missingScript+'"') -Wait -PassThru -RedirectStandardOutput $missingStdout -RedirectStandardError $missingStderr
+            if ($missingRun.ExitCode -eq 0) { throw "Incomplete package was installed" }
+            if (!(Select-String -LiteralPath $missingStderr -SimpleMatch "Missing wstunnel.exe" -Quiet)) { throw "Expected missing wstunnel preflight error was not reported" }
             if ((Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash -ne $previous) {
               throw "Previous connector was modified by incomplete package"
             }
