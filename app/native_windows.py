@@ -4,6 +4,7 @@ IKEv2 reuses Makia's one and only strongSwan owner (protocol_ops). SSTP and
 L2TP/IPsec must not be marked ready or provisioned without independently
 validated runtime, authentication, port ownership, firewall and real UAT.
 """
+import ipaddress
 import re
 
 from . import protocol_ops
@@ -25,6 +26,12 @@ def profile_script(kind, host):
     host=protocol_ops._validate_endpoint_host(host)
     if not re.fullmatch(r"[a-z0-9.-]{3,253}",host) or "." not in host:
         raise NativeWindowsError("IKEv2 requires a certificate-matching DNS hostname")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise NativeWindowsError("IKEv2 profile must use a DNS hostname matching the TLS certificate")
     try:
         # No arbitrary expression/string injection into PowerShell.
         if any(ch in host for ch in "'\"`$;()[]{} \\"):
