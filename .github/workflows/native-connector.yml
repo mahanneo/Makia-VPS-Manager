@@ -107,12 +107,37 @@ jobs:
             (New-Object System.Text.UTF8Encoding($false)))
           Write-Host "Signed vendor OpenVPN MSI verified (SHA256 $digest)"
 
+      - name: Bundle SHA256-pinned signed Wintun for Outline and sing-box TUN
+        shell: pwsh
+        run: |
+          $url="https://www.wintun.net/builds/wintun-0.14.1.zip"
+          $zip=Join-Path $env:RUNNER_TEMP "wintun-0.14.1.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 90
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51") {
+            throw "Official Wintun checksum mismatch: $hash"
+          }
+          $dir=Join-Path $env:RUNNER_TEMP "makia-wintun"
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $dll=Get-ChildItem $dir -Recurse -File -Filter wintun.dll | Where-Object {
+            $_.FullName -match '[/\\]amd64[/\\]'
+          } | Select-Object -First 1
+          if (!$dll) { throw "Official signed amd64 wintun.dll missing" }
+          $sig=Get-AuthenticodeSignature -LiteralPath $dll.FullName
+          if ($sig.Status -ne "Valid") { throw "Wintun DLL signature invalid" }
+          Copy-Item -LiteralPath $dll.FullName package\wintun.dll
+          # Preserve upstream license/distribution terms in the finished archive.
+          $license=Get-ChildItem $dir -Recurse -File | Where-Object { $_.Name -match 'LICENSE|COPYING' } | Select-Object -First 1
+          if ($license) { Copy-Item -LiteralPath $license.FullName package\WINTUN-LICENSE.txt }
+          else { throw "Official Wintun distribution license missing" }
+
       - name: Smoke package and real installer
         shell: pwsh
         run: |
           package\MakiaClientConnector.exe --status
           if ($LASTEXITCODE -ne 0) { throw "connector status smoke failed" }
           package\sing-box.exe version
+          if (!(Test-Path package\wintun.dll)) { throw "Outline and sing-box TUN driver missing" }
 
           $oldLocal=$env:LOCALAPPDATA
           $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP "makia-windows-smoke"
@@ -123,7 +148,7 @@ jobs:
             $installed=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\MakiaClientConnector.exe"
             $runtime=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\sing-box.exe"
             $ws=Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wstunnel.exe"
-            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws)) { throw "installed Windows runtime incomplete" }
+            if (!(Test-Path $installed) -or !(Test-Path $runtime) -or !(Test-Path $ws) -or !(Test-Path (Join-Path $env:LOCALAPPDATA "Makia\Connector\bin\wintun.dll")) ) { throw "installed Windows runtime incomplete" }
             $probe=(package\MakiaClientConnector.exe --self-test | ConvertFrom-Json)
             if (!$probe.ok -or !$probe.sing_box -or !$probe.wstunnel) { throw "connector self-test missing runtime" }
 
