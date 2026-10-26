@@ -285,7 +285,8 @@ def test_xray_mkcp_uses_xray_26327_schema_without_removed_seed_header():
     stream,meta=protocol_ops._build_xray_stream(
         "/unused/xray","vless","kcp","none","legacy-seed","",""
     )
-    assert stream["method"]=="mkcp"
+    assert stream["network"]=="mkcp"
+    assert "method" not in stream
     assert stream["kcpSettings"]=={}
     assert "seed" not in stream["kcpSettings"]
     assert "header" not in stream["kcpSettings"]
@@ -301,7 +302,7 @@ def test_replace_managed_block_is_idempotent():
     assert "value=2" in second
 
 
-def test_protocol_modes_reports_seven_real_modes(monkeypatch):
+def test_protocol_modes_reports_eight_real_modes_including_l2tp(monkeypatch):
     monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{
         "service_active":True,"config":"/etc/wireguard/wg0.conf","port":443
     })
@@ -327,7 +328,7 @@ def test_protocol_modes_reports_seven_real_modes(monkeypatch):
     })
     data=protocol_ops.protocol_modes()
     ids=[row["id"] for row in data["modes"]]
-    assert ids==["ikev2","wireguard","udp","tcp","stealth","wstunnel-openvpn","wstunnel"]
+    assert ids==["ikev2","l2tp","wireguard","udp","tcp","stealth","wstunnel-openvpn","wstunnel"]
     by_id={row["id"]:row for row in data["modes"]}
     assert by_id["ikev2"]["ready"] is True
     assert by_id["wireguard"]["ready"] is True

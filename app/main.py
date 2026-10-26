@@ -17,6 +17,10 @@ BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
 app.mount("/static",StaticFiles(directory=BASE/"static"),name="static")
 templates=Jinja2Templates(directory=BASE/"templates")
+
+def render_template(request:Request, name:str, context:dict, **kwargs):
+    """Render a Jinja template using Starlette's current request-first API."""
+    return templates.TemplateResponse(request=request, name=name, context=context, **kwargs)
 app.include_router(client_portal.router)
 
 @app.middleware("http")
@@ -151,7 +155,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline","ikev2":"strongswan","l2tp":"xl2tpd"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -321,7 +325,7 @@ def _portal_one_tap(kind,share_text,download_url):
         scheme=urllib.parse.urlsplit(share).scheme.lower()
         if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks"}:
             return share
-    if kind in {"wireguard","openvpn"}:
+    if kind in {"wireguard","openvpn","ikev2","l2tp"}:
         return download_url
     return ""
 
@@ -426,7 +430,7 @@ def account_rows():
 @app.get("/",response_class=HTMLResponse)
 def root(request:Request):
     if not current_user(request): return RedirectResponse("/login",302)
-    return templates.TemplateResponse("dashboard.html",{
+    return render_template(request, "dashboard.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
         "theme":get_setting("theme","glass"),"density":get_setting("density","comfortable"),
@@ -435,7 +439,7 @@ def root(request:Request):
 
 @app.get("/help/connect",response_class=HTMLResponse)
 def connection_help(request:Request):
-    response=templates.TemplateResponse("client_guide.html",{
+    response=render_template(request, "client_guide.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
     })
@@ -446,19 +450,19 @@ def connection_help(request:Request):
 @app.get("/support/login",response_class=HTMLResponse)
 def support_login_page(request:Request):
     if current_user(request): return RedirectResponse("/",302)
-    return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
+    return render_template(request, "support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/support/login")
 def support_login(request:Request,code:str=Form(...)):
     remote_ip=ip(request) or "unknown"
     state=login_rate_state("support:"+remote_ip,int(time.time()))
     if int(state.get("blocked_until") or 0)>int(time.time()):
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید." if get_setting("language","fa")!="en" else "Too many failed attempts. Try again later.")},status_code=429)
+        return render_template(request, "support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید." if get_setting("language","fa")!="en" else "Too many failed attempts. Try again later.")},status_code=429)
     grant=consume_support_grant(code)
     if not grant:
         state=record_login_failure("support:"+remote_ip,int(time.time()),max_failures=5,window_seconds=900,block_seconds=900)
         audit("remote-support","support_login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است." if get_setting("language","fa")!="en" else "The support code is invalid, already used or expired.")},status_code=401)
+        return render_template(request, "support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است." if get_setting("language","fa")!="en" else "The support code is invalid, already used or expired.")},status_code=401)
     clear_login_failures("support:"+remote_ip)
     actor=f"support:{grant['id']}:{grant['scope']}"
     ttl=max(60,int(grant["expires_at"])-int(time.time()))
@@ -478,7 +482,7 @@ def support_logout(request:Request):
 
 @app.get("/login",response_class=HTMLResponse)
 def login_page(request:Request):
-    return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
+    return render_template(request, "login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/login")
 def login(request:Request,username:str=Form(...),password:str=Form(...)):
@@ -488,18 +492,18 @@ def login(request:Request,username:str=Form(...),password:str=Form(...)):
     if int(rate.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(rate["blocked_until"])-now_ts)
         audit(username or "unknown","login_rate_limited",detail=f"retry_after={wait}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s).")},status_code=429)
+        return render_template(request, "login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s).")},status_code=429)
     with connect() as con:
         row=con.execute("SELECT * FROM admins WHERE username=? AND active=1",(username,)).fetchone()
     if not row or not verify_password(password,row["password_hash"]):
         state=record_login_failure(remote_ip,now_ts)
         audit(username or "unknown","login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password.")},status_code=401)
+        return render_template(request, "login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password.")},status_code=401)
     clear_login_failures(remote_ip)
     twofa=get_admin_2fa(username)
     if twofa and twofa.get("totp_enabled"):
         audit(username,"login_password_success_2fa_required",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":make_preauth(username),"error":None})
+        return render_template(request, "login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":make_preauth(username),"error":None})
     audit(username,"login_success",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -516,7 +520,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
     valid=bool(state and state.get("totp_enabled") and state.get("totp_secret") and pyotp.TOTP(state["totp_secret"]).verify(code.strip(),valid_window=1))
     if not valid:
         audit(username,"login_2fa_failed",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":token,"error":("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid.")},status_code=401)
+        return render_template(request, "login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":token,"error":("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid.")},status_code=401)
     audit(username,"login_success_2fa",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -1071,6 +1075,20 @@ def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
         result=protocol_ops.create_ikev2_user(payload.name,payload.password or None)
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
+    try:
+        profile=access_ops.native_vpn_payload(
+            "ikev2",payload.name,result.get("server") or protocol_ops.ikev2_status().get("domain") or "",
+            payload.name,result.get("password") or "",
+        )
+        artifact_id=artifact_save("ikev2",payload.name,payload.name,"ikev2",profile,{
+            "endpoint":result.get("server") or protocol_ops.ikev2_status().get("domain") or "",
+            "username":payload.name,"auth":"EAP-MSCHAPv2",
+        })
+        result["artifact_id"]=artifact_id
+    except access_ops.AccessPackageError as exc:
+        try: protocol_ops.remove_ikev2_user(payload.name)
+        except protocol_ops.ProtocolError: pass
+        raise HTTPException(500,"IKEv2 profile export failed: "+str(exc)) from exc
     audit(actor,"ikev2_user_create",payload.name,ip=ip(request))
     return result
 
@@ -1086,8 +1104,83 @@ def ikev2_user_delete(name:str,request:Request):
         result=protocol_ops.remove_ikev2_user(name)
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
+    delete_access_artifact_by_key("ikev2",name)
     audit(actor,"ikev2_user_delete",name,ip=ip(request))
     return result
+
+
+class L2TPUserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/l2tp/diagnostics")
+def l2tp_diagnostics(request:Request):
+    require_user(request)
+    return protocol_ops.l2tp_status()
+
+
+@app.get("/api/protocols/ikev2/diagnostics")
+def ikev2_diagnostics(request:Request):
+    require_user(request)
+    status=protocol_ops.ikev2_status()
+    # ikev2_status validates the certificate expiry, SAN, private-key match,
+    # forwarding, NAT, service and both IPsec UDP listeners.
+    warnings=[]
+    if not status.get("certificate_valid"):
+        warnings.append(status.get("certificate_error") or "IKEv2 certificate is invalid or missing.")
+    if not status.get("certificate_matches_domain"):
+        warnings.append("IKEv2 server certificate SAN does not match Remote ID.")
+    if not status.get("certificate_key_matches"):
+        warnings.append("IKEv2 certificate and private key do not match.")
+    if not status.get("service_active"):
+        warnings.append("strongSwan service is not active.")
+    if not all((status.get("listeners") or {}).values()):
+        warnings.append("One or more IPsec UDP listeners (500/4500) are missing.")
+    if not status.get("forwarding_ready"):
+        warnings.append("IKEv2 client-network forwarding/NAT is not ready.")
+    return {**status,"warnings":warnings,"ready":bool(status.get("ready") and not warnings)}
+
+@app.get("/api/protocols/l2tp/users")
+def l2tp_users_get(request:Request):
+    require_user(request)
+    return {"users":protocol_ops.list_l2tp_users()}
+
+
+@app.post("/api/protocols/l2tp/users")
+def l2tp_user_create(payload:L2TPUserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.create_l2tp_user(payload.name,payload.password or None)
+        profile=access_ops.native_vpn_payload(
+            "l2tp",payload.name,result.get("server") or "",
+            payload.name,result.get("password") or "",result.get("psk") or "",
+        )
+        artifact_id=artifact_save("l2tp",payload.name,payload.name,"l2tp",profile,{
+            "endpoint":result.get("server") or "","username":payload.name,"auth":"IPsec PSK + MS-CHAPv2",
+        })
+        result["artifact_id"]=artifact_id
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    except access_ops.AccessPackageError as exc:
+        try: protocol_ops.remove_l2tp_user(payload.name)
+        except protocol_ops.ProtocolError: pass
+        raise HTTPException(500,"L2TP profile export failed: "+str(exc)) from exc
+    audit(actor,"l2tp_user_create",payload.name,ip=ip(request))
+    return result
+
+
+@app.delete("/api/protocols/l2tp/users/{name}")
+def l2tp_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.remove_l2tp_user(name)
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    delete_access_artifact_by_key("l2tp",name)
+    audit(actor,"l2tp_user_delete",name,ip=ip(request))
+    return result
+
 
 class OpenVPNTCPFallback(BaseModel):
     port:int=Field(default=8443,ge=1,le=65535)
@@ -1187,6 +1280,17 @@ class XrayInboundBuilderPayload(BaseModel):
 def xray_inbound_capabilities(request:Request):
     require_capability(request,"xray")
     caps=protocol_ops.xray_inbound_builder_capabilities()
+    cert_domains=protocol_ops.xray_tls_certificate_inventory()
+    tls_domains=protocol_ops.xray_tls_domain_inventory()
+    configured_domain=str(get_setting("panel_domain","") or "").strip().lower()
+    default_tls_domain=configured_domain if configured_domain in tls_domains else (tls_domains[0] if tls_domains else "")
+    caps["tls_cert_domains"]=cert_domains
+    caps["tls_domains"]=tls_domains
+    caps["default_tls_domain"]=default_tls_domain
+    for preset in caps.get("presets") or []:
+        preset["tls_domain_ready"]=bool(default_tls_domain) if preset.get("requires_domain") else True
+        preset["tls_domain"]=default_tls_domain if preset.get("requires_domain") else ""
+        preset["tls_domain_error"]="" if preset["tls_domain_ready"] else "No valid TLS domain with a certificate pointing directly to this VPS."
     # Presets are enriched with actual host port readiness so selecting a
     # profile does not blindly collide with Nginx, OpenVPN, WireGuard or
     # another Xray listener. This is advisory; create/apply still performs
@@ -1202,7 +1306,24 @@ def xray_inbound_capabilities(request:Request):
                 "owner":protocol_ops._port_owner_label(port,transport_proto) if occupied else "",
             })
         preset["port_state"]=states
-        preset["suggested_port"]=next((x["port"] for x in states if not x["occupied"]),None)
+        try:
+            allocation=protocol_ops.allocate_xray_inbound_port(
+                int((preset.get("ports") or [2087])[0]),
+                preset.get("protocol") or "vless",
+                preset.get("transport") or "tcp",
+            )
+            preset["suggested_port"]=int(allocation["port"])
+            preset["port_adjusted"]=bool(allocation.get("adjusted"))
+            preset["port_error"]=""
+            if not any(int(x.get("port") or 0)==preset["suggested_port"] for x in states):
+                states.append({
+                    "port":preset["suggested_port"],"transport":transport_proto,
+                    "occupied":False,"owner":"","auto_selected":True,
+                })
+        except protocol_ops.ProtocolError as exc:
+            preset["suggested_port"]=None
+            preset["port_adjusted"]=False
+            preset["port_error"]=str(exc)[:300]
     return caps
 
 
@@ -1479,7 +1600,7 @@ def subscription_page(subscription_id:str,request:Request):
         profile_qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(link)).decode("ascii")
     if sub_url:
         subscription_qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(sub_url)).decode("ascii")
-    response=templates.TemplateResponse("subscription.html",{
+    response=render_template(request, "subscription.html",{
         "request":request,"client":snap,"subscription_id":subscription_id,
         "app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),
         "profile_qr":profile_qr,"subscription_qr":subscription_qr,"subscription_url":sub_url,
@@ -2078,6 +2199,34 @@ def _resolve_access_payload(kind,key,request):
         return payload,get_access_artifact_by_key("openvpn",key)
     if kind=="wireguard":
         raise HTTPException(409,"legacy WireGuard peer has no recoverable client private key; reissue this peer to create a new exportable config")
+    if kind=="ikev2":
+        credentials=protocol_ops.get_ikev2_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"IKEv2 user not found")
+        status=protocol_ops.ikev2_status()
+        payload=access_ops.native_vpn_payload(
+            "ikev2",key,status.get("domain") or "",credentials["name"],credentials["password"]
+        )
+        artifact_save("ikev2",key,key,"ikev2",payload,{
+            "endpoint":status.get("domain") or "","username":key,"auth":"EAP-MSCHAPv2",
+        })
+        return payload,get_access_artifact_by_key("ikev2",key)
+    if kind=="l2tp":
+        credentials=protocol_ops.get_l2tp_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"L2TP user not found")
+        status=protocol_ops.l2tp_status()
+        try:
+            psk=protocol_ops._l2tp_shared_psk()
+            payload=access_ops.native_vpn_payload(
+                "l2tp",key,status.get("domain") or "",credentials["name"],credentials["password"],psk
+            )
+        except (protocol_ops.ProtocolError,access_ops.AccessPackageError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+        artifact_save("l2tp",key,key,"l2tp",payload,{
+            "endpoint":status.get("domain") or "","username":key,"auth":"IPsec PSK + MS-CHAPv2",
+        })
+        return payload,get_access_artifact_by_key("l2tp",key)
     if kind=="ssh":
         raise HTTPException(409,"SSH password was not retained for this legacy account; set a new password once to enable encrypted exports")
     raise HTTPException(404,"access entry not found")
@@ -2133,7 +2282,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn","outline"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline","ikev2","l2tp"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -2186,6 +2335,30 @@ def access_entries(request:Request):
             "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
+    ike_status=protocol_ops.ikev2_status()
+    for item in protocol_ops.list_ikev2_users():
+        key=item["name"]
+        art=artifacts.get(("ikev2",key))
+        rows.append({
+            "id":f"ikev2:{key}","kind":"ikev2","key":key,"name":key,"protocol":"ikev2",
+            "status":"active" if ike_status.get("configured") and ike_status.get("service_active") else "disabled",
+            "enabled":bool(ike_status.get("configured") and ike_status.get("service_active")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,"can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or ike_status.get("domain") or "",
+        })
+
+    l2tp_status=protocol_ops.l2tp_status()
+    for item in protocol_ops.list_l2tp_users():
+        key=item["name"]
+        art=artifacts.get(("l2tp",key))
+        rows.append({
+            "id":f"l2tp:{key}","kind":"l2tp","key":key,"name":key,"protocol":"l2tp/ipsec",
+            "status":"active" if l2tp_status.get("ready") else "disabled",
+            "enabled":bool(l2tp_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,"can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or l2tp_status.get("domain") or "",
+        })
+
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
     wg_runtime={p["public_key"]:p for p in protocol_ops._wireguard_peer_runtime()}
     for peer in protocol_ops.list_wireguard_peers():
@@ -2227,7 +2400,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5,"ikev2":6,"l2tp":7}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2311,7 +2484,7 @@ def public_access_portal(token:str,request:Request):
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
     portal_url=f"{public_origin(request)}/access/{token}"
-    response=templates.TemplateResponse("access_portal.html",{
+    response=render_template(request, "access_portal.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "lang":lang,"dir":"rtl" if lang=="fa" else "ltr",
         "kind":kind,"key":key,"name":artifact.get("display_name") or key,
@@ -2353,7 +2526,8 @@ def public_access_download(token:str,request:Request):
         data=(payload.get("primary_text") or "").encode("utf-8")
     if isinstance(data,str): data=data.encode("utf-8")
     media="application/octet-stream"
-    if filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
+    if filename.endswith(".mobileconfig"): media="application/x-apple-aspen-config"
+    elif filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
     elif filename.endswith(".ovpn"): media="application/x-openvpn-profile"
     safe=access_ops.safe_filename(filename)
     return Response(content=bytes(data),media_type=media,headers={
@@ -2384,7 +2558,8 @@ def public_access_file(token:str,filename:str,request:Request):
     data=files[requested]
     if isinstance(data,str):data=data.encode("utf-8")
     media="application/octet-stream"
-    if requested.endswith((".txt",".conf",".json")):media="text/plain; charset=utf-8"
+    if requested.endswith(".mobileconfig"):media="application/x-apple-aspen-config"
+    elif requested.endswith((".txt",".conf",".json")):media="text/plain; charset=utf-8"
     elif requested.endswith(".ovpn"):media="application/x-openvpn-profile"
     elif requested.endswith(".svg"):media="image/svg+xml"
     return Response(content=bytes(data),media_type=media,headers={
@@ -2514,7 +2689,8 @@ def access_native(kind:str,key:str,request:Request):
         data=(payload.get("primary_text") or "").encode("utf-8")
     if isinstance(data,str): data=data.encode("utf-8")
     media="application/octet-stream"
-    if filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
+    if filename.endswith(".mobileconfig"): media="application/x-apple-aspen-config"
+    elif filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
     elif filename.endswith(".ovpn"): media="application/x-openvpn-profile"
     audit(current_user(request),"access_native_export",f"{kind}:{key}",filename,ip(request))
     safe=access_ops.safe_filename(filename)
@@ -2613,6 +2789,12 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="ikev2":
+            protocol_ops.remove_ikev2_user(key)
+            delete_access_artifact_by_key("ikev2",key)
+        elif kind=="l2tp":
+            protocol_ops.remove_l2tp_user(key)
+            delete_access_artifact_by_key("l2tp",key)
         elif kind=="openvpn_wstunnel":
             artifact=get_access_artifact_by_key("openvpn_wstunnel",key)
             if not artifact:
@@ -4320,10 +4502,39 @@ def update_status(request:Request):
             headers={"User-Agent":"Makia-VPS-Manager"}
         )
         with urllib.request.urlopen(req,timeout=4) as resp:
-            latest=resp.read(64).decode("utf-8","replace").strip()
+            candidate=resp.read(64).decode("utf-8","replace").strip()
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",candidate):
+            raise ValueError("upstream VERSION is not valid semantic versioning")
+        latest=candidate
     except Exception as exc:
         error=str(exc)[:160]
-    return {"current":VERSION,"latest":latest,"update_available":bool(latest and latest!=VERSION),"error":error}
+
+    def version_key(value):
+        if not value or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",str(value)):
+            return None
+        return tuple(int(part) for part in str(value).split("."))
+
+    current_key=version_key(VERSION)
+    latest_key=version_key(latest)
+    update_available=bool(current_key and latest_key and latest_key>current_key)
+    if latest_key is None:
+        release_state="unavailable"
+    elif current_key is None:
+        release_state="invalid_current_version"
+    elif latest_key>current_key:
+        release_state="update_available"
+    elif latest_key<current_key:
+        release_state="installed_ahead_of_release"
+    else:
+        release_state="current"
+    return {
+        "current":VERSION,
+        "latest":latest,
+        "update_available":update_available,
+        "release_state":release_state,
+        "latest_source":"GitHub main",
+        "error":error,
+    }
 
 @app.get("/healthz")
 def healthz(): return {"ok":True,"version":VERSION,"product":APP_NAME}

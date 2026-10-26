@@ -8,7 +8,7 @@
   <title>{{app_name}}</title>
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css?v={{version}}">
+  <link rel="stylesheet" href="/static/app.css?v={{version}}-native-vpn-workspaces3">
 </head>
 {% set fa = language != "en" %}
 <body class="makia-pro-shell" data-theme="{{theme}}" data-density="{{density}}">
@@ -20,7 +20,7 @@
     </div>
 
     <button class="pro-create-access" type="button" data-shell-action="create-access">
-      <span>＋</span><div><b>{{'ساخت دسترسی' if fa else 'Create access'}}</b><small>SSH · Xray · WireGuard · OpenVPN · Outline</small></div>
+      <span>＋</span><div><b>{{'ساخت دسترسی' if fa else 'Create access'}}</b><small>SSH · Xray · WireGuard · OpenVPN · IKEv2 · L2TP/IPsec · Outline</small></div>
     </button>
 
     <nav class="pro-nav" aria-label="{{'منوی اصلی پنل' if fa else 'Main navigation'}}">
@@ -40,6 +40,8 @@
           <button data-view="ssh"><span class="proto-dot ssh"></span><b>SSH / NPV</b></button>
           <button data-view="wireguard"><span class="proto-dot wg"></span><b>WireGuard</b></button>
           <button data-view="openvpn"><span class="proto-dot ovpn"></span><b>OpenVPN</b></button>
+          <button data-view="ikev2"><span class="proto-dot ikev2"></span><b>IKEv2</b></button>
+          <button data-view="l2tp"><span class="proto-dot l2tp"></span><b>L2TP/IPsec</b></button>
           <button data-view="outline"><span class="proto-dot outline"></span><b>Outline</b></button>
           <button data-view="telegramproxy"><span class="proto-dot telegram"></span><b>{{'پروکسی تلگرام' if fa else 'Telegram Proxy'}}</b></button>
           <button data-view="dnscenter"><span class="proto-dot dns"></span><b>{{'DNS برای کاربران' if fa else 'Client DNS'}}</b></button>
@@ -106,6 +108,6 @@
     window.MAKIA_DENSITY='{{density}}';
     window.MAKIA_USER='{{current_username or "admin"}}';
   </script>
-  <script src="/static/app.js?v={{version}}-wstunnel-hotfix2"></script>
+  <script src="/static/app.js?v={{version}}-native-vpn-workspaces3"></script>
 </body>
 </html>

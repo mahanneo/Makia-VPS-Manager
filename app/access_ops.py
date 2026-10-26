@@ -2,6 +2,8 @@ import base64
 import hashlib
 import io
 import json
+import plistlib
+import uuid
 import re
 import urllib.parse
 
@@ -207,6 +209,20 @@ def client_guide_text(kind,protocol=""):
             "3) فایل .ovpn را Import و سپس Connect کنید.\n"
             "4) فایل OVPN شامل اطلاعات اختصاصی همان کاربر است.\n"
         )
+    if kind=="ikev2":
+        return common+(
+            "IKEv2 (iPhone / iPad / Mac)\n"
+            "روش پیشنهادی: فایل .mobileconfig را از Access Link دانلود کنید، در iPhone باز کنید و از Settings > Profile Downloaded آن را Install کنید.\n"
+            "روش دستی: Type=IKEv2؛ Server و Remote ID هر دو برابر Server داخل فایل؛ Local ID را در صورت درخواست Username قرار دهید؛ Authentication=Username؛ سپس Username و Password را وارد کنید.\n"
+            "در Android از یک کلاینت IKEv2 سازگار استفاده کنید؛ پروفایل Apple برای Android نیست.\n"
+        )
+    if kind=="l2tp":
+        return common+(
+            "L2TP/IPsec (iPhone / iPad / Mac)\n"
+            "روش پیشنهادی: فایل .mobileconfig را از Access Link دانلود کنید، در iPhone باز کنید و از Settings > Profile Downloaded آن را Install کنید.\n"
+            "روش دستی: Type=L2TP؛ Server، Account و Password را از فایل وارد کنید؛ Secret دقیقاً برابر IPsec pre-shared key است؛ Send All Traffic را روشن و Proxy را Off بگذارید.\n"
+            "L2TP قدیمی‌تر است؛ اگر سیستم‌عامل یا شبکه آن را پشتیبانی نکند، IKEv2 یا WireGuard را انتخاب کنید.\n"
+        )
     if kind in {"openvpn_wstunnel","openvpn-wstunnel"}:
         return common+(
             "WStunnel 443 / OpenVPN over WebSocket\n"
@@ -332,6 +348,113 @@ def openvpn_payload(name,config):
         },
         "primary_text":str(config),
         "summary":{},
+    }
+
+
+def _apple_vpn_mobileconfig(kind,name,server,username,password,psk=""):
+    """Build an Apple built-in VPN configuration profile with explicit credentials."""
+    kind=str(kind or "").lower()
+    if kind not in {"ikev2","l2tp"}:
+        raise AccessPackageError("unsupported Apple native VPN profile type")
+    display=f"Makia {kind.upper()} · {name}"
+    vpn_uuid=str(uuid.uuid4()).upper()
+    vpn={
+        "PayloadType":"com.apple.vpn.managed",
+        "PayloadVersion":1,
+        "PayloadIdentifier":f"com.makia.vpn.{kind}.{uuid.uuid4()}",
+        "PayloadUUID":vpn_uuid,
+        "PayloadDisplayName":display,
+        "UserDefinedName":display,
+        "VPNType":"IKEv2" if kind=="ikev2" else "L2TP",
+    }
+    if kind=="ikev2":
+        vpn["IKEv2"]={
+            "AuthenticationMethod":"None",
+            "ExtendedAuthEnabled":1,
+            "AuthName":str(username),
+            "AuthPassword":str(password),
+            "RemoteAddress":str(server),
+            "RemoteIdentifier":str(server),
+            "LocalIdentifier":str(username),
+            "DeadPeerDetectionRate":"High",
+            "IncludeAllNetworks":1,
+            "ExcludeLocalNetworks":0,
+        }
+    else:
+        if not psk:
+            raise AccessPackageError("L2TP/IPsec pre-shared key is missing")
+        vpn["IPSec"]={"AuthenticationMethod":"SharedSecret","SharedSecret":str(psk)}
+        vpn["PPP"]={
+            "AuthName":str(username),
+            "AuthPassword":str(password),
+            "CommRemoteAddress":str(server),
+        }
+        vpn["IPv4"]={"OverridePrimary":1}
+    profile={
+        "PayloadContent":[vpn],
+        "PayloadDisplayName":display,
+        "PayloadDescription":"Makia VPN profile. Contains private connection credentials; do not share it.",
+        "PayloadIdentifier":f"com.makia.profile.{kind}.{uuid.uuid4()}",
+        "PayloadOrganization":"Makia",
+        "PayloadRemovalDisallowed":False,
+        "PayloadType":"Configuration",
+        "PayloadUUID":str(uuid.uuid4()).upper(),
+        "PayloadVersion":1,
+    }
+    return plistlib.dumps(profile,fmt=plistlib.FMT_XML,sort_keys=False)
+
+
+def native_vpn_payload(kind,name,server,username,password,psk=""):
+    kind=str(kind or "").lower()
+    if kind not in {"ikev2","l2tp"}:
+        raise AccessPackageError("unsupported native VPN profile type")
+    name=str(name or username or "").strip()
+    server=str(server or "").strip()
+    username=str(username or "").strip()
+    password=str(password or "")
+    if not name or not server or not username or not password:
+        raise AccessPackageError("native VPN profile is missing required connection fields")
+    if kind=="ikev2":
+        lines=[
+            "Makia IKEv2",
+            f"Server: {server}",
+            f"Remote ID: {server}",
+            f"Local ID: {username}",
+            "VPN type: IKEv2",
+            "Authentication: Username / EAP-MSCHAPv2",
+            f"Username: {username}",
+            f"Password: {password}",
+            "Send All Traffic: Enabled",
+            "IKE version: IKEv2",
+        ]
+    else:
+        if not psk:
+            raise AccessPackageError("L2TP/IPsec pre-shared key is missing")
+        lines=[
+            "Makia L2TP/IPsec",
+            f"Server: {server}",
+            "VPN type: L2TP/IPsec with pre-shared key",
+            f"IPsec pre-shared key: {psk}",
+            f"Username: {username}",
+            f"Password: {password}",
+            "Send All Traffic: Enabled",
+            "Security: IPsec PSK + MS-CHAPv2",
+        ]
+    text="\n".join(lines)+"\n"
+    manual_filename=f"{safe_filename(name)}-{kind}.txt"
+    mobileconfig_filename=f"{safe_filename(name)}-{kind}.mobileconfig"
+    mobileconfig=_apple_vpn_mobileconfig(kind,name,server,username,password,psk)
+    return {
+        "native_filename":mobileconfig_filename,
+        "files":{
+            manual_filename:text.encode("utf-8"),
+            mobileconfig_filename:mobileconfig,
+            "connection-guide-fa.txt":client_guide_text(kind).encode("utf-8"),
+        },
+        "primary_text":text,
+        "share_text":"",
+        "share_type":kind,
+        "summary":{"protocol":kind,"server":server,"username":username,"auth":"EAP-MSCHAPv2" if kind=="ikev2" else "IPsec PSK + MS-CHAPv2","apple_profile":mobileconfig_filename,"manual_details":manual_filename},
     }
 
 

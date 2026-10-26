@@ -1475,7 +1475,7 @@ body.makia-pro-shell{
 .pro-nav-group.open .pro-submenu{display:grid;gap:2px}
 .pro-submenu button{min-height:36px;padding:0 8px}.pro-submenu button b{font-size:10px;font-weight:500}
 .pro-submenu button>span:first-child{width:14px;text-align:center;color:#547aa5}
-.proto-dot{width:8px!important;height:8px;border-radius:50%;margin-left:3px}.proto-dot.xray{background:#8b5cf6}.proto-dot.inbound{background:#38bdf8}.proto-dot.ssh{background:#3b82f6}.proto-dot.wg{background:#fb7185}.proto-dot.ovpn{background:#f59e0b}
+.proto-dot{width:8px!important;height:8px;border-radius:50%;margin-left:3px}.proto-dot.xray{background:#8b5cf6}.proto-dot.inbound{background:#38bdf8}.proto-dot.ssh{background:#3b82f6}.proto-dot.wg{background:#fb7185}.proto-dot.ovpn{background:#f59e0b}.proto-dot.ikev2{background:#a78bfa;box-shadow:0 0 10px #a78bfa55}.proto-dot.l2tp{background:#fbbf24;box-shadow:0 0 10px #fbbf2455}
 
 .pro-sidebar-footer{padding:11px 13px 13px;border-top:1px solid var(--pro-line-soft)}
 .server-health{display:flex;align-items:center;gap:8px;padding:9px;border-radius:9px;background:#0d1b2c}.server-health>i{width:8px;height:8px;border-radius:50%;background:var(--pro-green);box-shadow:0 0 10px rgba(45,212,159,.65)}

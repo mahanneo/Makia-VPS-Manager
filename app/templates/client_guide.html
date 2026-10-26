@@ -27,6 +27,8 @@
         <a href="#xray"><span class="guide-mini-icon xray">X</span>Xray</a>
         <a href="#wireguard"><span class="guide-mini-icon wg">W</span>WireGuard</a>
         <a href="#openvpn"><span class="guide-mini-icon ovpn">O</span>OpenVPN</a>
+        <a href="#ikev2"><span class="guide-mini-icon wg">I</span>IKEv2</a>
+        <a href="#l2tp"><span class="guide-mini-icon wg">L</span>L2TP/IPsec</a>
         <a href="#outline"><span class="guide-mini-icon outline">◈</span>Outline</a>
         <a href="#ssh"><span class="guide-mini-icon ssh">›_</span>SSH / NPV</a>
       </nav>
@@ -77,6 +79,26 @@
       <div class="notice">{{'اگر مدیر Port یا Transport سرور را تغییر داد، فایل OVPN جدید را از لینک اختصاصی خود دریافت کنید.' if fa else 'If the server port or transport changes, download a fresh OVPN file from your private access page.'}}</div>
     </section>
 
+
+    <section class="client-card guide-section" id="ikev2">
+      <div class="guide-section-head"><span class="guide-icon wg">I</span><div><div class="eyebrow">IPSEC · IKEV2 · EAP</div><h2>IKEv2 Native VPN</h2></div></div>
+      <div class="guide-method-grid">
+        <article><b>iPhone / iPad</b><p>Settings → General → VPN & Device Management → Add VPN Configuration → IKEv2. Server و Remote ID را از فایل اختصاصی وارد کنید و Username/Password را ثبت کنید.</p></article>
+        <article><b>Windows</b><p>Settings → Network & Internet → VPN → Add VPN. Provider را Windows (built-in)، Type را IKEv2 و Sign-in info را Username/password انتخاب کنید.</p></article>
+        <article><b>Android</b><p>اگر تنظیمات گوشی IKEv2 ندارد، برنامه strongSwan VPN Client یا کلاینت IKEv2 سازگار را نصب کنید.</p></article>
+      </div>
+      <div class="notice">Remote ID باید با دامنه و گواهی سرور مطابقت داشته باشد.</div>
+    </section>
+
+    <section class="client-card guide-section" id="l2tp">
+      <div class="guide-section-head"><span class="guide-icon wg">L</span><div><div class="eyebrow">L2TP · IPSEC · MS-CHAPV2</div><h2>L2TP/IPsec Native VPN</h2></div></div>
+      <div class="guide-method-grid">
+        <article><b>Windows</b><p>Settings → Network & Internet → VPN → Add VPN. نوع L2TP/IPsec with pre-shared key را انتخاب کنید و PSK، Username و Password را از فایل اختصاصی وارد کنید.</p></article>
+        <article><b>Android</b><p>در تنظیمات VPN نوع L2TP/IPsec PSK را انتخاب کنید و Server address، PSK، Username و Password را وارد کنید.</p></article>
+        <article><b>iPhone / macOS</b><p>پشتیبانی L2TP بسته به نسخه سیستم‌عامل متفاوت است. اگر گزینه L2TP/IPsec موجود نیست، از IKEv2 استفاده کنید.</p></article>
+      </div>
+      <div class="notice">PSK بین کاربران این سرور مشترک است؛ Username/Password هر کاربر مستقل است.</div>
+    </section>
 
     <section class="client-card guide-section" id="outline">
       <div class="guide-section-head"><span class="guide-icon outline">◈</span><div><div class="eyebrow">ACCESS KEY · QR · ONE-TAP</div><h2>Outline</h2></div></div>
