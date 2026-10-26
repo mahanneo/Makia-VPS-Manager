@@ -18,6 +18,8 @@ from pathlib import Path
 XRAY_BIN_CANDIDATES=["/usr/local/bin/xray","/usr/bin/xray"]
 XRAY_CONFIG_CANDIDATES=["/usr/local/etc/xray/config.json","/etc/xray/config.json"]
 XRAY_VALIDATED_VERSION="v26.3.27"
+# Official historical installer commit explicitly supports -u nobody; never fetch its mutable main branch.
+XRAY_INSTALLER_COMMIT="e741a4f56d368afbb9e5be3361b40c4552d3710d"
 XRAY_TLS_DIR=Path("/usr/local/etc/xray/tls")
 WG_DIR=Path("/etc/wireguard")
 OVPN_DIR=Path("/etc/openvpn")
@@ -1430,7 +1432,17 @@ def install_component(component):
     if component=="xray":
         # Official XTLS installer. It installs the core + systemd service and
         # verifies the release artifacts handled by the upstream installer.
-        _run(["bash","-lc",f'bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --version {XRAY_VALIDATED_VERSION} -u nobody'],timeout=600)
+        fd,installer=tempfile.mkstemp(prefix="makia-xray-installer-",suffix=".sh")
+        os.close(fd)
+        try:
+            url=f"https://raw.githubusercontent.com/XTLS/Xray-install/{XRAY_INSTALLER_COMMIT}/install-release.sh"
+            _run(["curl","--fail","--silent","--show-error","--location","--retry","3","--output",installer,url],timeout=90)
+            _run(["bash","-n",installer],timeout=15)
+            # Execute file directly so argv is explicit; no nested shell
+            # substitution, mutable upstream branch or unexpected $0 parsing.
+            _run(["bash",installer,"install","--version",XRAY_VALIDATED_VERSION,"-u","nobody"],timeout=600)
+        finally:
+            Path(installer).unlink(missing_ok=True)
         config=Path("/usr/local/etc/xray/config.json")
         config.parent.mkdir(parents=True,exist_ok=True)
         if not config.exists():

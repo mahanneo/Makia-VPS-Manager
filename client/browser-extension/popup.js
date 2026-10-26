@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const EXT_HEADER={"X-Makia-Extension":"1"};
-let state={controller:"",token:"",deviceKey:"",account:null,gateway:null};
+let state={controller:"",token:"",deviceKey:"",account:null,gateway:null,rememberDevice:false,expiresAt:0,lastUsername:""};
 
 function normalizeController(value){
   const u=new URL(String(value||"").trim());
@@ -25,11 +25,28 @@ async function ensureOriginPermission(origin){
   return chrome.permissions.request({origins:[pattern]});
 }
 async function loadStorage(){
-  const saved=await chrome.storage.local.get(["controller","token","deviceKey","account"]);
+  const saved=await chrome.storage.local.get(["controller","token","deviceKey","account","rememberDevice","expiresAt","lastUsername"]);
+  const transient=await chrome.storage.session.get(["clientSessionToken","clientSessionExpiresAt"]);
   state=Object.assign(state,saved);
+  // Non-remembered logins survive popup closure but not a browser restart.
+  if(transient.clientSessionToken){
+    state.token=transient.clientSessionToken;
+    state.expiresAt=Number(transient.clientSessionExpiresAt||0);
+  }
 }
 async function saveAuth(){
-  await chrome.storage.local.set({controller:state.controller,token:state.token,deviceKey:state.deviceKey,account:state.account});
+  const basic={controller:state.controller,deviceKey:state.deviceKey,account:state.account,
+    rememberDevice:state.rememberDevice,lastUsername:state.lastUsername};
+  if(state.rememberDevice){
+    await chrome.storage.local.set({...basic,token:state.token,expiresAt:state.expiresAt});
+    await chrome.storage.session.remove(["clientSessionToken","clientSessionExpiresAt"]);
+  }else{
+    await chrome.storage.local.set(basic);
+    await chrome.storage.local.remove(["token","expiresAt"]);
+    await chrome.storage.session.set({
+      clientSessionToken:state.token,clientSessionExpiresAt:state.expiresAt
+    });
+  }
 }
 function setError(id,msg){$(id).textContent=msg||"";}
 function bytes(n){
@@ -46,14 +63,19 @@ async function render(){
 
   const status=await chrome.runtime.sendMessage({action:"status"});
   const connection=status&&status.ok?status.result:{connected:false,connectionError:"وضعیت Proxy قابل بررسی نیست"};
+  const held=!!connection.proxyActive&&!connection.connected;
+  const needsReauth=held&&/Browser restarted or extension updated/.test(String(connection.connectionError||''));
   $("statusDot").className="dot "+(connection.connected?"on":"off");
-  $("connectionState").textContent=connection.connected?"متصل · تأیید شد":"قطع";
-  $("activeLabel").textContent=connection.connected?"Makia Browser VPN":"Browser VPN";
-  $("disconnectBtn").classList.toggle("hidden",!connection.connected);
-  $("verifyBtn").classList.toggle("hidden",!connection.connected);
+  $("connectionState").textContent=connection.connected?"متصل · تأیید شد":
+    held?"اتصال تأیید نشد · پروکسی همچنان فعال است":"قطع";
+  $("activeLabel").textContent=connection.connected||held?"Makia Browser VPN":"Browser VPN";
+  $("disconnectBtn").classList.toggle("hidden",!connection.connected&&!connection.proxyHost);
+  $("verifyBtn").classList.toggle("hidden",!connection.connected&&(!held||needsReauth));
   $("exitIp").textContent=connection.connected&&connection.exitIp?connection.exitIp:"هنوز تأیید نشده";
   $("verificationState").textContent=connection.connected&&connection.verifiedAt?
     "IP خروجی از اتصال HTTPS واقعی بررسی شد. آخرین تست: "+new Date(connection.verifiedAt).toLocaleTimeString("fa-IR"):
+    needsReauth?"پروکسی محافظت‌شده فعال است. برای گرفتن اعتبارنامه تازه، روی «اتصال مجدد امن» بزنید.":
+    held?"پروکسی به‌صورت محافظتی فعال مانده است. برای تلاش دوباره «بررسی IP» و برای استفاده مستقیم «قطع اتصال» را انتخاب کنید.":
     "صرف نمایش وضعیت متصل، تغییر IP را تضمین نمی‌کند.";
   if(connection.connectionError&&!$("appError").textContent) setError("appError",connection.connectionError);
   $("authDiagnostic").textContent=String(connection.authDiagnostic||"");
@@ -65,18 +87,30 @@ async function render(){
   const g=state.gateway||{};
   $("gatewayHost").textContent=(g.gateway&&g.gateway.host)?g.gateway.host:"—";
   $("gatewayState").textContent=g.available?"آماده اتصال":"در دسترس نیست";
-  $("connectBtn").disabled=!g.available||!!connection.connected;
-  $("connectBtn").textContent=connection.connected?"متصل":"اتصال";
+  // A legacy held proxy has no control-plane bypass and needs one explicit disconnect.
+  const canRenew=held&&!!connection.controlHost;
+  $("connectBtn").disabled=!g.available||!!connection.connected||(held&&!canRenew);
+  $("connectBtn").textContent=connection.connected?"متصل":canRenew?"اتصال مجدد امن":held?"ابتدا قطع اتصال":"اتصال";
 }
 async function refresh(){
   setError("appError","");
   try{
     state.account=await api("/client/extension/me");
     state.gateway=await api("/client/extension/browser-gateway");
-    await chrome.storage.local.set({account:state.account});
+    if(state.rememberDevice)await chrome.storage.local.set({account:state.account});
     await render();
   }catch(e){
-    if(/401|authentication|session/i.test(String(e.message||e))) await logout(false);
+    if(/401|authentication|session/i.test(String(e.message||e))){
+      // An expired portal session must not silently remove an already
+      // installed proxy, which would expose direct browsing.
+      const proxy=await chrome.runtime.sendMessage({action:"status"}).catch(()=>null);
+      if(!proxy?.result?.proxyActive) await logout(false);
+      else {
+        setError("appError","نشست پنل منقضی شده؛ پروکسی هنوز فعال است. برای خروج مستقیم، ابتدا «قطع اتصال» را بزنید.");
+        await render();
+        return;
+      }
+    }
     setError("appError",e.message);
   }
 }
@@ -84,6 +118,7 @@ async function login(){
   setError("setupError","");
   $("loginBtn").disabled=true;
   try{
+    const rememberDevice=!!$("rememberDevice").checked;
     const origin=normalizeController($("controller").value);
     if(!await ensureOriginPermission(origin)) throw new Error("اجازه دسترسی افزونه به پنل داده نشد.");
     state.controller=origin;
@@ -93,10 +128,14 @@ async function login(){
         username:$("username").value,
         password:$("password").value,
         device_key:state.deviceKey||"",
+        remember_device:rememberDevice,
         device_label:"Chrome / Edge · Makia Browser VPN"
       })
     });
     state.token=data.token;
+    state.rememberDevice=rememberDevice;
+    state.expiresAt=Number(data.expires_at||0);
+    state.lastUsername=$("username").value.trim();
     state.deviceKey=data.device_key||state.deviceKey||"";
     state.account=data.account;
     $("password").value="";
@@ -110,8 +149,14 @@ async function connectGateway(){
   $("connectBtn").disabled=true;
   $("connectBtn").textContent="در حال اتصال…";
   try{
+    const installed=await chrome.runtime.sendMessage({action:"status"});
+    if(!installed?.ok)throw new Error(installed?.error||"Proxy status unavailable");
+    const held=!!installed.result?.proxyActive&&!installed.result?.connected;
+    if(held&&!installed.result?.controlHost)
+      throw new Error("پروکسی قدیمی فعال است؛ یک‌بار «قطع» و دوباره «اتصال» را بزنید.");
     const data=await api("/client/extension/browser-gateway/credential",{method:"POST"});
-    const response=await chrome.runtime.sendMessage({action:"connect",proxy:data.proxy});
+    const proxy={...data.proxy,expires_at:data.expires_at,control_host:new URL(state.controller).hostname};
+    const response=await chrome.runtime.sendMessage({action:held?"reconnect":"connect",proxy});
     if(!response||!response.ok) throw new Error((response&&response.error)||"اتصال ناموفق بود");
     await refresh();
   }catch(e){
@@ -139,9 +184,13 @@ async function logout(callServer=true){
   try{await chrome.runtime.sendMessage({action:"disconnect"});}catch(_){}
   const keep={controller:state.controller,deviceKey:state.deviceKey};
   await chrome.storage.local.clear();
+  await chrome.storage.session.remove(["clientSessionToken","clientSessionExpiresAt"]);
   await chrome.storage.local.set(keep);
-  state={controller:keep.controller,deviceKey:keep.deviceKey,token:"",account:null,gateway:null};
+  state={controller:keep.controller,deviceKey:keep.deviceKey,token:"",account:null,gateway:null,rememberDevice:false,expiresAt:0,lastUsername:""};
   $("controller").value=keep.controller||"";
+  $("username").value="";
+  $("password").value="";
+  $("rememberDevice").checked=false;
   await render();
 }
 $("loginBtn").addEventListener("click",login);
@@ -153,6 +202,9 @@ $("logoutBtn").addEventListener("click",()=>logout(true));
 (async()=>{
   await loadStorage();
   $("controller").value=state.controller||"";
+  $("username").value=state.lastUsername||"";
+  // A previous remembered session is not permission to opt in on a new login.
+  $("rememberDevice").checked=false;
   if(state.token) await refresh();
   await render();
 })();

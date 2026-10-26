@@ -4,7 +4,8 @@ const IP_PROBES=[
   {url:"https://api4.ipify.org?format=json",json:true},
   {url:"https://checkip.amazonaws.com/",json:false}
 ];
-const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","connectionError","authDiagnostic"];
+const CONNECTION_KEYS=["connected","activeLabel","proxyHost","proxyPort","exitIp","directIp","verifiedAt","credentialExpiresAt","connectionError","authDiagnostic","controlHost"];
+const VERIFICATION_FRESH_MS=120000; // A previous successful IP probe is not perpetual connectivity.
 
 function publicIp(value){
   const ip=String(value||"").trim();
@@ -51,7 +52,7 @@ async function clearBrowserProxy(){
   await chrome.storage.session.remove(["proxyAuth","proxyEndpoint"]);
   await chrome.storage.local.set({
     connected:false,activeLabel:"",proxyHost:"",proxyPort:0,
-    exitIp:"",directIp:"",verifiedAt:0,connectionError:"",authDiagnostic:""
+    exitIp:"",directIp:"",verifiedAt:0,credentialExpiresAt:0,controlHost:"",connectionError:"",authDiagnostic:""
   });
 }
 async function effectiveProxy(expectedHost,expectedPort){
@@ -64,7 +65,20 @@ async function effectiveProxy(expectedHost,expectedPort){
     Number(proxy&&proxy.port||0)===Number(expectedPort);
 }
 async function disconnectWithError(message){
-  const last=await chrome.storage.local.get(["authDiagnostic"]).catch(()=>({}));
+  const last=await chrome.storage.local.get(["authDiagnostic","proxyHost","proxyPort"]).catch(()=>({}));
+  // A failed verification does NOT authorize switching an installed proxy
+  // back to direct. Only an explicit Disconnect may remove a held proxy.
+  const held=!!last.proxyHost&&!!last.proxyPort&&
+    await effectiveProxy(last.proxyHost,last.proxyPort).catch(()=>false);
+  if(held){
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:String(message||"Proxy not verified")+
+        " Proxy is still active to prevent direct fallback; use Disconnect to browse directly.",
+      authDiagnostic:String(last.authDiagnostic||"")
+    });
+    return;
+  }
   try{await clearBrowserProxy();}catch(_){}
   await chrome.storage.local.set({
     connected:false,
@@ -76,6 +90,8 @@ async function verifyBrowserProxy(){
   const s=await chrome.storage.local.get(CONNECTION_KEYS);
   if(!s.proxyHost||!s.proxyPort||!await effectiveProxy(s.proxyHost,s.proxyPort))
     throw new Error("Chrome/Edge did not apply the Makia proxy (another extension or policy may control it).");
+  if(Number(s.credentialExpiresAt||0)>0&&Date.now()>=Number(s.credentialExpiresAt)*1000)
+    throw new Error("Browser Gateway credential expired. Disconnect and connect again.");
   const exitIp=await fetchPublicIp();
   if(s.directIp&&exitIp===s.directIp)
     throw new Error("Public IP has not changed. Browser traffic is not verified through Makia.");
@@ -102,6 +118,9 @@ async function setBrowserProxy(proxy){
 
   // Capture an optional direct baseline BEFORE changing the proxy.
   const directIp=await fetchPublicIp().catch(()=>"");
+  const credentialExpiresAt=Number(proxy.expires_at||0);
+  const controlHost=String(proxy.control_host||host).toLowerCase();
+  if(!/^[a-z0-9.-]+$/.test(controlHost))throw new Error("Invalid Makia control-plane host");
   await chrome.storage.session.set({
     proxyAuth:{username:String(proxy.username||""),password:String(proxy.password||"")},
     proxyEndpoint:{host,port}
@@ -111,13 +130,14 @@ async function setBrowserProxy(proxy){
     value:{
       mode:"fixed_servers",
       rules:{singleProxy:{scheme:"https",host,port},
-        bypassList:["<local>","127.0.0.1","localhost","::1"]}
+        bypassList:[controlHost,"<local>","127.0.0.1","localhost","::1"]}
     },
     scope:"regular"
   });
   await chrome.storage.local.set({
     connected:false,activeLabel:"Makia Browser VPN",
-    proxyHost:host,proxyPort:port,directIp,exitIp:"",verifiedAt:0,connectionError:""
+    proxyHost:host,proxyPort:port,directIp,exitIp:"",verifiedAt:0,
+    credentialExpiresAt,controlHost,connectionError:""
   });
   // Fail closed: never display "connected" until a real HTTPS request
   // succeeds through the installed proxy and an effective setting is observed.
@@ -181,15 +201,96 @@ chrome.proxy.onProxyError.addListener(details=>{
   })().finally(()=>{proxyErrorRecheck=null;});
   return proxyErrorRecheck;
 });
-chrome.runtime.onInstalled.addListener(()=>clearBrowserProxy().catch(()=>{}));
-chrome.runtime.onStartup.addListener(()=>clearBrowserProxy().catch(()=>{}));
+// Browser restart/update must not silently remove an already selected proxy.
+// Session-only credentials are not copied into persistent storage. A held proxy
+// may block browsing until the user explicitly disconnects and reconnects.
+async function retainProxyOnLifecycle(){
+  const saved=await chrome.storage.local.get(["proxyHost","proxyPort"]);
+  const host=String(saved.proxyHost||"").trim();
+  const port=Number(saved.proxyPort||0);
+  const controlHost=String(saved.controlHost||host).toLowerCase();
+  if(!host||!Number.isInteger(port)||port<1||port>65535){
+    await clearBrowserProxy();
+    return;
+  }
+  try{
+    // Reassert the same held proxy after extension upgrades too: older builds
+    // did not bypass the Makia control-plane and could not obtain fresh creds.
+    // Only this exact HTTPS controller host is bypassed, not general browsing.
+    if(!/^[a-z0-9.-]+$/.test(controlHost))
+      throw new Error("Invalid Makia control-plane host");
+    await chrome.proxy.settings.set({
+      value:{mode:"fixed_servers",rules:{
+        singleProxy:{scheme:"https",host,port},
+        bypassList:[controlHost,"<local>","127.0.0.1","localhost","::1"]
+      }},scope:"regular"
+    });
+    await chrome.storage.local.set({controlHost});
+    await applyPrivacyProtection();
+    const held=await effectiveProxy(host,port);
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:held?
+        "Browser restarted or extension updated: proxy is held but not verified. Session-only proxy credentials may be unavailable. Disconnect explicitly, then reconnect to restore access.":
+        "Browser proxy control was not restored; another extension or policy may control browsing."
+    });
+  }catch(e){
+    await chrome.storage.local.set({
+      connected:false,exitIp:"",verifiedAt:0,
+      connectionError:"Could not restore safe proxy control after restart: "+String(e.message||e)
+    });
+  }
+}
+chrome.runtime.onInstalled.addListener(details=>{
+  if(details&&details.reason==="install")return clearBrowserProxy().catch(()=>{});
+  return retainProxyOnLifecycle().catch(()=>{});
+});
+chrome.runtime.onStartup.addListener(()=>retainProxyOnLifecycle().catch(()=>{}));
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   (async()=>{
     if(message&&message.action==="connect"){
+      const before=await chrome.storage.local.get(["proxyHost","proxyPort"]);
+      if(before.proxyHost&&before.proxyPort&&
+          await effectiveProxy(before.proxyHost,before.proxyPort))
+        throw new Error("An existing proxy is still installed. Disconnect explicitly before reconnecting.");
       await clearBrowserProxy();
       try{
         const verified=await setBrowserProxy(message.proxy);
+        return {ok:true,result:verified};
+      }catch(e){
+        await disconnectWithError(e.message);
+        throw e;
+      }
+    }
+    if(message&&message.action==="reconnect"){
+      // User-initiated credential renewal on an already-held proxy. Never
+      // briefly clear the proxy or silently fall back to direct browsing.
+      const saved=await chrome.storage.local.get(CONNECTION_KEYS);
+      const next=message.proxy||{};
+      const host=String(next.host||"").trim().toLowerCase();
+      const port=Number(next.port||0);
+      if(next.scheme!=="https"||!host||host!==saved.proxyHost||port!==Number(saved.proxyPort)||
+         !await effectiveProxy(host,port))
+        throw new Error("Makia cannot renew: the expected proxy is not held by this extension.");
+      if(!String(next.username||"")||!String(next.password||"")||
+         Number(next.expires_at||0)*1000<=Date.now())
+        throw new Error("Fresh Browser Gateway credentials are required.");
+      // Preserve the old control-plane exception (which is needed to fetch
+      // the new token) and never widen browser bypass destinations.
+      const controlHost=String(next.control_host||host).toLowerCase();
+      if(!/^[a-z0-9.-]+$/.test(controlHost)||controlHost!==saved.controlHost)
+        throw new Error("Control-plane host changed; explicit disconnect required.");
+      await chrome.storage.session.set({
+        proxyAuth:{username:String(next.username),password:String(next.password)},
+        proxyEndpoint:{host,port}
+      });
+      await chrome.storage.local.set({
+        connected:false,exitIp:"",verifiedAt:0,
+        credentialExpiresAt:Number(next.expires_at),connectionError:""
+      });
+      try{
+        const verified=await verifyBrowserProxy();
         return {ok:true,result:verified};
       }catch(e){
         await disconnectWithError(e.message);
@@ -211,14 +312,38 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     }
     if(message&&message.action==="status"){
       const s=await chrome.storage.local.get(CONNECTION_KEYS);
-      if(s.connected&&!await effectiveProxy(s.proxyHost,s.proxyPort)){
+      const proxyActive=!!s.proxyHost&&!!s.proxyPort&&
+        await effectiveProxy(s.proxyHost,s.proxyPort).catch(()=>false);
+      if(s.connected&&!proxyActive){
         await chrome.storage.local.set({
-          connected:false,connectionError:"Browser proxy is no longer controlled by Makia."
+          connected:false,exitIp:"",verifiedAt:0,
+          connectionError:"Browser proxy is no longer controlled by Makia."
         });
         s.connected=false;
+        s.exitIp="";
+        s.verifiedAt=0;
         s.connectionError="Browser proxy is no longer controlled by Makia.";
+      }else if(s.connected&&proxyActive){
+        const expired=Number(s.credentialExpiresAt||0)>0&&
+          Date.now()>=Number(s.credentialExpiresAt)*1000;
+        if(expired){
+          const message="Browser Gateway credential expired. Proxy is held; disconnect then connect for a fresh credential.";
+          await chrome.storage.local.set({connected:false,exitIp:"",verifiedAt:0,connectionError:message});
+          s.connected=false;s.exitIp="";s.verifiedAt=0;s.connectionError=message;
+        }else if(!Number(s.verifiedAt)||Date.now()-Number(s.verifiedAt)>VERIFICATION_FRESH_MS){
+          // Never reuse yesterday's IP verification to claim current egress.
+          try{
+            const fresh=await verifyBrowserProxy();
+            s.connected=true;s.exitIp=fresh.exitIp;s.verifiedAt=fresh.verifiedAt;s.connectionError="";
+          }catch(e){
+            const message="Recent Browser Gateway egress verification failed: "+
+              String(e.message||e)+". Proxy remains installed to prevent direct fallback.";
+            await chrome.storage.local.set({connected:false,exitIp:"",verifiedAt:0,connectionError:message});
+            s.connected=false;s.exitIp="";s.verifiedAt=0;s.connectionError=message;
+          }
+        }
       }
-      return {ok:true,result:s};
+      return {ok:true,result:{...s,proxyActive}};
     }
     throw new Error("Unknown extension action");
   })().then(sendResponse).catch(e=>sendResponse({ok:false,error:String(e.message||e)}));

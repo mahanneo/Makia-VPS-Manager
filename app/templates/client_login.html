@@ -11,7 +11,7 @@
   <title>Makia Client</title>
   <link rel="manifest" href="/client/manifest.webmanifest">
   <link rel="icon" href="/static/client-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/client.css?v={{ version }}-mobile-login-rc1">
+  <link rel="stylesheet" href="/static/client.css?v={{ version }}-remember-v1">
 </head>
 <body class="mc-body mc-login-body">
   <main class="mc-login-shell">
@@ -54,6 +54,9 @@
           <span>نام این دستگاه <small>اختیاری</small></span>
           <input name="device_label" id="deviceLabel" maxlength="120" placeholder="مثلاً گوشی شخصی">
         </label>
+        <label class="mc-remember"><input type="checkbox" name="remember_device" value="1">
+          <span>ورود من روی این دستگاه تا ۳۰ روز حفظ شود <small>فقط روی دستگاه شخصی؛ بدون ذخیره رمز عبور</small></span>
+        </label>
         <button class="mc-primary" type="submit">ورود امن</button>
       </form>
 
@@ -65,6 +68,6 @@
       <p class="mc-login-foot">Makia Client · v{{ version }}</p>
     </section>
   </main>
-  <script src="/static/client-login.js?v={{ version }}-mobile-login-rc1" defer></script>
+  <script src="/static/client-login.js?v={{ version }}-remember-v1" defer></script>
 </body>
 </html>

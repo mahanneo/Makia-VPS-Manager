@@ -39,6 +39,10 @@ done
 
 docker cp "$BASELINE_DIR" "$CONTAINER":/tmp/makia-v130
 docker cp tests/upgrade_identity_probe.py "$CONTAINER":/tmp/upgrade_identity_probe.py
+docker cp tests/seed_xray_historical_fixture.sh "$CONTAINER":/tmp/seed_xray_historical_fixture.sh
+# Preseed a pinned engine so a mutable upstream installer does not invalidate
+# historical baseline identity/upgrade parity before the target code runs.
+docker exec "$CONTAINER" bash /tmp/seed_xray_historical_fixture.sh
 set +e
 docker exec -e MAKIA_INITIAL_ADMIN_PASSWORD="UpgradeBaselineOnly-130" \
   "$CONTAINER" bash -lc 'bash /tmp/makia-v130/scripts/install.sh'
