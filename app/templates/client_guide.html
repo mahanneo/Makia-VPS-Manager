@@ -115,6 +115,16 @@
       <div class="notice">{{'اگر Quota یا Expiry تمام شده باشد، کلید ممکن است توسط سرور غیرفعال شود. برای تمدید با مدیر تماس بگیرید.' if fa else 'When quota or expiry is reached, the key may be disabled by the server. Contact the administrator to renew it.'}}</div>
     </section>
 
+    <section class="client-card guide-section" id="sstp">
+      <div class="guide-section-head"><span class="guide-icon wg">S</span><div><div class="eyebrow">SSTP · WINDOWS VPN · TLS</div><h2>SSTP Native VPN</h2></div></div>
+      <div class="guide-method-grid">
+        <article><b>Windows 10/11</b><p>Settings → Network &amp; Internet → VPN → Add VPN; Windows built-in, VPN type SSTP; use your private server hostname, username and password.</p></article>
+        <article><b>Certificate</b><p>Server name must match a publicly trusted TLS certificate. Do not ignore certificate errors or install unknown root certificates.</p></article>
+        <article><b>Availability</b><p>This protocol requires a dedicated reachable TCP/443 listener, which your administrator must verify before issuing access.</p></article>
+      </div>
+      <div class="notice warn">SSTP is unavailable until a separate TLS listener is ready. A portal login alone is not proof of a working tunnel.</div>
+    </section>
+
     <section class="client-card guide-section" id="ssh">
       <div class="guide-section-head"><span class="guide-icon ssh">›_</span><div><div class="eyebrow">SSH · NPV</div><h2>SSH / NPV</h2></div></div>
       <div class="visual-steps">

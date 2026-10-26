@@ -302,7 +302,7 @@ def test_replace_managed_block_is_idempotent():
     assert "value=2" in second
 
 
-def test_protocol_modes_reports_eight_real_modes_including_l2tp(monkeypatch):
+def test_protocol_modes_reports_native_modes_including_sstp(monkeypatch):
     monkeypatch.setattr(protocol_ops,"wireguard_status",lambda:{
         "service_active":True,"config":"/etc/wireguard/wg0.conf","port":443
     })
@@ -328,7 +328,7 @@ def test_protocol_modes_reports_eight_real_modes_including_l2tp(monkeypatch):
     })
     data=protocol_ops.protocol_modes()
     ids=[row["id"] for row in data["modes"]]
-    assert ids==["ikev2","l2tp","wireguard","udp","tcp","stealth","wstunnel-openvpn","wstunnel"]
+    assert ids==["ikev2","l2tp","sstp","wireguard","udp","tcp","stealth","wstunnel-openvpn","wstunnel"]
     by_id={row["id"]:row for row in data["modes"]}
     assert by_id["ikev2"]["ready"] is True
     assert by_id["wireguard"]["ready"] is True

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, get_profile, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight, sstp_ops
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
@@ -155,7 +155,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline","ikev2":"strongswan","l2tp":"xl2tpd"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline","ikev2":"strongswan","l2tp":"xl2tpd","sstp":"accel-ppp"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -963,6 +963,11 @@ def protocols(request:Request):
     try:outline=integration_ops.outline_status()
     except Exception as exc:outline={"installed":False,"container_active":False,"api_ok":False,"error":str(exc)[:300]}
     result["outline"]=outline
+    result["sstp"]=sstp_ops.sstp_status()
+    result.setdefault("capabilities",[]).append({
+        "id":"sstp","engine":"accel-ppp","available":bool(result["sstp"]["ready"]),
+        "installed":bool(result["sstp"]["installed"]),"mode":"managed"
+    })
     result.setdefault("capabilities",[]).append({
         "id":"outline","engine":"outline","available":bool(outline.get("installed") and outline.get("api_ok")),
         "installed":bool(outline.get("installed")),"mode":"managed"
@@ -1179,6 +1184,58 @@ def l2tp_user_delete(name:str,request:Request):
         raise HTTPException(400,str(exc))
     delete_access_artifact_by_key("l2tp",name)
     audit(actor,"l2tp_user_delete",name,ip=ip(request))
+    return result
+
+
+class SSTPUserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/sstp/diagnostics")
+def sstp_diagnostics(request:Request):
+    require_user(request)
+    return sstp_ops.sstp_status()
+
+
+@app.get("/api/protocols/sstp/users")
+def sstp_users_get(request:Request):
+    require_user(request)
+    return {"users":sstp_ops.list_sstp_users()}
+
+
+@app.post("/api/protocols/sstp/users")
+def sstp_user_create(payload:SSTPUserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=sstp_ops.create_sstp_user(payload.name,payload.password or None)
+        profile=access_ops.native_vpn_payload(
+            "sstp",payload.name,result["server"],payload.name,result["password"]
+        )
+        artifact_id=artifact_save("sstp",payload.name,payload.name,"sstp",profile,{
+            "endpoint":result["server"],"username":payload.name,"auth":"MS-CHAPv2 / SSTP"
+        })
+        result["profile"]=profile["primary_text"]
+        result["artifact_id"]=artifact_id
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except access_ops.AccessPackageError as exc:
+        try: sstp_ops.remove_sstp_user(payload.name)
+        except protocol_ops.ProtocolError: pass
+        raise HTTPException(500,"SSTP export failed") from exc
+    audit(actor,"sstp_user_create",payload.name,ip=ip(request))
+    return result
+
+
+@app.delete("/api/protocols/sstp/users/{name}")
+def sstp_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=sstp_ops.remove_sstp_user(name)
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    delete_access_artifact_by_key("sstp",name)
+    audit(actor,"sstp_user_delete",name,ip=ip(request))
     return result
 
 
@@ -2227,6 +2284,18 @@ def _resolve_access_payload(kind,key,request):
             "endpoint":status.get("domain") or "","username":key,"auth":"IPsec PSK + MS-CHAPv2",
         })
         return payload,get_access_artifact_by_key("l2tp",key)
+    if kind=="sstp":
+        credentials=sstp_ops.get_sstp_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"SSTP user not found")
+        status=sstp_ops.sstp_status()
+        payload=access_ops.native_vpn_payload(
+            "sstp",key,status.get("domain") or "",credentials["name"],credentials["password"]
+        )
+        artifact_save("sstp",key,key,"sstp",payload,{
+            "endpoint":status.get("domain") or "","username":key,"auth":"MS-CHAPv2 / SSTP",
+        })
+        return payload,get_access_artifact_by_key("sstp",key)
     if kind=="ssh":
         raise HTTPException(409,"SSH password was not retained for this legacy account; set a new password once to enable encrypted exports")
     raise HTTPException(404,"access entry not found")
@@ -2282,7 +2351,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn","outline","ikev2","l2tp"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline","ikev2","l2tp","sstp"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -2359,6 +2428,19 @@ def access_entries(request:Request):
             "legacy":not bool(art),"endpoint":saved_endpoint(art) or l2tp_status.get("domain") or "",
         })
 
+    sstp_status=sstp_ops.sstp_status()
+    for item in sstp_ops.list_sstp_users():
+        key=item["name"]
+        art=artifacts.get(("sstp",key))
+        rows.append({
+            "id":f"sstp:{key}","kind":"sstp","key":key,"name":key,"protocol":"sstp",
+            "status":"active" if sstp_status.get("ready") else "disabled",
+            "enabled":bool(sstp_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or sstp_status.get("domain") or "",
+        })
+
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
     wg_runtime={p["public_key"]:p for p in protocol_ops._wireguard_peer_runtime()}
     for peer in protocol_ops.list_wireguard_peers():
@@ -2400,7 +2482,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5,"ikev2":6,"l2tp":7}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5,"ikev2":6,"l2tp":7,"sstp":8}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2795,6 +2877,9 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="l2tp":
             protocol_ops.remove_l2tp_user(key)
             delete_access_artifact_by_key("l2tp",key)
+        elif kind=="sstp":
+            sstp_ops.remove_sstp_user(key)
+            delete_access_artifact_by_key("sstp",key)
         elif kind=="openvpn_wstunnel":
             artifact=get_access_artifact_by_key("openvpn_wstunnel",key)
             if not artifact:

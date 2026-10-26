@@ -34,7 +34,7 @@ def test_xray_diagnostics_detects_root_service_user_mismatch(tmp_path,monkeypatc
     monkeypatch.setattr(protocol_ops,"_xray_journal_tail",lambda lines=24:"failed to read config: permission denied")
     monkeypatch.setattr(
         protocol_ops.subprocess,"run",
-        lambda *args,**kwargs:SimpleNamespace(returncode=0,stdout="Xray 26.3.27 (Xray, Penetrates Everything.)\n",stderr=""),
+        lambda *args,**kwargs:SimpleNamespace(returncode=0,stdout="Xray 26.10.21 (Xray, Penetrates Everything.)\n",stderr=""),
     )
     result=protocol_ops.xray_diagnostics()
     assert result["root_validation"] is True

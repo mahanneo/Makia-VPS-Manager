@@ -6,7 +6,7 @@ from app import main
 
 class XrayPresetPreflightTests(unittest.TestCase):
     def test_every_preset_has_an_available_port_suggestion(self):
-        with patch.object(main, "require_capability", return_value="admin"):
+        with patch.object(main, "require_capability", return_value="admin"), patch.object(main, "get_setting", side_effect=lambda key,default="": default):
             result = main.xray_inbound_capabilities(object())
         presets = result.get("presets") or []
         self.assertGreaterEqual(len(presets), 5)

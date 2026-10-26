@@ -1,3 +1,9 @@
+## 1.6.10-rc1 — 2026-10-26 (SSTP managed staging, NOT PRODUCTION)
+- Add SSTP admin dashboard, diagnostics, user-management API, independent chap-secrets store and confidential text exports.
+- Fail closed if accel-pppd or dedicated public TCP/443 TLS listener is not available; never seize Nginx port 443.
+- Integrate local 1.6.9 features with remembered-client and pinned Xray installer fixes in a separate review branch.
+- Pending full CI, Windows SSTP UAT, dedicated IP and off-host backup; no SSTP live rollout.
+
 # Changelog
 
 ## [1.6.1] - 2026-10-07

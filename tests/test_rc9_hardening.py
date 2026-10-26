@@ -109,7 +109,7 @@ def test_outline_setup_surfaces_root_dependency_commands():
 def test_outline_has_first_class_public_connection_guide():
     js=(ROOT/"app/static/app.js").read_text(encoding="utf-8")
     guide=(ROOT/"app/templates/client_guide.html").read_text(encoding="utf-8")
-    assert "kind==='outline'?'outline':'xray'" in js
+    assert "'outline','ikev2','l2tp','sstp'" in js
     assert 'href="#outline"' in guide
     assert 'id="outline"' in guide
     assert "Outline Client" in guide

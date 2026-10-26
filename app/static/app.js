@@ -143,7 +143,7 @@ function viewIntro(kicker,heading,desc,aside=''){
   return '<section class="view-intro"><div><div class="eyebrow">'+htmlEsc(kicker)+'</div><h2>'+htmlEsc(heading)+'</h2><p>'+htmlEsc(desc)+'</p></div>'+aside+'</section>';
 }
 function clientGuideUrl(kind){
-  const anchor=['wireguard','openvpn','ssh','outline','ikev2','l2tp'].includes(kind)?kind:'xray';
+  const anchor=['wireguard','openvpn','ssh','outline','ikev2','l2tp','sstp'].includes(kind)?kind:'xray';
   return location.origin+'/help/connect#'+anchor;
 }
 function openClientGuide(kind){window.open(clientGuideUrl(kind),'_blank','noopener')}
@@ -344,12 +344,14 @@ async function openAccessDetail(id){
     manage='<button class="primary" data-action="nav" data-view="protocols">WStunnel 443</button><button class="ghost" data-action="openvpn-wstunnel-client" data-name="'+name+'">'+htmlEsc(tr('بازسازی بسته','Rebuild package'))+'</button>';
   }else if(a.kind==='ikev2'){
     manage='<button class="primary" data-action="ikev2-users">'+htmlEsc(tr('مدیریت کاربران IKEv2','Manage IKEv2 users'))+'</button>';
+  }else if(a.kind==='sstp'){
+    manage='<button class="primary" data-action="sstp-users">مدیریت کاربران SSTP</button>';
   }else if(a.kind==='l2tp'){
     manage='<button class="primary" data-action="l2tp-users">'+htmlEsc(tr('مدیریت کاربران L2TP','Manage L2TP users'))+'</button>';
   }else{
     manage='<button class="primary" data-action="nav" data-view="'+kind+'">'+htmlEsc(tr('مدیریت پروتکل','Manage protocol'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
   }
-  const nativeLabel=['openvpn','openvpn_wstunnel'].includes(a.kind)?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':a.kind==='outline'?'Access Key':a.kind==='ikev2'?'IKEv2 credentials':a.kind==='l2tp'?'L2TP/IPsec credentials':'Native config';
+  const nativeLabel=['openvpn','openvpn_wstunnel'].includes(a.kind)?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':a.kind==='outline'?'Access Key':a.kind==='ikev2'?'IKEv2 credentials':a.kind==='l2tp'?'L2TP/IPsec credentials':a.kind==='sstp'?'SSTP credentials':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
@@ -442,6 +444,7 @@ function wizardProtocolReady(kind){
   if(kind==='outline')return Boolean(s.outline?.installed&&s.outline?.api_ok);
   if(kind==='ikev2')return Boolean(s.ikev2?.configured&&s.ikev2?.service_active);
   if(kind==='l2tp')return Boolean(s.l2tp?.ready);
+  if(kind==='sstp')return Boolean(s.sstp?.ready);
   return false;
 }
 
@@ -458,11 +461,12 @@ function renderProvisionWizard(){
       ['openvpn_wstunnel','WStunnel 443','OpenVPN داخل WebSocket/TLS','HTTPS/443 · Restricted networks'],
       ['outline','Outline','Shadowsocks مدیریت‌شده','Access Key · QR · Data Limit'],
       ['ikev2','IKEv2','VPN بومی گوشی و سیستم‌عامل','Username / Password · EAP-MSCHAPv2'],
-      ['l2tp','L2TP/IPsec','سازگاری با کلاینت‌های قدیمی‌تر','IPsec PSK · Username / Password']
+      ['l2tp','L2TP/IPsec','سازگاری با کلاینت‌های قدیمی‌تر','IPsec PSK · Username / Password'],
+      ['sstp','SSTP','Windows Native VPN · فقط TCP/443 اختصاصی','TLS trusted · Username / Password']
     ];
     body='<div class="provision-intro"><span class="pro-kicker">CHOOSE PROTOCOL</span><h4>نوع دسترسی را انتخاب کن</h4><p>فقط تنظیمات ضروری نمایش داده می‌شود؛ گزینه‌های تخصصی داخل بخش پیشرفته باقی می‌مانند.</p></div><div class="wizard-protocols pro-protocol-picker">'+cards.map(x=>{
       const ready=wizardProtocolReady(x[0]);
-      const setupAction=x[0]==='openvpn_wstunnel'?'openvpn-wstunnel-setup':x[0]==='ikev2'?'ikev2-setup':x[0]==='l2tp'?'l2tp-setup':'protocol-setup';
+      const setupAction=x[0]==='openvpn_wstunnel'?'openvpn-wstunnel-setup':x[0]==='ikev2'?'ikev2-setup':x[0]==='l2tp'?'l2tp-setup':x[0]==='sstp'?'sstp-setup':'protocol-setup';
       const glyph=x[0]==='openvpn_wstunnel'?'wstunnel':x[0];
       return '<button class="wizard-protocol pro-protocol-card '+(ready?'ready':'not-ready')+'" data-action="'+(ready?'wizard-protocol':setupAction)+'" data-kind="'+x[0]+'"><span class="protocol-card-icon '+x[0]+'">'+protocolGlyph(glyph)+'</span><div class="protocol-card-copy"><b>'+x[1]+'</b><small>'+x[2]+'</small><em>'+x[3]+'</em></div><i>'+(ready?'آماده':'نیاز به راه‌اندازی')+'</i></button>';
     }).join('')+'</div>';
@@ -494,8 +498,8 @@ function wizardIdentityFields(s){
     wizardEndpointFields(s)+'</div>',
     '<details class="pro-advanced"><summary><span>تنظیمات پیشرفته</span><small>Plan و یادداشت داخلی</small></summary><div class="wizard-form two"><label>Plan<input id="wizPlan" value="'+htmlEsc(s.plan)+'" placeholder="VIP / Trial / 30D"></label><label>یادداشت داخلی<input id="wizNote" value="'+htmlEsc(s.note)+'" placeholder="نام مشتری / سفارش"></label></div></details>'
   ].join('');
-  if(s.protocol==='ikev2'||s.protocol==='l2tp') return [
-    '<div class="wizard-section-title"><span class="pro-kicker">NATIVE VPN CREDENTIALS</span><h4>'+(s.protocol==='ikev2'?'IKEv2 user':'L2TP/IPsec user')+'</h4><p>حساب اختصاصی روی سرویس Native VPN ساخته می‌شود؛ فایل راهنما برای ورود در تنظیمات VPN گوشی/سیستم‌عامل آماده خواهد شد.</p></div>',
+  if(['ikev2','l2tp','sstp'].includes(s.protocol)) return [
+    '<div class="wizard-section-title"><span class="pro-kicker">NATIVE VPN CREDENTIALS</span><h4>'+(s.protocol==='ikev2'?'IKEv2 user':s.protocol==='sstp'?'SSTP user':'L2TP/IPsec user')+'</h4><p>حساب اختصاصی روی سرویس Native VPN ساخته می‌شود؛ فایل راهنما برای ورود در تنظیمات VPN گوشی/سیستم‌عامل آماده خواهد شد.</p></div>',
     '<div class="wizard-form two"><label>نام کاربری<input id="wizName" value="'+htmlEsc(s.name)+'"></label>',
     '<label>رمز ورود<div class="input-action"><input id="wizPassword" value="'+htmlEsc(s.password||'')+'" placeholder="خالی = تولید خودکار"><button class="soft" data-action="wizard-secret" data-mode="strong">تولید</button></div></label>',
     '<label>Server<input id="wizEndpoint" value="'+htmlEsc(s.endpoint)+'" readonly></label></div>',
@@ -578,7 +582,7 @@ function wizardEndpointFields(s){
 }
 
 function wizardPolicyFields(s){
-  if(s.protocol==='ikev2'||s.protocol==='l2tp') return '<div class="wizard-section-title"><span class="pro-kicker">NATIVE VPN POLICY</span><h4>دسترسی کاربر</h4><p>این پروتکل‌ها در حال حاضر محدودیت حجم/انقضای مستقل در پنل ندارند. برای قطع دسترسی از Revoke استفاده کنید.</p></div><div class="wizard-note"><b>تحویل</b><span>پس از ساخت، فایل متنی اتصال، لینک اختصاصی کاربر و بسته رمزدار در دسترس خواهد بود.</span></div>';
+  if(['ikev2','l2tp','sstp'].includes(s.protocol)) return '<div class="wizard-section-title"><span class="pro-kicker">NATIVE VPN POLICY</span><h4>دسترسی کاربر</h4><p>این پروتکل‌ها در حال حاضر محدودیت حجم/انقضای مستقل در پنل ندارند. برای قطع دسترسی از Revoke استفاده کنید.</p></div><div class="wizard-note"><b>تحویل</b><span>پس از ساخت، فایل متنی اتصال، لینک اختصاصی کاربر و بسته رمزدار در دسترس خواهد بود.</span></div>';
   if(s.protocol==='ssh') return [
     '<div class="wizard-section-title"><span class="pro-kicker">ACCESS POLICY</span><h4>مدت و محدودیت</h4><p>فقط انقضا را تنظیم کن؛ محدودیت‌های نشست و دستگاه اختیاری‌اند.</p></div>',
     '<div class="wizard-form one"><label>تاریخ انقضا<input id="wizExpireDate" type="date" value="'+htmlEsc(s.expireDate)+'"><div class="preset-row"><button data-action="wizard-expiry" data-days="7">7 روز</button><button data-action="wizard-expiry" data-days="30">30 روز</button><button data-action="wizard-expiry" data-days="60">60 روز</button><button data-action="wizard-expiry" data-days="90">90 روز</button><button data-action="wizard-expiry" data-days="0">بدون انقضا</button></div></label></div>',
@@ -672,7 +676,7 @@ function validateWizardStep(){
     if(!s.name)return 'نام کاربر/Client لازم است.';
     if(s.protocol==='ssh'&&(!s.password||s.password.length<4))return 'Password/PIN حداقل ۴ کاراکتر باشد.';
     if(s.protocol==='openvpn_wstunnel'&&(!s.password||s.password.length<8))return 'رمز ورود WStunnel باید حداقل ۸ کاراکتر باشد.';
-    if((s.protocol==='ikev2'||s.protocol==='l2tp')&&s.password&&s.password.length<10)return 'رمز Native VPN باید حداقل ۱۰ کاراکتر باشد.';
+    if(['ikev2','l2tp','sstp'].includes(s.protocol)&&s.password&&s.password.length<10)return 'رمز Native VPN باید حداقل ۱۰ کاراکتر باشد.';
     if(!s.endpoint)return 'دامنه یا IP عمومی لازم است.';
     const isIp=/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s.endpoint);
     if(s.endpointMode==='ip'&&!isIp)return 'در حالت IP، آدرس IPv4 عمومی را وارد کن.';
@@ -727,6 +731,9 @@ async function createProvisionedAccess(){
     }else if(s.protocol==='ikev2'){
       r=await api('/api/protocols/ikev2/users',{method:'POST',body:JSON.stringify({name:s.name,password:s.password||''})});
       kind='ikev2';key=s.name;
+    }else if(s.protocol==='sstp'){
+      r=await api('/api/protocols/sstp/users',{method:'POST',body:JSON.stringify({name:s.name,password:s.password||''})});
+      kind='sstp';key=s.name;
     }else if(s.protocol==='l2tp'){
       r=await api('/api/protocols/l2tp/users',{method:'POST',body:JSON.stringify({name:s.name,password:s.password||''})});
       kind='l2tp';key=s.name;
@@ -745,7 +752,7 @@ async function createProvisionedAccess(){
     }else{
       r=await api('/api/protocols/openvpn/clients',{method:'POST',body:JSON.stringify({name:s.name,endpoint:s.endpoint,endpoint_mode:s.endpointMode,port:s.ovpnPort,proto:s.ovpnProto})});key=s.name;
     }
-    showProvisionSuccess(kind,key,s.name,s.packagePassword,(s.protocol==='ssh'||s.protocol==='openvpn_wstunnel'||s.protocol==='ikev2'||s.protocol==='l2tp')?(r.password||s.password||null):null,r);
+    showProvisionSuccess(kind,key,s.name,s.packagePassword,(s.protocol==='ssh'||s.protocol==='openvpn_wstunnel'||s.protocol==='ikev2'||s.protocol==='l2tp'||s.protocol==='sstp')?(r.password||s.password||null):null,r);
   }catch(e){alert(e.message);if(createBtn){createBtn.disabled=false;createBtn.textContent='ساخت و آماده‌سازی'}}
 }
 
@@ -2100,6 +2107,7 @@ async function guides(renderToken=window.__viewRenderToken){
     ['openvpn','OpenVPN','.ovpn','Import فایل OVPN با OpenVPN Connect روی موبایل و دسکتاپ.'],
     ['ikev2','IKEv2','Native VPN · Username / Password','تنظیمات VPN بومی iPhone، Windows و کلاینت سازگار Android.'],
     ['l2tp','L2TP/IPsec','PSK · Username / Password','تنظیمات VPN بومی Windows/Android؛ پشتیبانی بسته به نسخه سیستم‌عامل.'],
+    ['sstp','SSTP','Windows Native VPN · TCP/443','نیازمند آدرس عمومی و TLS معتبر روی TCP/443 اختصاصی؛ روی VPS فعلی تا فراهم شدن زیرساخت غیرفعال است.'],
     ['ssh','SSH / NPV','npvt-ssh / Credentials','Import لینک/QR در NPV Tunnel سازگار یا ورود دستی SSH با Server/User/Password.']
   ];
   content.innerHTML=[
@@ -2415,7 +2423,7 @@ async function enable2FA(){try{await api('/api/admin/2fa/enable',{method:'POST',
 async function disable2FA(){const password=prompt('رمز فعلی مدیر:');if(password===null)return;const code=prompt('کد ۶ رقمی Authenticator:');if(code===null)return;try{await api('/api/admin/2fa/disable',{method:'POST',body:JSON.stringify({password,code})});alert('2FA غیرفعال شد.');await settings()}catch(e){alert(e.message)}}
 async function changePass(){try{await api('/api/admin/password',{method:'POST',body:JSON.stringify({current_password:formValue('oldP',''),new_password:formValue('newP','')})});alert('رمز مدیر تغییر کرد.')}catch(e){alert(e.message)}}
 function toast(msg){let t=document.getElementById('makiaToast');if(!t){t=document.createElement('div');t.id='makiaToast';t.className='toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
-const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['IKEv2','ikev2'],['L2TP/IPsec','l2tp'],['Connectivity Lab','connectivity'],['Telegram Proxy','telegramproxy'],['DNS Center','dnscenter'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
+const commandItems=[['Dashboard','dashboard'],['Clients','access'],['Plans','plans'],['Expiry Center','expiry'],['Inbounds','inbounds'],['SSH / NPV','ssh'],['Xray / V2Ray','xray'],['Outline','outline'],['WireGuard','wireguard'],['OpenVPN','openvpn'],['IKEv2','ikev2'],['L2TP/IPsec','l2tp'],['SSTP','sstp'],['Connectivity Lab','connectivity'],['Telegram Proxy','telegramproxy'],['DNS Center','dnscenter'],['Diagnostics Center','diagnostics'],['Operations / DR','operations'],['Network / Ports','protocols'],['Live Sessions','sessions'],['Nodes','nodes'],['Services','services'],['Backups','backups'],['Logs','audit'],['Update','updates'],['Settings','settings'],['Client Guides','guides'],['Security','security'],['Support','support']];
 
 function openCommandPalette(){
   modalRoot.innerHTML='<div class="modal-backdrop command-backdrop"><div class="command-modal"><input id="commandSearch" autofocus placeholder="Search Makia…  (Ctrl+K)"><div id="commandList"></div></div></div>';
@@ -2435,6 +2443,7 @@ async function selectWizardProtocol(kind){
   if(!wizardProtocolReady(kind)){
     if(kind==='ikev2'){await setupIKEv2();return}
     if(kind==='l2tp'){await setupL2TP();return}
+    if(kind==='sstp'){await setupSSTP();return}
     await openProtocolSetup(kind);return
   }
   if(kind==='xray'){
@@ -2447,7 +2456,7 @@ async function selectWizardProtocol(kind){
     if(!wizardProtocolReady('outline')){await switchView('outline');setTimeout(setupOutline,50);return}
     await switchView('outline');setTimeout(openOutlineKeyCreate,50);return;
   }
-  if(kind==='ikev2'||kind==='l2tp'){
+  if(kind==='ikev2'||kind==='l2tp'||kind==='sstp'){
     const nativeServer=window.__protocolData?.[kind]?.domain||window.PANEL_DOMAIN||location.hostname;
     if(nativeServer){
       provisionState.endpoint=nativeServer;
@@ -2531,6 +2540,10 @@ async function handleMakiaAction(btn){
   if(action==='l2tp-user'){await createL2TPUser();return}
   if(action==='l2tp-users'){await openL2TPUsers();return}
   if(action==='l2tp-user-delete'){await revokeL2TPUser(dataDec(btn.dataset.name));return}
+  if(action==='sstp-setup'){await setupSSTP();return}
+  if(action==='sstp-user'){await createSSTPUser();return}
+  if(action==='sstp-users'){await openSSTPUsers();return}
+  if(action==='sstp-user-delete'){await revokeSSTPUser(dataDec(btn.dataset.name));return}
   if(action==='openvpn-mode'){await switchOpenVPNMode(btn.dataset.proto||'udp');return}
   if(action==='openvpn-tcp-fallback'){await ensureOpenVPNTCPFallback();return}
   if(action==='stealth-setup'){await setupStealth();return}
@@ -3418,16 +3431,56 @@ async function l2tpWorkspace(renderToken=window.__viewRenderToken){
   ].join('');
 }
 
-const views={dashboard,clientplatform:clientPlatformCenter,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,ikev2:ikev2Workspace,l2tp:l2tpWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
+async function setupSSTP(){
+  const s=await api('/api/protocols/sstp/diagnostics');
+  if(s.ready){await openSSTPUsers();return}
+  alert('SSTP فعلاً آماده نیست. Nginx مالک TCP/443 است؛ یک IPv4 عمومی اختصاصی با TLS معتبر و accel-ppp لازم است.\\n'+(s.warnings||[]).join('\\n'));
+}
+async function createSSTPUser(){
+  const name=prompt('SSTP username','user001');if(!name)return;
+  const password=prompt('Password (leave empty to generate)','')||'';
+  try{const r=await api('/api/protocols/sstp/users',{method:'POST',body:JSON.stringify({name,password})});
+    configModal('SSTP · '+name,r.profile,name+'-sstp.txt','sstp',name)
+  }catch(e){alert('SSTP: '+e.message)}
+}
+async function openSSTPUsers(){
+  try{
+    const result=await api('/api/protocols/sstp/users'),users=result.users||[];
+    modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h3>SSTP · کاربران</h3><button class="close-btn" data-action="modal-close">×</button></div><div class="service-control-list">'+(users.length?users.map(x=>'<div class="service-row"><b>'+htmlEsc(x.name)+'</b><div class="toolbar"><button class="ghost" data-action="native-export" data-kind="sstp" data-key="'+dataEnc(x.name)+'">فایل اتصال</button><button class="danger" data-action="sstp-user-delete" data-name="'+dataEnc(x.name)+'">لغو کاربر</button></div></div>').join(''):'<div class="empty">هنوز کاربر SSTP وجود ندارد.</div>')+'</div><button class="ghost" data-action="modal-close">بستن</button></div></div>';
+  }catch(e){alert('SSTP users: '+e.message)}
+}
+async function revokeSSTPUser(name){
+  if(!confirm('دسترسی SSTP کاربر '+name+' لغو شود؟ نشست‌های PPP فعلی ممکن است نیاز به قطع جداگانه داشته باشند.'))return;
+  try{const r=await api('/api/protocols/sstp/users/'+encodeURIComponent(name),{method:'DELETE'});
+    if(r.warning)alert(r.warning);await openSSTPUsers();
+  }catch(e){alert('SSTP revoke: '+e.message)}
+}
+async function sstpWorkspace(renderToken=window.__viewRenderToken){
+  title.textContent='SSTP';setPageContext('NATIVE VPN · SSTP');
+  content.innerHTML='<div class="empty">در حال بررسی SSTP…</div>';
+  let status,result;
+  try{[status,result]=await Promise.all([api('/api/protocols/sstp/diagnostics'),api('/api/protocols/sstp/users')])}
+  catch(e){if(renderToken===window.__viewRenderToken)content.innerHTML='<div class="panel"><div class="notice warn">'+htmlEsc(e.message)+'</div></div>';return}
+  if(renderToken!==window.__viewRenderToken||activeView!=='sstp')return;
+  const ready=Boolean(status.ready),users=result.users||[];
+  content.innerHTML=[
+    '<section class="protocol-page-header"><div class="protocol-page-title">'+protocolGlyph('sstp')+'<div><span class="pro-kicker">WINDOWS NATIVE VPN</span><h2>SSTP</h2><p>مدیریت کاربران SSTP با TLS معتبر و MS-CHAPv2؛ بدون تداخل با HTTPS موجود</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="refresh">بروزرسانی</button><button class="primary" data-action="sstp-user" '+(ready?'':'disabled')+'>＋ ساخت کاربر SSTP</button></div></section>',
+    '<section class="protocol-stat-grid"><div class="protocol-stat"><b class="'+(ready?'ok-text':'bad-text')+'">'+(ready?'READY':'BLOCKED')+'</b><span>Service</span></div><div class="protocol-stat"><b>'+htmlEsc(status.domain||'—')+'</b><span>Server</span></div><div class="protocol-stat"><b>'+users.length+'</b><span>Users</span></div></section>',
+    (ready?'':'<div class="notice warn"><b>امکان اتصال SSTP هنوز فعال نشده است.</b><p>برای SSTP روی Windows، TCP/443 اختصاصی و گواهی معتبر لازم است؛ پورت ۴۴۳ کنونی Nginx را تغییر نمی‌دهیم.</p>'+htmlEsc((status.warnings||[]).join(' · '))+'</div>'),
+    '<section class="panel"><div class="panel-head"><h3>کاربران SSTP</h3><button class="ghost" data-action="sstp-users">مدیریت</button></div><div class="service-control-list">'+(users.length?users.map(u=>'<div class="service-row"><b>'+htmlEsc(u.name)+'</b><div class="toolbar"><button data-action="native-export" data-kind="sstp" data-key="'+dataEnc(u.name)+'">فایل اتصال</button><button class="danger" data-action="sstp-user-delete" data-name="'+dataEnc(u.name)+'">لغو کاربر</button></div></div>').join(''):'<div class="empty">هیچ کاربری ایجاد نشده است.</div>')+'</div></section>'
+  ].join('');
+}
+
+const views={dashboard,clientplatform:clientPlatformCenter,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,ikev2:ikev2Workspace,l2tp:l2tpWorkspace,sstp:sstpWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='clientplatform'?'CLIENT PLATFORM':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='ikev2'?'IKEV2 USERS':v==='l2tp'?'L2TP/IPSEC USERS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='clientplatform'?'CLIENT PLATFORM':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='ikev2'?'IKEV2 USERS':v==='l2tp'?'L2TP/IPSEC USERS':v==='sstp'?'SSTP USERS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','ikev2','l2tp','outline','inbounds','telegramproxy','dnscenter'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics','operations'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','ikev2','l2tp','sstp','outline','inbounds','telegramproxy','dnscenter'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics','operations'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');

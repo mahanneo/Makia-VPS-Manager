@@ -216,6 +216,14 @@ def client_guide_text(kind,protocol=""):
             "روش دستی: Type=IKEv2؛ Server و Remote ID هر دو برابر Server داخل فایل؛ Local ID را در صورت درخواست Username قرار دهید؛ Authentication=Username؛ سپس Username و Password را وارد کنید.\n"
             "در Android از یک کلاینت IKEv2 سازگار استفاده کنید؛ پروفایل Apple برای Android نیست.\n"
         )
+    if kind=="sstp":
+        return common+(
+            "SSTP on Windows (native VPN)\n"
+            "1) Only use a verified dedicated SSTP TLS hostname and public TCP/443.\n"
+            "2) Windows Settings > Network > VPN > Add VPN; provider Windows built-in; type SSTP.\n"
+            "3) Use the provided server hostname, username and password (MS-CHAPv2).\n"
+            "4) Do not disable certificate validation or trust unknown certificates.\n"
+        )
     if kind=="l2tp":
         return common+(
             "L2TP/IPsec (iPhone / iPad / Mac)\n"
@@ -406,7 +414,7 @@ def _apple_vpn_mobileconfig(kind,name,server,username,password,psk=""):
 
 def native_vpn_payload(kind,name,server,username,password,psk=""):
     kind=str(kind or "").lower()
-    if kind not in {"ikev2","l2tp"}:
+    if kind not in {"ikev2","l2tp","sstp"}:
         raise AccessPackageError("unsupported native VPN profile type")
     name=str(name or username or "").strip()
     server=str(server or "").strip()
@@ -414,6 +422,23 @@ def native_vpn_payload(kind,name,server,username,password,psk=""):
     password=str(password or "")
     if not name or not server or not username or not password:
         raise AccessPackageError("native VPN profile is missing required connection fields")
+    if kind=="sstp":
+        lines=[
+            "Makia SSTP",f"Server: {server}","Port: TCP/443",
+            "VPN type: SSTP (Windows built-in)","Authentication: MS-CHAPv2",
+            f"Username: {username}",f"Password: {password}",
+            "Verify server TLS certificate and hostname; never bypass certificate warnings."
+        ]
+        filename=f"{safe_filename(name)}-sstp.txt"
+        data="\n".join(lines)+"\n"
+        return {
+            "native_filename":filename,
+            "files":{filename:data.encode("utf-8"),
+                     "connection-guide-fa.txt":client_guide_text(kind).encode("utf-8")},
+            "primary_text":data,"share_text":"","share_type":"sstp",
+            "summary":{"protocol":"sstp","server":server,"username":username,
+                       "auth":"MS-CHAPv2","manual_details":filename}
+        }
     if kind=="ikev2":
         lines=[
             "Makia IKEv2",

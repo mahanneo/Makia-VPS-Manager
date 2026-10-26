@@ -44,7 +44,7 @@ def test_xhttp_is_explicitly_lab_only_for_pinned_core():
     xhttp=[p for p in presets if p["transport"]=="xhttp"]
     assert xhttp
     assert all(p["tier"]=="experimental" for p in xhttp)
-    assert all("26.3.27" in p["note"] for p in xhttp)
+    assert all("test the selected mode" in p["note"] for p in xhttp)
 
 
 def test_tls_presets_declare_domain_requirement():
@@ -87,6 +87,7 @@ def test_presets_do_not_claim_guaranteed_connectivity():
 
 def test_capabilities_endpoint_avoids_occupied_preset_ports(monkeypatch):
     monkeypatch.setattr(main_app,"require_capability",lambda *a,**k:"admin")
+    monkeypatch.setattr(main_app,"get_setting",lambda key,default="": default)
     monkeypatch.setattr(
         protocol_ops,"_port_transport_in_use",
         lambda port,proto: int(port) in {443,8443},

@@ -1685,6 +1685,8 @@ def protocol_modes():
     ov=_openvpn_server_runtime()
     ike=ikev2_status()
     l2tp=l2tp_status()
+    from . import sstp_ops
+    sstp=sstp_ops.sstp_status()
     st=stealth_status()
     ws=wstunnel_status()
     ovws=openvpn_wstunnel_status()
@@ -1693,6 +1695,7 @@ def protocol_modes():
         "modes":[
             {"id":"ikev2","label":"IKEv2","ports":[500,4500],"transport":"UDP/IPsec","ready":bool(ike.get("configured") and ike.get("service_active")),"status":ike},
             {"id":"l2tp","label":"L2TP/IPsec","ports":[500,4500,1701],"transport":"UDP / IPsec + L2TP","ready":bool(l2tp.get("ready")),"status":l2tp},
+            {"id":"sstp","label":"SSTP","ports":[443],"transport":"TCP/443 TLS / MS-CHAPv2","ready":bool(sstp.get("ready")),"status":sstp},
             {"id":"wireguard","label":"WireGuard","ports":[wg.get("port")] if wg.get("port") else [],"transport":"UDP","ready":bool(wg.get("service_active") and wg.get("config")),"status":wg},
             {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
             {"id":"tcp","label":"TCP","ports":[tcp.get("port")] if tcp.get("port") else ([ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else []),"transport":"OpenVPN TCP fallback","ready":bool((tcp.get("service_active") and tcp.get("listener")) or (ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp"))),"status":tcp if tcp.get("config") else ov},
