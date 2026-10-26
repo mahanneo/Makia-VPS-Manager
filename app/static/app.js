@@ -3463,10 +3463,13 @@ async function sstpWorkspace(renderToken=window.__viewRenderToken){
   catch(e){if(renderToken===window.__viewRenderToken)content.innerHTML='<div class="panel"><div class="notice warn">'+htmlEsc(e.message)+'</div></div>';return}
   if(renderToken!==window.__viewRenderToken||activeView!=='sstp')return;
   const ready=Boolean(status.ready),users=result.users||[];
+  const engine=Boolean(status.backend_ready);
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title">'+protocolGlyph('sstp')+'<div><span class="pro-kicker">WINDOWS NATIVE VPN</span><h2>SSTP</h2><p>مدیریت کاربران SSTP با TLS معتبر و MS-CHAPv2؛ بدون تداخل با HTTPS موجود</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="refresh">بروزرسانی</button><button class="primary" data-action="sstp-user" '+(ready?'':'disabled')+'>＋ ساخت کاربر SSTP</button></div></section>',
-    '<section class="protocol-stat-grid"><div class="protocol-stat"><b class="'+(ready?'ok-text':'bad-text')+'">'+(ready?'READY':'BLOCKED')+'</b><span>Service</span></div><div class="protocol-stat"><b>'+htmlEsc(status.domain||'—')+'</b><span>Server</span></div><div class="protocol-stat"><b>'+users.length+'</b><span>Users</span></div></section>',
-    (ready?'':'<div class="notice warn"><b>امکان اتصال SSTP هنوز فعال نشده است.</b><p>برای SSTP روی Windows، TCP/443 اختصاصی و گواهی معتبر لازم است؛ پورت ۴۴۳ کنونی Nginx را تغییر نمی‌دهیم.</p>'+htmlEsc((status.warnings||[]).join(' · '))+'</div>'),
+    '<section class="protocol-stat-grid"><div class="protocol-stat"><b class="'+(ready?'ok-text':'bad-text')+'">'+(ready?'READY':engine?'ENGINE ONLY':'BLOCKED')+'</b><span>Service</span></div><div class="protocol-stat"><b>'+htmlEsc(status.endpoint||status.domain||'—')+'</b><span>Server</span></div><div class="protocol-stat"><b>'+users.length+'</b><span>Users</span></div></section>',
+    (ready?
+       (Number(status.port)!==443?'<div class="notice warn">SSTP اکنون روی پورت جایگزین '+Number(status.port)+' فعال است. در ویندوز آدرس سرور را '+htmlEsc(status.endpoint||'')+' وارد کنید. عملکرد این روش در همه شبکه‌ها تضمین نشده و نیازمند تست واقعی اتصال است.</div>':''):
+       '<div class="notice warn"><b>امکان اتصال SSTP هنوز فعال نشده است.</b><p>وضعیت سرویس، گواهی TLS و پورت اختصاصی SSTP را بررسی کنید. HTTPS فعلی Nginx حفظ می‌شود.</p>'+htmlEsc((status.warnings||[]).join(' · '))+'</div>'),
     '<section class="panel"><div class="panel-head"><h3>کاربران SSTP</h3><button class="ghost" data-action="sstp-users">مدیریت</button></div><div class="service-control-list">'+(users.length?users.map(u=>'<div class="service-row"><b>'+htmlEsc(u.name)+'</b><div class="toolbar"><button data-action="native-export" data-kind="sstp" data-key="'+dataEnc(u.name)+'">فایل اتصال</button><button class="danger" data-action="sstp-user-delete" data-name="'+dataEnc(u.name)+'">لغو کاربر</button></div></div>').join(''):'<div class="empty">هیچ کاربری ایجاد نشده است.</div>')+'</div></section>'
   ].join('');
 }

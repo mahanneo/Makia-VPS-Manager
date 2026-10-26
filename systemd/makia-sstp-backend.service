@@ -1,0 +1,19 @@
+[Unit]
+Description=Makia SSTP backend (dedicated TCP listener)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/accel-ppp/makia-sstp.conf
+
+[Service]
+Type=simple
+ExecStart=/opt/makia-sstp/runtime/sbin/accel-pppd -c /etc/accel-ppp/makia-sstp.conf -p /run/makia-sstp.pid
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+LimitNOFILE=65536
+PrivateTmp=true
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

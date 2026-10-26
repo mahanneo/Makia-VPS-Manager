@@ -15,10 +15,12 @@ from pathlib import Path
 from . import protocol_ops
 
 SSTP_CHAP = Path("/etc/makia-vps-manager/sstp-chap-secrets")
-CONFIG_LOCATIONS = (Path("/etc/accel-ppp/accel-ppp.conf"), Path("/etc/accel-ppp.conf"))
+ACCEL_BIN = Path("/opt/makia-sstp/runtime/sbin/accel-pppd")
+CONFIG_LOCATIONS = (Path("/etc/accel-ppp/makia-sstp.conf"), Path("/etc/accel-ppp/accel-ppp.conf"), Path("/etc/accel-ppp.conf"))
 _NAME = re.compile(r"[A-Za-z0-9_.-]{3,48}\Z")
 _PASSWORD = re.compile(r"[A-Za-z0-9._~-]{10,128}\Z")
-_MANAGED = re.compile(r"^([A-Za-z0-9_.-]{3,48})\s+\*\s+([A-Za-z0-9._~-]{10,128})\s+\*\s+# makia-sstp:([A-Za-z0-9_.-]{3,48})$")
+_MANAGED = re.compile(r"^([A-Za-z0-9_.-]{3,48})\s+\*\s+([A-Za-z0-9._~-]{10,128})\s+\*$")
+_MARKER = re.compile(r"# makia-sstp:([A-Za-z0-9_.-]{3,48})\Z")
 
 
 def _section(text, name):
@@ -75,12 +77,13 @@ def sstp_status():
     # Even with no SSTP config, surface an existing 443 owner in diagnostics.
     occupied, owned = _listener(bind if valid_bind else "0.0.0.0", port if port else 443)
     statuses = [_run(["systemctl", "is-active", name])
-                for name in ("accel-ppp", "accel-pppd")]
+                for name in ("makia-sstp-backend", "accel-ppp", "accel-pppd")]
     active = any(result and result.stdout.strip() == "active" for result in statuses)
-    installed = bool(shutil.which("accel-pppd"))
+    installed = bool(shutil.which("accel-pppd") or
+                     ACCEL_BIN.is_file())
     configured = bool(
         config and "sstp" in modules and "chap-secrets" in modules
-        and valid_bind and port == 443
+        and valid_bind and 1 <= port <= 65535
         and chap.get("chap-secrets") == str(SSTP_CHAP)
         and domain and sstp.get("ssl-pemfile") and sstp.get("ssl-keyfile")
     )
@@ -105,25 +108,36 @@ def sstp_status():
         except Exception:
             tls_ready=False
     store_ready = bool(SSTP_CHAP.is_file() and SSTP_CHAP.stat().st_mode & 0o077 == 0)
+    # Complete internet egress requires the same explicit FORWARD/NAT controls
+    # used for the other Makia native VPNs. Never advertise a tunnel as ready
+    # based only on a TLS listener.
+    vpn_net=protocol_ops._vpn_network_status("10.79.0.0/24","makia-sstp-backend")
+    backend_ready=bool(installed and configured and active and owned and tls_ready and store_ready)
     warnings = []
     if not installed:
         warnings.append("accel-ppp SSTP daemon is not installed")
     if not configured:
-        warnings.append("dedicated IPv4 TCP/443, SSTP TLS hostname and managed chap-secrets are not configured")
+        warnings.append("dedicated public IPv4, SSTP hostname/TLS and managed chap-secrets are not configured")
     if not tls_ready:
         warnings.append("trusted SSTP server certificate/domain/key needs validation")
     if occupied and not owned:
-        warnings.append("TCP/443 belongs to an existing service; never displace Nginx or active VPN listeners")
+        warnings.append("SSTP listener port is occupied by another process; do not displace live HTTPS or VPN services")
     if not owned:
         warnings.append("no dedicated accel-pppd SSTP listener is verified")
     if not store_ready:
         warnings.append("root-only SSTP account store is not provisioned")
+    if not vpn_net["forwarding_ready"]:
+        warnings.append("SSTP client subnet 10.79.0.0/24 is missing verified IPv4 forwarding/FORWARD/NAT; VPN internet egress is not ready")
+    if port != 443 and port > 0:
+        warnings.append("Nonstandard SSTP TCP port; Windows VPN server address requires hostname:port and restricted networks may block it")
+    endpoint=(domain + (f":{port}" if port and port != 443 else "")) if domain else ""
     return {
-        "installed": installed, "configured": configured, "service_active": active,
+        "endpoint":endpoint, "installed": installed, "configured": configured, "service_active": active,
         "listener": owned, "tcp_443_occupied": occupied, "tls_ready": tls_ready,
         "store_ready": store_ready, "domain": domain, "bind": bind, "port": port,
-        "users": len(list_sstp_users()), "ready": bool(installed and configured and
-        active and owned and tls_ready and store_ready),
+        "users": len(list_sstp_users()), "backend_ready":backend_ready,
+        "network":vpn_net, "network_ready":bool(vpn_net["forwarding_ready"]),
+        "ready":bool(backend_ready and vpn_net["forwarding_ready"]),
         "warnings": warnings,
     }
 
@@ -134,22 +148,26 @@ def _read_users():
     return [line for line in SSTP_CHAP.read_text(encoding="utf-8").splitlines()]
 
 
+def _managed_records():
+    lines=_read_users()
+    for index in range(len(lines)-1):
+        marker=_MARKER.fullmatch(lines[index].strip())
+        values=_MANAGED.fullmatch(lines[index+1].strip())
+        if marker and values and marker[1]==values[1]:
+            yield index,values[1],values[2]
+
+
 def list_sstp_users():
-    users = []
-    for line in _read_users():
-        match = _MANAGED.fullmatch(line.strip())
-        if match and match[1] == match[3]:
-            users.append({"name": match[1]})
-    return sorted(users, key=lambda x: x["name"].lower())
+    return sorted(({"name":name} for _,name,_ in _managed_records()),
+                  key=lambda item:item["name"].lower())
 
 
 def get_sstp_user_credentials(name):
     if not _NAME.fullmatch(str(name)):
         return None
-    for line in _read_users():
-        match = _MANAGED.fullmatch(line.strip())
-        if match and match[1] == name and match[3] == name:
-            return {"name": name, "password": match[2]}
+    for _,user,password in _managed_records():
+        if user==name:
+            return {"name":user,"password":password}
     return None
 
 
@@ -171,7 +189,7 @@ def _atomic_store(text):
 def create_sstp_user(name, password=None):
     status = sstp_status()
     if not status["ready"]:
-        raise protocol_ops.ProtocolError("SSTP unavailable: verified dedicated TCP/443, TLS and accel-ppp are required")
+        raise protocol_ops.ProtocolError("SSTP unavailable: verify dedicated SSTP TCP listener, trusted TLS and accel-ppp readiness")
     name = str(name or "").strip()
     if not _NAME.fullmatch(name):
         raise protocol_ops.ProtocolError("invalid SSTP username")
@@ -182,10 +200,12 @@ def create_sstp_user(name, password=None):
         raise protocol_ops.ProtocolError("invalid SSTP password format")
     # Strictly managed records. Do not modify L2TP/strongSwan authentication.
     before = "\n".join(_read_users()).rstrip()
-    new = f"{name} * {password} * # makia-sstp:{name}"
+    # The accel-ppp split() parser treats a fifth inline token as a speed field.
+    # Put the marker on its own comment line, never after the 4-field auth row.
+    new = f"# makia-sstp:{name}\n{name} * {password} *"
     _atomic_store((before + "\n" if before else "") + new + "\n")
     return {"ok": True, "name": name, "password": password,
-            "server": status["domain"], "port": 443}
+            "server": status["endpoint"], "port": status["port"]}
 
 
 def remove_sstp_user(name):
@@ -193,11 +213,11 @@ def remove_sstp_user(name):
     if not _NAME.fullmatch(name):
         raise protocol_ops.ProtocolError("invalid SSTP username")
     lines = _read_users()
-    kept = [line for line in lines if not (_MANAGED.fullmatch(line.strip()) and
-            line.strip().endswith("# makia-sstp:" + name) and
-            line.strip().split()[0] == name)]
-    if len(lines) == len(kept):
+    indexes={index for index,user,_ in _managed_records() if user==name}
+    if not indexes:
         raise protocol_ops.ProtocolError("SSTP managed user not found")
+    exclude=indexes|{index+1 for index in indexes}
+    kept=[line for index,line in enumerate(lines) if index not in exclude]
     _atomic_store("\n".join(kept).rstrip() + "\n")
     return {"ok": True, "name": name,
             "warning": "Existing active PPP sessions need verified runtime termination; credentials are removed for future authentication."}

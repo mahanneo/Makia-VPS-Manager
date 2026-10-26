@@ -120,7 +120,7 @@
       <div class="guide-method-grid">
         <article><b>Windows 10/11</b><p>Settings → Network &amp; Internet → VPN → Add VPN; Windows built-in, VPN type SSTP; use your private server hostname, username and password.</p></article>
         <article><b>Certificate</b><p>Server name must match a publicly trusted TLS certificate. Do not ignore certificate errors or install unknown root certificates.</p></article>
-        <article><b>Availability</b><p>This protocol requires a dedicated reachable TCP/443 listener, which your administrator must verify before issuing access.</p></article>
+        <article><b>Availability</b><p>This service may use an alternative port. Enter the exact private endpoint including :port (e.g. p.mahinet.shop:14443) in Windows VPN settings. Some networks reject nonstandard ports.</p></article>
       </div>
       <div class="notice warn">SSTP is unavailable until a separate TLS listener is ready. A portal login alone is not proof of a working tunnel.</div>
     </section>

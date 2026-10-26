@@ -424,7 +424,8 @@ def native_vpn_payload(kind,name,server,username,password,psk=""):
         raise AccessPackageError("native VPN profile is missing required connection fields")
     if kind=="sstp":
         lines=[
-            "Makia SSTP",f"Server: {server}","Port: TCP/443",
+            "Makia SSTP",f"Server: {server}",
+            f"Port: TCP/{server.rsplit(':',1)[-1] if server.rsplit(':',1)[-1].isdigit() else '443'}",
             "VPN type: SSTP (Windows built-in)","Authentication: MS-CHAPv2",
             f"Username: {username}",f"Password: {password}",
             "Verify server TLS certificate and hostname; never bypass certificate warnings."

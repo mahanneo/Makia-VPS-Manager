@@ -10,6 +10,7 @@ def test_missing_daemon_remains_blocked(monkeypatch, tmp_path):
     monkeypatch.setattr(sstp_ops, "CONFIG_LOCATIONS", (tmp_path / "missing.conf",))
     monkeypatch.setattr(sstp_ops, "SSTP_CHAP", tmp_path / "missing.secrets")
     monkeypatch.setattr(sstp_ops.shutil, "which", lambda name: None)
+    monkeypatch.setattr(sstp_ops, "ACCEL_BIN", tmp_path / "missing-daemon")
     result = sstp_ops.sstp_status()
     assert not result["ready"]
     assert not result["installed"]
@@ -43,7 +44,7 @@ def test_sstp_account_file_only_written_if_ready(monkeypatch, tmp_path):
     store.write_text("")
     store.chmod(0o600)
     monkeypatch.setattr(sstp_ops, "SSTP_CHAP", store)
-    monkeypatch.setattr(sstp_ops, "sstp_status", lambda: {"ready":True,"domain":"vpn.example.test"})
+    monkeypatch.setattr(sstp_ops, "sstp_status", lambda: {"ready":True,"domain":"vpn.example.test","endpoint":"vpn.example.test:14443","port":14443})
     result=sstp_ops.create_sstp_user("client001", "ValidPassword123")
     assert result["name"]=="client001"
     assert "ValidPassword123" in store.read_text()
@@ -62,7 +63,7 @@ def test_sstp_rejects_injection(monkeypatch, tmp_path):
     store.write_text("")
     store.chmod(0o600)
     monkeypatch.setattr(sstp_ops, "SSTP_CHAP", store)
-    monkeypatch.setattr(sstp_ops, "sstp_status", lambda: {"ready":True,"domain":"vpn.example.test"})
+    monkeypatch.setattr(sstp_ops, "sstp_status", lambda: {"ready":True,"domain":"vpn.example.test","endpoint":"vpn.example.test:14443","port":14443})
     for bad_name in ["root\nadmin", "../root", "a", "username test"]:
         with pytest.raises(protocol_ops.ProtocolError):
             sstp_ops.create_sstp_user(bad_name)

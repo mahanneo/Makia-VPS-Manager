@@ -2438,7 +2438,7 @@ def access_entries(request:Request):
             "enabled":bool(sstp_status.get("ready")),"expired":False,"days_left":None,
             "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
             "can_export":True,"artifact_id":art["id"] if art else None,
-            "legacy":not bool(art),"endpoint":saved_endpoint(art) or sstp_status.get("domain") or "",
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or sstp_status.get("endpoint") or "",
         })
 
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
