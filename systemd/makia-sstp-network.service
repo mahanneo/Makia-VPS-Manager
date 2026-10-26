@@ -1,0 +1,15 @@
+[Unit]
+Description=Makia SSTP client network and NAT
+After=network-online.target makia-sstp-backend.service
+Wants=network-online.target
+Requires=makia-sstp-backend.service
+ConditionPathExists=/etc/accel-ppp/makia-sstp.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/makia-sstp-network
+TimeoutStartSec=20
+
+[Install]
+WantedBy=multi-user.target
