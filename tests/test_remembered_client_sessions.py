@@ -68,8 +68,13 @@ def test_login_forms_make_remembering_opt_in_and_do_not_store_password():
     background=(ROOT/"client/browser-extension/background.js").read_text(encoding="utf-8")
     assert 'remember_device:str=Form("")' in portal
     assert 'remember_device=body.get("remember_device") is True' in portal
-    assert 'name="remember_device" value="1" checked' in web
-    assert 'id="rememberDevice"' in html
+    assert 'name="remember_device" value="1"' in web
+    assert 'name="remember_device" value="1" checked' not in web
+    assert 'id="rememberDevice" type="checkbox"' in html
+    assert 'id="rememberDevice" type="checkbox" checked' not in html
+    assert 'rememberDevice:false,expiresAt:0' in popup
+    assert '$("rememberDevice").checked=false;' in popup
+    assert '$("rememberDevice").checked=state.rememberDevice!==false;' not in popup
     assert "remember_device:rememberDevice" in popup
     assert "clientSessionToken" in popup
     assert "chrome.storage.local.remove([\"token\",\"expiresAt\"])" in popup

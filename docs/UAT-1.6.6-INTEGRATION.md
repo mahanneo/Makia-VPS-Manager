@@ -8,6 +8,9 @@ This integration combines two independent changes on top of the official
 - PR #119: opt-in, revocable 30-day Client Portal / Browser VPN sessions and
   verified browser egress with a fail-closed reconnect path. The default
   Client Portal session remains 12 hours.
+- Integration hardening: removed the pre-checked 30-day login choice in both
+  the web and browser-extension forms. Every new login must explicitly opt in;
+  an old stored preference does not re-check the box automatically.
 
 The installer resolution retains PR #126's pinned script and supported
 `-u nobody` argument. It must not silently regress to the mutable upstream

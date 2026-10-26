@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const EXT_HEADER={"X-Makia-Extension":"1"};
-let state={controller:"",token:"",deviceKey:"",account:null,gateway:null,rememberDevice:true,expiresAt:0,lastUsername:""};
+let state={controller:"",token:"",deviceKey:"",account:null,gateway:null,rememberDevice:false,expiresAt:0,lastUsername:""};
 
 function normalizeController(value){
   const u=new URL(String(value||"").trim());
@@ -186,11 +186,11 @@ async function logout(callServer=true){
   await chrome.storage.local.clear();
   await chrome.storage.session.remove(["clientSessionToken","clientSessionExpiresAt"]);
   await chrome.storage.local.set(keep);
-  state={controller:keep.controller,deviceKey:keep.deviceKey,token:"",account:null,gateway:null,rememberDevice:true,expiresAt:0,lastUsername:""};
+  state={controller:keep.controller,deviceKey:keep.deviceKey,token:"",account:null,gateway:null,rememberDevice:false,expiresAt:0,lastUsername:""};
   $("controller").value=keep.controller||"";
   $("username").value="";
   $("password").value="";
-  $("rememberDevice").checked=true;
+  $("rememberDevice").checked=false;
   await render();
 }
 $("loginBtn").addEventListener("click",login);
@@ -203,7 +203,8 @@ $("logoutBtn").addEventListener("click",()=>logout(true));
   await loadStorage();
   $("controller").value=state.controller||"";
   $("username").value=state.lastUsername||"";
-  $("rememberDevice").checked=state.rememberDevice!==false;
+  // A previous remembered session is not permission to opt in on a new login.
+  $("rememberDevice").checked=false;
   if(state.token) await refresh();
   await render();
 })();
