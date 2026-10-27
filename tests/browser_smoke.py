@@ -400,7 +400,7 @@ def main():
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator(".provision-drawer").wait_for()
             page.screenshot(path='/tmp/makia-new-access.png',full_page=True)
-            assert page.locator(".wizard-protocol").count()==6
+            assert page.locator(".wizard-protocol").count()==9
             assert page.locator('.wizard-protocol[data-kind="outline"]').count()==1
             page.locator('[data-action="wizard-protocol"][data-kind="ssh"]').click()
             page.locator("#wizEndpointMode").select_option("ip")
@@ -479,8 +479,8 @@ def main():
 
             page.evaluate("switchView('guides')")
             page.locator(".guide-admin-grid").wait_for()
-            assert page.locator(".guide-admin-card").count()==4
-            assert page.locator('[data-action="client-guide-copy"]').count()==4
+            assert page.locator(".guide-admin-card").count()==7
+            assert page.locator('[data-action="client-guide-copy"]').count()==7
             page.locator('.pro-sidebar button[data-view="settings"]').click()
             leave_sidebar(page)
             page.locator(".settings-content-v2").wait_for()

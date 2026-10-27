@@ -30,7 +30,7 @@ def main():
     binary=os.environ["XRAY_BIN"]
     version=protocol_ops._run([binary,"version"],timeout=10).splitlines()[0]
     print(version)
-    assert "26.3.27" in version
+    assert "26.10.21" in version
 
     root=Path("/tmp/makia-xray-matrix")
     root.mkdir(parents=True,exist_ok=True)
@@ -42,6 +42,9 @@ def main():
     cover=ThreadingHTTPServer(("127.0.0.1",0),Cover)
     cover_tls=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     cover_tls.load_cert_chain(str(cert_path),str(key_path))
+    # Xray 26.10.21 REALITY requires a nonempty EncryptedExtensions payload
+    # from the TLS cover. Negotiate ALPN as real-world HTTPS targets do.
+    cover_tls.set_alpn_protocols(["h2","http/1.1"])
     cover.socket=cover_tls.wrap_socket(cover.socket,server_side=True)
     cover_thread=threading.Thread(target=cover.serve_forever,daemon=True)
     cover_thread.start()
@@ -54,6 +57,8 @@ def main():
         data=protocol_ops._ensure_xray_stats(
             protocol_ops._xray_default_config(Path("/tmp/makia-xray-config.json"))
         )
+        # Isolate smoke API port from live Xray metrics when run on a host.
+        data["api"]["listen"]="127.0.0.1:20085"
         data["log"]["loglevel"]="debug"
 
         # VLESS + XHTTP + REALITY
@@ -150,7 +155,7 @@ def main():
             "tag":"makia-ci-hysteria2","listen":"127.0.0.1","port":21005,"protocol":"hysteria",
             "settings":{"version":2,"users":[{"auth":"ci-hy2-secret","email":"ci-hy2","level":0}]},
             "streamSettings":{
-                "method":"hysteria","security":"tls",
+                "network":"hysteria","security":"tls",
                 "hysteriaSettings":{"version":2},
                 "tlsSettings":{
                     "serverName":"test.example.com","alpn":["h3"],
@@ -163,14 +168,14 @@ def main():
         data["inbounds"].append({
             "tag":"makia-ci-http","listen":"127.0.0.1","port":21006,"protocol":"http",
             "settings":{"accounts":[{"user":"ci-http","pass":"ci-http-secret"}]},
-            "streamSettings":{"method":"raw","security":"none"},
+            "streamSettings":{"network":"raw","security":"none"},
         })
 
         # SOCKS5 proxy.
         data["inbounds"].append({
             "tag":"makia-ci-socks","listen":"127.0.0.1","port":21007,"protocol":"socks",
             "settings":{"auth":"password","accounts":[{"user":"ci-socks","pass":"ci-socks-secret"}],"udp":True,"ip":"127.0.0.1"},
-            "streamSettings":{"method":"raw","security":"none"},
+            "streamSettings":{"network":"raw","security":"none"},
         })
 
         target=protocol_ops._xray_temp_json_path(Path("/tmp/config.json"),"runtime-matrix")
@@ -184,7 +189,7 @@ def main():
 
         assert reality_meta["public_key"]
         assert reality_meta["short_id"]
-        print("Xray 26.3.27 guided matrix PASS: VLESS RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP; VMess WS/gRPC/XHTTP; Trojan TCP/WS/gRPC; Shadowsocks; Hysteria2; HTTP; SOCKS5")
+        print("Xray 26.10.21 guided matrix PASS: VLESS RAW/WS/gRPC/HTTPUpgrade/XHTTP/mKCP; VMess WS/gRPC/XHTTP; Trojan TCP/WS/gRPC; Shadowsocks; Hysteria2; HTTP; SOCKS5")
     finally:
         cover.shutdown();cover.server_close()
         protocol_ops._xray_materialize_tls=original_tls
@@ -235,7 +240,7 @@ def validate_iran_preset_profiles(binary,root,cert_path,key_path):
             protocol_ops._xray_test_config(binary,target)
         except Exception as exc:
             raise AssertionError(
-                f"Xray 26.3.27 rejected preset {preset['id']}: {exc}"
+                f"Xray 26.10.21 rejected preset {preset['id']}: {exc}"
             ) from exc
         finally:
             target.unlink(missing_ok=True)
@@ -305,7 +310,7 @@ def validate_inbound_builder_profiles(binary,root,cert_path,key_path):
             protocol_ops._xray_test_config(binary,target)
         except Exception as exc:
             raise AssertionError(
-                f"Xray 26.3.27 rejected inbound builder profile {protocol}/{transport}/{security}: {exc}"
+                f"Xray 26.10.21 rejected inbound builder profile {protocol}/{transport}/{security}: {exc}"
             ) from exc
         finally:
             target.unlink(missing_ok=True)
@@ -320,7 +325,7 @@ def validate_guided_matrix(binary,root,cert_path,key_path):
 
     The public compatibility table is intentionally broader than a Cartesian
     product for VLESS: REALITY is only valid with RAW, gRPC and XHTTP. Every
-    pair the UI/backend can actually commit is syntax-checked by Xray 26.3.27.
+    pair the UI/backend can actually commit is syntax-checked by Xray 26.10.21.
     """
     expected={
         "vless":{"transports":["tcp","ws","grpc","httpupgrade","xhttp","kcp"],"security":["reality","tls","none"]},
@@ -356,7 +361,7 @@ def validate_guided_matrix(binary,root,cert_path,key_path):
 
                 if protocol=="hysteria2":
                     stream={
-                        "method":"hysteria","security":"tls",
+                        "network":"hysteria","security":"tls",
                         "hysteriaSettings":{"version":2},
                         "tlsSettings":{
                             "serverName":"test.example.com","alpn":["h3"],
@@ -366,11 +371,11 @@ def validate_guided_matrix(binary,root,cert_path,key_path):
                     inbound_protocol="hysteria"
                     settings={"version":2,"users":[{"auth":"matrix-hy2","email":f"matrix-{port}","level":0}]}
                 elif protocol=="http":
-                    stream={"method":"raw","security":"none"}
+                    stream={"network":"raw","security":"none"}
                     inbound_protocol="http"
                     settings={"accounts":[{"user":"matrix","pass":"matrix-secret"}]}
                 elif protocol=="socks":
-                    stream={"method":"raw","security":"none"}
+                    stream={"network":"raw","security":"none"}
                     inbound_protocol="socks"
                     settings={"auth":"password","accounts":[{"user":"matrix","pass":"matrix-secret"}],"udp":True,"ip":"127.0.0.1"}
                 else:
@@ -386,7 +391,7 @@ def validate_guided_matrix(binary,root,cert_path,key_path):
                         settings={"clients":[client]}
                         if protocol=="vless":
                             settings["decryption"]="none"
-                            if security=="reality" and stream.get("method")=="raw":
+                            if security=="reality" and stream.get("network")=="raw":
                                 client["flow"]="xtls-rprx-vision"
                     elif protocol=="trojan":
                         settings={"clients":[{"password":"matrix-trojan","email":f"matrix-{port}","level":0}]}
@@ -408,7 +413,7 @@ def validate_guided_matrix(binary,root,cert_path,key_path):
                 try:
                     protocol_ops._xray_test_config(binary,target_path)
                 except Exception as exc:
-                    raise AssertionError(f"Xray 26.3.27 rejected guided pair {label}: {exc}") from exc
+                    raise AssertionError(f"Xray 26.10.21 rejected guided pair {label}: {exc}") from exc
                 finally:
                     target_path.unlink(missing_ok=True)
                 checked.append(label)
@@ -420,6 +425,21 @@ def validate_guided_matrix(binary,root,cert_path,key_path):
     print(f"Xray guided compatibility exhaustive PASS: {len(checked)} valid pairs; {len(rejected)} invalid REALITY pairs rejected")
 
 
+def allow_test_loopback_target(binary, server_config, target_port):
+    """Only temporary smoke config: allow an exact loopback test endpoint.
+
+    Current Xray Freedom blocks private address egress by default; do NOT
+    broaden that rule on actual production Xray or service configurations.
+    """
+    data=json.loads(server_config.read_text(encoding="utf-8"))
+    direct=next(item for item in data["outbounds"] if item["protocol"]=="freedom")
+    direct["settings"]={"finalRules":[{
+        "action":"allow","network":"tcp","port":int(target_port),"ip":["127.0.0.1/32"],
+    }]}
+    server_config.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    protocol_ops._xray_test_config(binary,server_config)
+
+
 def verify_simple_connection(binary,server_config,root,client_id,meta):
     class Target(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -429,6 +449,7 @@ def verify_simple_connection(binary,server_config,root,client_id,meta):
         def log_message(self,*args): pass
 
     target=ThreadingHTTPServer(("127.0.0.1",0),Target)
+    allow_test_loopback_target(binary,server_config,target.server_port)
     thread=threading.Thread(target=target.serve_forever,daemon=True)
     thread.start()
     client_config=root/"client.json"
@@ -438,7 +459,7 @@ def verify_simple_connection(binary,server_config,root,client_id,meta):
         "outbounds":[{"protocol":"vless","settings":{"vnext":[{
             "address":"127.0.0.1","port":21008,
             "users":[{"id":client_id,"encryption":"none","flow":"xtls-rprx-vision"}],
-        }]},"streamSettings":{"method":"raw","security":"reality","realitySettings":{
+        }]},"streamSettings":{"network":"raw","security":"reality","realitySettings":{
             "serverName":meta["server_name"],"fingerprint":"chrome",
             "password":meta["public_key"],"shortId":meta["short_id"],
         }}}],
@@ -488,6 +509,7 @@ def verify_manual_none_connection(binary,server_config,root,client_id):
         def log_message(self,*args): pass
 
     target=ThreadingHTTPServer(("127.0.0.1",0),Target)
+    allow_test_loopback_target(binary,server_config,target.server_port)
     thread=threading.Thread(target=target.serve_forever,daemon=True)
     thread.start()
     client_config=root/"client-none.json"
@@ -497,7 +519,7 @@ def verify_manual_none_connection(binary,server_config,root,client_id):
         "outbounds":[{"protocol":"vless","settings":{"vnext":[{
             "address":"127.0.0.1","port":21009,
             "users":[{"id":client_id,"encryption":"none"}],
-        }]},"streamSettings":{"method":"raw","security":"none"}}],
+        }]},"streamSettings":{"network":"raw","security":"none"}}],
     }),encoding="utf-8")
     protocol_ops._xray_test_config(binary,client_config)
     server_log=root/"server-none.log"
