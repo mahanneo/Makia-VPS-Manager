@@ -68,6 +68,9 @@ chap-secrets=$cred
 [ip-pool]
 gw-ip-address=10.79.0.1
 tunnel=10.79.0.2-254,name=sstp
+[dns]
+dns1=1.1.1.1
+dns2=8.8.8.8
 [log]
 level=3
 CONFIG
