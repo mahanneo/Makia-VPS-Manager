@@ -83,3 +83,11 @@ def test_delivery_packages_include_persian_connection_guide(kind,payload):
     assert "connection-guide-fa.txt" in built["files"]
     guide=built["files"]["connection-guide-fa.txt"].decode("utf-8")
     assert "راهنمای اتصال Makia" in guide
+
+
+def test_doctor_version_gate_matches_validated_xray_core():
+    script=Path(__file__).resolve().parents[1]/"scripts"/"doctor.sh"
+    source=script.read_text(encoding="utf-8")
+    assert 'if [[ "$XRAY_VERSION" == *"26.10.21"* ]]' in source
+    assert "CI target: 26.10.21" in source
+    assert "CI target: 26.3.27" not in source

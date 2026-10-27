@@ -1,5 +1,9 @@
 # Makia Release Status
 
+## Active candidate (2026-10-27)
+
+The VPS currently runs candidate **1.6.10-rc1** from branch `feature/sstp-v1.6.10-rc1`; it is not yet an official stable release. Local unit/regression tests passed **552 tests plus 8 subtests**. GitHub CI passed for the previous candidate commit; the exact release commit must pass CI before promotion. Live host smoke reported **33 PASS / 2 WARN / 0 FAIL**. Remaining blockers before stable promotion: Windows built-in SSTP returns RasClient error 720 before IPv4 IPCP completes; Android's tunnel connected but post-DNS-change public egress/DNS evidence is not yet captured; and an encrypted off-host backup plus rollback demonstration must be verified. Do not tag or describe 1.6.10 as stable until these gates pass and the exact release source is promoted to `main`.
+
 ## Current server release: 1.6.5 (2026-10-09)
 
 [Release v1.6.5](https://github.com/mahanneo/Makia-VPS-Manager/releases/tag/v1.6.5) · [Live-tested source commit](https://github.com/mahanneo/Makia-VPS-Manager/commit/9fb4a51a738aa6641c272855115f3f75e65a89e3)
