@@ -417,10 +417,18 @@ def main():
             assert "8.8.8.8" in page.locator(".review-grid").text_content()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            page.evaluate("window.__protocolData.xray.installed=true")
+            # Wizard refreshes live protocol status on every open/select. Mock
+            # the API response, not only the temporary JavaScript global.
+            def mock_xray_ready(route):
+                response=route.fetch()
+                payload=response.json()
+                payload.setdefault("xray",{})["installed"]=True
+                route.fulfill(response=response,json=payload)
+            page.route("**/api/protocols",mock_xray_ready)
             page.locator('.pro-sidebar .pro-create-access').click()
             page.locator('[data-action="wizard-protocol"][data-kind="xray"]').click()
             page.locator(".xray-builder-modal").wait_for()
+            page.unroute("**/api/protocols",mock_xray_ready)
             assert "XRAY INBOUND CENTER" in page.locator(".xray-builder-modal").inner_text()
             assert page.locator("#xbProtocol").count()==1
             assert page.locator("#xbTransport").count()==1
