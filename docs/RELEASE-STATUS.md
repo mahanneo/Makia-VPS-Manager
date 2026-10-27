@@ -2,7 +2,7 @@
 
 ## Active candidate (2026-10-27)
 
-The VPS currently runs candidate **1.6.10-rc1** from branch `feature/sstp-v1.6.10-rc1`; it is not yet an official stable release. Local unit/regression tests passed **552 tests plus 8 subtests**. GitHub CI passed for the previous candidate commit; the exact release commit must pass CI before promotion. Live host smoke reported **33 PASS / 2 WARN / 0 FAIL**. Remaining blockers before stable promotion: Windows built-in SSTP returns RasClient error 720 before IPv4 IPCP completes; Android's tunnel connected but post-DNS-change public egress/DNS evidence is not yet captured; and an encrypted off-host backup plus rollback demonstration must be verified. Do not tag or describe 1.6.10 as stable until these gates pass and the exact release source is promoted to `main`.
+The VPS currently runs candidate **1.6.10-rc1** from branch `feature/sstp-v1.6.10-rc1`; it is not yet an official stable release. Local unit/regression tests passed **552 tests plus 8 subtests**. GitHub CI passed for the previous candidate commit; the exact release commit must pass CI before promotion. After correcting the stale Xray Doctor version gate, live host smoke reported **34 PASS / 1 WARN / 0 FAIL**. Remaining blockers before stable promotion: Windows built-in SSTP returns RasClient error 720 before IPv4 IPCP completes; Android's tunnel connected but post-DNS-change public egress/DNS evidence is not yet captured; and an encrypted off-host backup plus rollback demonstration must be verified. Do not tag or describe 1.6.10 as stable until these gates pass and the exact release source is promoted to `main`.
 
 ## Current server release: 1.6.5 (2026-10-09)
 
