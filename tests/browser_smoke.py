@@ -12,7 +12,8 @@ import pyzipper
 from playwright.sync_api import sync_playwright
 
 DATA=Path(os.environ["MAKIA_DATA_DIR"])
-BASE_URL="http://127.0.0.1:8787"
+BROWSER_PORT=int(os.environ.get("MAKIA_BROWSER_TEST_PORT","8787"))
+BASE_URL=f"http://127.0.0.1:{BROWSER_PORT}"
 PASSWORD=os.environ["MAKIA_INITIAL_ADMIN_PASSWORD"]
 
 
@@ -79,7 +80,7 @@ def main():
     env=os.environ.copy()
     env["MAKIA_CLIENT_PORTAL_ENABLED"]="1"
     proc=subprocess.Popen(
-        [sys.executable,"-m","uvicorn","app.main:app","--host","127.0.0.1","--port","8787"],
+        [sys.executable,"-m","uvicorn","app.main:app","--host","127.0.0.1","--port",str(BROWSER_PORT)],
         stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,env=env,
     )
     try:
