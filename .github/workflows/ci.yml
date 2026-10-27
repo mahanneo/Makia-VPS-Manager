@@ -32,7 +32,16 @@ jobs:
         run: |
           python -c "import app.main; print(app.main.APP_NAME, app.main.VERSION)"
       - name: Unit tests
-        run: pytest -q
+        run: |
+          set +e
+          pytest -q > /tmp/makia-pytest.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/makia-pytest.log
+          if [ "$rc" -ne 0 ]; then
+            python -c 'import re,pathlib; s=pathlib.Path("/tmp/makia-pytest.log").read_text(errors="replace"); names=re.findall(r"(?m)^FAILED (tests/[^ :]+)",s); name=names[0] if names else "tests/unknown.py"; print("::error file="+name.split("::")[0]+",line=1::Unit test failed: "+name)'
+          fi
+          exit "$rc"
       - name: Bash syntax
         run: bash -n install.sh upgrade.sh scripts/*.sh tools/*.sh tests/upgrade_v130_smoke.sh
       - name: Browser extension verified egress and remembered reconnect

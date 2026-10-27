@@ -572,8 +572,9 @@ def main():
             page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
             page.locator(".pro-directory").wait_for()
-            assert page.locator("#accessSegments button").count()==6
+            assert page.locator("#accessSegments button").count()==9
             assert page.locator('#accessSegments [data-filter-value="outline"]').count()==1
+            assert page.locator('#accessSegments [data-filter-value="sstp"]').count()==1
             assert page.locator(".pro-user-row .pro-more").count() >= 1
             assert page.locator(".license-lock-panel").count()==0
             page.locator('.pro-sidebar button[data-view="services"]').click()
@@ -585,14 +586,14 @@ def main():
             page.locator(".protocol-modes-panel").wait_for()
             page.locator('[data-action="change-protocol"]').click()
             page.locator(".change-protocol-modal").wait_for()
-            assert page.locator(".change-protocol-row").count()==7
+            assert page.locator(".change-protocol-row").count()==9
             switcher_text=page.locator(".change-protocol-modal").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in switcher_text
             assert "Backend واقعی Makia" in switcher_text
             page.locator('.change-protocol-modal [data-action="modal-close"]').last.click()
             assert page.locator(".change-protocol-modal").count()==0
-            assert page.locator(".protocol-mode-card").count()==7
+            assert page.locator(".protocol-mode-card").count()==9
             mode_text=page.locator(".protocol-modes-panel").inner_text()
             for label in ["IKEv2","WireGuard","UDP","TCP","Stealth","WStunnel"]:
                 assert label in mode_text
