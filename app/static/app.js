@@ -1177,6 +1177,7 @@ async function protocols(renderToken=window.__viewRenderToken){
     const actions={
       ikev2:'<button class="ghost" data-action="ikev2-setup">Configure</button><button class="soft" data-action="ikev2-user">New user</button><button class="soft" data-action="ikev2-users">Users</button>',
       l2tp:'<button class="ghost" data-action="l2tp-setup">Diagnostics</button><button class="soft" data-action="l2tp-user">New user</button><button class="soft" data-action="l2tp-users">Users</button>',
+      sstp:'<button class="ghost" data-action="sstp-setup">Diagnostics</button><button class="soft" data-action="sstp-user" '+(m.ready?'':'disabled')+'>New user</button><button class="soft" data-action="sstp-users">Users</button>',
       wireguard:'<button class="ghost" data-action="nav" data-view="wireguard">Manage</button>',
       udp:'<button class="ghost" data-action="openvpn-mode" data-proto="udp">Use UDP</button>',
       tcp:'<button class="ghost" data-action="openvpn-tcp-fallback">Enable TCP fallback</button>',
@@ -1222,6 +1223,7 @@ function protocolModeDescription(id){
   return {
     ikev2:'IPsec/IKEv2 با StrongSwan؛ مناسب Clientهای Native سیستم‌عامل.',
     l2tp:'L2TP/IPsec با PSK و حساب PPP مستقل؛ برای دستگاه‌های قدیمی‌تر.',
+    sstp:'SSTP با TLS معتبر، حساب اختصاصی و آدرس TCP/14443؛ امکان اتصال باید تأیید شود.',
     wireguard:'WireGuard سریع با Peer، QR، Handshake و Traffic واقعی.',
     udp:'OpenVPN روی UDP؛ حالت کم‌تاخیر با Port قابل انتخاب.',
     tcp:'OpenVPN روی TCP؛ برای شبکه‌هایی که UDP مشکل دارد.',
@@ -1237,7 +1239,7 @@ async function openChangeProtocol(){
     data=await api('/api/protocols/modes');
     window.__protocolModes=data;
   }
-  const order=['ikev2','l2tp','wireguard','udp','tcp','stealth','wstunnel-openvpn','wstunnel'];
+  const order=['ikev2','l2tp','sstp','wireguard','udp','tcp','stealth','wstunnel-openvpn','wstunnel'];
   const byId=Object.fromEntries((data.modes||[]).map(x=>[x.id,x]));
   const rows=order.map(id=>{
     const m=byId[id]||{id,label:id.toUpperCase(),ports:[],transport:'',ready:false,status:{}};
@@ -1269,6 +1271,7 @@ async function selectProtocolMode(mode){
     return;
   }
   if(mode==='l2tp'){if(current.ready)await openL2TPUsers();else await setupL2TP();return}
+  if(mode==='sstp'){if(current.ready)await openSSTPUsers();else await setupSSTP();return}
   if(mode==='wireguard'){await switchView('wireguard');return}
   if(mode==='udp'){await switchOpenVPNMode('udp');return}
   if(mode==='tcp'){await ensureOpenVPNTCPFallback();return}
