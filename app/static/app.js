@@ -166,39 +166,68 @@ async function ensureSessionContext(force=false){
 async function dashboard(renderToken=window.__viewRenderToken){
   title.textContent='داشبورد';setPageContext('OVERVIEW');
   content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال دریافت وضعیت سرور…</b></div>';
-  const [d,hist,accessRows,stack]=await Promise.all([
-    api('/api/overview'),api('/api/metrics/history?hours=24'),api('/api/access'),api('/api/protocols')
+  const [d,hist,accessRows,stack,mtproxy]=await Promise.all([
+    api('/api/overview'),api('/api/metrics/history?hours=24'),api('/api/access'),api('/api/protocols'),
+    api('/api/network/mtproxy').catch(()=>({configured:false,service_active:false,listener:false,host:'',port:0}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='dashboard')return;
-  const m=d.metrics||{},services=d.services||[],x=stack.xray||{};
+  const m=d.metrics||{},services=d.services||[],x=stack.xray||{},mt=mtproxy||{},tuic=stack.tuic||{},hyst=stack.hysteria2||{};
   const running=services.filter(s=>s.active).length;
   const counts={
     ssh:accessRows.filter(a=>a.kind==='ssh').length,
     xray:accessRows.filter(a=>a.kind==='xray').length,
     wireguard:accessRows.filter(a=>a.kind==='wireguard').length,
-    openvpn:accessRows.filter(a=>a.kind==='openvpn').length
+    openvpn:accessRows.filter(a=>a.kind==='openvpn').length,
+    outline:accessRows.filter(a=>a.kind==='outline').length
   };
   const maxCount=Math.max(1,...Object.values(counts));
   const traffic=Number(m.network?.sent||0)+Number(m.network?.recv||0);
   const activeClients=accessRows.filter(a=>a.status==='active').length;
   const endpoint=window.PANEL_DOMAIN||location.hostname;
+  const inboundCount=(x.inbounds||[]).length;
   const vital=(icon,label,value,unit,detail,percent,footL,footR)=>'<article class="sx-vital"><div class="sx-vital-head"><span>'+icon+'</span><b>'+htmlEsc(label)+'</b></div><div class="sx-vital-value"><b>'+htmlEsc(value)+'</b><span>'+htmlEsc(unit||'')+'</span></div><div class="sx-vital-detail">'+htmlEsc(detail)+'</div><div class="sx-meter"><i style="width:'+pct(percent)+'%"></i></div><div class="sx-vital-foot"><span>'+htmlEsc(footL||'')+'</span><span>'+htmlEsc(footR||'')+'</span></div></article>';
-  const proto=(label,count)=>'<div class="sx-protocol-row"><div><b>'+label+'</b><span>'+count+' client</span></div><em>'+Math.round((count/Math.max(1,accessRows.length))*100)+'%</em><div class="sx-protocol-bar"><i style="width:'+Math.round(count/maxCount*100)+'%"></i></div></div>';
+  const proto=(label,count)=>'<div class="sx-protocol-row"><div><b>'+htmlEsc(label)+'</b><span>'+count+' client</span></div><em>'+Math.round((count/Math.max(1,accessRows.length))*100)+'%</em><div class="sx-protocol-bar"><i style="width:'+Math.round(count/maxCount*100)+'%"></i></div></div>';
+  const runtimeCard=(icon,label,subtitle,state,detail,view)=>{
+    const stateLabel=state==='live'?'LIVE':state==='ready'?'READY · IDLE':'CHECK';
+    return '<button type="button" class="sx-runtime-card '+state+'" data-action="nav" data-view="'+htmlEsc(view)+'"><span class="sx-runtime-glyph">'+htmlEsc(icon)+'</span><span class="sx-runtime-main"><b>'+htmlEsc(label)+'</b><small>'+htmlEsc(subtitle)+'</small><em>'+htmlEsc(detail)+'</em></span><span class="sx-runtime-state"><i></i>'+stateLabel+'</span><span class="sx-runtime-arrow">↗</span></button>';
+  };
+  const xState=x.service_active?'live':'attention';
+  const mtState=mt.service_active&&mt.listener?'live':'attention';
+  const tuicState=tuic.service_active&&tuic.listener?'live':(tuic.installed&&tuic.configured?'ready':'attention');
+  const hystState=hyst.service_active&&hyst.listener?'live':(hyst.installed&&hyst.configured?'ready':'attention');
+  const mtDetail=mt.configured?'TCP / '+String(mt.port||'—'):'Needs setup';
+  const xDetail=inboundCount+' active config inbound'+(inboundCount===1?'':'s');
+  const tuicDetail='UDP / '+String(tuic.port||8445)+(tuic.users_count===0?' · no users yet':'');
+  const hystDetail='UDP / '+String(hyst.port||8446)+(hyst.users_count===0?' · no users yet':'');
   content.innerHTML=[
-    '<div class="sx-page">',
-      '<section class="sx-page-head"><div><h1>داشبورد</h1><p>نمای کلی وضعیت سیستم، Xray، منابع و دسترسی‌ها</p></div><div class="sx-head-actions"><span class="sx-state-pill '+(x.service_active?'':'warn')+'"><i></i>Xray · '+(x.service_active?'Running':'Attention')+(x.version?' · '+htmlEsc(x.version):'')+'</span><button class="primary" data-shell-action="create-access">＋ ساخت کاربر</button></div></section>',
-      '<section class="sx-actionbar"><button class="primary" data-action="service-action" data-service="'+dataEnc('xray')+'" data-service-action="restart">↻ Restart Xray</button><button data-action="nav" data-view="audit">▤ Logs</button><button data-action="xray-advanced">⌘ Config</button><span class="sx-sep"></span><button data-action="nav" data-view="backups">↺ Backup</button><button data-action="nav" data-view="updates">⇧ Update</button><button data-action="self-test">Self-Test</button><button data-action="refresh">Refresh</button><span class="sx-version">Makia v'+htmlEsc(window.MAKIA_VERSION||'')+'</span></section>',
+    '<div class="sx-page sx-future-dashboard">',
+      '<section class="sx-future-hero">',
+        '<div class="sx-future-copy"><span class="sx-future-kicker"><i></i>MAKIA // NEXUS CONTROL</span><h1>مرکز فرماندهی شبکه</h1><p>یک نمای زنده از هسته سرور، Inboundها، پروکسی تلگرام و پروتکل‌های اتصال. وضعیت‌ها از سرویس واقعی خوانده می‌شوند، نه از مقادیر نمایشی.</p>',
+          '<div class="sx-future-badges"><span class="live"><i></i>CORE ONLINE</span><span>BUILD '+htmlEsc(window.MAKIA_VERSION||'')+'</span><span>'+running+'/'+services.length+' SERVICES ACTIVE</span></div>',
+          '<div class="sx-future-actions"><button class="primary" data-shell-action="create-access">＋ ساخت دسترسی</button><button class="ghost" data-action="nav" data-view="inbounds">مشاهده Inboundها <span>↗</span></button><button class="ghost" data-action="nav" data-view="diagnostics">عیب‌یابی سیستم</button></div>',
+        '</div>',
+        '<div class="sx-future-visual"><div class="sx-core-scene"><div class="sx-core-ring ring-a"></div><div class="sx-core-ring ring-b"></div><div class="sx-core-ring ring-c"></div><span class="sx-core-node node-a"></span><span class="sx-core-node node-b"></span><span class="sx-core-node node-c"></span><div class="sx-core-center"><span>MK</span><b>CORE</b><small>SECURE</small></div></div>',
+          '<div class="sx-core-readouts"><div><span>XRAY INBOUNDS</span><b>'+inboundCount+'</b></div><div><span>TELEGRAM MTPROTO</span><b class="'+(mtState==='live'?'good':'warn')+'">'+(mtState==='live'?'LIVE':'CHECK')+'</b></div><div><span>ACTIVE CLIENTS</span><b>'+activeClients+'</b></div></div>',
+        '</div>',
+      '</section>',
+      '<section class="sx-actionbar sx-future-commandbar"><span class="sx-command-label">QUICK COMMANDS</span><button class="primary" data-action="nav" data-view="inbounds">▤ Inbounds</button><button data-action="nav" data-view="telegramproxy">↗ Telegram Proxy</button><button data-action="nav" data-view="backups">↺ Backup / DR</button><button data-action="nav" data-view="updates">⇧ Update</button><button data-action="self-test">◎ Self-Test</button><button data-action="refresh">↻ Refresh</button><span class="sx-version">NODE / '+htmlEsc(endpoint)+'</span></section>',
+      '<section class="sx-runtime-grid">',
+        runtimeCard('X','Xray / V2Ray','CORE · INBOUND ENGINE',xState,xDetail,'inbounds'),
+        runtimeCard('TG','Telegram MTProto','FAKETLS · FRONT DOMAIN',mtState,mtDetail,'telegramproxy'),
+        runtimeCard('Q','TUIC / QUIC','SING-BOX · UDP',tuicState,tuicDetail,'tuic'),
+        runtimeCard('H','Hysteria2 / QUIC','SING-BOX · UDP',hystState,hystDetail,'hysteria2'),
+      '</section>',
       '<section class="sx-vitals">',
-        vital('◴','CPU',Number(m.cpu||0).toFixed(1),'%','مصرف لحظه‌ای پردازنده',Number(m.cpu||0),'24h metrics',''),
-        vital('▥','Memory',Number(m.memory||0).toFixed(1),'%','مصرف حافظه سیستم',Number(m.memory||0),'24h metrics',''),
-        vital('▤','Disk',Number(m.disk||0).toFixed(1),'%','فضای ذخیره‌سازی استفاده‌شده',Number(m.disk||0),'Host storage',''),
-        vital('◉','Services',String(running),'','از '+services.length+' سرویس مدیریت‌شده',services.length?running/services.length*100:0,'Running',running+'/'+services.length),
+        vital('◴','CPU',Number(m.cpu||0).toFixed(1),'%','مصرف لحظه‌ای پردازنده',Number(m.cpu||0),'HOST TELEMETRY',''),
+        vital('▥','Memory',Number(m.memory||0).toFixed(1),'%','مصرف حافظه سیستم',Number(m.memory||0),'RAM USAGE',''),
+        vital('▤','Disk',Number(m.disk||0).toFixed(1),'%','فضای ذخیره‌سازی استفاده‌شده',Number(m.disk||0),'HOST STORAGE',''),
+        vital('◉','Services',String(running),'','از '+services.length+' سرویس مدیریت‌شده',services.length?running/services.length*100:0,'ACTIVE SERVICES',running+'/'+services.length),
       '</section>',
       '<section class="sx-mid-grid">',
-        '<article class="sx-card"><div class="sx-card-head"><div><h3>System history</h3><p>CPU و Memory در ۲۴ ساعت گذشته</p></div><span class="status-chip">'+(hist?.length||0)+' samples</span></div>'+svgHistory(hist)+'</article>',
-        '<article class="sx-card"><div class="sx-card-head"><div><h3>Clients by protocol</h3><p>'+activeClients+' فعال از '+accessRows.length+' پروفایل</p></div><button class="ghost" data-action="nav" data-view="access">Clients</button></div><div class="sx-protocol-list">'+proto('Xray / V2Ray',counts.xray)+proto('SSH / NPV',counts.ssh)+proto('WireGuard',counts.wireguard)+proto('OpenVPN',counts.openvpn)+'</div></article>',
+        '<article class="sx-card"><div class="sx-card-head"><div><span class="sx-section-kicker">SYSTEM TELEMETRY</span><h3>System history</h3><p>CPU و Memory در ۲۴ ساعت گذشته</p></div><span class="status-chip">'+(hist?.length||0)+' samples</span></div>'+svgHistory(hist)+'</article>',
+        '<article class="sx-card"><div class="sx-card-head"><div><span class="sx-section-kicker">ACCESS DISTRIBUTION</span><h3>Clients by protocol</h3><p>'+activeClients+' فعال از '+accessRows.length+' پروفایل</p></div><button class="ghost" data-action="nav" data-view="access">مدیریت کاربران ↗</button></div><div class="sx-protocol-list">'+proto('Xray / V2Ray',counts.xray)+proto('Outline',counts.outline)+proto('SSH / NPV',counts.ssh)+proto('WireGuard',counts.wireguard)+proto('OpenVPN',counts.openvpn)+'</div></article>',
       '</section>',
-      '<section class="sx-system-strip"><div class="sx-system-cell"><span>Uptime</span><b>'+htmlEsc(fmtUp(m.uptime_seconds||0))+'</b></div><div class="sx-system-cell"><span>Traffic recorded</span><b>'+htmlEsc(fmtBytes(traffic))+'</b></div><div class="sx-system-cell"><span>Live sessions</span><b>'+Number(d.online_sessions||0)+'</b></div><div class="sx-system-cell"><span>Panel endpoint</span><b>'+htmlEsc(endpoint)+'</b></div></section>',
+      '<section class="sx-system-strip"><div class="sx-system-cell"><span>UPTIME</span><b>'+htmlEsc(fmtUp(m.uptime_seconds||0))+'</b></div><div class="sx-system-cell"><span>TRAFFIC RECORDED</span><b>'+htmlEsc(fmtBytes(traffic))+'</b></div><div class="sx-system-cell"><span>LIVE SESSIONS</span><b>'+Number(d.online_sessions||0)+'</b></div><div class="sx-system-cell"><span>PANEL ENDPOINT</span><b>'+htmlEsc(endpoint)+'</b></div></section>',
     '</div>'
   ].join('');
 }

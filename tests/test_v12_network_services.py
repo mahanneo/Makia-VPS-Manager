@@ -93,6 +93,34 @@ def test_mtproxy_reconfigure_keeps_its_own_live_port(tmp_path,monkeypatch):
     assert secret in config.read_text(encoding="utf-8")
 
 
+def test_mtproxy_auto_port_does_not_report_false_adjustment(tmp_path,monkeypatch):
+    env=tmp_path/"mtproxy.env"
+    secret="ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d"
+    env.write_text(
+        "MTPROXY_PUBLIC_HOST=proxy.example.com\n"
+        "MTPROXY_PORT=10443\n"
+        "MTPROXY_FRONT_DOMAIN=proxy.example.com\n",
+        encoding="utf-8",
+    )
+    config=tmp_path/"mtproxy.toml"
+    config.write_text(f'secret = "{secret}"\nbind-to = "0.0.0.0:10443"\n',encoding="utf-8")
+    binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
+    monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
+    monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
+    monkeypatch.setattr(network_services,"_active",lambda service:True)
+    monkeypatch.setattr(network_services,"_port_busy",lambda port,proto="tcp",address="0.0.0.0":True)
+    monkeypatch.setattr(network_services,"_run",lambda *a,**k:"")
+    monkeypatch.setattr(network_services.grp,"getgrnam",lambda name:type("G",(),{"gr_gid":0})())
+    monkeypatch.setattr(network_services.os,"chown",lambda *a,**k:None)
+    monkeypatch.setattr(network_services,"_write_mtproxy_config",lambda value,port:config.write_text(f'secret = "{value}"\nbind-to = "0.0.0.0:{port}"\n',encoding="utf-8"))
+    monkeypatch.setattr(network_services,"_ufw_allow",lambda *a,**k:{"active":False})
+    result=network_services.configure_mtproxy("proxy.example.com",0,False)
+    assert result["port"]==10443
+    assert result["port_adjusted"] is False
+    assert result["secret_rotated"] is False
+
+
 def test_mtproxy_requires_domain_for_faketls(tmp_path,monkeypatch):
     binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
     monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
@@ -348,7 +376,10 @@ def test_mtproxy_backend_repairs_config_parent_permissions():
     assert "def _ensure_mtproxy_config_access" in source
     assert "os.chmod(config_dir,0o710)" in source
     assert "os.chown(config_dir,0,gid)" in source
-    assert '"runuser","-u","makia-mtproxy","--","test","-r"' in source
+    assert "def _assert_mtproxy_config_access" in source
+    assert "directory.st_mode & 0o010" in source
+    assert "config.st_mode & 0o040" in source
+    assert '"runuser","-u","makia-mtproxy","--","test","-r"' not in source
 
 
 def test_mtproxy_uses_auto_port_without_preferring_443():

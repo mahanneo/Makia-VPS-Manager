@@ -8,7 +8,7 @@
   <title>{{app_name}}</title>
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css?v={{version}}-cyberpunk-quic2">
+  <link rel="stylesheet" href="/static/app.css?v={{version}}-future-core2">
 </head>
 {% set fa = language != "en" %}
 <body class="makia-pro-shell" data-theme="{{theme}}" data-density="{{density}}">
@@ -91,6 +91,11 @@
         <button class="mobile-menu-toggle" type="button" data-shell-action="sidebar-open" aria-label="{{'باز کردن منو' if fa else 'Open menu'}}">☰</button>
         <button class="global-command" type="button" data-shell-action="command"><span>⌕</span><b>{{'جستجو در پنل...' if fa else 'Search panel...'}}</b><kbd>Ctrl K</kbd></button>
       </div>
+      <div class="pro-topbar-center" aria-label="Makia live control channel">
+        <i class="pro-topbar-beacon"></i>
+        <div><b>NEXUS OPERATIONS GRID</b><small>LIVE TELEMETRY · ENCRYPTED CONTROL CHANNEL</small></div>
+        <span class="pro-topbar-node">NODE / 01</span>
+      </div>
       <div class="pro-topbar-left">
         <span class="top-server-state"><i></i>{{'آنلاین' if fa else 'ONLINE'}}</span>
         <button class="top-refresh" type="button" data-shell-action="refresh" title="{{'بروزرسانی' if fa else 'Refresh'}}">↻</button>
@@ -111,6 +116,6 @@
     window.MAKIA_DENSITY='{{density}}';
     window.MAKIA_USER='{{current_username or "admin"}}';
   </script>
-  <script src="/static/app.js?v={{version}}-cyberpunk-quic2"></script>
+  <script src="/static/app.js?v={{version}}-future-core2"></script>
 </body>
 </html>

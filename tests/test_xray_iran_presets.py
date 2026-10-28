@@ -96,6 +96,10 @@ def test_capabilities_endpoint_avoids_occupied_preset_ports(monkeypatch):
         protocol_ops,"_port_owner_label",
         lambda port,proto:"occupied-test" if int(port) in {443,8443} else "free",
     )
+    # This is a port-allocation unit test: isolate it from real production
+    # listeners and restored Xray Inbounds on the same host.
+    monkeypatch.setattr(protocol_ops,"_listener_present",lambda port,proto="tcp":False)
+    monkeypatch.setattr(protocol_ops,"xray_status",lambda:{"inbounds":[]})
     caps=main_app.xray_inbound_capabilities(None)
     primary=next(p for p in caps["presets"] if p["id"]=="ir-reality-raw-vision")
     assert primary["suggested_port"]==2053

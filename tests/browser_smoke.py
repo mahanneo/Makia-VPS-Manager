@@ -155,10 +155,12 @@ def main():
             page.locator('button[type="submit"]').click()
             page.wait_for_url(BASE_URL+"/")
             assert page.locator('body[data-theme="cyberpunk"]').count()==1
+            page.locator(".sx-future-hero").wait_for()
+            assert page.locator(".sx-runtime-card").count()==4
             page.locator(".sx-vitals").wait_for()
             assert page.locator(".sx-vital").count()==4
             assert page.locator(".sx-system-cell").count()==4
-            assert page.locator(".sx-protocol-row").count()==4
+            assert page.locator(".sx-protocol-row").count()==5
             assert page.locator(".pro-nav").count()==1
             assert page.locator('.pro-brand img[src*="makia-brand.png"]').count()==1
             assert "Inboundها" in page.locator(".pro-sidebar").inner_text()

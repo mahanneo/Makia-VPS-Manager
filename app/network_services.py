@@ -188,6 +188,31 @@ def _ensure_mtproxy_config_access():
     return gid
 
 
+def _assert_mtproxy_config_access(gid=None):
+    """Validate the service account's group-based access without setuid probes.
+
+    Hardened systemd units may intentionally block setuid/setgid transitions,
+    making runuser-based readability tests fail even when the config ACL is
+    correct. The service runs with Group=makia-mtproxy, so validate the actual
+    directory traverse and file read bits instead of attempting a UID switch.
+    """
+    if gid is None:
+        try:
+            gid=grp.getgrnam("makia-mtproxy").gr_gid
+        except KeyError as exc:
+            raise NetworkServiceError("makia-mtproxy system group is missing") from exc
+    try:
+        directory=MTPROXY_CONFIG.parent.stat()
+        config=MTPROXY_CONFIG.stat()
+    except OSError as exc:
+        raise NetworkServiceError(f"MTProxy config permissions cannot be checked: {exc}") from exc
+    if directory.st_gid!=gid or not (directory.st_mode & 0o010):
+        raise NetworkServiceError("MTProxy config directory is not traversable by the service group")
+    if config.st_gid!=gid or not (config.st_mode & 0o040):
+        raise NetworkServiceError("MTProxy config is not readable by the service group")
+    return True
+
+
 def _mtproxy_secret():
     if not MTPROXY_CONFIG.exists():
         return ""
@@ -203,10 +228,12 @@ def _write_mtproxy_config(secret,port):
     if not re.fullmatch(r"ee[0-9a-fA-F]+",str(secret or "")):
         raise NetworkServiceError("invalid mtg FakeTLS secret")
     port=_validate_port(port)
+    public_ipv4=_default_public_ipv4()
     text=(
         f'secret = "{secret}"\n'
-        f'bind-to = "0.0.0.0:{port}"\n\n'
-        '[network]\n'
+        f'bind-to = "0.0.0.0:{port}"\n'
+        +(f'public-ipv4 = "{public_ipv4}"\n' if public_ipv4 else '')
+        +'\n[network]\n'
         'dns = "https://1.1.1.1"\n'
     )
     gid=_ensure_mtproxy_config_access()
@@ -359,7 +386,7 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
         # Telegram/fronting connectivity. The generated TOML is deterministic;
         # the critical host preflight is that the real service account can
         # traverse/read it before systemd is started.
-        _run(["runuser","-u","makia-mtproxy","--","test","-r",str(MTPROXY_CONFIG)],timeout=10)
+        _assert_mtproxy_config_access()
         _run(["systemctl","daemon-reload"],timeout=15)
         _run(["systemctl","enable","--now",MTPROXY_SERVICE],timeout=30)
         _run(["systemctl","restart",MTPROXY_SERVICE],timeout=30)
@@ -397,7 +424,7 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
     result=mtproxy_status(host)
     result["firewall_warning"]=firewall_warning
     result["requested_port"]=requested
-    result["port_adjusted"]=selected!=requested
+    result["port_adjusted"]=bool(requested and selected!=requested)
     result["secret_rotated"]=bool(rotate_secret)
     return result
 

@@ -1,5 +1,18 @@
-## 1.6.10-rc3 — 2026-10-28 (Cyberpunk UI + TUIC/Hysteria2 integration, NOT PRODUCTION)
+## 1.6.10-rc5 — 2026-10-28 (NEXUS control shell + inbound recovery + MTProxy hardening, NOT PRODUCTION)
 
+- Finalized the NEXUS future-control shell with a live runtime grid, Xray Inbound count, Telegram MTProto state, responsive glass/HUD layout and reduced-motion support.
+- Recovered and validated the 10 existing Xray Inbounds from the latest full pre-removal backup. The Xray service is active, the config validates, and all 10 TCP listeners are bound; the emptied config remains backed up for rollback.
+- Fixed MTProxy configuration failures caused by `runuser` being blocked in the hardened panel service. The panel now validates the service-group ACL directly, preserves the existing secret and TCP/10443 endpoint, and records the detected public IPv4 for FakeTLS SNI/DNS checks.
+- MTProxy `mtg doctor` now passes all Telegram DC checks and confirms the fronting-domain IP matches the FakeTLS secret hostname. Independent external TCP probes reached port 10443 from three nodes; Telegram-app end-to-end confirmation is still pending.
+- Isolated the Xray preset port-allocation unit test from live production Inbounds so a real server's occupied ports do not make CI nondeterministic.
+- Rotated the service-worker and asset cache identifiers to v173 / `future-core2`.
+- Release gates still open: Telegram client handshake from a real phone/desktop, external TUIC/Hysteria2 client egress and UDP/8445/8446 provider-firewall access, Windows SSTP error 720, and verified off-host backup/rollback. This is a release candidate, not a stable release.
+
+## 1.6.10-rc4 — 2026-10-28 (NEXUS control shell + QUIC + MTProxy repair, NOT PRODUCTION)
+
+- Rebuilt the admin shell as a future-facing NEXUS control deck: live runtime cards, a system-core visual, glass telemetry panels, a responsive command bar, high-contrast neon focus states, RTL/LTR layouts and reduced-motion support.
+- Replaced the previous MTProxy `runuser` permission probe, which failed under the panel's hardened service sandbox, with an explicit service-group ACL check. Reconfigured MTProxy without rotating its secret or changing its existing TCP/10443 endpoint; local listener and Telegram DC/front-domain doctor checks pass. External provider-firewall reachability remains to be confirmed.
+- Recovered the 10 Xray Inbounds from the latest full pre-removal snapshot after finding the live config had been emptied. Xray Core validation passed, the service restarted cleanly, and all 10 listeners were confirmed active; the emptied config was retained as a timestamped rollback backup.
 - Made Cyberpunk 2077 the default shell theme, with a selectable alternative theme setting, high-contrast neon accents, dark panels, scanline/grid treatment, keyboard focus states and reduced-motion support.
 - Added a managed TUIC / QUIC service using the official sing-box 1.14.4 package, isolated on UDP/8445 without taking over TCP/443, WireGuard UDP/443 or SSTP TCP/14443.
 - Added TUIC user create/list/revoke APIs, TLS/SNI-aware share links, QR and text exports through the existing access-artifact system, certificate-renewal deployment hook, and config backup/validation/rollback.
@@ -9,7 +22,7 @@
 - Fixed `ss -H` UDP-listener parsing and allowed the required AF_NETLINK family in the isolated sing-box units; live smoke tests now create/revoke temporary users and verify both listeners bind locally.
 - Corrected protocol capability reporting for the active AmneziaWG interface and MTProto proxy.
 - Bumped the web asset and service-worker cache revisions to avoid stale UI assets.
-- Release gates still open: external TUIC and Hysteria2 client handshakes/egress, upstream UDP/8445 and UDP/8446 reachability, Windows native SSTP error 720, post-DNS Android egress evidence, and verified off-host backup/rollback. This is a release candidate, not the stable tag.
+- Release gates still open: external MTProxy/TUIC/Hysteria2 reachability, upstream UDP/8445 and UDP/8446 access, TCP/10443 provider-firewall validation, Windows native SSTP error 720, post-DNS Android egress evidence, and verified off-host backup/rollback. This is a release candidate, not the stable tag.
 
 ## 1.6.10-rc1 — 2026-10-26 (SSTP managed staging, NOT PRODUCTION)
 - Add SSTP admin dashboard, diagnostics, user-management API, independent chap-secrets store and confidential text exports.
