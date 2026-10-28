@@ -574,9 +574,11 @@ def main():
             page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
             page.locator(".pro-directory").wait_for()
-            assert page.locator("#accessSegments button").count()==9
+            assert page.locator("#accessSegments button").count()==11
             assert page.locator('#accessSegments [data-filter-value="outline"]').count()==1
             assert page.locator('#accessSegments [data-filter-value="sstp"]').count()==1
+            assert page.locator('#accessSegments [data-filter-value="tuic"]').count()==1
+            assert page.locator('#accessSegments [data-filter-value="hysteria2"]').count()==1
             assert page.locator(".pro-user-row .pro-more").count() >= 1
             assert page.locator(".license-lock-panel").count()==0
             page.locator('.pro-sidebar button[data-view="services"]').click()
