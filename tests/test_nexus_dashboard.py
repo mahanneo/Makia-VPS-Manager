@@ -30,3 +30,11 @@ def test_mtproxy_configure_does_not_require_setuid_inside_hardened_panel_unit():
     assert "def _assert_mtproxy_config_access" in source
     assert "_assert_mtproxy_config_access()" in source
     assert '\"runuser\",\"-u\",\"makia-mtproxy\",\"--\",\"test\",\"-r\"' not in source
+
+
+def test_public_guide_has_one_visual_step_group_per_protocol_and_hysteria2_anchor():
+    guide = (ROOT / "app/templates/client_guide.html").read_text(encoding="utf-8")
+    main = (ROOT / "app/main.py").read_text(encoding="utf-8")
+    assert guide.count('class="visual-steps"') == 7
+    assert 'id="hysteria2"' in guide
+    assert "'hysteria2' if kind=='hysteria2'" in main
