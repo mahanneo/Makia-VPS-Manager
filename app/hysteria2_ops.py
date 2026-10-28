@@ -104,9 +104,10 @@ def _port_listener(port):
         return False
     for line in (result.stdout or "").splitlines():
         fields = line.split()
+        # `ss -H` omits the netid column: state, recv-q, send-q, local, peer, users.
         if len(fields) < 5:
             continue
-        local = fields[4]
+        local = fields[3]
         if not re.search(rf":{int(port)}$", local):
             continue
         if "sing-box" in line:

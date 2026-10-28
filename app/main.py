@@ -78,9 +78,9 @@ async def security_headers(request:Request,call_next):
 def startup():
     init_db()
     client_store.init_client_db()
-    if get_setting("ui_generation","")!="glass-v1":
-        set_setting("theme","glass")
-        set_setting("ui_generation","glass-v1")
+    if get_setting("ui_generation","")!="cyberpunk-v2":
+        set_setting("theme","cyberpunk")
+        set_setting("ui_generation","cyberpunk-v2")
 
 def current_user(request:Request):
     actor=read_session(request.cookies.get(COOKIE_NAME))
@@ -4522,7 +4522,7 @@ def node_heartbeat(payload:NodeHeartbeat,request:Request):
 class GeneralSettings(BaseModel):
     language:str="fa"
     panel_domain:str=""
-    theme:str="glass"
+    theme:str="cyberpunk"
     density:str="comfortable"
 
 @app.get("/api/settings/endpoint/preflight")
@@ -4558,7 +4558,7 @@ def general_settings_get(request:Request):
     return {
         "language":data.get("language","fa"),
         "panel_domain":domain,
-        "theme":data.get("theme","glass"),
+        "theme":data.get("theme","cyberpunk"),
         "density":data.get("density","comfortable"),
         "domain_status":panel_ops.domain_status(domain or None),
     }
@@ -4567,7 +4567,7 @@ def general_settings_get(request:Request):
 def general_settings_put(payload:GeneralSettings,request:Request):
     actor=require_mutation(request)
     language=payload.language if payload.language in {"fa","en"} else "fa"
-    theme=payload.theme if payload.theme in {"glass","midnight","amoled","graphite","cyberpunk"} else "glass"
+    theme=payload.theme if payload.theme in {"glass","midnight","amoled","graphite","cyberpunk"} else "cyberpunk"
     density=payload.density if payload.density in {"comfortable","compact"} else "comfortable"
     domain=(payload.panel_domain or "").strip().lower()
     if domain:

@@ -154,7 +154,7 @@ def main():
             page.locator('input[name="password"]').fill(PASSWORD)
             page.locator('button[type="submit"]').click()
             page.wait_for_url(BASE_URL+"/")
-            assert page.locator('body[data-theme="glass"]').count()==1
+            assert page.locator('body[data-theme="cyberpunk"]').count()==1
             page.locator(".sx-vitals").wait_for()
             assert page.locator(".sx-vital").count()==4
             assert page.locator(".sx-system-cell").count()==4

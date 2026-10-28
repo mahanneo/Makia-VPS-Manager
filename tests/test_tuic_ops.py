@@ -41,6 +41,16 @@ def test_tuic_share_link_encodes_password_and_keeps_tls_parameters():
     assert "zero_rtt" not in query
 
 
+def test_tuic_listener_parser_uses_ss_headerless_local_address(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(tuic_ops.shutil, "which", lambda name: "/usr/bin/ss" if name == "ss" else None)
+    monkeypatch.setattr(tuic_ops.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=0, stdout='UNCONN 0 0 0.0.0.0:8445 0.0.0.0:* users:(("sing-box",pid=123,fd=7))\\n'
+    ))
+    assert tuic_ops._port_listener(8445)
+    assert not tuic_ops._port_listener(8446)
+
+
 def test_tuic_username_validation_rejects_path_and_control_characters():
     assert tuic_ops._validate_name("client_01") == "client_01"
     for name in ("", "a", "two words", "../admin", "x/y", "bad\nname"):

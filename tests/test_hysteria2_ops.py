@@ -38,6 +38,16 @@ def test_hysteria2_share_link_escapes_password_and_keeps_tls_sni():
     assert query["alpn"] == ["h3"]
 
 
+def test_hysteria2_listener_parser_uses_ss_headerless_local_address(monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(hysteria2_ops.shutil, "which", lambda name: "/usr/bin/ss" if name == "ss" else None)
+    monkeypatch.setattr(hysteria2_ops.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=0, stdout='UNCONN 0 0 0.0.0.0:8446 0.0.0.0:* users:(("sing-box",pid=123,fd=7))\\n'
+    ))
+    assert hysteria2_ops._port_listener(8446)
+    assert not hysteria2_ops._port_listener(8445)
+
+
 def test_hysteria2_username_validation_rejects_path_and_control_characters():
     assert hysteria2_ops._validate_name("client_01") == "client_01"
     for name in ("", "a", "two words", "../admin", "x/y", "bad\nname"):
@@ -131,6 +141,7 @@ def test_hysteria2_service_isolated_and_pinned_setup_contract():
     assert "Group=sing-box" in unit
     assert "ProtectSystem=strict" in unit
     assert "NoNewPrivileges=true" in unit
+    assert "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK" in unit
     assert 'PINNED_VERSION="1.14.4"' in setup
     assert 'UDP/$PORT is already bound. No changes made.' in setup
     assert "refusing to overwrite users or runtime state" in setup

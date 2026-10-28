@@ -60,6 +60,7 @@ done
 rollback_setup() {
   local rc=$?
   trap - ERR
+  if (( BASH_SUBSHELL > 0 )); then exit "$rc"; fi
   systemctl disable --now makia-tuic.service 2>/dev/null || true
   systemctl disable --now sing-box.service 2>/dev/null || true
   for f in /etc/apt/keyrings/sagernet.asc /etc/apt/sources.list.d/sagernet.sources /etc/sing-box/makia-tuic.json /etc/sing-box/tls/fullchain.pem /etc/sing-box/tls/privkey.pem /etc/systemd/system/makia-tuic.service /etc/makia-vps-manager/tuic-state.json /etc/letsencrypt/renewal-hooks/deploy/50-makia-tuic-certificate.sh; do
@@ -90,7 +91,7 @@ Signed-By: /etc/apt/keyrings/sagernet.asc
 EOF
 chmod 0644 /etc/apt/sources.list.d/sagernet.sources
 apt-get update
-PKG_VERSION="$(apt-cache madison sing-box | awk -v want="$PINNED_VERSION" '$3 == want || index($3,want "-")==1 {print $3; exit}')"
+PKG_VERSION="$(apt-cache madison sing-box | awk -v want="$PINNED_VERSION" '($3 == want || index($3,want "-")==1) && !found {version=$3; found=1} END {if (found) print version}')"
 [[ -n "$PKG_VERSION" ]] || {
   echo "Pinned sing-box $PINNED_VERSION is not present in the signed official repository; refusing an unpinned install." >&2
   apt-cache madison sing-box >&2 || true
@@ -102,7 +103,7 @@ systemctl disable --now sing-box.service 2>/dev/null || true
 if systemctl is-active --quiet sing-box.service 2>/dev/null; then echo "Generic sing-box.service is still active; aborting." >&2; exit 1; fi
 BINARY="$(command -v sing-box || true)"
 [[ -x "$BINARY" ]] || { echo "sing-box binary missing after package installation." >&2; exit 1; }
-ACTUAL_VERSION="$("$BINARY" version | head -n1)"
+ACTUAL_VERSION="$("$BINARY" version | sed -n '1p')"
 [[ "$ACTUAL_VERSION" == *"$PINNED_VERSION"* ]] || { echo "Installed version does not match pin: $ACTUAL_VERSION" >&2; exit 1; }
 
 if ! getent group sing-box >/dev/null; then groupadd --system sing-box; fi

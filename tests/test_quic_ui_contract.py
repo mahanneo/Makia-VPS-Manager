@@ -9,6 +9,9 @@ MAIN = (ROOT / "app/main.py").read_text(encoding="utf-8")
 
 def test_cyberpunk_theme_is_selectable_and_scoped():
     assert 'value="cyberpunk"' in JS
+    assert 'get_setting("ui_generation","")!="cyberpunk-v2"' in MAIN
+    assert 'set_setting("theme","cyberpunk")' in MAIN
+    assert 'theme:str="cyberpunk"' in MAIN
     assert 'body[data-theme="cyberpunk"]' in CSS
     assert "prefers-reduced-motion:reduce" in CSS
     assert "data-theme=\"{{theme}}\"" in SHELL
@@ -50,6 +53,7 @@ def test_tuic_service_isolated_and_pinned_setup_contract():
     assert "Group=sing-box" in unit
     assert "ProtectSystem=strict" in unit
     assert "NoNewPrivileges=true" in unit
+    assert "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK" in unit
     assert "ExecStartPre=/usr/bin/sing-box check -c /etc/sing-box/makia-tuic.json" in unit
     assert 'PINNED_VERSION="1.14.4"' in setup
     assert 'UDP/$PORT is already bound. No changes made.' in setup
@@ -76,6 +80,7 @@ def test_hysteria2_workspace_and_access_routes_are_managed():
     assert "hysteria2-user-delete" in JS
     assert '\"hysteria2\":\"sing-box\"' in MAIN
     assert 'access_ops.hysteria2_payload' in MAIN
+    assert "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK" in unit
     assert 'ExecStartPre=/usr/bin/sing-box check -c /etc/sing-box/makia-hysteria2.json' in unit
     assert 'PINNED_VERSION="1.14.4"' in setup
     assert 'UDP/$PORT is already bound. No changes made.' in setup

@@ -1,11 +1,12 @@
 ## 1.6.10-rc3 — 2026-10-28 (Cyberpunk UI + TUIC/Hysteria2 integration, NOT PRODUCTION)
 
-- Added a selectable Cyberpunk 2077 control-room theme with high-contrast neon accents, dark panels, scanline/grid treatment, keyboard focus states and reduced-motion support.
+- Made Cyberpunk 2077 the default shell theme, with a selectable alternative theme setting, high-contrast neon accents, dark panels, scanline/grid treatment, keyboard focus states and reduced-motion support.
 - Added a managed TUIC / QUIC service using the official sing-box 1.14.4 package, isolated on UDP/8445 without taking over TCP/443, WireGuard UDP/443 or SSTP TCP/14443.
 - Added TUIC user create/list/revoke APIs, TLS/SNI-aware share links, QR and text exports through the existing access-artifact system, certificate-renewal deployment hook, and config backup/validation/rollback.
 - Added TUIC runtime diagnostics and endpoint-preflight/port-matrix support.
 - Added a separate Hysteria2 / QUIC backend on UDP/8446, per-user password auth, Hysteria2 share links, QR exports, user create/list/revoke APIs and independent systemd/config/backup/rollback lifecycle.
 - Added Hysteria2 diagnostics, endpoint preflight, port-matrix visibility and a dedicated mobile/desktop connection guide.
+- Fixed `ss -H` UDP-listener parsing and allowed the required AF_NETLINK family in the isolated sing-box units; live smoke tests now create/revoke temporary users and verify both listeners bind locally.
 - Corrected protocol capability reporting for the active AmneziaWG interface and MTProto proxy.
 - Bumped the web asset and service-worker cache revisions to avoid stale UI assets.
 - Release gates still open: external TUIC and Hysteria2 client handshakes/egress, upstream UDP/8445 and UDP/8446 reachability, Windows native SSTP error 720, post-DNS Android egress evidence, and verified off-host backup/rollback. This is a release candidate, not the stable tag.
