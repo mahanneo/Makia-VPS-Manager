@@ -5,7 +5,7 @@
 - Fixed MTProxy configuration failures caused by `runuser` being blocked in the hardened panel service. The panel now validates the service-group ACL directly, preserves the existing secret and TCP/10443 endpoint, and records the detected public IPv4 for FakeTLS SNI/DNS checks.
 - MTProxy `mtg doctor` now passes all Telegram DC checks and confirms the fronting-domain IP matches the FakeTLS secret hostname. Independent external TCP probes reached port 10443 from three nodes; Telegram-app end-to-end confirmation is still pending.
 - Isolated the Xray preset port-allocation unit test from live production Inbounds so a real server's occupied ports do not make CI nondeterministic.
-- Rotated the service-worker and asset cache identifiers to v173 / `future-core2`.
+- Rotated the service-worker and asset cache identifiers to v174 / `future-core3`; fixed the mobile RTL shell offset that caused horizontal overflow in the WireGuard workspace.
 - Release gates still open: Telegram client handshake from a real phone/desktop, external TUIC/Hysteria2 client egress and UDP/8445/8446 provider-firewall access, Windows SSTP error 720, and verified off-host backup/rollback. This is a release candidate, not a stable release.
 
 ## 1.6.10-rc4 — 2026-10-28 (NEXUS control shell + QUIC + MTProxy repair, NOT PRODUCTION)

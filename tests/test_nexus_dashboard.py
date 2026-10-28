@@ -12,6 +12,7 @@ def test_nexus_shell_has_live_command_hud_and_accessible_motion_preferences():
     assert "sx-future-hero" in css
     assert "sx-runtime-grid" in css
     assert "@media(prefers-reduced-motion:reduce)" in css
+    assert 'html[dir="rtl"] .pro-main{margin-right:0}' in css
     assert "const inboundCount=(x.inbounds||[]).length" in js
     assert "api('/api/network/mtproxy').catch" in js
     assert "runtimeCard('TG','Telegram MTProto'" in js
