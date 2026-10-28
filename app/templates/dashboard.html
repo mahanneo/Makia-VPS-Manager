@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#0b1220">
+  <meta name="theme-color" content="{{ '#05050a' if theme == 'cyberpunk' else '#0b1220' }}">
   <meta name="application-name" content="Makia VPS Manager">
   <title>{{app_name}}</title>
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css?v={{version}}-native-vpn-workspaces3">
+  <link rel="stylesheet" href="/static/app.css?v={{version}}-cyberpunk-quic2">
 </head>
 {% set fa = language != "en" %}
 <body class="makia-pro-shell" data-theme="{{theme}}" data-density="{{density}}">
@@ -43,6 +43,8 @@
           <button data-view="ikev2"><span class="proto-dot ikev2"></span><b>IKEv2</b></button>
           <button data-view="l2tp"><span class="proto-dot l2tp"></span><b>L2TP/IPsec</b></button>
           <button data-view="sstp"><span class="proto-dot sstp"></span><b>SSTP</b></button>
+          <button data-view="tuic"><span class="proto-dot tuic"></span><b>TUIC / QUIC</b></button>
+          <button data-view="hysteria2"><span class="proto-dot hysteria2"></span><b>Hysteria2 / QUIC</b></button>
           <button data-view="outline"><span class="proto-dot outline"></span><b>Outline</b></button>
           <button data-view="telegramproxy"><span class="proto-dot telegram"></span><b>{{'پروکسی تلگرام' if fa else 'Telegram Proxy'}}</b></button>
           <button data-view="dnscenter"><span class="proto-dot dns"></span><b>{{'DNS برای کاربران' if fa else 'Client DNS'}}</b></button>
@@ -109,6 +111,6 @@
     window.MAKIA_DENSITY='{{density}}';
     window.MAKIA_USER='{{current_username or "admin"}}';
   </script>
-  <script src="/static/app.js?v={{version}}-sstp-uat6"></script>
+  <script src="/static/app.js?v={{version}}-cyberpunk-quic2"></script>
 </body>
 </html>

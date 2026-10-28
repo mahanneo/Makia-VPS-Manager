@@ -30,12 +30,14 @@
         <a href="#ikev2"><span class="guide-mini-icon wg">I</span>IKEv2</a>
         <a href="#l2tp"><span class="guide-mini-icon wg">L</span>L2TP/IPsec</a>
         <a href="#outline"><span class="guide-mini-icon outline">◈</span>Outline</a>
+        <a href="#tuic"><span class="guide-mini-icon outline">Q</span>TUIC / QUIC</a>
+        <a href="#hysteria2"><span class="guide-mini-icon outline">H</span>Hysteria2</a>
         <a href="#ssh"><span class="guide-mini-icon ssh">›_</span>SSH / NPV</a>
       </nav>
     </section>
 
     <section class="client-card guide-section" id="xray">
-      <div class="guide-section-head"><span class="guide-icon xray">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS · HYSTERIA2</div><h2>Xray / V2Ray</h2></div></div>
+      <div class="guide-section-head"><span class="guide-icon xray">X</span><div><div class="eyebrow">VLESS · VMESS · TROJAN · SHADOWSOCKS</div><h2>Xray / V2Ray</h2></div></div>
       <div class="visual-steps">
         <figure><svg viewBox="0 0 240 145"><rect x="65" y="10" width="110" height="125" rx="16"/><rect x="83" y="30" width="74" height="74" rx="8"/><path d="M94 42h18v18H94zm34 0h18v18h-18zM94 76h18v18H94zm28-8h10v10h-10zm16 16h10v10h-10z"/></svg><figcaption><b>{{'۱. دریافت پروفایل' if fa else '1. Get the profile'}}</b><span>{{'QR یا لینک اختصاصی را باز کنید.' if fa else 'Open your private QR or link.'}}</span></figcaption></figure>
         <figure><svg viewBox="0 0 240 145"><rect x="52" y="23" width="136" height="96" rx="12"/><path d="M76 48h88M76 66h66M76 84h78"/><circle cx="164" cy="94" r="12"/><path d="m158 94 5 5 8-11"/></svg><figcaption><b>{{'۲. وارد کردن' if fa else '2. Import'}}</b><span>{{'پروفایل را در کلاینت سازگار وارد کنید.' if fa else 'Import it into a compatible client.'}}</span></figcaption></figure>
@@ -113,6 +115,36 @@
         <article><b>{{'نکته امنیتی' if fa else 'Security note'}}</b><p>{{'Access Key مانند رمز عبور است؛ آن را عمومی نکنید و در صورت لو رفتن از مدیر بخواهید Reissue انجام دهد.' if fa else 'Treat the Access Key like a password. Do not publish it; ask the administrator to reissue it if exposed.'}}</p></article>
       </div>
       <div class="notice">{{'اگر Quota یا Expiry تمام شده باشد، کلید ممکن است توسط سرور غیرفعال شود. برای تمدید با مدیر تماس بگیرید.' if fa else 'When quota or expiry is reached, the key may be disabled by the server. Contact the administrator to renew it.'}}</div>
+    </section>
+
+    <section class="client-card guide-section" id="tuic">
+      <div class="guide-section-head"><span class="guide-icon outline">Q</span><div><div class="eyebrow">TUIC · QUIC · TLS · UDP/8445</div><h2>TUIC / QUIC</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95z"/></svg><figcaption><b>{{'۱. دریافت لینک خصوصی' if fa else '1. Get your private link'}}</b><span>{{'لینک tuic:// یا QR اختصاصی را از صفحه دسترسی بگیرید.' if fa else 'Get your private tuic:// link or QR from the access page.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="52" y="23" width="136" height="96" rx="12"/><path d="M76 48h88M76 66h66M76 84h78"/><path d="M160 47v39m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن در کلاینت' if fa else '2. Import into a compatible client'}}</b><span>{{'لینک را Import کنید یا QR را اسکن کنید.' if fa else 'Import the link or scan the QR code.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/><rect x="78" y="117" width="84" height="9" rx="4"/></svg><figcaption><b>{{'۳. تست اتصال' if fa else '3. Test the connection'}}</b><span>{{'اتصال را فعال کنید و یک صفحه HTTPS را باز کنید.' if fa else 'Connect and open an HTTPS page to verify traffic.'}}</span></figcaption></figure>
+      </div>
+      <div class="guide-method-grid">
+        <article><b>Android / iPhone</b><p>{{'از کلاینتی استفاده کنید که صریحاً TUIC و QUIC را پشتیبانی می‌کند. لینک خصوصی را Import کنید یا QR را اسکن کنید.' if fa else 'Use a client that explicitly supports TUIC and QUIC. Import the private link or scan its QR code.'}}</p></article>
+        <article><b>Windows / macOS / Linux</b><p>{{'کلاینت سازگار TUIC را انتخاب کنید و لینک tuic:// را بدون تغییر SNI، پورت یا TLS وارد کنید.' if fa else 'Choose a TUIC-compatible client and import the tuic:// link without changing SNI, port or TLS settings.'}}</p></article>
+        <article><b>{{'عیب‌یابی' if fa else 'Troubleshooting'}}</b><p>{{'TUIC روی UDP کار می‌کند. اگر شبکه UDP را مسدود کند، از یک پروتکل جایگزین مبتنی بر TCP استفاده کنید.' if fa else 'TUIC runs over UDP. If the network blocks UDP, use an alternative TCP-based protocol.'}}</p></article>
+      </div>
+      <div class="notice">{{'گواهی TLS را غیرفعال یا نادیده نگیرید. لینک TUIC شامل اطلاعات محرمانه اتصال است؛ آن را عمومی منتشر نکنید.' if fa else 'Never disable or ignore TLS certificate validation. The TUIC link contains private access credentials; do not publish it.'}}</div>
+    </section>
+
+    <section class="client-card guide-section" id="hysteria2">
+      <div class="guide-section-head"><span class="guide-icon outline">H</span><div><div class="eyebrow">HYSTERIA2 · QUIC · TLS · UDP/8446</div><h2>Hysteria2</h2></div></div>
+      <div class="visual-steps">
+        <figure><svg viewBox="0 0 240 145"><rect x="68" y="10" width="104" height="125" rx="15"/><path d="M88 36h64v64H88zM95 43h16v16H95zm34 0h16v16h-16zM95 78h16v16H95z"/></svg><figcaption><b>{{'۱. دریافت لینک خصوصی' if fa else '1. Get your private link'}}</b><span>{{'لینک hysteria2:// یا QR را از صفحه دسترسی بگیرید.' if fa else 'Get the private hysteria2:// link or QR from your access page.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><rect x="52" y="23" width="136" height="96" rx="12"/><path d="M76 48h88M76 66h66M76 84h78"/><path d="M160 47v39m-10-10 10 10 10-10"/></svg><figcaption><b>{{'۲. وارد کردن پروفایل' if fa else '2. Import the profile'}}</b><span>{{'لینک را در کلاینت سازگار وارد کنید.' if fa else 'Import the link into a compatible client.'}}</span></figcaption></figure>
+        <figure><svg viewBox="0 0 240 145"><circle cx="120" cy="70" r="38"/><path d="M104 70l11 11 23-28"/><rect x="78" y="117" width="84" height="9" rx="4"/></svg><figcaption><b>{{'۳. تست اتصال' if fa else '3. Test the connection'}}</b><span>{{'یک صفحه HTTPS باز کنید و عبور ترافیک را بررسی کنید.' if fa else 'Open an HTTPS page and verify traffic passes.'}}</span></figcaption></figure>
+      </div>
+      <div class="guide-method-grid">
+        <article><b>Android / iPhone</b><p>{{'از کلاینتی استفاده کنید که صریحاً Hysteria2 را پشتیبانی می‌کند. لینک خصوصی را Import کنید یا QR را اسکن کنید.' if fa else 'Use a client that explicitly supports Hysteria2. Import the private link or scan its QR code.'}}</p></article>
+        <article><b>Windows / macOS / Linux</b><p>{{'کلاینت سازگار Hysteria2 را انتخاب کنید و لینک را بدون تغییر SNI یا تنظیمات TLS وارد کنید.' if fa else 'Choose a Hysteria2-compatible client and import the link without changing SNI or TLS settings.'}}</p></article>
+        <article><b>{{'عیب‌یابی' if fa else 'Troubleshooting'}}</b><p>{{'این پروتکل روی UDP کار می‌کند. اگر شبکه UDP را مسدود کند، یک پروتکل مبتنی بر TCP را امتحان کنید.' if fa else 'This protocol uses UDP. If the network blocks UDP, try a TCP-based protocol.'}}</p></article>
+      </div>
+      <div class="notice">{{'گواهی TLS را غیرفعال نکنید و لینک اختصاصی را عمومی منتشر نکنید.' if fa else 'Do not disable TLS certificate validation or publish your private access link.'}}</div>
     </section>
 
     <section class="client-card guide-section" id="sstp">

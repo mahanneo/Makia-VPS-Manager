@@ -185,6 +185,21 @@ def client_guide_text(kind,protocol=""):
         "====================\n"
         "این فایل فقط راهنمای استفاده است. Credential را در گروه یا کانال عمومی ارسال نکنید.\n\n"
     )
+    if kind=="tuic":
+        return common+(
+            "TUIC / QUIC\n"
+            "1) Import the provided tuic:// share link or scan its QR in a TUIC-capable client.\n"
+            "2) Keep TLS certificate verification enabled and preserve the provided SNI.\n"
+            "3) Zero-RTT is disabled by default to reduce replay risk.\n"
+            "4) TUIC requires UDP reachability; if UDP is blocked, use a TCP-based fallback.\n"
+        )
+    if kind=="hysteria2":
+        return common+(
+            "Hysteria2 / QUIC\n"
+            "1) Import the hysteria2:// share link or scan its QR in a Hysteria2-capable client.\n"
+            "2) Keep TLS certificate verification enabled and preserve the provided SNI.\n"
+            "3) Hysteria2 requires UDP reachability; if UDP is blocked, use a TCP-based fallback.\n"
+        )
     if kind=="xray":
         return common+(
             f"نوع پروفایل: {protocol or 'XRAY'}\n"
@@ -587,6 +602,115 @@ def outline_payload(name,access_url,key_id="",data_limit_bytes=0):
         "share_text":access_url,
         "share_type":"outline",
         "summary":{"protocol":"outline","key_id":str(key_id or ""),"data_limit_bytes":int(data_limit_bytes or 0)},
+    }
+
+
+def describe_tuic_share(link:str)->dict:
+    link=str(link or "").strip()
+    try:
+        parsed=urllib.parse.urlsplit(link)
+        if parsed.scheme.lower()!="tuic":
+            return {"protocol":"tuic"}
+        query={k:(v[-1] if isinstance(v,list) and v else v) for k,v in urllib.parse.parse_qs(parsed.query,keep_blank_values=True).items()}
+        return {
+            "protocol":"tuic","label":urllib.parse.unquote(parsed.fragment or ""),
+            "host":parsed.hostname or "","port":int(parsed.port or 0),
+            "transport":"udp/quic","security":"tls","sni":str(query.get("sni") or ""),
+            "congestion_control":str(query.get("congestion_control") or "bbr"),
+            "zero_rtt_handshake":False,
+        }
+    except Exception:
+        return {"protocol":"tuic"}
+
+
+def tuic_payload(name,share_link,endpoint,port):
+    name=str(name or "tuic").strip()
+    share_link=str(share_link or "").strip()
+    if not share_link.startswith("tuic://"):
+        raise AccessPackageError("TUIC profile must be a tuic:// share link")
+    filename=f"{safe_filename(name)}-tuic.txt"
+    text=(
+        "Makia TUIC Access\n"
+        f"Name: {name}\n"
+        f"Server: {endpoint}\n"
+        f"Port: {int(port)} / UDP\n"
+        "Transport: TUIC / QUIC\n"
+        "TLS: enabled (certificate validation required)\n\n"
+        "Share link:\n"
+        f"{share_link}\n"
+    )
+    guide=(
+        "راهنمای اتصال Makia\n"
+        "====================\n"
+        "۱) از کلاینتی استفاده کنید که TUIC و QUIC را پشتیبانی کند.\n"
+        "۲) Share Link یا QR را Import کنید؛ تنظیمات SNI و TLS را تغییر ندهید.\n"
+        "۳) Zero-RTT غیرفعال است تا خطر بازپخش اتصال کاهش یابد.\n"
+        "۴) اگر UDP شبکه مسدود است، از یک پروتکل TCP جایگزین در پنل استفاده کنید.\n"
+        "۵) این لینک محرمانه است؛ آن را عمومی منتشر نکنید.\n"
+    )
+    files={
+        filename:text.encode("utf-8"),
+        f"{safe_filename(name)}-tuic-qr.svg":make_qr_svg(share_link),
+        "connection-guide-fa.txt":guide.encode("utf-8"),
+    }
+    return {
+        "native_filename":filename,"files":files,
+        "primary_text":share_link,"share_text":share_link,"share_type":"tuic",
+        "summary":{"protocol":"tuic","endpoint":str(endpoint or ""),"port":int(port),"transport":"udp/quic","security":"tls"},
+    }
+
+
+
+def describe_hysteria2_share(link:str)->dict:
+    link=str(link or "").strip()
+    try:
+        parsed=urllib.parse.urlsplit(link)
+        if parsed.scheme.lower() not in {"hysteria2","hy2"}:
+            return {"protocol":"hysteria2"}
+        query={k:(v[-1] if isinstance(v,list) and v else v) for k,v in urllib.parse.parse_qs(parsed.query,keep_blank_values=True).items()}
+        return {
+            "protocol":"hysteria2","label":urllib.parse.unquote(parsed.fragment or ""),
+            "host":parsed.hostname or "","port":int(parsed.port or 0),
+            "transport":"udp/quic","security":"tls","sni":str(query.get("sni") or ""),
+            "alpn":str(query.get("alpn") or "h3"),"obfs":bool(query.get("obfs")),
+        }
+    except Exception:
+        return {"protocol":"hysteria2"}
+
+
+def hysteria2_payload(name,share_link,endpoint,port):
+    name=str(name or "hysteria2").strip()
+    share_link=str(share_link or "").strip()
+    if not share_link.startswith("hysteria2://"):
+        raise AccessPackageError("Hysteria2 profile must be a hysteria2:// share link")
+    filename=f"{safe_filename(name)}-hysteria2.txt"
+    text=(
+        "Makia Hysteria2 Access\n"
+        f"Name: {name}\n"
+        f"Server: {endpoint}\n"
+        f"Port: {int(port)} / UDP\n"
+        "Transport: Hysteria2 / QUIC\n"
+        "TLS: enabled (certificate validation required)\n\n"
+        "Share link:\n"
+        f"{share_link}\n"
+    )
+    guide=(
+        "راهنمای اتصال Makia\n"
+        "====================\n"
+        "۱) از کلاینتی استفاده کنید که Hysteria2 و QUIC را پشتیبانی کند.\n"
+        "۲) لینک hysteria2:// یا QR را Import کنید؛ SNI و TLS را تغییر ندهید.\n"
+        "۳) این پروتکل روی UDP کار می‌کند؛ اگر UDP مسدود است از پروتکل TCP جایگزین استفاده کنید.\n"
+        "۴) لینک اتصال محرمانه است؛ آن را عمومی منتشر نکنید.\n"
+    )
+    files={
+        filename:text.encode("utf-8"),
+        f"{safe_filename(name)}-hysteria2-qr.svg":make_qr_svg(share_link),
+        "connection-guide-fa.txt":guide.encode("utf-8"),
+    }
+    return {
+        "native_filename":filename,"files":files,
+        "primary_text":share_link,"share_text":share_link,"share_type":"hysteria2",
+        "summary":{"protocol":"hysteria2","endpoint":str(endpoint or ""),"port":int(port),"transport":"udp/quic","security":"tls"},
     }
 
 

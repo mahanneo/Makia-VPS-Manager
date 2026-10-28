@@ -90,3 +90,37 @@ def test_invalid_resolved_a_records_fail_closed_without_uncaught_exception(bad_d
     result = evaluate("wireguard", "vpn.example.org", resolved_ipv4=bad_dns)
     assert not result.ok
     assert any("invalid IPv4" in error for error in result.errors)
+
+
+def test_tuic_requires_tls_domain_and_defaults_to_udp_8445():
+    ip = evaluate("tuic", "212.100.171.183")
+    assert not ip.ok
+    assert ip.needs_tls_certificate
+    assert not ip.direct_ip_supported
+    assert any("TLS certificate" in error for error in ip.errors)
+
+    domain = evaluate(
+        "tuic", "p.example.org", server_ipv4="212.100.171.183",
+        resolved_ipv4=["212.100.171.183"], tls_names=["p.example.org"],
+    )
+    assert domain.ok
+    assert domain.port == 8445
+    assert domain.transport == "udp"
+    assert any("UDP/8445" in step for step in domain.next_steps)
+
+
+def test_hysteria2_requires_tls_domain_and_defaults_to_udp_8446():
+    ip = evaluate("hysteria2", "212.100.171.183")
+    assert not ip.ok
+    assert ip.needs_tls_certificate
+    assert not ip.direct_ip_supported
+    assert any("TLS certificate" in error for error in ip.errors)
+
+    domain = evaluate(
+        "hysteria2", "p.example.org", server_ipv4="212.100.171.183",
+        resolved_ipv4=["212.100.171.183"], tls_names=["p.example.org"],
+    )
+    assert domain.ok
+    assert domain.port == 8446
+    assert domain.transport == "udp"
+    assert any("UDP/8446" in step for step in domain.next_steps)

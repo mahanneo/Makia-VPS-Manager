@@ -1759,9 +1759,10 @@ def catalog():
             {"id":"stealth","engine":"stunnel","available":st["installed"],"mode":"guided"},
             {"id":"wstunnel-openvpn","engine":"wstunnel","available":ws["installed"] and ovpn["installed"],"mode":"guided"},
             {"id":"wstunnel","engine":"wstunnel","available":ws["installed"],"mode":"guided"},
-            {"id":"tuic","engine":"external","available":False,"mode":"unavailable"},
-            {"id":"amneziawg","engine":"external","available":False,"mode":"unavailable"},
-            {"id":"mtproto","engine":"external","available":False,"mode":"unavailable"},
+            {"id":"tuic","engine":"sing-box","available":_installed("sing-box") and _active("makia-tuic"),"installed":_installed("sing-box"),"mode":"managed"},
+            {"id":"hysteria2","engine":"sing-box","available":_installed("sing-box") and _active("makia-hysteria2"),"installed":_installed("sing-box"),"mode":"managed"},
+            {"id":"amneziawg","engine":"awg","available":_installed("awg") and _active("awg-quick@awg0"),"installed":_installed("awg"),"mode":"managed"},
+            {"id":"mtproto","engine":"mtg","available":_active("makia-mtproxy"),"installed":os.path.isfile("/opt/makia-mtproxy/mtg") and os.access("/opt/makia-mtproxy/mtg",os.X_OK),"mode":"managed"},
         ]
     }
 
@@ -2462,12 +2463,21 @@ def protocol_endpoint_matrix(endpoint):
     wg=wireguard_endpoint_diagnostics(endpoint) if (WG_DIR/"wg0.conf").exists() else {"ok":False,"runtime_ok":False,"warnings":["WireGuard server not bootstrapped"]}
     ov=openvpn_endpoint_diagnostics(endpoint) if (OVPN_DIR/"server/server.conf").exists() else {"ok":False,"warnings":["OpenVPN server not bootstrapped"]}
     ssh=ssh_status()
+    try:
+        from . import tuic_ops, hysteria2_ops
+        tuic=tuic_ops.status()
+        hysteria2=hysteria2_ops.status()
+    except Exception:
+        tuic={"ready":False,"listener":False,"port":8445,"endpoint":""}
+        hysteria2={"ready":False,"listener":False,"port":8446,"endpoint":""}
     x_ports=[int(i.get("port")) for i in (x.get("inbounds") or []) if i.get("port")]
     rows=[
         {"id":"ssh","label":"SSH","transport":"TCP","ports":[22],"runtime":bool(ssh.get("service_active")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
         {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":x_ports,"runtime":bool(x.get("service_active") and x_ports),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
         {"id":"wireguard","label":"WireGuard","transport":"UDP","ports":[wg.get("port")] if wg.get("port") else [],"runtime":bool(wg.get("runtime_ok")),"endpoint_ok":bool(wg.get("endpoint_ok",False))},
         {"id":"openvpn","label":"OpenVPN","transport":str(ov.get("proto") or "").upper(),"ports":[ov.get("port")] if ov.get("port") else [],"runtime":bool(ov.get("service_active") and ov.get("listener")),"endpoint_ok":bool(ov.get("endpoint_is_ip") or (ov.get("resolved_ipv4") and ov.get("dns_matches_server") is not False))},
+        {"id":"tuic","label":"TUIC / QUIC","transport":"UDP/QUIC","ports":[int(tuic.get("port") or 8445)] if tuic.get("listener") else [],"runtime":bool(tuic.get("ready")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
+        {"id":"hysteria2","label":"Hysteria2 / QUIC","transport":"UDP/QUIC","ports":[int(hysteria2.get("port") or 8446)] if hysteria2.get("listener") else [],"runtime":bool(hysteria2.get("ready")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
     ]
     for row in rows:
         row["ready"]=bool(row["runtime"] and row["endpoint_ok"])
@@ -2475,7 +2485,7 @@ def protocol_endpoint_matrix(endpoint):
         "endpoint":endpoint,"endpoint_is_ip":is_ip,"resolved_ipv4":resolved4,"resolved_ipv6":resolved6,
         "local_ipv4":local4,"dns_matches_server":dns_match,
         "rows":rows,"all_ready":all(r["ready"] for r in rows),
-        "wireguard":wg,"openvpn":ov,
+        "wireguard":wg,"openvpn":ov,"tuic":tuic,"hysteria2":hysteria2,
         "note":"این تست Readiness سمت سرور، DNS و Listener را بررسی می‌کند؛ تأیید نهایی اتصال از اینترنت باید با Client واقعی خارج از VPS انجام شود."
     }
 

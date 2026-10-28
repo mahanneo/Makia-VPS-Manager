@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 DIRECT = {"ssh", "wireguard", "openvpn", "outline", "xray-direct"}
-TLS_NAME_REQUIRED = {"browser-gateway", "wstunnel-wss", "openvpn-wstunnel", "stealth-tls", "ikev2-cert"}
+TLS_NAME_REQUIRED = {"browser-gateway", "wstunnel-wss", "openvpn-wstunnel", "stealth-tls", "ikev2-cert", "tuic", "hysteria2"}
 ALL = DIRECT | TLS_NAME_REQUIRED
 PORTS = {
     "ssh": (22, "tcp"), "wireguard": (51820, "udp"),
@@ -22,6 +22,7 @@ PORTS = {
     "xray-direct": (0, "tcp/udp"), "browser-gateway": (9444, "tcp"),
     "wstunnel-wss": (8444, "tcp"), "openvpn-wstunnel": (443, "tcp"),
     "stealth-tls": (39443, "tcp"), "ikev2-cert": (500, "udp"),
+    "tuic": (8445, "udp"), "hysteria2": (8446, "udp"),
 }
 
 @dataclass
@@ -117,6 +118,10 @@ def evaluate(protocol: str, endpoint: str, port: int | None = None, *,
         warnings.append("Outline ports are assigned by Outline; use the port from its generated access key.")
     if protocol == "ikev2-cert":
         steps.append("Also verify UDP/500 and UDP/4500, matching server certificate identity and client trust.")
+    if protocol == "tuic":
+        steps.append("Verify UDP/8445 on the VPS and upstream firewall, a matching TLS certificate, and a real client handshake; a local listener alone does not prove public reachability.")
+    if protocol == "hysteria2":
+        steps.append("Verify UDP/8446 on the VPS and upstream firewall, a matching TLS certificate, and a real Hysteria2 client handshake; a local listener alone does not prove public reachability.")
     if protocol == "wireguard":
         steps.append("Confirm UDP listener, server forwarding/NAT and client handshake; a generated QR alone is not proof.")
     if protocol == "openvpn":

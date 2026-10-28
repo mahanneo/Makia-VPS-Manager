@@ -1,0 +1,31 @@
+[Unit]
+Description=Makia TUIC / QUIC service (sing-box)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/sing-box/makia-tuic.json
+
+[Service]
+Type=simple
+User=sing-box
+Group=sing-box
+ExecCondition=/usr/bin/python3 -c 'import json,sys; c=json.load(open("/etc/sing-box/makia-tuic.json")); u=next((x.get("users",[]) for x in c.get("inbounds",[]) if x.get("tag")=="makia-tuic-in"),[]); sys.exit(0 if u else 1)'
+ExecStartPre=/usr/bin/sing-box check -c /etc/sing-box/makia-tuic.json
+ExecStart=/usr/bin/sing-box run -c /etc/sing-box/makia-tuic.json
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

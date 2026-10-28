@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, get_profile, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight, sstp_ops
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight, sstp_ops, tuic_ops, hysteria2_ops
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
@@ -155,7 +155,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline","ikev2":"strongswan","l2tp":"xl2tpd","sstp":"accel-ppp"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline","ikev2":"strongswan","l2tp":"xl2tpd","sstp":"accel-ppp","tuic":"sing-box","hysteria2":"sing-box"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -321,9 +321,9 @@ def _portal_device(request:Request):
 
 def _portal_one_tap(kind,share_text,download_url):
     share=str(share_text or "").strip()
-    if kind in {"xray","outline"}:
+    if kind in {"xray","outline","tuic","hysteria2"}:
         scheme=urllib.parse.urlsplit(share).scheme.lower()
-        if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks"}:
+        if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks","tuic"}:
             return share
     if kind in {"wireguard","openvpn","ikev2","l2tp"}:
         return download_url
@@ -331,6 +331,15 @@ def _portal_one_tap(kind,share_text,download_url):
 
 
 def _public_access_state(kind,key):
+    if kind in {"tuic","hysteria2"}:
+        ops=hysteria2_ops if kind=="hysteria2" else tuic_ops
+        try:
+            credentials=ops.get_user_credentials(key)
+            state=ops.status()
+        except Exception:
+            credentials=None;state={"ready":False}
+        active=bool(credentials and state.get("ready"))
+        return {"active":active,"reason":"active" if active else "disabled","usage":None}
     if kind in {"xray","outline"}:
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -964,6 +973,8 @@ def protocols(request:Request):
     except Exception as exc:outline={"installed":False,"container_active":False,"api_ok":False,"error":str(exc)[:300]}
     result["outline"]=outline
     result["sstp"]=sstp_ops.sstp_status()
+    result["tuic"]=tuic_ops.status()
+    result["hysteria2"]=hysteria2_ops.status()
     result.setdefault("capabilities",[]).append({
         "id":"sstp","engine":"accel-ppp","available":bool(result["sstp"]["ready"]),
         "installed":bool(result["sstp"]["installed"]),"mode":"managed"
@@ -1236,6 +1247,124 @@ def sstp_user_delete(name:str,request:Request):
         raise HTTPException(400,str(exc)) from exc
     delete_access_artifact_by_key("sstp",name)
     audit(actor,"sstp_user_delete",name,ip=ip(request))
+    return result
+
+
+class TUICUserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/tuic/diagnostics")
+def tuic_diagnostics(request:Request):
+    require_user(request)
+    return tuic_ops.diagnostics()
+
+
+@app.get("/api/protocols/tuic/users")
+def tuic_users_get(request:Request):
+    require_user(request)
+    return {"users":tuic_ops.list_users()}
+
+
+@app.post("/api/protocols/tuic/users")
+def tuic_user_create(payload:TUICUserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=tuic_ops.create_user(payload.name,payload.password or "")
+        profile=access_ops.tuic_payload(
+            payload.name,result["share_link"],result["server"],result["port"]
+        )
+        artifact_id=artifact_save("tuic",payload.name,payload.name,"tuic",profile,{
+            "endpoint":result["server"],"port":result["port"],"username":payload.name,
+            "transport":"udp/quic","auth":"UUID + password",
+        })
+    except tuic_ops.TUICError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except access_ops.AccessPackageError as exc:
+        try: tuic_ops.remove_user(payload.name)
+        except tuic_ops.TUICError: pass
+        raise HTTPException(500,"TUIC profile export failed") from exc
+    except Exception as exc:
+        try: tuic_ops.remove_user(payload.name)
+        except tuic_ops.TUICError: pass
+        delete_access_artifact_by_key("tuic",payload.name)
+        raise HTTPException(500,"TUIC user provisioning failed; rollback was attempted") from exc
+    audit(actor,"tuic_user_create",payload.name,f"port={result['port']}",ip=ip(request))
+    return {
+        "name":payload.name,"server":result["server"],"port":result["port"],
+        "profile":result["share_link"],"artifact_id":artifact_id,
+    }
+
+
+@app.delete("/api/protocols/tuic/users/{name}")
+def tuic_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=tuic_ops.remove_user(name)
+    except tuic_ops.TUICError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    delete_access_artifact_by_key("tuic",name)
+    audit(actor,"tuic_user_delete",name,ip=ip(request))
+    return result
+
+
+class Hysteria2UserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/hysteria2/diagnostics")
+def hysteria2_diagnostics(request:Request):
+    require_user(request)
+    return hysteria2_ops.diagnostics()
+
+
+@app.get("/api/protocols/hysteria2/users")
+def hysteria2_users_get(request:Request):
+    require_user(request)
+    return {"users":hysteria2_ops.list_users()}
+
+
+@app.post("/api/protocols/hysteria2/users")
+def hysteria2_user_create(payload:Hysteria2UserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=hysteria2_ops.create_user(payload.name,payload.password or "")
+        profile=access_ops.hysteria2_payload(
+            payload.name,result["share_link"],result["server"],result["port"]
+        )
+        artifact_id=artifact_save("hysteria2",payload.name,payload.name,"hysteria2",profile,{
+            "endpoint":result["server"],"port":result["port"],"username":payload.name,
+            "transport":"udp/quic","auth":"password",
+        })
+    except hysteria2_ops.Hysteria2Error as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except access_ops.AccessPackageError as exc:
+        try: hysteria2_ops.remove_user(payload.name)
+        except hysteria2_ops.Hysteria2Error: pass
+        raise HTTPException(500,"Hysteria2 profile export failed") from exc
+    except Exception as exc:
+        try: hysteria2_ops.remove_user(payload.name)
+        except hysteria2_ops.Hysteria2Error: pass
+        delete_access_artifact_by_key("hysteria2",payload.name)
+        raise HTTPException(500,"Hysteria2 user provisioning failed; rollback was attempted") from exc
+    audit(actor,"hysteria2_user_create",payload.name,f"port={result['port']}",ip=ip(request))
+    return {
+        "name":payload.name,"server":result["server"],"port":result["port"],
+        "profile":result["share_link"],"artifact_id":artifact_id,
+    }
+
+
+@app.delete("/api/protocols/hysteria2/users/{name}")
+def hysteria2_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=hysteria2_ops.remove_user(name)
+    except hysteria2_ops.Hysteria2Error as exc:
+        raise HTTPException(409,str(exc)) from exc
+    delete_access_artifact_by_key("hysteria2",name)
+    audit(actor,"hysteria2_user_delete",name,ip=ip(request))
     return result
 
 
@@ -2296,6 +2425,38 @@ def _resolve_access_payload(kind,key,request):
             "endpoint":status.get("domain") or "","username":key,"auth":"MS-CHAPv2 / SSTP",
         })
         return payload,get_access_artifact_by_key("sstp",key)
+    if kind=="tuic":
+        credentials=tuic_ops.get_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"TUIC user not found")
+        status=tuic_ops.status()
+        share=tuic_ops.share_link_for_user(
+            key,credentials,status.get("domain") or "",int(status.get("port") or tuic_ops.DEFAULT_PORT)
+        )
+        payload=access_ops.tuic_payload(
+            key,share,status.get("domain") or "",int(status.get("port") or tuic_ops.DEFAULT_PORT)
+        )
+        artifact_save("tuic",key,key,"tuic",payload,{
+            "endpoint":status.get("domain") or "","port":int(status.get("port") or tuic_ops.DEFAULT_PORT),
+            "username":key,"transport":"udp/quic","auth":"UUID + password",
+        })
+        return payload,get_access_artifact_by_key("tuic",key)
+    if kind=="hysteria2":
+        credentials=hysteria2_ops.get_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"Hysteria2 user not found")
+        status=hysteria2_ops.status()
+        share=hysteria2_ops.share_link_for_user(
+            key,credentials,status.get("domain") or "",int(status.get("port") or hysteria2_ops.DEFAULT_PORT)
+        )
+        payload=access_ops.hysteria2_payload(
+            key,share,status.get("domain") or "",int(status.get("port") or hysteria2_ops.DEFAULT_PORT)
+        )
+        artifact_save("hysteria2",key,key,"hysteria2",payload,{
+            "endpoint":status.get("domain") or "","port":int(status.get("port") or hysteria2_ops.DEFAULT_PORT),
+            "username":key,"transport":"udp/quic","auth":"password",
+        })
+        return payload,get_access_artifact_by_key("hysteria2",key)
     if kind=="ssh":
         raise HTTPException(409,"SSH password was not retained for this legacy account; set a new password once to enable encrypted exports")
     raise HTTPException(404,"access entry not found")
@@ -2351,7 +2512,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn","outline","ikev2","l2tp","sstp"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline","ikev2","l2tp","sstp","tuic","hysteria2"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -2441,6 +2602,32 @@ def access_entries(request:Request):
             "legacy":not bool(art),"endpoint":saved_endpoint(art) or sstp_status.get("endpoint") or "",
         })
 
+    tuic_status=tuic_ops.status()
+    for item in tuic_ops.list_users():
+        key=item["name"]
+        art=artifacts.get(("tuic",key))
+        rows.append({
+            "id":f"tuic:{key}","kind":"tuic","key":key,"name":key,"protocol":"tuic",
+            "status":"active" if tuic_status.get("ready") else "disabled",
+            "enabled":bool(tuic_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or tuic_status.get("endpoint") or "",
+        })
+
+    hysteria2_status=hysteria2_ops.status()
+    for item in hysteria2_ops.list_users():
+        key=item["name"]
+        art=artifacts.get(("hysteria2",key))
+        rows.append({
+            "id":f"hysteria2:{key}","kind":"hysteria2","key":key,"name":key,"protocol":"hysteria2",
+            "status":"active" if hysteria2_status.get("ready") else "disabled",
+            "enabled":bool(hysteria2_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or hysteria2_status.get("endpoint") or "",
+        })
+
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
     wg_runtime={p["public_key"]:p for p in protocol_ops._wireguard_peer_runtime()}
     for peer in protocol_ops.list_wireguard_peers():
@@ -2482,7 +2669,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5,"ikev2":6,"l2tp":7,"sstp":8}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5,"ikev2":6,"l2tp":7,"sstp":8,"tuic":9,"hysteria2":10}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2541,7 +2728,7 @@ def public_access_portal(token:str,request:Request):
     except access_ops.AccessPackageError as exc:
         raise HTTPException(404,str(exc))
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         share_text=""
     else:
         share_text=str(payload.get("share_text") or payload.get("primary_text") or "")
@@ -2561,7 +2748,7 @@ def public_access_portal(token:str,request:Request):
             "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
         })
     qr=""
-    if share_text and kind in {"xray","wireguard","ssh","outline"}:
+    if share_text and kind in {"xray","wireguard","ssh","outline","tuic","hysteria2"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
@@ -2597,7 +2784,7 @@ def public_access_download(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -2629,7 +2816,7 @@ def public_access_file(token:str,filename:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -2660,11 +2847,11 @@ def public_access_qr(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
-    if kind not in {"xray","wireguard","ssh","outline"}:
+    if kind not in {"xray","wireguard","ssh","outline","tuic","hysteria2"}:
         raise HTTPException(404,"QR is not available for this access type")
     share=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not share:
@@ -2680,7 +2867,7 @@ def public_access_qr(token:str,request:Request):
 def access_share(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
     require_local_admin(request)
-    if kind not in {"ssh","xray","wireguard","outline"}:
+    if kind not in {"ssh","xray","wireguard","outline","tuic","hysteria2"}:
         raise HTTPException(404,"share view is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -2691,7 +2878,11 @@ def access_share(kind:str,key:str,request:Request):
     qr=access_ops.make_qr_svg(share)
     summary=dict(payload.get("summary") or {})
     connection={}
-    if kind=="xray":
+    if kind=="tuic":
+        connection=access_ops.describe_tuic_share(share)
+    elif kind=="hysteria2":
+        connection=access_ops.describe_hysteria2_share(share)
+    elif kind=="xray":
         try: xray_row=get_protocol_client(int(key))
         except Exception: xray_row=None
         connection=access_ops.describe_xray_share(share,(xray_row or {}).get("protocol") or summary.get("protocol"))
@@ -2700,7 +2891,7 @@ def access_share(kind:str,key:str,request:Request):
             sid=xray_row["subscription_id"]
             summary["subscription_url"]=f"{public_origin(request)}/sub/{sid}?format={subscription_settings['default_format']}" if subscription_settings["enabled"] else ""
             summary["client_url"]=f"{public_origin(request)}/client/{sid}" if subscription_settings["client_page_enabled"] else ""
-    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'ssh'}"
+    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'tuic' if kind=='tuic' else 'wireguard' if kind=='wireguard' else 'ssh'}"
     subscription=str(summary.get("subscription_url") or "")
     subscription_qr=""
     if subscription:
@@ -2719,7 +2910,7 @@ def access_share(kind:str,key:str,request:Request):
 @app.get("/api/access/{kind}/{key}/qr.svg")
 def access_qr(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
-    if kind not in {"ssh","xray","wireguard","outline"}:
+    if kind not in {"ssh","xray","wireguard","outline","tuic","hysteria2"}:
         raise HTTPException(404,"QR is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -4376,7 +4567,7 @@ def general_settings_get(request:Request):
 def general_settings_put(payload:GeneralSettings,request:Request):
     actor=require_mutation(request)
     language=payload.language if payload.language in {"fa","en"} else "fa"
-    theme=payload.theme if payload.theme in {"glass","midnight","amoled","graphite"} else "glass"
+    theme=payload.theme if payload.theme in {"glass","midnight","amoled","graphite","cyberpunk"} else "glass"
     density=payload.density if payload.density in {"comfortable","compact"} else "comfortable"
     domain=(payload.panel_domain or "").strip().lower()
     if domain:

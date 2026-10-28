@@ -225,7 +225,7 @@ async function access(renderToken=window.__viewRenderToken){
       '<section class="pro-page-head"><div><span class="pro-kicker">'+htmlEsc(tr('مدیریت دسترسی','ACCESS MANAGEMENT'))+'</span><h1>'+htmlEsc(tr('کاربران','Clients'))+'</h1><p>'+htmlEsc(tr('لیست یکپارچه دسترسی‌ها؛ جزئیات و ابزارهای تحویل فقط هنگام نیاز باز می‌شوند.','Unified access list; delivery and management tools open only when needed.'))+'</p></div><div class="pro-head-actions"><button class="ghost" data-action="self-test">'+htmlEsc(tr('بررسی سلامت','Health check'))+'</button><button class="primary" data-action="wizard-open">＋ '+htmlEsc(tr('ساخت دسترسی','Create access'))+'</button></div></section>',
       '<section class="pro-stat-strip"><div><span>'+htmlEsc(tr('کل کاربران','Total clients'))+'</span><b>'+rows.length+'</b></div><div><span>'+htmlEsc(tr('فعال','Active'))+'</span><b>'+active+'</b></div><div><span>'+htmlEsc(tr('نیازمند توجه','Needs attention'))+'</span><b>'+attention+'</b></div><div><span>'+htmlEsc(tr('اتصال زنده','Live connections'))+'</span><b>'+online+'</b></div></section>',
       '<section class="pro-directory">',
-        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button><button data-filter-value="outline">Outline</button><button data-filter-value="ikev2">IKEv2</button><button data-filter-value="l2tp">L2TP/IPsec</button><button data-filter-value="sstp">SSTP</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
+        '<div class="pro-directory-toolbar"><div class="pro-filter-tabs" id="accessSegments"><button class="active" data-filter-value="all">همه</button><button data-filter-value="xray">Xray</button><button data-filter-value="ssh">SSH</button><button data-filter-value="wireguard">WireGuard</button><button data-filter-value="openvpn">OpenVPN</button><button data-filter-value="outline">Outline</button><button data-filter-value="ikev2">IKEv2</button><button data-filter-value="l2tp">L2TP/IPsec</button><button data-filter-value="sstp">SSTP</button><button data-filter-value="tuic">TUIC</button><button data-filter-value="hysteria2">Hysteria2</button></div><div class="pro-search-wrap"><span>⌕</span><input id="accessSearch" placeholder="جستجو نام کاربر یا پروتکل..."></div></div>',
         '<div class="pro-user-table-head"><span>کاربر</span><span>پروتکل</span><span>وضعیت</span><span>مصرف / انقضا</span><span></span></div>',
         '<div id="accessRows" class="pro-user-list"></div>',
       '</section>',
@@ -259,6 +259,7 @@ function accessUsageText(a){
   if(a.kind==='wireguard')return fmtBytes(Number(a.rx||0)+Number(a.tx||0));
   if(a.kind==='ssh')return Number(a.online||0)+' / '+Number(a.connection_limit||1)+' session';
   if(a.kind==='ikev2'||a.kind==='l2tp')return 'Native VPN';
+  if(a.kind==='tuic'||a.kind==='hysteria2')return 'QUIC / UDP';
   return 'PKI';
 }
 function accessExpiryText(a){
@@ -266,6 +267,7 @@ function accessExpiryText(a){
   if(a.kind==='xray'||a.kind==='outline')return a.expire_at?new Date(a.expire_at*1000).toLocaleDateString():'بدون انقضا';
   if(a.kind==='wireguard')return a.address||'Peer';
   if(a.kind==='ikev2'||a.kind==='l2tp')return 'Username / Password';
+  if(a.kind==='tuic'||a.kind==='hysteria2')return 'Password / TLS';
   return 'Certificate';
 }
 function accessCard(a){
@@ -326,7 +328,7 @@ async function openAccessDetail(id){
   const kind=htmlEsc(a.kind),key=dataEnc(a.key),name=dataEnc(a.name);
   const delivery=window.__operatorSettings?.delivery||{};
   const canShare=a.can_export&&(a.kind!=='ssh'||delivery.npv_enabled!==false);
-  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':a.kind==='outline'?'Access Key / QR':'';
+  const shareLabel=a.kind==='ssh'?'NPV / QR':a.kind==='xray'?'QR / Share':a.kind==='wireguard'?'QR / Share':a.kind==='outline'?'Access Key / QR':a.kind==='tuic'?'TUIC / QR':a.kind==='hysteria2'?'Hysteria2 / QR':'';
   let manage='';
   if(a.kind==='ssh'){
     manage='<button class="primary" data-action="manage-access" data-id="'+dataEnc(a.id)+'">'+htmlEsc(tr('ویرایش کاربر','Edit user'))+'</button><button class="ghost" data-action="account-disconnect" data-user="'+key+'">'+htmlEsc(tr('قطع اتصال','Disconnect'))+'</button>';
@@ -346,12 +348,16 @@ async function openAccessDetail(id){
     manage='<button class="primary" data-action="ikev2-users">'+htmlEsc(tr('مدیریت کاربران IKEv2','Manage IKEv2 users'))+'</button>';
   }else if(a.kind==='sstp'){
     manage='<button class="primary" data-action="sstp-users">مدیریت کاربران SSTP</button>';
+  }else if(a.kind==='tuic'){
+    manage='<button class="primary" data-action="nav" data-view="tuic">مدیریت TUIC</button><button class="ghost" data-action="tuic-diagnostics">Diagnostics</button>';
+  }else if(a.kind==='hysteria2'){
+    manage='<button class="primary" data-action="nav" data-view="hysteria2">مدیریت Hysteria2</button><button class="ghost" data-action="hysteria2-diagnostics">Diagnostics</button>';
   }else if(a.kind==='l2tp'){
     manage='<button class="primary" data-action="l2tp-users">'+htmlEsc(tr('مدیریت کاربران L2TP','Manage L2TP users'))+'</button>';
   }else{
     manage='<button class="primary" data-action="nav" data-view="'+kind+'">'+htmlEsc(tr('مدیریت پروتکل','Manage protocol'))+'</button><button class="ghost" data-action="access-diagnostics" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">Diagnostics</button>';
   }
-  const nativeLabel=['openvpn','openvpn_wstunnel'].includes(a.kind)?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':a.kind==='outline'?'Access Key':a.kind==='ikev2'?'IKEv2 credentials':a.kind==='l2tp'?'L2TP/IPsec credentials':a.kind==='sstp'?'SSTP credentials':'Native config';
+  const nativeLabel=['openvpn','openvpn_wstunnel'].includes(a.kind)?'دانلود فایل OVPN':a.kind==='wireguard'?'دانلود Config':a.kind==='outline'?'Access Key':a.kind==='ikev2'?'IKEv2 credentials':a.kind==='l2tp'?'L2TP/IPsec credentials':a.kind==='sstp'?'SSTP credentials':a.kind==='tuic'?'TUIC share link':a.kind==='hysteria2'?'Hysteria2 share link':'Native config';
   const deliveryButtons=a.can_export?[
     canShare&&shareLabel?'<button class="ghost" data-action="access-share" data-kind="'+kind+'" data-key="'+key+'" data-name="'+name+'">'+shareLabel+'</button>':'',
     '<button class="ghost" data-action="native-export" data-kind="'+kind+'" data-key="'+key+'">'+nativeLabel+'</button>',
@@ -1168,7 +1174,7 @@ async function protocols(renderToken=window.__viewRenderToken){
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='protocols')return;
   window.__protocolData=d;window.__protocolClients=clients;window.__protocolModes=modesData;
-  const x=d.xray||{},w=d.wireguard||{},o=d.openvpn||{},s=d.stunnel||{},ssh=d.ssh||{};
+  const x=d.xray||{},w=d.wireguard||{},o=d.openvpn||{},s=d.stunnel||{},ssh=d.ssh||{},tuic=d.tuic||{},hysteria2=d.hysteria2||{},caps=Object.fromEntries((d.capabilities||[]).map(c=>[c.id,c]));
   const protocolModeCards=(modesData.modes||[]).map(m=>{
     const suggestionKey=m.id==='tcp'?'openvpn_tcp':m.id;
     const suggested=Number(modesData.port_plan?.suggested?.[suggestionKey]||0);
@@ -1191,12 +1197,14 @@ async function protocols(renderToken=window.__viewRenderToken){
     {id:'ssh',label:'SSH',transport:'TCP',ports:[22],runtime:Boolean(ssh.service_active)},
     {id:'xray',label:'Xray',transport:'TCP/UDP by inbound',ports:(x.inbounds||[]).map(i=>i.port).filter(Boolean),runtime:Boolean(x.service_active)},
     {id:'wireguard',label:'WireGuard',transport:'UDP',ports:w.port?[w.port]:[],runtime:Boolean(w.service_active)},
-    {id:'openvpn',label:'OpenVPN',transport:String(o.proto||'UDP').toUpperCase(),ports:o.port?[o.port]:[],runtime:Boolean(o.service_active)}
+    {id:'openvpn',label:'OpenVPN',transport:String(o.proto||'UDP').toUpperCase(),ports:o.port?[o.port]:[],runtime:Boolean(o.service_active)},
+    {id:'tuic',label:'TUIC / QUIC',transport:'UDP/QUIC',ports:tuic.listener?[Number(tuic.port||8445)]:[],runtime:Boolean(tuic.ready)},
+    {id:'hysteria2',label:'Hysteria2 / QUIC',transport:'UDP/QUIC',ports:hysteria2.listener?[Number(hysteria2.port||8446)]:[],runtime:Boolean(hysteria2.ready)}
   ];
   const matrixRows=(matrix.rows||[]).length?matrix.rows:fallbackPortRows;
   const portRows=matrixRows.map(row=>{
     const ports=(row.ports||[]).length?(row.ports||[]).join(', '):'—';
-    const view=row.id==='ssh'?'ssh':row.id==='xray'?'xray':row.id==='wireguard'?'wireguard':'openvpn';
+    const view=row.id==='hysteria2'?'hysteria2':row.id==='tuic'?'tuic':row.id==='ssh'?'ssh':row.id==='xray'?'xray':row.id==='wireguard'?'wireguard':'openvpn';
     return '<div class="port-table-row"><div><b>'+htmlEsc(row.label)+'</b><span>'+htmlEsc(row.id==='xray'?'Xray inbounds':'Managed service')+'</span></div><div><b>'+htmlEsc(ports)+'</b></div><div><span class="transport-badge">'+htmlEsc(row.transport||'—')+'</span></div><div><span class="status-chip '+(row.runtime?'ok':'bad')+'">'+(row.runtime?'فعال':'غیرفعال')+'</span></div><div class="toolbar"><button class="ghost" data-action="nav" data-view="'+view+'">مدیریت</button></div></div>';
   }).join('');
   const engineRows=[
@@ -1204,7 +1212,11 @@ async function protocols(renderToken=window.__viewRenderToken){
     ['Xray Core',x.installed,x.service_active,'xray'],
     ['WireGuard',w.installed,w.service_active,'wireguard'],
     ['OpenVPN',o.installed,o.service_active,'openvpn'],
-    ['Stunnel',s.installed,s.service_active,'services']
+    ['Stunnel',s.installed,s.service_active,'services'],
+    ['TUIC / QUIC',tuic.installed,tuic.ready,'tuic'],
+    ['Hysteria2 / QUIC',hysteria2.installed,hysteria2.ready,'hysteria2'],
+    ['AmneziaWG',Boolean(caps.amneziawg&&caps.amneziawg.installed),Boolean(caps.amneziawg&&caps.amneziawg.available),'wireguard'],
+    ['MTProto',Boolean(caps.mtproto&&caps.mtproto.installed),Boolean(caps.mtproto&&caps.mtproto.available),'telegramproxy']
   ].map(e=>'<div class="service-control-row"><div class="service-logo-mini">'+htmlEsc(e[0].slice(0,1))+'</div><div><b>'+htmlEsc(e[0])+'</b><span>'+(e[1]?'نصب شده':'نصب نشده')+'</span></div><span class="status-chip '+(e[2]?'ok':e[1]?'warn':'bad')+'">'+(e[2]?'در حال اجرا':e[1]?'متوقف':'Missing')+'</span><button class="ghost" data-action="nav" data-view="'+e[3]+'">تنظیمات</button></div>').join('');
   content.innerHTML=[
     '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon xray">⌘</span><div><h2>مدیریت پورت‌ها</h2><p>نمایش پورت‌های فعال و کنترل Engineهای شبکه بدون تداخل TCP / UDP</p></div></div><div class="protocol-header-actions"><button class="primary" data-action="change-protocol">Change Protocol</button><button class="ghost" data-action="endpoint-matrix">بررسی Endpoint</button><button class="ghost" data-action="protocol-refresh">بروزرسانی</button></div></section>',
@@ -1897,7 +1909,7 @@ function configModal(titleText,textData,fileName,kind=null,key=null){
   window.__lastConfigFilename=fileName||'config.txt';
   const nativeLabel=kind==='ikev2'||kind==='l2tp'?'دانلود پروفایل نصب آیفون (.mobileconfig)':'Native file';
   const secure=kind&&key?'<button class="primary" data-action="protected-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'" data-name="'+dataEnc(key)+'">Protected ZIP</button><button class="ghost" data-action="native-export" data-kind="'+htmlEsc(kind)+'" data-key="'+dataEnc(key)+'">'+nativeLabel+'</button>':'';
-  const refreshAfter=(kind==='ikev2'&&activeView==='ikev2')?'ikev2':(kind==='l2tp'&&activeView==='l2tp')?'l2tp':'';
+  const refreshAfter=(kind==='ikev2'&&activeView==='ikev2')?'ikev2':(kind==='l2tp'&&activeView==='l2tp')?'l2tp':(kind==='tuic'&&activeView==='tuic')?'tuic':(kind==='hysteria2'&&activeView==='hysteria2')?'hysteria2':'';
   const refreshButton=refreshAfter?'<button class="ghost" data-action="modal-close-refresh" data-view="'+refreshAfter+'">Done · Refresh list</button>':'';
   const deliveryNote=(kind==='ikev2'||kind==='l2tp')?'برای آیفون، به‌جای واردکردن دستی فیلدها، «دانلود پروفایل نصب آیفون» را بزنید و فایل .mobileconfig را باز کنید؛ سپس Settings → Profile Downloaded → Install. فایل شامل اطلاعات محرمانهٔ اتصال است.':'Protected ZIP برای تحویل امن توصیه می‌شود.';
   modalRoot.innerHTML='<div class="modal-backdrop"><div class="modal config-modal"><div class="wizard-head"><div><div class="eyebrow">CLIENT CONFIG</div><h3>'+htmlEsc(titleText)+'</h3></div><button class="close-btn" data-action="modal-close">×</button></div><textarea id="configOutput" class="config-output" readonly></textarea><div class="wizard-note"><b>Delivery</b><span>'+htmlEsc(deliveryNote)+'</span></div><div class="wizard-footer">'+secure+'<button class="ghost" data-action="copy-target" data-target="configOutput">Copy config</button><button class="ghost" data-action="download-text-target" data-target="configOutput">Download raw</button>'+refreshButton+'</div></div></div>';
@@ -2236,7 +2248,7 @@ async function settings(renderToken=window.__viewRenderToken){
       '<section class="settings-section-head"><div><div class="eyebrow">PANEL EXPERIENCE</div><h2>Panel General</h2><p>زبان، Theme، Density و هویت عمومی پنل؛ فارسی RTL و English LTR از Shell مشترک اعمال می‌شوند.</p></div><span class="settings-version">v'+htmlEsc(window.MAKIA_VERSION)+'</span></section>',
       '<div class="settings-card-v2"><div class="settings-card-title"><div><b>Interface</b><span>Language, theme and layout density</span></div></div>',
       '<div class="settings-form-grid"><label>Language<select id="generalLang"><option value="fa" '+(general.language==='fa'?'selected':'')+'>فارسی</option><option value="en" '+(general.language==='en'?'selected':'')+'>English</option></select></label>',
-      '<label>Theme<select id="generalTheme"><option value="glass" '+(general.theme==='glass'?'selected':'')+'>Control Center</option><option value="midnight" '+(general.theme==='midnight'?'selected':'')+'>Midnight</option><option value="amoled" '+(general.theme==='amoled'?'selected':'')+'>AMOLED</option><option value="graphite" '+(general.theme==='graphite'?'selected':'')+'>Graphite</option></select></label>',
+      '<label>Theme<select id="generalTheme"><option value="glass" '+(general.theme==='glass'?'selected':'')+'>Control Center</option><option value="midnight" '+(general.theme==='midnight'?'selected':'')+'>Midnight</option><option value="amoled" '+(general.theme==='amoled'?'selected':'')+'>AMOLED</option><option value="graphite" '+(general.theme==='graphite'?'selected':'')+'>Graphite</option><option value="cyberpunk" '+(general.theme==='cyberpunk'?'selected':'')+'>Cyberpunk 2077</option></select></label>',
       '<label>Density<select id="generalDensity"><option value="comfortable" '+(general.density==='comfortable'?'selected':'')+'>Comfortable</option><option value="compact" '+(general.density==='compact'?'selected':'')+'>Compact</option></select></label>',
       '<label>Panel Domain<input id="generalDomain" value="'+htmlEsc(general.panel_domain||'')+'" placeholder="panel.example.com"></label></div>',
       '<div class="settings-actions"><button class="primary" data-action="settings-general-save">Save panel settings</button></div></div>',
@@ -2252,7 +2264,7 @@ async function settings(renderToken=window.__viewRenderToken){
       '<div class="wizard-note"><b>DNS gate</b><span>Issue / Renew ابتدا DNS را با IPv4 همین VPS تطبیق می‌دهد، Domain را روی Nginx اعمال می‌کند و فقط از Certbot ازپیش‌نصب‌شده استفاده می‌کند؛ نصب Package داخل Web Service انجام نمی‌شود. nginx -t و Listener 443 تأیید می‌شوند و در خطا تنظیم Nginx rollback می‌شود.</span></div>',
       '<div class="settings-actions"><button class="ghost" data-action="settings-domain-apply">Apply domain to Nginx</button><button class="primary" data-action="settings-cert-issue">Issue / Renew HTTPS</button></div></div>',
       '<div class="settings-card-v2"><div class="settings-card-title"><div><b>بررسی IP یا دامنه قبل از ساخت کانفیگ</b><span>Read-only · بدون تغییر سرویس، پورت یا حساب کاربر</span></div></div>',
-      '<div class="settings-form-grid"><label>نوع اتصال<select id="endpointPreviewProtocol"><option value="ssh">SSH</option><option value="wireguard">WireGuard معمولی</option><option value="openvpn">OpenVPN معمولی</option><option value="outline">Outline</option><option value="xray-direct">Xray مستقیم</option><option value="browser-gateway">Browser VPN / HTTPS Proxy</option><option value="openvpn-wstunnel">OpenVPN + WStunnel</option><option value="wstunnel-wss">WStunnel WSS</option><option value="stealth-tls">Stealth TLS</option><option value="ikev2-cert">IKEv2</option></select></label>',
+      '<div class="settings-form-grid"><label>نوع اتصال<select id="endpointPreviewProtocol"><option value="ssh">SSH</option><option value="wireguard">WireGuard معمولی</option><option value="openvpn">OpenVPN معمولی</option><option value="outline">Outline</option><option value="xray-direct">Xray مستقیم</option><option value="browser-gateway">Browser VPN / HTTPS Proxy</option><option value="openvpn-wstunnel">OpenVPN + WStunnel</option><option value="wstunnel-wss">WStunnel WSS</option><option value="stealth-tls">Stealth TLS</option><option value="ikev2-cert">IKEv2</option><option value="tuic">TUIC / QUIC</option><option value="hysteria2">Hysteria2 / QUIC</option></select></label>',
       '<label>آدرس IP عمومی یا دامنه<input id="endpointPreviewHost" placeholder="vpn.example.com یا IP عمومی VPS" autocomplete="off"></label>',
       '<label>پورت (اختیاری؛ خالی = مقدار پیش‌فرض)<input id="endpointPreviewPort" type="number" min="1" max="65535" placeholder="مثلاً 51820"></label>',
       '<label>IP عمومی VPS (برای بررسی مطابقت DNS، اختیاری)<input id="endpointPreviewServerIp" autocomplete="off" placeholder="Public IPv4"></label></div>',
@@ -2547,6 +2559,12 @@ async function handleMakiaAction(btn){
   if(action==='sstp-user'){await createSSTPUser();return}
   if(action==='sstp-users'){await openSSTPUsers();return}
   if(action==='sstp-user-delete'){await revokeSSTPUser(dataDec(btn.dataset.name));return}
+  if(action==='tuic-user-create'){await createTUICUser();return}
+  if(action==='tuic-user-delete'){await revokeTUICUser(dataDec(btn.dataset.name));return}
+  if(action==='tuic-diagnostics'){await openTUICDiagnostics();return}
+  if(action==='hysteria2-user-create'){await createHysteria2User();return}
+  if(action==='hysteria2-user-delete'){await revokeHysteria2User(dataDec(btn.dataset.name));return}
+  if(action==='hysteria2-diagnostics'){await openHysteria2Diagnostics();return}
   if(action==='openvpn-mode'){await switchOpenVPNMode(btn.dataset.proto||'udp');return}
   if(action==='openvpn-tcp-fallback'){await ensureOpenVPNTCPFallback();return}
   if(action==='stealth-setup'){await setupStealth();return}
@@ -3477,16 +3495,136 @@ async function sstpWorkspace(renderToken=window.__viewRenderToken){
   ].join('');
 }
 
-const views={dashboard,clientplatform:clientPlatformCenter,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,ikev2:ikev2Workspace,l2tp:l2tpWorkspace,sstp:sstpWorkspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
+async function tuicWorkspace(renderToken=window.__viewRenderToken){
+  title.textContent='TUIC / QUIC';setPageContext('TUIC · SING-BOX');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی TUIC و پورت UDP…</b></div>';
+  let result,diagnostics;
+  try{
+    [result,diagnostics]=await Promise.all([
+      api('/api/protocols/tuic/users'),api('/api/protocols/tuic/diagnostics')
+    ]);
+  }catch(e){
+    if(renderToken!==window.__viewRenderToken||activeView!=='tuic')return;
+    content.innerHTML='<div class="panel"><div class="notice warn">دریافت وضعیت TUIC ناموفق بود: '+htmlEsc(e.message)+'</div><button class="ghost" data-action="refresh">تلاش دوباره</button></div>';
+    return;
+  }
+  if(renderToken!==window.__viewRenderToken||activeView!=='tuic')return;
+  const s=diagnostics||{},users=result.users||[],ready=Boolean(s.ready),canCreate=Boolean(s.installed&&s.configured&&s.certificate_valid&&(ready||users.length===0));
+  const userRows=users.length?users.map(x=>'<div class="service-row"><div><b>'+htmlEsc(x.name)+'</b><span>TUIC · UUID + password · '+htmlEsc(s.domain||'TLS domain')+'</span></div><div class="toolbar"><button class="ghost" data-action="native-export" data-kind="tuic" data-key="'+dataEnc(x.name)+'">Export</button><button class="danger" data-action="tuic-user-delete" data-name="'+dataEnc(x.name)+'">Revoke</button></div></div>').join(''):'<div class="empty">هنوز کاربر TUIC ساخته نشده است. برای ساخت اولین پروفایل از دکمه بالا استفاده کن.</div>';
+  const warnings=(s.warnings||[]).map(x=>'<div class="diagnostic-hint">• '+htmlEsc(x)+'</div>').join('');
+  content.innerHTML=[
+    '<div class="pro-page">',
+      '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon tuic">TUIC</span><div><span class="pro-kicker">SING-BOX · QUIC TRANSPORT</span><h2>TUIC</h2><p>پروتکل مبتنی بر QUIC با TLS معتبر، احراز هویت اختصاصی و پورت مستقل؛ بدون دست‌کاری Nginx یا WireGuard روی 443.</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="tuic-diagnostics">Diagnostics</button><button class="primary" data-action="tuic-user-create" '+(canCreate?'':'disabled')+'>＋ ساخت کاربر TUIC</button></div></section>',
+      '<section class="protocol-stat-grid"><div class="protocol-stat '+(ready?'green':'red')+'"><span class="icon">◉</span><div><span>Runtime</span><b>'+(ready?'READY':'NOT READY')+'</b></div></div><div class="protocol-stat"><span class="icon">⌁</span><div><span>Endpoint</span><b>'+htmlEsc(s.domain||'—')+'</b></div></div><div class="protocol-stat"><span class="icon">⇅</span><div><span>Listener</span><b>UDP/'+Number(s.port||8445)+'</b></div></div></section>',
+      (warnings?'<section class="panel"><div class="notice '+(ready?'warn':(!users.length&&s.certificate_valid?'warn':'bad'))+'">'+warnings+'</div></section>':''),
+      '<section class="panel"><div class="panel-head"><div><h3>کاربران TUIC</h3><span>'+users.length+' کاربر · Zero-RTT غیرفعال · TLS certificate validation</span></div><div class="toolbar"><button class="ghost" data-action="refresh">Refresh</button><button class="primary" data-action="tuic-user-create" '+(canCreate?'':'disabled')+'>＋ ساخت کاربر</button></div></div><div class="service-control-list">'+userRows+'</div></section>',
+      '<section class="panel"><div class="panel-head"><div><h3>Network contract</h3><span>پورت و مسیر این پروتکل مستقل از سرویس‌های فعلی نگه داشته شده است.</span></div></div><div class="protocol-stat-grid"><div class="protocol-stat"><span class="icon">TLS</span><div><span>Certificate</span><b class="'+(s.certificate_valid?'ok-text':'bad-text')+'">'+(s.certificate_valid?'VALID':'CHECK')+'</b></div></div><div class="protocol-stat"><span class="icon">UDP</span><div><span>Transport</span><b>QUIC / TUIC</b></div></div><div class="protocol-stat"><span class="icon">↻</span><div><span>Replay protection</span><b>Zero-RTT OFF</b></div></div></div><div class="wizard-note"><b>نکته شبکه و اعمال تنظیمات</b><span>UDP/'+Number(s.port||8445)+' باید در فایروال ارائه‌دهنده VPS هم مجاز باشد. این پنل می‌تواند Listener محلی را بررسی کند، اما بازبودن فایروال بیرونی باید از یک کلاینت خارج از سرور تأیید شود. افزودن یا لغو کاربر، sing-box را پس از اعتبارسنجی و Backup کوتاه Restart می‌کند؛ نشست‌های TUIC ممکن است برای چند ثانیه قطع شوند.</span></div></section>',
+    '</div>'
+  ].join('');
+}
+
+async function createTUICUser(){
+  const name=prompt('TUIC username','user001');if(!name)return;
+  try{
+    const r=await api('/api/protocols/tuic/users',{method:'POST',body:JSON.stringify({name:name.trim(),password:''})});
+    configModal('TUIC · '+name.trim(),r.profile,name.trim()+'-tuic.txt','tuic',name.trim());
+    await tuicWorkspace();
+  }catch(e){alert('TUIC: '+e.message)}
+}
+
+async function revokeTUICUser(name){
+  if(!confirm('دسترسی TUIC کاربر '+name+' حذف شود؟ اتصال‌های فعال او نیز باید پس از قطع نشست از سمت کلاینت پایان یابند.'))return;
+  try{
+    await api('/api/protocols/tuic/users/'+encodeURIComponent(name),{method:'DELETE'});
+    toast('TUIC access revoked');await tuicWorkspace();
+  }catch(e){alert('TUIC revoke: '+e.message)}
+}
+
+async function openTUICDiagnostics(){
+  try{
+    const s=await api('/api/protocols/tuic/diagnostics');
+    const warnings=(s.warnings||[]).map(x=>'<div class="diagnostic-hint">• '+htmlEsc(x)+'</div>').join('');
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal diagnostics-modal">',
+        '<div class="wizard-head"><div><div class="eyebrow">TUIC / SING-BOX</div><h3>Runtime diagnostics</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+        '<div class="xray-diagnostic-grid"><div><span>Service</span><b class="'+(s.service_active?'ok-text':'bad-text')+'">'+(s.service_active?'ACTIVE':'DOWN')+'</b></div><div><span>UDP Listener</span><b class="'+(s.listener?'ok-text':'bad-text')+'">'+(s.listener?'UDP/'+Number(s.port):'MISSING')+'</b></div><div><span>TLS</span><b class="'+(s.certificate_valid?'ok-text':'bad-text')+'">'+(s.certificate_valid?'VALID':'INVALID')+'</b></div><div><span>Users</span><b>'+Number(s.users_count||0)+'</b></div></div>',
+        (warnings?'<div class="diagnostic-hints">'+warnings+'</div>':'<div class="wizard-note success-note"><b>Runtime checks passed</b><span>Service, listener and certificate checks passed locally.</span></div>'),
+        '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="primary" data-action="modal-close-refresh" data-view="tuic">Done · Refresh</button></div>',
+      '</div></div>'
+    ].join('');
+  }catch(e){alert('TUIC diagnostics: '+e.message)}
+}
+
+async function hysteria2Workspace(renderToken=window.__viewRenderToken){
+  title.textContent='Hysteria2 / QUIC';setPageContext('Hysteria2 · SING-BOX');
+  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال بررسی Hysteria2 و پورت UDP…</b></div>';
+  let result,diagnostics;
+  try{
+    [result,diagnostics]=await Promise.all([
+      api('/api/protocols/hysteria2/users'),api('/api/protocols/hysteria2/diagnostics')
+    ]);
+  }catch(e){
+    if(renderToken!==window.__viewRenderToken||activeView!=='hysteria2')return;
+    content.innerHTML='<div class="panel"><div class="notice warn">دریافت وضعیت Hysteria2 ناموفق بود: '+htmlEsc(e.message)+'</div><button class="ghost" data-action="refresh">تلاش دوباره</button></div>';
+    return;
+  }
+  if(renderToken!==window.__viewRenderToken||activeView!=='hysteria2')return;
+  const s=diagnostics||{},users=result.users||[],ready=Boolean(s.ready),canCreate=Boolean(s.installed&&s.configured&&s.certificate_valid&&(ready||users.length===0));
+  const userRows=users.length?users.map(x=>'<div class="service-row"><div><b>'+htmlEsc(x.name)+'</b><span>Hysteria2 · password authentication · '+htmlEsc(s.domain||'TLS domain')+'</span></div><div class="toolbar"><button class="ghost" data-action="native-export" data-kind="hysteria2" data-key="'+dataEnc(x.name)+'">Export</button><button class="danger" data-action="hysteria2-user-delete" data-name="'+dataEnc(x.name)+'">Revoke</button></div></div>').join(''):'<div class="empty">هنوز کاربر Hysteria2 ساخته نشده است. برای ساخت اولین پروفایل از دکمه بالا استفاده کن.</div>';
+  const warnings=(s.warnings||[]).map(x=>'<div class="diagnostic-hint">• '+htmlEsc(x)+'</div>').join('');
+  content.innerHTML=[
+    '<div class="pro-page">',
+      '<section class="protocol-page-header"><div class="protocol-page-title"><span class="protocol-page-icon hysteria2">Hysteria2</span><div><span class="pro-kicker">SING-BOX · QUIC TRANSPORT</span><h2>Hysteria2</h2><p>پروتکل مبتنی بر QUIC با TLS معتبر، احراز هویت اختصاصی و پورت مستقل؛ بدون دست‌کاری Nginx یا WireGuard روی 443.</p></div></div><div class="protocol-header-actions"><button class="ghost" data-action="hysteria2-diagnostics">Diagnostics</button><button class="primary" data-action="hysteria2-user-create" '+(canCreate?'':'disabled')+'>＋ ساخت کاربر Hysteria2</button></div></section>',
+      '<section class="protocol-stat-grid"><div class="protocol-stat '+(ready?'green':'red')+'"><span class="icon">◉</span><div><span>Runtime</span><b>'+(ready?'READY':'NOT READY')+'</b></div></div><div class="protocol-stat"><span class="icon">⌁</span><div><span>Endpoint</span><b>'+htmlEsc(s.domain||'—')+'</b></div></div><div class="protocol-stat"><span class="icon">⇅</span><div><span>Listener</span><b>UDP/'+Number(s.port||8446)+'</b></div></div></section>',
+      (warnings?'<section class="panel"><div class="notice '+(ready?'warn':(!users.length&&s.certificate_valid?'warn':'bad'))+'">'+warnings+'</div></section>':''),
+      '<section class="panel"><div class="panel-head"><div><h3>کاربران Hysteria2</h3><span>'+users.length+' کاربر · Password authentication · TLS · TLS certificate validation</span></div><div class="toolbar"><button class="ghost" data-action="refresh">Refresh</button><button class="primary" data-action="hysteria2-user-create" '+(canCreate?'':'disabled')+'>＋ ساخت کاربر</button></div></div><div class="service-control-list">'+userRows+'</div></section>',
+      '<section class="panel"><div class="panel-head"><div><h3>Network contract</h3><span>پورت و مسیر این پروتکل مستقل از سرویس‌های فعلی نگه داشته شده است.</span></div></div><div class="protocol-stat-grid"><div class="protocol-stat"><span class="icon">TLS</span><div><span>Certificate</span><b class="'+(s.certificate_valid?'ok-text':'bad-text')+'">'+(s.certificate_valid?'VALID':'CHECK')+'</b></div></div><div class="protocol-stat"><span class="icon">UDP</span><div><span>Transport</span><b>QUIC / Hysteria2</b></div></div><div class="protocol-stat"><span class="icon">↻</span><div><span>Authentication</span><b>Password + TLS</b></div></div></div><div class="wizard-note"><b>نکته شبکه و اعمال تنظیمات</b><span>UDP/'+Number(s.port||8446)+' باید در فایروال ارائه‌دهنده VPS هم مجاز باشد. این پنل می‌تواند Listener محلی را بررسی کند، اما بازبودن فایروال بیرونی باید از یک کلاینت خارج از سرور تأیید شود. افزودن یا لغو کاربر، sing-box را پس از اعتبارسنجی و Backup کوتاه Restart می‌کند؛ نشست‌های Hysteria2 ممکن است برای چند ثانیه قطع شوند.</span></div></section>',
+    '</div>'
+  ].join('');
+}
+
+async function createHysteria2User(){
+  const name=prompt('Hysteria2 username','user001');if(!name)return;
+  try{
+    const r=await api('/api/protocols/hysteria2/users',{method:'POST',body:JSON.stringify({name:name.trim(),password:''})});
+    configModal('Hysteria2 · '+name.trim(),r.profile,name.trim()+'-hysteria2.txt','hysteria2',name.trim());
+    await hysteria2Workspace();
+  }catch(e){alert('Hysteria2: '+e.message)}
+}
+
+async function revokeHysteria2User(name){
+  if(!confirm('دسترسی Hysteria2 کاربر '+name+' حذف شود؟ اتصال‌های فعال او نیز باید پس از قطع نشست از سمت کلاینت پایان یابند.'))return;
+  try{
+    await api('/api/protocols/hysteria2/users/'+encodeURIComponent(name),{method:'DELETE'});
+    toast('Hysteria2 access revoked');await hysteria2Workspace();
+  }catch(e){alert('Hysteria2 revoke: '+e.message)}
+}
+
+async function openHysteria2Diagnostics(){
+  try{
+    const s=await api('/api/protocols/hysteria2/diagnostics');
+    const warnings=(s.warnings||[]).map(x=>'<div class="diagnostic-hint">• '+htmlEsc(x)+'</div>').join('');
+    modalRoot.innerHTML=[
+      '<div class="modal-backdrop"><div class="modal diagnostics-modal">',
+        '<div class="wizard-head"><div><div class="eyebrow">Hysteria2 / SING-BOX</div><h3>Runtime diagnostics</h3></div><button class="close-btn" data-action="modal-close">×</button></div>',
+        '<div class="xray-diagnostic-grid"><div><span>Service</span><b class="'+(s.service_active?'ok-text':'bad-text')+'">'+(s.service_active?'ACTIVE':'DOWN')+'</b></div><div><span>UDP Listener</span><b class="'+(s.listener?'ok-text':'bad-text')+'">'+(s.listener?'UDP/'+Number(s.port):'MISSING')+'</b></div><div><span>TLS</span><b class="'+(s.certificate_valid?'ok-text':'bad-text')+'">'+(s.certificate_valid?'VALID':'INVALID')+'</b></div><div><span>Users</span><b>'+Number(s.users_count||0)+'</b></div></div>',
+        (warnings?'<div class="diagnostic-hints">'+warnings+'</div>':'<div class="wizard-note success-note"><b>Runtime checks passed</b><span>Service, listener and certificate checks passed locally.</span></div>'),
+        '<div class="wizard-footer"><button class="ghost" data-action="modal-close">Close</button><button class="primary" data-action="modal-close-refresh" data-view="hysteria2">Done · Refresh</button></div>',
+      '</div></div>'
+    ].join('');
+  }catch(e){alert('Hysteria2 diagnostics: '+e.message)}
+}
+
+const views={dashboard,clientplatform:clientPlatformCenter,inbounds:inboundsWorkspace,access,plans:plansCenter,expiry:expiryCenter,ssh:accounts,xray:xrayWorkspace,outline:outlineWorkspace,wireguard,openvpn:openvpnWorkspace,ikev2:ikev2Workspace,l2tp:l2tpWorkspace,sstp:sstpWorkspace,tuic:tuicWorkspace,hysteria2:hysteria2Workspace,accounts,sessions,services,protocols,guides,nodes,security,connectivity:connectivityLab,telegramproxy:telegramProxyCenter,dnscenter:dnsCenter,diagnostics:diagnosticsCenter,operations:operationsCenter,backups,audit:auditView,updates,settings,support:supportCenter};
 window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
-  setPageContext(v==='dashboard'?'OVERVIEW':v==='clientplatform'?'CLIENT PLATFORM':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='ikev2'?'IKEV2 USERS':v==='l2tp'?'L2TP/IPSEC USERS':v==='sstp'?'SSTP USERS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
+  setPageContext(v==='dashboard'?'OVERVIEW':v==='clientplatform'?'CLIENT PLATFORM':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='ikev2'?'IKEV2 USERS':v==='l2tp'?'L2TP/IPSEC USERS':v==='sstp'?'SSTP USERS':v==='tuic'?'TUIC USERS':v==='hysteria2'?'HYSTERIA2 USERS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
     const name=g.dataset.groupRoot;
-    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','ikev2','l2tp','sstp','outline','inbounds','telegramproxy','dnscenter'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics','operations'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
+    const shouldOpen=(name==='protocols'&&['ssh','xray','wireguard','openvpn','ikev2','l2tp','sstp','tuic','hysteria2','outline','inbounds','telegramproxy','dnscenter'].includes(v))||(name==='infra'&&['services','protocols','sessions','nodes','connectivity','diagnostics','operations'].includes(v))||(name==='system'&&['audit','backups','updates'].includes(v));
     if(shouldOpen)g.classList.add('open');
   });
   document.body.classList.remove('menu-open');
