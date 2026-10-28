@@ -94,8 +94,8 @@ def test_update_softfails_only_preexisting_openvpn_listener_gap():
 def test_dashboard_busts_cached_service_controls_after_hotfix():
     html=(ROOT/"app/templates/dashboard.html").read_text(encoding="utf-8")
     # The Cyberpunk/TUIC asset revision must invalidate browser and service-worker caches.
-    assert '/static/app.js?v={{version}}-future-core3' in html
-    assert '/static/app.css?v={{version}}-future-core3' in html
+    assert '/static/app.js?v={{version}}-future-core4' in html
+    assert '/static/app.css?v={{version}}-future-core4' in html
 
 
 def test_stealth_uses_dedicated_makia_service():

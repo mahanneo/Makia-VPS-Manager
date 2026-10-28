@@ -188,8 +188,9 @@ def client_login_page(request:Request):
     if _session(request):
         return _no_store(RedirectResponse("/client/app",302))
     response=templates.TemplateResponse(
-        "client_login.html",
-        {
+        request=request,
+        name="client_login.html",
+        context={
             "request":request,"app_name":APP_NAME,"version":VERSION,"error":None,
             "default_username":str(request.query_params.get("u") or "")[:64],
             "detected_platform":_client_platform(request),
@@ -214,8 +215,9 @@ def client_login(
     if int(state.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(state["blocked_until"])-now_ts)
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {
+            request=request,
+            name="client_login.html",
+            context={
                 "request":request,"app_name":APP_NAME,"version":VERSION,
                 "error":f"تلاش‌های ناموفق زیاد بوده است. حدود {max(1,wait//60)} دقیقه بعد دوباره امتحان کنید.",
             },
@@ -226,8 +228,9 @@ def client_login(
         state=record_login_failure(rate_key,now_ts,max_failures=6,window_seconds=900,block_seconds=900)
         audit("client:"+str(username or "unknown"),"client_login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {"request":request,"app_name":APP_NAME,"version":VERSION,"error":"نام کاربری یا رمز عبور صحیح نیست."},
+            request=request,
+            name="client_login.html",
+            context={"request":request,"app_name":APP_NAME,"version":VERSION,"error":"نام کاربری یا رمز عبور صحیح نیست."},
             status_code=401,
         ))
     ok,reason=client_store.account_available(account,now_ts)
@@ -239,8 +242,9 @@ def client_login(
             "disabled":"حساب کاربری غیرفعال است.",
         }.get(reason,"دسترسی حساب در حال حاضر فعال نیست.")
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
+            request=request,
+            name="client_login.html",
+            context={"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
             status_code=403,
         ))
     try:
@@ -259,8 +263,9 @@ def client_login(
         audit("client:"+account["username"],"client_login_device_denied",detail=str(exc),ip=remote_ip)
         message="سقف دستگاه یا اتصال همزمان این اشتراک پر شده است."
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
+            request=request,
+            name="client_login.html",
+            context={"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
             status_code=403,
         ))
     clear_login_failures(rate_key)
@@ -300,8 +305,9 @@ def client_app(request:Request):
     if not session:
         return RedirectResponse("/client/login",302)
     response=templates.TemplateResponse(
-        "client_app.html",
-        {
+        request=request,
+        name="client_app.html",
+        context={
             "request":request,"app_name":APP_NAME,"version":VERSION,
             "username":session["username"],"display_name":session.get("display_name") or session["username"],
             "detected_platform":_client_platform(request),

@@ -599,6 +599,32 @@ def test_xray_builder_listen_accepts_blank_and_ip():
         protocol_ops._xray_builder_listen("example.com")
 
 
+def test_xhttp_reality_share_link_explicitly_selects_xray_core():
+    from urllib.parse import parse_qs, urlsplit
+    inbound = {
+        "port": 9443,
+        "streamSettings": {
+            "network": "xhttp",
+            "security": "reality",
+            "xhttpSettings": {"path": "/makia-xhttp", "mode": "packet-up", "host": "p.example.test"},
+        },
+    }
+    reality = {
+        "server_name": "www.microsoft.com",
+        "public_key": "test-public-key",
+        "short_id": "0123456789abcdef",
+        "fingerprint": "chrome",
+        "spider_x": "/",
+    }
+    link = protocol_ops._xray_builder_share_link(
+        "vless", inbound, "22222222-2222-4222-8222-222222222222", "xhttp-test",
+        "203.0.113.10", reality,
+    )
+    query = parse_qs(urlsplit(link).query)
+    assert query["type"] == ["xhttp"]
+    assert query["core"] == ["xray"]
+
+
 def test_add_xray_client_preserves_existing_inbound(monkeypatch,tmp_path):
     config=tmp_path/"config.json"
     config.write_text(
