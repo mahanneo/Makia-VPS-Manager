@@ -166,8 +166,9 @@ def main():
             assert page.locator(".axon-hub-footer").count()==1
             assert page.locator(".pro-nav").count()==1
             assert page.locator('.pro-brand img[src*="makia-brand.png"]').count()==1
+            page.locator('.pro-sidebar .pro-group-toggle[data-group="protocols"]').click()
+            assert page.locator('.pro-sidebar button[data-view="inbounds"]').is_visible()
             assert "Inboundها" in page.locator(".pro-sidebar").inner_text()
-            assert page.locator('.pro-sidebar button[data-view="inbounds"]').count()>=1
             page.screenshot(path='/tmp/makia-dashboard.png',full_page=True)
 
             # Client Platform admin workspace must coexist with the existing
