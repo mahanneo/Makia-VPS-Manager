@@ -138,21 +138,22 @@ def main():
             page.on("pageerror",lambda exc: page_errors.append(str(exc)))
             page.goto(BASE_URL+"/login",wait_until="networkidle")
             page.screenshot(path='/tmp/makia-login.png',full_page=True)
-            assert page.locator('.pro-login-logo img[src*="makia-brand.png"]').count()==1
-            # Login controls must be real controls, not decorative buttons.
-            assert page.locator('body.pro-login[data-theme="dark"], body.pro-login[data-theme="light"]').count()==1
-            before_theme=page.locator("body").get_attribute("data-theme")
-            page.locator("#loginThemeToggle").click()
-            assert page.locator("body").get_attribute("data-theme")!=before_theme
-            page.locator("#loginLangToggle").click()
-            assert page.locator("html").get_attribute("lang")=="en"
-            page.locator("#loginLangToggle").click()
-            assert page.locator("html").get_attribute("lang")=="fa"
-            page.locator("#loginUsername").focus()
-            assert page.locator(".pro-login-field:focus-within").count()==1
+            # /login now opens the unified landing-page authentication modal.
+            # Keep this browser contract aligned with the current Makia landing UI.
+            assert page.locator('.landing-auth-brand img[src*="makia-brand.png"]').count()==1
+            assert page.locator('body.makia-landing[data-auth-open="true"]').count()==1
+            assert page.locator('.landing-auth-overlay.is-open[aria-hidden="false"]').count()==1
+            assert page.locator('.landing-auth-panel[role="dialog"][aria-modal="true"]').count()==1
+            assert page.locator('#landingAuthPasswordToggle').count()==1
+            page.locator("#landingAuthPasswordToggle").click()
+            assert page.locator("#landingAuthPassword").get_attribute("type")=="text"
+            page.locator("#landingAuthPasswordToggle").click()
+            assert page.locator("#landingAuthPassword").get_attribute("type")=="password"
+            page.locator('input[name="username"]').focus()
+            assert page.locator(".landing-auth-field:focus-within").count()==1
             page.locator('input[name="username"]').fill("admin")
             page.locator('input[name="password"]').fill(PASSWORD)
-            page.locator('button[type="submit"]').click()
+            page.locator('.landing-auth-submit[type="submit"]').click()
             page.wait_for_url(BASE_URL+"/")
             assert page.locator('body[data-theme="cyberpunk"]').count()==1
             page.locator(".sx-future-hero").wait_for()
