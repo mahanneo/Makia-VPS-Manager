@@ -9,9 +9,13 @@
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}-future-core4">
+  <link rel="stylesheet" href="/static/orbit.css?v={{version}}-orbit1">
+  <link rel="stylesheet" href="/static/axon-dashboard.css?v={{version}}-axon3">
+  <link rel="stylesheet" href="/static/axon-system.css?v={{version}}-system5">
 </head>
 {% set fa = language != "en" %}
-<body class="makia-pro-shell" data-theme="{{theme}}" data-density="{{density}}">
+<body class="makia-pro-shell orbit-ui axon-app-active axon-dashboard-active" data-theme="{{theme}}" data-density="{{density}}">
+  <div class="axon-global-environment" aria-hidden="true"><canvas id="axonGlobalScene" class="axon-global-canvas"></canvas><div class="axon-environment-grid"></div><div class="axon-environment-ring"></div><div class="axon-environment-prism"></div><i class="axon-environment-node node-a"></i><i class="axon-environment-node node-b"></i><i class="axon-environment-node node-c"></i><div class="axon-environment-vignette"></div></div>
   <aside class="pro-sidebar" id="sidebar">
     <div class="pro-brand">
       <img src="/static/makia-brand.png?v={{version}}" alt="Makia">
@@ -32,7 +36,7 @@
       <button data-view="expiry"><span class="pro-nav-icon">◷</span><b>{{'مرکز تمدید' if fa else 'Expiry Center'}}</b></button>
 
       <p>{{'پروتکل‌ها' if fa else 'Protocols'}}</p>
-      <div class="pro-nav-group open" data-group-root="protocols">
+      <div class="pro-nav-group" data-group-root="protocols">
         <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="protocols"><span class="pro-nav-icon">◫</span><b>{{'مدیریت پروتکل‌ها' if fa else 'Protocol management'}}</b><i>⌄</i></button>
         <div class="pro-submenu" data-group-panel="protocols">
           <button data-view="xray"><span class="proto-dot xray"></span><b>Xray / V2Ray</b></button>
@@ -116,6 +120,8 @@
     window.MAKIA_DENSITY='{{density}}';
     window.MAKIA_USER='{{current_username or "admin"}}';
   </script>
-  <script src="/static/app.js?v={{version}}-future-core4"></script>
+  <script defer src="/static/three-r150.min.js?v=0.150.1"></script>
+  <script defer src="/static/axon-dashboard.js?v={{version}}-axon3"></script>
+  <script defer src="/static/app.js?v={{version}}-axon-hub1"></script>
 </body>
 </html>

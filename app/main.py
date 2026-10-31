@@ -26,10 +26,12 @@ app.include_router(client_portal.router)
 @app.middleware("http")
 async def security_headers(request:Request,call_next):
     allowed_raw=(os.getenv("MAKIA_ADMIN_ALLOWED_CIDRS") or "").strip()
+    raw_actor=read_session(request.cookies.get(COOKIE_NAME))
     public_path=(
         request.url.path=="/healthz" or
         request.url.path=="/help/connect" or
-        request.url.path in {"/support/login","/support/logout"} or
+        request.url.path in {"/support/login","/support/logout","/welcome"} or
+        (request.url.path=="/" and not raw_actor) or
         request.url.path.startswith("/static/") or
         request.url.path.startswith("/sub/") or
         request.url.path.startswith("/client/") or
@@ -38,7 +40,6 @@ async def security_headers(request:Request,call_next):
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
-    raw_actor=read_session(request.cookies.get(COOKIE_NAME))
     if raw_actor and raw_actor.startswith("support:"):
         parts=raw_actor.split(":")
         if len(parts)==3:
@@ -65,10 +66,11 @@ async def security_headers(request:Request,call_next):
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
-        "img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; media-src 'self' https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
         "connect-src 'self'; form-action 'self'"
     )
-    if request.url.path.startswith("/api/") or request.url.path in {"/","/login","/login/2fa"}:
+    if request.url.path.startswith("/api/") or request.url.path in {"/","/welcome","/login","/login/2fa"}:
         response.headers["Cache-Control"]="no-store"
     if request.headers.get("x-forwarded-proto","").lower()=="https" or request.url.scheme=="https":
         response.headers.setdefault("Strict-Transport-Security","max-age=31536000; includeSubDomains")
@@ -436,15 +438,39 @@ def account_rows():
         })
     return rows
 
+def landing_response(request:Request,*,login_open:bool=False,error:str|None=None,twofa_token:str|None=None,status_code:int=200):
+    response=render_template(request,"makia_landing.html",{
+        "request":request,"app_name":APP_NAME,"version":VERSION,
+        "language":get_setting("language","fa"),"login_open":login_open,
+        "error":error,"twofa_token":twofa_token,
+    },status_code=status_code)
+    response.headers["Cache-Control"]="no-store"
+    # Permit only the explicitly selected background-video and font hosts on this public page.
+    response.headers["Content-Security-Policy"]=(
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
+        "img-src 'self' data:; "
+        "media-src 'self' https://d8j0ntlcm91z4.cloudfront.net; "
+        "style-src 'self' 'unsafe-inline' https://db.onlinewebfonts.com https://fonts.googleapis.com; "
+        "font-src 'self' data: https://db.onlinewebfonts.com https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'"
+    )
+    return response
+
 @app.get("/",response_class=HTMLResponse)
 def root(request:Request):
-    if not current_user(request): return RedirectResponse("/login",302)
+    actor=current_user(request)
+    if not actor:
+        return landing_response(request)
     return render_template(request, "dashboard.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
         "theme":get_setting("theme","glass"),"density":get_setting("density","comfortable"),
-        "current_username":current_user(request) or "admin"
+        "current_username":actor or "admin"
     })
+
+@app.get("/welcome",response_class=HTMLResponse)
+def welcome_page(request:Request):
+    return landing_response(request)
 
 @app.get("/help/connect",response_class=HTMLResponse)
 def connection_help(request:Request):
@@ -491,7 +517,8 @@ def support_logout(request:Request):
 
 @app.get("/login",response_class=HTMLResponse)
 def login_page(request:Request):
-    return render_template(request, "login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
+    if current_user(request): return RedirectResponse("/",302)
+    return landing_response(request,login_open=True)
 
 @app.post("/login")
 def login(request:Request,username:str=Form(...),password:str=Form(...)):
@@ -501,18 +528,18 @@ def login(request:Request,username:str=Form(...),password:str=Form(...)):
     if int(rate.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(rate["blocked_until"])-now_ts)
         audit(username or "unknown","login_rate_limited",detail=f"retry_after={wait}",ip=remote_ip)
-        return render_template(request, "login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s).")},status_code=429)
+        return landing_response(request,login_open=True,error=(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s)."),status_code=429)
     with connect() as con:
         row=con.execute("SELECT * FROM admins WHERE username=? AND active=1",(username,)).fetchone()
     if not row or not verify_password(password,row["password_hash"]):
         state=record_login_failure(remote_ip,now_ts)
         audit(username or "unknown","login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return render_template(request, "login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password.")},status_code=401)
+        return landing_response(request,login_open=True,error=("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password."),status_code=401)
     clear_login_failures(remote_ip)
     twofa=get_admin_2fa(username)
     if twofa and twofa.get("totp_enabled"):
         audit(username,"login_password_success_2fa_required",ip=ip(request))
-        return render_template(request, "login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":make_preauth(username),"error":None})
+        return landing_response(request,login_open=True,twofa_token=make_preauth(username))
     audit(username,"login_success",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -529,7 +556,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
     valid=bool(state and state.get("totp_enabled") and state.get("totp_secret") and pyotp.TOTP(state["totp_secret"]).verify(code.strip(),valid_window=1))
     if not valid:
         audit(username,"login_2fa_failed",ip=ip(request))
-        return render_template(request, "login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":token,"error":("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid.")},status_code=401)
+        return landing_response(request,login_open=True,twofa_token=token,error=("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid."),status_code=401)
     audit(username,"login_success_2fa",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -541,7 +568,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
 def logout(request:Request):
     user=current_user(request)
     if user: audit(user,"logout",ip=ip(request))
-    r=RedirectResponse("/login",302); r.delete_cookie(COOKIE_NAME); return r
+    r=RedirectResponse("/",302); r.delete_cookie(COOKIE_NAME); return r
 
 class SupportRequestCreate(BaseModel):
     subject:str=Field(min_length=3,max_length=160)

@@ -1,0 +1,219 @@
+/* Makia Orbit UI: rounded welcome, calm admin workspace, functional elements preserved. */
+body.orbit-ui.makia-pro-shell{
+  --pro-sidebar:252px;--pro-text:#1b2a41;--pro-muted:#71809a;--pro-line:#e2e9f3;--pro-line-soft:#edf1f7;
+  --pro-surface:#fff;--pro-green:#13956b;--pro-cyan:#477bf5;--pro-violet:#7a68e8;--pro-shadow:0 9px 28px rgba(34,57,91,.055);
+  background:radial-gradient(ellipse at 70% -10%,#e0eaff 0,transparent 36%),radial-gradient(ellipse at 0% 70%,#eaf2ff 0,transparent 34%),#f4f7fc;
+  color:var(--pro-text);font-family:Tahoma,"Segoe UI",Inter,Arial,sans-serif;
+}
+body.orbit-ui.makia-pro-shell::before,body.orbit-ui.makia-pro-shell::after{display:none!important}
+.orbit-ui.makia-pro-shell .pro-sidebar{background:rgba(255,255,255,.96);border-left:1px solid #e3eaf4;box-shadow:-8px 0 30px rgba(41,64,100,.045);backdrop-filter:blur(22px)}
+.orbit-ui.makia-pro-shell .pro-sidebar::after{background:linear-gradient(180deg,transparent,#7da6ff,#7bded5,transparent);opacity:.45}
+.orbit-ui.makia-pro-shell .pro-brand{height:76px;border-bottom-color:#edf1f7;background:linear-gradient(90deg,#f8faff,#fff)}
+.orbit-ui.makia-pro-shell .pro-brand img{width:43px;height:43px;border:1px solid #e0e8f4;border-radius:15px;box-shadow:0 6px 16px #315f9c12;filter:none}
+.orbit-ui.makia-pro-shell .pro-brand strong{color:#1b2c47;letter-spacing:2px}
+.orbit-ui.makia-pro-shell .pro-brand span{color:#6683c5}
+.orbit-ui.makia-pro-shell .pro-create-access{margin:14px 13px 9px;min-height:54px;border:1px solid #d7e3ff;border-radius:15px;background:linear-gradient(120deg,#edf3ff,#e7f8ff);color:#2d4e91;box-shadow:0 5px 14px #416ed30b;transition:transform .18s,border-color .18s}
+.orbit-ui.makia-pro-shell .pro-create-access:hover{transform:translateY(-1px);border-color:#b9ceff;box-shadow:0 9px 22px #416ed31a}
+.orbit-ui.makia-pro-shell .pro-create-access>span{width:30px;height:30px;border-radius:11px;background:#fff;color:#5279e6;border:1px solid #dce6ff}
+.orbit-ui.makia-pro-shell .pro-create-access b{font-size:11px;color:#25447f}
+.orbit-ui.makia-pro-shell .pro-create-access small{display:none}
+.orbit-ui.makia-pro-shell .pro-nav{padding:4px 11px 12px}
+.orbit-ui.makia-pro-shell .pro-nav>p{margin:16px 11px 6px;color:#9aa8bd;font-size:9px;letter-spacing:.8px}
+.orbit-ui.makia-pro-shell .pro-nav>button,.orbit-ui.makia-pro-shell .pro-group-toggle,.orbit-ui.makia-pro-shell .pro-submenu button{min-height:41px;border-radius:12px;color:#66758c;transition:background .16s,border-color .16s,color .16s}
+.orbit-ui.makia-pro-shell .pro-nav>button:hover,.orbit-ui.makia-pro-shell .pro-group-toggle:hover,.orbit-ui.makia-pro-shell .pro-submenu button:hover{background:#f4f7fc;border-color:#edf1f7;color:#233652;transform:none}
+.orbit-ui.makia-pro-shell .pro-nav>button.active,.orbit-ui.makia-pro-shell .pro-submenu button.active{background:#edf3ff;border-color:#dfe8ff;color:#3158b6;box-shadow:inset -3px 0 0 #5d83f2}
+.orbit-ui.makia-pro-shell .pro-nav-icon{width:29px;height:29px;border-radius:11px;background:#f2f5fb;border:1px solid #e7edf6;color:#7186ae}
+.orbit-ui.makia-pro-shell .pro-nav>button.active .pro-nav-icon{background:#dce7ff;border-color:#dce7ff;color:#4268d0}
+.orbit-ui.makia-pro-shell .pro-nav button b{font-size:11px;font-weight:650}
+.orbit-ui.makia-pro-shell .pro-nav>button em{display:none}
+.orbit-ui.makia-pro-shell .pro-group-toggle i{color:#96a4b8}
+.orbit-ui.makia-pro-shell .pro-submenu{margin:3px 17px 5px 0;border-right-color:#e2e9f3}
+.orbit-ui.makia-pro-shell .pro-submenu button{min-height:34px}
+.orbit-ui.makia-pro-shell .pro-submenu button b{font-size:10px;font-weight:500}
+.orbit-ui.makia-pro-shell .pro-sidebar-footer{border-top-color:#edf1f7;background:#fbfcff}
+.orbit-ui.makia-pro-shell .server-health{border:1px solid #e0f3ea;background:#f4fcf8;border-radius:12px}
+.orbit-ui.makia-pro-shell .server-health b{color:#2b765b;font-size:10px}
+.orbit-ui.makia-pro-shell .server-health small,.orbit-ui.makia-pro-shell .footer-meta{color:#91a0b5}
+.orbit-ui.makia-pro-shell .footer-meta button{color:#71809a}
+.orbit-ui.makia-pro-shell .footer-meta button:hover{color:#416bd2}
+.orbit-ui.makia-pro-shell .pro-main{background:transparent}
+.orbit-ui.makia-pro-shell .pro-topbar{height:64px;top:9px;margin:9px 16px 0;padding:0 18px;border:1px solid rgba(222,231,244,.92);border-radius:18px;background:rgba(255,255,255,.88);box-shadow:0 8px 28px rgba(40,63,100,.045);backdrop-filter:blur(22px)}
+.orbit-ui.makia-pro-shell .pro-topbar-center{display:none}
+.orbit-ui.makia-pro-shell .global-command{width:min(290px,32vw);height:38px;border:1px solid #e5ebf4;border-radius:13px;background:#f7f9fd;color:#8390a5}
+.orbit-ui.makia-pro-shell .global-command b{font-size:10px}
+.orbit-ui.makia-pro-shell .global-command kbd{border-color:#e0e7f0;background:#fff;color:#8290a5}
+.orbit-ui.makia-pro-shell .top-server-state{border-color:#d9f1e6;background:#f0fbf5;color:#17805a;border-radius:999px}
+.orbit-ui.makia-pro-shell .top-refresh{border-color:#e4eaf3;background:#fff;color:#657995;border-radius:12px}
+.orbit-ui.makia-pro-shell .top-refresh:hover{background:#f3f6fc;color:#3e68ce}
+.orbit-ui.makia-pro-shell .top-user>span{background:linear-gradient(135deg,#e4edff,#d8f6f0);color:#4369bb;border:1px solid #dce8f6}
+.orbit-ui.makia-pro-shell .top-user b{color:#2c3a51;font-size:10px}
+.orbit-ui.makia-pro-shell .top-user small{color:#8a98ad}
+.orbit-ui.makia-pro-shell .mobile-menu-toggle{border:1px solid #e3eaf4;background:#fff;color:#536c92;border-radius:12px}
+.orbit-ui.makia-pro-shell .pro-content{padding:22px 24px 42px}
+.orbit-ui.makia-pro-shell .pro-page-head h1,.orbit-ui.makia-pro-shell .sx-page-head h1{color:#1b2a41;font-size:25px;letter-spacing:-.45px}
+.orbit-ui.makia-pro-shell .pro-page-head p,.orbit-ui.makia-pro-shell .sx-page-head p{color:#74829a}
+.orbit-ui.makia-pro-shell .pro-kicker,.orbit-ui.makia-pro-shell .sx-section-kicker{color:#6281c9}
+.orbit-ui.makia-pro-shell .primary{border:1px solid #4d72e7;background:linear-gradient(135deg,#527af2,#6d75e8);color:#fff;border-radius:12px;box-shadow:0 6px 15px #5876e51a}
+.orbit-ui.makia-pro-shell .primary:hover{box-shadow:0 9px 20px #5876e52b;filter:none}
+.orbit-ui.makia-pro-shell .ghost,.orbit-ui.makia-pro-shell .soft{border:1px solid #e0e7f1;background:#fff;color:#53647d;border-radius:12px}
+.orbit-ui.makia-pro-shell .ghost:hover,.orbit-ui.makia-pro-shell .soft:hover{background:#f5f8fd;border-color:#ccd9ed;color:#3157a8;filter:none}
+.orbit-ui.makia-pro-shell .danger{border:1px solid #f2d7dc;background:#fff5f6;color:#b33f53;border-radius:12px}
+.orbit-ui.makia-pro-shell .status-chip{border:1px solid #e1e8f2;background:#f7f9fd;color:#64758c;border-radius:999px}
+.orbit-ui.makia-pro-shell .status-chip.ok{border-color:#d7f0e4;background:#effbf5;color:#16835c}
+.orbit-ui.makia-pro-shell .status-chip.warn{border-color:#f4e5c3;background:#fff9eb;color:#a97818}
+.orbit-ui.makia-pro-shell .status-chip.bad{border-color:#f2d8dc;background:#fff3f4;color:#b64256}
+.orbit-ui.makia-pro-shell .muted{color:#7d8ba0}
+.orbit-ui.makia-pro-shell input,.orbit-ui.makia-pro-shell select,.orbit-ui.makia-pro-shell textarea{background:#fbfcff!important;border:1px solid #dfe7f2!important;color:#24344c!important;border-radius:12px!important;box-shadow:none!important}
+.orbit-ui.makia-pro-shell input::placeholder,.orbit-ui.makia-pro-shell textarea::placeholder{color:#a1adbd}
+.orbit-ui.makia-pro-shell input:focus,.orbit-ui.makia-pro-shell select:focus,.orbit-ui.makia-pro-shell textarea:focus{border-color:#91a9f7!important;box-shadow:0 0 0 3px #5879ef17!important}
+.orbit-ui.makia-pro-shell .panel,.orbit-ui.makia-pro-shell .view-intro,.orbit-ui.makia-pro-shell .account-hero,.orbit-ui.makia-pro-shell .wg-workspace-hero,.orbit-ui.makia-pro-shell .settings-card-v2,.orbit-ui.makia-pro-shell .settings-nav,.orbit-ui.makia-pro-shell .protocol-page-header,.orbit-ui.makia-pro-shell .sx-card,.orbit-ui.makia-pro-shell .sx-vital,.orbit-ui.makia-pro-shell .sx-actionbar,.orbit-ui.makia-pro-shell .sx-system-strip,.orbit-ui.makia-pro-shell .sx-runtime-card,.orbit-ui.makia-pro-shell .settings-nav-v2,.orbit-ui.makia-pro-shell .settings-content-v2{border-color:#e3eaf4!important;background:#fff!important;box-shadow:0 8px 26px rgba(38,60,94,.045)!important;color:#24334b}
+.orbit-ui.makia-pro-shell .view-intro{border-radius:20px}
+.orbit-ui.makia-pro-shell .view-intro h2,.orbit-ui.makia-pro-shell .protocol-page-title h2,.orbit-ui.makia-pro-shell .panel h3,.orbit-ui.makia-pro-shell .panel-head h3,.orbit-ui.makia-pro-shell .sx-card-head h3{color:#253650}
+.orbit-ui.makia-pro-shell .view-intro p,.orbit-ui.makia-pro-shell .protocol-page-title p,.orbit-ui.makia-pro-shell .panel-head span,.orbit-ui.makia-pro-shell .sx-card-head p{color:#7c8aa0}
+.orbit-ui.makia-pro-shell .view-intro-stat{border-color:#e3eaf4;background:#f8faff;color:#2a3b56;border-radius:15px}
+.orbit-ui.makia-pro-shell .view-intro-stat span{color:#8190a6}
+.orbit-ui.makia-pro-shell .sx-future-hero{border:1px solid #e1e9f5;border-radius:25px;padding:26px;background:radial-gradient(ellipse at 12% 0,#e7efff 0,transparent 42%),linear-gradient(125deg,#fff,#f8fbff 58%,#f2f8ff);box-shadow:0 12px 34px rgba(39,67,111,.06)}
+.orbit-ui.makia-pro-shell .sx-future-hero::before{background:radial-gradient(circle,#dceaff 0,transparent 68%);opacity:.7}
+.orbit-ui.makia-pro-shell .sx-future-hero::after{background:#cfe6ff;opacity:.28}
+.orbit-ui.makia-pro-shell .sx-future-copy h1{color:#20324f;font-size:clamp(25px,2.5vw,34px);letter-spacing:-.65px}
+.orbit-ui.makia-pro-shell .sx-future-copy p{color:#74839b;font-size:11px;line-height:1.9}
+.orbit-ui.makia-pro-shell .sx-future-kicker{color:#6d83bd}
+.orbit-ui.makia-pro-shell .sx-future-badges span{border-color:#e0e8f4;background:#fff;color:#7b8ba2;border-radius:999px}
+.orbit-ui.makia-pro-shell .sx-future-badges span.live{border-color:#d6f0e4;background:#f0fbf5;color:#18845d}
+.orbit-ui.makia-pro-shell .sx-future-actions{display:none!important}
+.orbit-ui.makia-pro-shell .sx-future-commandbar{display:none!important}
+.orbit-ui.makia-pro-shell .sx-future-visual{filter:saturate(.85)}
+.orbit-ui.makia-pro-shell .sx-core-center{background:linear-gradient(145deg,#fff,#e9f1ff);border-color:#dbe6f5;box-shadow:0 12px 35px #7e9bce27;color:#476cc5}
+.orbit-ui.makia-pro-shell .sx-core-center b,.orbit-ui.makia-pro-shell .sx-core-center small{color:#617da8}
+.orbit-ui.makia-pro-shell .sx-core-ring{border-color:#9bb8f6;box-shadow:inset 0 0 20px #9cb7f31a,0 0 15px #8ba8ed13}
+.orbit-ui.makia-pro-shell .sx-core-node{background:#7b99f0;box-shadow:0 0 14px #7b99f080}
+.orbit-ui.makia-pro-shell .sx-core-readouts>div{border-color:#e1e9f5;background:#fff;border-radius:13px}
+.orbit-ui.makia-pro-shell .sx-core-readouts span{color:#8795aa}
+.orbit-ui.makia-pro-shell .sx-core-readouts b{color:#2e4260}
+.orbit-ui.makia-pro-shell .sx-runtime-grid{gap:12px}
+.orbit-ui.makia-pro-shell .sx-runtime-card{border-radius:17px;min-height:105px;transition:transform .18s,border-color .18s,box-shadow .18s}
+.orbit-ui.makia-pro-shell .sx-runtime-card::before{background:linear-gradient(90deg,transparent,#9db8ff,transparent);opacity:.65}
+.orbit-ui.makia-pro-shell .sx-runtime-card:hover{transform:translateY(-2px);border-color:#cbd9fa!important;box-shadow:0 12px 28px #31548a10!important}
+.orbit-ui.makia-pro-shell .sx-runtime-main b{color:#293b56}
+.orbit-ui.makia-pro-shell .sx-runtime-main small,.orbit-ui.makia-pro-shell .sx-runtime-main em{color:#8795a9}
+.orbit-ui.makia-pro-shell .sx-runtime-glyph{background:#eef3ff;border:1px solid #e0e9ff;color:#5474d0;border-radius:13px}
+.orbit-ui.makia-pro-shell .sx-runtime-state{border-color:#dcefe5;background:#f2fbf6;color:#1b8b62;border-radius:999px}
+.orbit-ui.makia-pro-shell .sx-runtime-state i{box-shadow:none}
+.orbit-ui.makia-pro-shell .sx-vitals{gap:12px}
+.orbit-ui.makia-pro-shell .sx-vital{min-height:140px;border-radius:17px}
+.orbit-ui.makia-pro-shell .sx-vital-head{color:#7a899f}
+.orbit-ui.makia-pro-shell .sx-vital-head span:first-child{color:#5f7ed9}
+.orbit-ui.makia-pro-shell .sx-vital-value b{color:#263854;font-weight:750}
+.orbit-ui.makia-pro-shell .sx-vital-value span,.orbit-ui.makia-pro-shell .sx-vital-detail,.orbit-ui.makia-pro-shell .sx-vital-foot{color:#8290a4}
+.orbit-ui.makia-pro-shell .sx-meter{background:#edf1f8}
+.orbit-ui.makia-pro-shell .sx-meter i{background:linear-gradient(90deg,#7ba3ff,#5f7fe8);box-shadow:none}
+.orbit-ui.makia-pro-shell .sx-mid-grid{gap:13px}
+.orbit-ui.makia-pro-shell .sx-card{border-radius:18px;padding:18px}
+.orbit-ui.makia-pro-shell .sx-card-head h3{font-size:13px}
+.orbit-ui.makia-pro-shell .sx-card-head p{font-size:10px}
+.orbit-ui.makia-pro-shell .sx-protocol-row{border-bottom-color:#edf1f7}
+.orbit-ui.makia-pro-shell .sx-protocol-row b{color:#344761}
+.orbit-ui.makia-pro-shell .sx-protocol-row span,.orbit-ui.makia-pro-shell .sx-protocol-row em{color:#8391a5}
+.orbit-ui.makia-pro-shell .sx-protocol-bar{background:#edf2fa}
+.orbit-ui.makia-pro-shell .sx-protocol-bar i{background:linear-gradient(90deg,#7fa5ff,#6c76e7)}
+.orbit-ui.makia-pro-shell .sx-system-strip{border-radius:16px}
+.orbit-ui.makia-pro-shell .sx-system-cell{border-left-color:#edf1f7}
+.orbit-ui.makia-pro-shell .sx-system-cell span{color:#8290a4}
+.orbit-ui.makia-pro-shell .sx-system-cell b{color:#31435d}
+.orbit-ui.makia-pro-shell .history-chart{background:#fbfcff!important;border-color:#e7edf6!important}
+.orbit-ui.makia-pro-shell .chart-legend{color:#7e8ca2}
+.orbit-ui.makia-pro-shell .settings-tabs-sx{padding:6px;border:1px solid #e3eaf4;background:#fff;border-radius:15px;gap:5px}
+.orbit-ui.makia-pro-shell .settings-tabs-sx button{border-radius:11px;color:#74829a}
+.orbit-ui.makia-pro-shell .settings-tabs-sx button.active{background:#edf3ff;border-color:#dbe6ff;color:#3d60bf;box-shadow:none}
+.orbit-ui.makia-pro-shell .settings-tabs-sx button i{color:#6c85cb}
+.orbit-ui.makia-pro-shell .settings-shortcuts button,.orbit-ui.makia-pro-shell .settings-card-v2 button{border-color:#e4eaf3;background:#fbfcff;color:#344761;border-radius:13px}
+.orbit-ui.makia-pro-shell .settings-shortcuts button:hover,.orbit-ui.makia-pro-shell .settings-card-v2 button:hover{background:#f2f6ff;border-color:#d5e1f7}
+.orbit-ui.makia-pro-shell .settings-shortcuts span,.orbit-ui.makia-pro-shell .settings-card-v2 span{color:#8290a4}
+.orbit-ui.makia-pro-shell .table,.orbit-ui.makia-pro-shell .table-wrap{border-radius:13px}
+.orbit-ui.makia-pro-shell table{color:#33445d}
+.orbit-ui.makia-pro-shell th{background:#f7f9fd;color:#8794a7;font-weight:650}
+.orbit-ui.makia-pro-shell td,.orbit-ui.makia-pro-shell th{border-bottom-color:#edf1f7}
+.orbit-ui.makia-pro-shell tr:hover td{background:#fafcff}
+.orbit-ui.makia-pro-shell .toolbar{gap:7px}
+.orbit-ui.makia-pro-shell .modal-backdrop{background:rgba(31,47,73,.30);backdrop-filter:blur(7px)}
+.orbit-ui.makia-pro-shell .modal{background:#fff;border:1px solid #e0e8f3;border-radius:24px;box-shadow:0 30px 90px #1e355626;color:#263650}
+.orbit-ui.makia-pro-shell .modal h3,.orbit-ui.makia-pro-shell .modal h2,.orbit-ui.makia-pro-shell .modal b{color:#2c3d57}
+.orbit-ui.makia-pro-shell .modal p,.orbit-ui.makia-pro-shell .modal span{color:#71819a}
+.orbit-ui.makia-pro-shell .close-btn{border-color:#e1e8f2;background:#f8faff;color:#6a7890;border-radius:11px}
+.orbit-ui.makia-pro-shell .wizard-head{border-bottom-color:#edf1f7}
+.orbit-ui.makia-pro-shell .wizard-footer{border-top-color:#edf1f7}
+.orbit-ui.makia-pro-shell .notice{border-color:#f1e2bc;background:#fff9eb;color:#8e681b;border-radius:13px}
+.orbit-ui.makia-pro-shell .notice.warn{border-color:#f1e2bc;background:#fff9eb;color:#8e681b}
+.orbit-ui.makia-pro-shell .quick-card,.orbit-ui.makia-pro-shell .wizard-note,.orbit-ui.makia-pro-shell .form-grid .field-group{border-color:#e4eaf3;background:#f8faff;border-radius:13px;color:#33445d}
+.orbit-ui.makia-pro-shell .quick-card span,.orbit-ui.makia-pro-shell .wizard-note span{color:#77869b}
+.orbit-ui.makia-pro-shell .config-output,.orbit-ui.makia-pro-shell pre,.orbit-ui.makia-pro-shell code{background:#f6f8fc;color:#3a4c66;border-color:#e0e7f1}
+.orbit-ui.makia-pro-shell .empty{color:#8592a6}
+.orbit-ui.makia-pro-shell .loading-state{color:#657995}
+.orbit-ui.makia-pro-shell .spinner{border-color:#dfe7f3;border-top-color:#5c7eea}
+.orbit-ui.makia-pro-shell .danger-note{border-color:#f0d6dc!important;background:#fff4f5!important;color:#a63e52!important}
+.orbit-ui.makia-pro-shell .ok-text{color:#16845d!important}.orbit-ui.makia-pro-shell .bad-text{color:#bb4557!important}
+.orbit-ui.makia-pro-shell .command-modal{background:#fff;border-color:#e1e8f2}
+.orbit-ui.makia-pro-shell .command-modal input{background:#f8faff!important}
+.orbit-ui.makia-pro-shell .command-modal button{color:#344761;border-color:#edf1f7}
+.orbit-ui.makia-pro-shell .command-modal button:hover{background:#f3f6fc}
+.orbit-ui.makia-pro-shell .command-modal kbd{background:#f4f7fc;border-color:#e0e7f1;color:#8290a4}
+.orbit-ui.makia-pro-shell .sx-future-dashboard{gap:13px}
+.orbit-ui.makia-pro-shell .sx-future-dashboard .sx-future-hero{margin-bottom:0}
+.orbit-ui.makia-pro-shell .sx-page-head{margin-bottom:2px}
+.orbit-ui.makia-pro-shell .pro-page-head,.orbit-ui.makia-pro-shell .sx-page-head{align-items:center}
+.orbit-ui.makia-pro-shell .protocol-page-icon{border-radius:14px!important}
+.orbit-ui.makia-pro-shell .pro-page-head .view-intro-stat,.orbit-ui.makia-pro-shell .sx-page-head .view-intro-stat{background:#f8faff}
+.orbit-ui.makia-pro-shell .server-health i{background:#1cb783}
+/* Login / 2FA: rounded app-style welcome with a floating 3D orbit. */
+body.pro-login.orbit-ui{
+  --login-bg:#f3f6fc;--login-card:#fff;--login-card-soft:#f7f9fe;--login-line:#e3eaf5;--login-text:#20304a;--login-muted:#7d8ba1;--login-accent:#5b7df0;--login-accent-2:#7a79e8;
+  min-height:100vh;min-height:100dvh;padding:46px 18px 25px;display:grid;place-items:center;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 7%,#e0eaff 0,transparent 33%),radial-gradient(ellipse at 0% 100%,#e6f5ff 0,transparent 34%),linear-gradient(145deg,#f7f9fe,#eef3fb 70%,#f8faff);color:var(--login-text)
+}
+body.pro-login.orbit-ui[data-theme="dark"]{--login-bg:#101a2d;--login-card:#17243a;--login-card-soft:#1d2d46;--login-line:#31445f;--login-text:#f0f5ff;--login-muted:#a0b0c7;--login-accent:#7da2ff;--login-accent-2:#9b8aff;background:radial-gradient(ellipse at 50% 7%,#263d6a 0,transparent 35%),linear-gradient(145deg,#0b1322,#111c30)}
+body.pro-login.orbit-ui .login-ambient{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+body.pro-login.orbit-ui .login-ambient i:first-child{position:absolute;width:168px;height:168px;right:calc(50% - 84px);top:calc(50% - 330px);opacity:1;filter:none;background:linear-gradient(145deg,#fff 0%,#dce7ff 23%,#89a9ff 55%,#8e83ef 78%,#b4e8ff 100%);border:1px solid rgba(255,255,255,.92);box-shadow:inset -16px -20px 35px #566fd833,inset 14px 14px 25px #ffffffb3,0 25px 55px #627fd52b;animation:orbit-float 7s ease-in-out infinite}
+body.pro-login.orbit-ui .login-ambient i:first-child::before,body.pro-login.orbit-ui .login-ambient i:first-child::after{content:"";position:absolute;inset:-24px;border:1px solid #7c9de66b;border-radius:50%;transform:rotate(-28deg) scaleY(.45)}
+body.pro-login.orbit-ui .login-ambient i:first-child::after{inset:-44px;transform:rotate(34deg) scaleY(.4);border-color:#88d4e65c}
+body.pro-login.orbit-ui .login-ambient i:last-child{width:390px;height:390px;left:-145px;bottom:-210px;opacity:.23;filter:blur(90px);background:#87b8ff}
+body.pro-login.orbit-ui .pro-login-toolbar{top:18px;left:18px;gap:7px}
+body.pro-login.orbit-ui .pro-login-toolbar button{width:39px;height:39px;border-radius:50%;border-color:var(--login-line);background:var(--login-card);color:var(--login-muted);box-shadow:0 5px 16px #233e6910;backdrop-filter:blur(15px)}
+body.pro-login.orbit-ui .pro-login-card{width:min(430px,calc(100vw - 30px));margin-top:72px;padding:29px 31px 24px;border:1px solid var(--login-line);border-radius:30px;background:var(--login-card);box-shadow:0 28px 80px rgba(45,67,108,.12),inset 0 1px 0 #ffffffb0;backdrop-filter:blur(22px)}
+body.pro-login.orbit-ui[data-theme="dark"] .pro-login-card{box-shadow:0 28px 80px #0004,inset 0 1px 0 #ffffff0a}
+body.pro-login.orbit-ui .pro-login-logo{width:51px;height:51px;margin-bottom:9px;border-radius:17px;border-color:var(--login-line);background:var(--login-card-soft)}
+body.pro-login.orbit-ui .pro-login-logo img{width:41px;height:41px;border-radius:14px;object-fit:cover}
+body.pro-login.orbit-ui .pro-login-brand strong{color:var(--login-text);font-size:20px;letter-spacing:2.5px}
+body.pro-login.orbit-ui .pro-login-brand>span{color:#6d83ca;letter-spacing:1.5px}
+body.pro-login.orbit-ui .pro-login-heading{margin:22px 0 19px}
+body.pro-login.orbit-ui .pro-login-kicker{color:#7087cc;font-size:9px;letter-spacing:1.1px}
+body.pro-login.orbit-ui .pro-login-heading h1{font-size:25px;letter-spacing:-.5px;color:var(--login-text)}
+body.pro-login.orbit-ui .pro-login-heading p{font-size:11px;color:var(--login-muted)}
+body.pro-login.orbit-ui .pro-login-form>label{margin:14px 0}
+body.pro-login.orbit-ui .pro-login-form>label>span{color:var(--login-muted);font-size:11px}
+body.pro-login.orbit-ui .pro-login-field{height:49px;border-radius:15px;border-color:var(--login-line);background:var(--login-card-soft);padding:0 13px}
+body.pro-login.orbit-ui .pro-login-field:focus-within{border-color:#8ba4f6;box-shadow:0 0 0 4px #7893f21a;background:var(--login-card)}
+body.pro-login.orbit-ui .pro-login-field>i{color:#8296bb}
+body.pro-login.orbit-ui .pro-login-field input,body.pro-login.orbit-ui .pro-login-field input:focus{color:var(--login-text)!important}
+body.pro-login.orbit-ui .pro-password-toggle{border-radius:50%;color:#8293ad}
+body.pro-login.orbit-ui .pro-login-submit{height:49px;margin-top:10px;border:0;border-radius:15px;background:linear-gradient(115deg,var(--login-accent),var(--login-accent-2));box-shadow:0 10px 23px #607ded24;font-size:12px}
+body.pro-login.orbit-ui .pro-login-submit:hover{filter:brightness(1.035);transform:translateY(-1px)}
+body.pro-login.orbit-ui .pro-login-security{margin-top:18px;padding-top:14px;border-top-color:var(--login-line);font-size:9px}
+body.pro-login.orbit-ui .pro-login-security small{color:var(--login-muted)}
+body.sanaei-login.orbit-ui:not(.pro-login){--login-bg:#f3f6fc;--login-card:#fff;--login-card-soft:#f7f9fe;--login-line:#e3eaf5;--login-text:#20304a;--login-muted:#7d8ba1;background:radial-gradient(ellipse at 50% 8%,#e0eaff 0,transparent 34%),linear-gradient(145deg,#f7f9fe,#eef3fb);color:#20304a;min-height:100vh;min-height:100dvh;padding:22px}
+body.sanaei-login.orbit-ui:not(.pro-login)::before{content:"";position:fixed;width:140px;height:140px;top:calc(50% - 315px);left:calc(50% - 70px);border-radius:50%;background:linear-gradient(145deg,#fff,#dce7ff 25%,#89a9ff 60%,#9a8af4);box-shadow:inset -14px -16px 25px #566fd833,inset 12px 12px 22px #ffffffb0,0 24px 50px #627fd526;animation:orbit-float 7s ease-in-out infinite;pointer-events:none}
+body.sanaei-login.orbit-ui .sanaei-login-card{width:min(410px,calc(100vw - 30px));margin-top:80px;padding:29px 30px 24px;border:1px solid #e3eaf5;border-radius:29px;background:#fff;box-shadow:0 28px 80px #2d436c1f;color:#20304a;position:relative;z-index:1}
+body.sanaei-login.orbit-ui .sanaei-login-brand img{border-radius:15px}
+body.sanaei-login.orbit-ui .sanaei-login-brand strong{color:#20304a}
+body.sanaei-login.orbit-ui .sanaei-login-brand span{color:#6d83ca}
+body.sanaei-login.orbit-ui .sanaei-login-card h1{font-size:23px;color:#20304a}
+body.sanaei-login.orbit-ui .sanaei-login-card>p{font-size:11px;line-height:1.8;color:#7d8ba1}
+body.sanaei-login.orbit-ui .sanaei-login-form label>span{font-size:11px;color:#65748b}
+body.sanaei-login.orbit-ui .sanaei-login-input{min-height:49px;border-color:#e1e8f3;border-radius:14px;background:#f8faff}
+body.sanaei-login.orbit-ui .sanaei-login-input input{color:#20304a!important}
+body.sanaei-login.orbit-ui .sanaei-login-submit{height:48px;border-radius:14px;background:linear-gradient(115deg,#5b7df0,#7a79e8);box-shadow:0 10px 22px #607ded24}
+body.sanaei-login.orbit-ui .sanaei-login-foot{border-top-color:#e8edf5;color:#8592a6;font-size:9px}
+@keyframes orbit-float{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-10px) rotate(4deg)}}
+@media(max-width:1000px){body.orbit-ui.makia-pro-shell{--pro-sidebar:230px}.orbit-ui.makia-pro-shell .pro-content{padding:18px 18px 34px}.orbit-ui.makia-pro-shell .sx-runtime-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.orbit-ui.makia-pro-shell .sx-vitals{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:780px){body.orbit-ui.makia-pro-shell{--pro-sidebar:0px}.orbit-ui.makia-pro-shell .pro-sidebar{width:min(290px,88vw);border-radius:0 0 0 22px;box-shadow:-20px 0 60px #243b5c1f}.orbit-ui.makia-pro-shell .pro-topbar{margin:8px 9px 0;padding:0 11px;border-radius:15px}.orbit-ui.makia-pro-shell .global-command{width:auto;max-width:42vw}.orbit-ui.makia-pro-shell .global-command b{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.orbit-ui.makia-pro-shell .top-user>div{display:none}.orbit-ui.makia-pro-shell .pro-content{padding:17px 12px 30px}.orbit-ui.makia-pro-shell .sx-future-hero{grid-template-columns:1fr;padding:20px}.orbit-ui.makia-pro-shell .sx-future-visual{display:none}.orbit-ui.makia-pro-shell .sx-mid-grid{grid-template-columns:1fr}.orbit-ui.makia-pro-shell .sx-runtime-grid{grid-template-columns:1fr 1fr}.orbit-ui.makia-pro-shell .sx-runtime-card{padding:12px;grid-template-columns:34px minmax(0,1fr)}.orbit-ui.makia-pro-shell .sx-runtime-state{grid-column:2}.orbit-ui.makia-pro-shell .sx-system-strip{grid-template-columns:repeat(2,1fr)}.orbit-ui.makia-pro-shell .sx-system-cell{border-bottom:1px solid #edf1f7}.orbit-ui.makia-pro-shell .pro-page-head,.orbit-ui.makia-pro-shell .sx-page-head{align-items:flex-start;flex-direction:column;gap:10px}}
+@media(max-width:540px){body.pro-login.orbit-ui{padding:34px 12px 18px}body.pro-login.orbit-ui .pro-login-card{margin-top:65px;padding:26px 21px 22px;border-radius:27px}body.pro-login.orbit-ui .login-ambient i:first-child{width:138px;height:138px;right:calc(50% - 69px);top:calc(50% - 300px)}body.pro-login.orbit-ui .pro-login-heading h1{font-size:23px}.orbit-ui.makia-pro-shell .pro-topbar-center{display:none}.orbit-ui.makia-pro-shell .top-server-state{padding:0 8px}.orbit-ui.makia-pro-shell .top-refresh{display:none}.orbit-ui.makia-pro-shell .sx-runtime-grid{grid-template-columns:1fr}.orbit-ui.makia-pro-shell .sx-vitals{grid-template-columns:repeat(2,minmax(0,1fr))}.orbit-ui.makia-pro-shell .sx-vital{min-height:120px;padding:13px}.orbit-ui.makia-pro-shell .sx-vital-value b{font-size:24px}.orbit-ui.makia-pro-shell .sx-system-strip{grid-template-columns:1fr 1fr}.orbit-ui.makia-pro-shell .sx-system-cell{padding:11px}.orbit-ui.makia-pro-shell .sx-system-cell b{font-size:10px}.orbit-ui.makia-pro-shell .sx-card{padding:14px}}
+@media(prefers-reduced-motion:reduce){body.pro-login.orbit-ui .login-ambient i:first-child,body.sanaei-login.orbit-ui:not(.pro-login)::before{animation:none!important}.orbit-ui.makia-pro-shell *{scroll-behavior:auto!important;transition:none!important}}

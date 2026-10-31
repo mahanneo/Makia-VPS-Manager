@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#05070b">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="ماکیا؛ پنل یکپارچه مدیریت سرور، کاربران و پروتکل‌های ارتباطی.">
+  <title>MAKIA — مدیریت هوشمند سرور</title>
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://db.onlinewebfonts.com/c/8b75d9dcff6a48c35a46656192adf019?family=FSP+DEMO+-+PODIUM+Sharp+4.11" rel="stylesheet">
+  <link rel="stylesheet" href="/static/makia-landing.css?v={{version}}-4">
+</head>
+<body class="makia-landing" data-auth-open="{{ 'true' if login_open else 'false' }}">
+  <main class="landing-shell" id="top">
+    <video class="landing-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true" tabindex="-1">
+      <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260606_154941_df1a96e1-a06f-450c-bd02-d863414cc1a0.mp4" type="video/mp4">
+    </video>
+    <div class="landing-overlay landing-overlay-left" aria-hidden="true"></div>
+    <div class="landing-overlay landing-overlay-bottom" aria-hidden="true"></div>
+    <div class="landing-grain" aria-hidden="true"></div>
+
+    <header class="landing-nav">
+      <a class="landing-brand" href="/welcome" aria-label="صفحه اصلی ماکیا">
+        <span class="landing-brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="landing-brand-copy"><strong>MAKIA</strong><small>VPS MANAGER</small></span>
+      </a>
+      <nav class="landing-links" aria-label="ناوبری اصلی">
+        <a href="#features">قابلیت‌ها</a>
+        <a href="#protocols">پروتکل‌ها</a>
+        <a href="/help/connect">راهنمای اتصال</a>
+        <a href="/client/login">پنل کاربر</a>
+      </nav>
+      <a class="landing-nav-cta" href="/login"><span>ورود به پنل</span><b aria-hidden="true">↗</b></a>
+      <button class="landing-menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false" aria-controls="landing-mobile-menu">
+        <i></i><i></i><i></i>
+      </button>
+    </header>
+
+    <div class="landing-mobile-menu" id="landing-mobile-menu" aria-hidden="true">
+      <div class="landing-mobile-head">
+        <a class="landing-brand" href="/welcome"><span class="landing-brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="landing-brand-copy"><strong>MAKIA</strong><small>VPS MANAGER</small></span></a>
+        <button class="landing-menu-close" type="button" aria-label="بستن منو">×</button>
+      </div>
+      <nav aria-label="ناوبری موبایل">
+        <a href="#features">قابلیت‌ها</a>
+        <a href="#protocols">پروتکل‌ها</a>
+        <a href="/help/connect">راهنمای اتصال</a>
+        <a href="/client/login">پنل کاربر</a>
+        <a class="landing-mobile-login" href="/login">ورود به پنل مدیریت <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+
+    <section class="landing-hero" aria-labelledby="landing-title">
+      <div class="landing-hero-copy">
+        <div class="landing-eyebrow" id="features"><span class="landing-status-dot"></span><span>ADVANCED SERVER CONTROL PLATFORM</span></div>
+        <h1 id="landing-title"><span>CONTROL.</span><span>CONNECT.</span><span class="landing-title-accent">SCALE.</span></h1>
+        <p class="landing-description">مدیریت سرور، کاربران و پروتکل‌های ارتباطی؛<br class="desktop-break"> همه‌چیز در یک پنل سریع، یکپارچه و حرفه‌ای.</p>
+        <div class="landing-actions">
+          <a class="landing-primary-cta" href="/login"><span>ورود به پنل مدیریت</span><b aria-hidden="true">↗</b></a>
+          <a class="landing-secondary-cta" href="/help/connect"><span class="landing-play-icon" aria-hidden="true">▷</span><span>راهنمای اتصال کاربران</span></a>
+        </div>
+        <div class="landing-capabilities" id="protocols">
+          <div class="landing-capability"><span class="landing-capability-icon" aria-hidden="true">01</span><span><b>مدیریت متمرکز</b><small>کاربران و دسترسی‌ها</small></span></div>
+          <div class="landing-capability"><span class="landing-capability-icon" aria-hidden="true">02</span><span><b>چندپروتکلی</b><small>تنظیم و کنترل سرویس‌ها</small></span></div>
+          <div class="landing-capability"><span class="landing-capability-icon" aria-hidden="true">03</span><span><b>پایش عملیاتی</b><small>وضعیت و عیب‌یابی</small></span></div>
+        </div>
+      </div>
+      <div class="landing-side-note" aria-hidden="true"><span class="landing-side-line"></span><span>ENGINEERED FOR CONTROL</span></div>
+    </section>
+
+    <footer class="landing-footer"><span><i></i> MAKIA SYSTEMS</span><span>SECURE ACCESS · UNIFIED CONTROL</span><a href="/login">ورود مدیر <b aria-hidden="true">↗</b></a></footer>
+    <div class="landing-scroll-mark" aria-hidden="true"><span></span></div>
+
+    <div class="landing-auth-overlay{% if login_open %} is-open{% endif %}" id="landingAuth" aria-hidden="{{ 'false' if login_open else 'true' }}">
+      <button class="landing-auth-backdrop" type="button" data-close-login aria-label="بستن پنجره ورود"></button>
+      <div class="landing-watchers" id="landingWatchers" aria-hidden="true">
+        <svg class="landing-watcher landing-watcher-left" viewBox="0 0 220 280" focusable="false">
+          <defs>
+            <linearGradient id="watcherL-shell" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0e9ff"/><stop offset=".3" stop-color="#9b82e8"/><stop offset=".68" stop-color="#292343"/><stop offset="1" stop-color="#10121e"/></linearGradient>
+            <linearGradient id="watcherL-face" x1="0" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#27213d"/><stop offset="1" stop-color="#080b14"/></linearGradient>
+            <radialGradient id="watcherL-eye"><stop offset="0" stop-color="#fff"/><stop offset=".22" stop-color="#f0ddff"/><stop offset=".55" stop-color="#b78aff"/><stop offset="1" stop-color="#7447e8"/></radialGradient>
+            <filter id="watcherL-glow"><feGaussianBlur stdDeviation="7"/></filter>
+          </defs>
+          <ellipse cx="110" cy="253" rx="56" ry="10" fill="#9876ff" opacity=".24" filter="url(#watcherL-glow)"/>
+          <ellipse cx="110" cy="126" rx="78" ry="103" fill="none" stroke="#a98aff" stroke-width="1" stroke-dasharray="3 10" opacity=".38"/>
+          <path d="M70 210 Q43 223 40 258 Q110 282 180 258 Q177 223 150 210Z" fill="url(#watcherL-shell)" stroke="#d9c8ff" stroke-opacity=".52"/>
+          <path d="M83 207 L83 229 Q110 248 137 229 L137 207Z" fill="#211b35" stroke="#ad91ff" stroke-opacity=".5"/>
+          <path d="M110 20 C66 20 44 54 45 99 L49 151 Q55 189 81 204 L110 218 L139 204 Q165 189 171 151 L175 99 C176 54 154 20 110 20Z" fill="url(#watcherL-shell)" stroke="#e7ddff" stroke-width="1.5"/>
+          <path d="M65 73 Q110 43 155 73 L153 143 Q147 177 110 191 Q73 177 67 143Z" fill="url(#watcherL-face)" stroke="#b9a3ff" stroke-width="1.2"/>
+          <path d="M74 91 Q88 76 101 92 L99 114 Q87 123 75 111Z" fill="#0a0b15" stroke="#7f69bc" stroke-width="1.2"/>
+          <path d="M119 92 Q132 76 146 91 L145 111 Q133 123 121 114Z" fill="#0a0b15" stroke="#7f69bc" stroke-width="1.2"/>
+          <g class="watcher-eye-group"><ellipse cx="88" cy="101" rx="8" ry="9" fill="url(#watcherL-eye)" class="watcher-eye"/><g class="watcher-pupil"><circle cx="89" cy="102" r="3.2" fill="#160f2c"/><circle cx="90" cy="100" r="1.2" fill="#fff"/></g></g>
+          <g class="watcher-eye-group"><ellipse cx="133" cy="101" rx="8" ry="9" fill="url(#watcherL-eye)" class="watcher-eye"/><g class="watcher-pupil"><circle cx="134" cy="102" r="3.2" fill="#160f2c"/><circle cx="135" cy="100" r="1.2" fill="#fff"/></g></g>
+          <path d="M106 119 L110 114 L114 119 L111 128 L109 128Z" fill="#9278d7" opacity=".75"/>
+          <path d="M96 145 Q110 153 124 145" fill="none" stroke="#d2baff" stroke-width="2" stroke-linecap="round"/>
+          <path d="M54 102 L33 92 L38 120 L54 126 M166 102 L187 92 L182 120 L166 126" fill="none" stroke="#9d84f1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M97 26 L92 10 L110 2 L128 10 L123 26" fill="url(#watcherL-shell)" stroke="#cdbbff" stroke-width="1.4"/>
+          <circle cx="110" cy="8" r="3.5" fill="#f5eaff"/><circle cx="110" cy="8" r="9" fill="#b18cff" opacity=".18"/>
+          <path d="M70 180 L58 198 M150 180 L162 198" stroke="#f0e9ff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <svg class="landing-watcher landing-watcher-right" viewBox="0 0 220 280" focusable="false">
+          <defs>
+            <linearGradient id="watcherR-shell" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e0ffff"/><stop offset=".28" stop-color="#69c8d8"/><stop offset=".67" stop-color="#173d50"/><stop offset="1" stop-color="#0b1420"/></linearGradient>
+            <linearGradient id="watcherR-face" x1="0" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#102a38"/><stop offset="1" stop-color="#070d15"/></linearGradient>
+            <radialGradient id="watcherR-eye"><stop offset="0" stop-color="#fff"/><stop offset=".22" stop-color="#d6ffff"/><stop offset=".55" stop-color="#68edff"/><stop offset="1" stop-color="#1592b8"/></radialGradient>
+            <filter id="watcherR-glow"><feGaussianBlur stdDeviation="7"/></filter>
+          </defs>
+          <ellipse cx="110" cy="253" rx="56" ry="10" fill="#52dcff" opacity=".23" filter="url(#watcherR-glow)"/>
+          <ellipse cx="110" cy="126" rx="78" ry="103" fill="none" stroke="#74eaff" stroke-width="1" stroke-dasharray="3 10" opacity=".35"/>
+          <path d="M70 210 Q43 223 40 258 Q110 282 180 258 Q177 223 150 210Z" fill="url(#watcherR-shell)" stroke="#c4faff" stroke-opacity=".52"/>
+          <path d="M83 207 L83 229 Q110 248 137 229 L137 207Z" fill="#112c39" stroke="#77ddeb" stroke-opacity=".5"/>
+          <path d="M110 20 C66 20 44 54 45 99 L49 151 Q55 189 81 204 L110 218 L139 204 Q165 189 171 151 L175 99 C176 54 154 20 110 20Z" fill="url(#watcherR-shell)" stroke="#d6ffff" stroke-width="1.5"/>
+          <path d="M65 73 Q110 43 155 73 L153 143 Q147 177 110 191 Q73 177 67 143Z" fill="url(#watcherR-face)" stroke="#8de9f4" stroke-width="1.2"/>
+          <path d="M74 91 Q88 76 101 92 L99 114 Q87 123 75 111Z" fill="#06121a" stroke="#4a9eaf" stroke-width="1.2"/>
+          <path d="M119 92 Q132 76 146 91 L145 111 Q133 123 121 114Z" fill="#06121a" stroke="#4a9eaf" stroke-width="1.2"/>
+          <g class="watcher-eye-group"><ellipse cx="88" cy="101" rx="8" ry="9" fill="url(#watcherR-eye)" class="watcher-eye"/><g class="watcher-pupil"><circle cx="89" cy="102" r="3.2" fill="#071923"/><circle cx="90" cy="100" r="1.2" fill="#fff"/></g></g>
+          <g class="watcher-eye-group"><ellipse cx="133" cy="101" rx="8" ry="9" fill="url(#watcherR-eye)" class="watcher-eye"/><g class="watcher-pupil"><circle cx="134" cy="102" r="3.2" fill="#071923"/><circle cx="135" cy="100" r="1.2" fill="#fff"/></g></g>
+          <path d="M106 119 L110 114 L114 119 L111 128 L109 128Z" fill="#71d8e9" opacity=".75"/>
+          <path d="M96 145 Q110 153 124 145" fill="none" stroke="#b5f8ff" stroke-width="2" stroke-linecap="round"/>
+          <path d="M54 102 L33 92 L38 120 L54 126 M166 102 L187 92 L182 120 L166 126" fill="none" stroke="#63d4e7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M97 26 L92 10 L110 2 L128 10 L123 26" fill="url(#watcherR-shell)" stroke="#bdfaff" stroke-width="1.4"/>
+          <circle cx="110" cy="8" r="3.5" fill="#eaffff"/><circle cx="110" cy="8" r="9" fill="#6fe9ff" opacity=".18"/>
+          <path d="M70 180 L58 198 M150 180 L162 198" stroke="#e0ffff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <section class="landing-auth-panel" role="dialog" aria-modal="true" aria-labelledby="landingAuthTitle">
+        <div class="landing-auth-top"><span>MAKIA / SECURE ACCESS</span><button class="landing-auth-close" type="button" data-close-login aria-label="بستن">×</button></div>
+        <div class="landing-auth-brand"><img src="/static/makia-brand.png?v={{version}}" alt="Makia"><div><strong>MAKIA</strong><small>VPS MANAGER</small></div></div>
+        <div class="landing-auth-heading">
+          <span class="landing-auth-kicker">{{ 'TWO-FACTOR VERIFICATION' if twofa_token else 'SECURE CONTROL CENTER' }}</span>
+          <h2 id="landingAuthTitle">{{ 'تأیید دو مرحله‌ای' if twofa_token and language != 'en' else 'Two-factor authentication' if twofa_token else 'ورود به مرکز فرماندهی' if language != 'en' else 'Access the control center' }}</h2>
+          <p>{{ 'کد ۶ رقمی برنامه احراز هویت را وارد کنید.' if twofa_token and language != 'en' else 'Enter the 6-digit code from your authenticator app.' if twofa_token else 'برای ورود امن به پنل مدیریت، اطلاعات مدیر را وارد کنید.' if language != 'en' else 'Enter your administrator credentials to continue securely.' }}</p>
+        </div>
+        {% if error %}<div class="landing-auth-error" role="alert">{{error}}</div>{% endif %}
+        {% if twofa_token %}
+        <form method="post" action="/login/2fa" class="landing-auth-form" autocomplete="on">
+          <input type="hidden" name="token" value="{{twofa_token}}">
+          <label><span>{{ 'کد احراز هویت' if language != 'en' else 'Authenticator code' }}</span><div class="landing-auth-field"><i aria-hidden="true">◇</i><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required {% if login_open %}autofocus{% endif %} placeholder="123456"></div></label>
+          <button class="landing-auth-submit" type="submit"><span>{{ 'تأیید و ورود' if language != 'en' else 'Verify and sign in' }}</span><b aria-hidden="true">↗</b></button>
+        </form>
+        {% else %}
+        <form method="post" action="/login" class="landing-auth-form" autocomplete="on">
+          <label><span>{{ 'نام کاربری' if language != 'en' else 'Username' }}</span><div class="landing-auth-field"><i aria-hidden="true">♙</i><input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required {% if login_open %}autofocus{% endif %} placeholder="admin"></div></label>
+          <label><span>{{ 'رمز عبور' if language != 'en' else 'Password' }}</span><div class="landing-auth-field"><i aria-hidden="true">⌑</i><input id="landingAuthPassword" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"><button type="button" id="landingAuthPasswordToggle" aria-label="نمایش رمز" title="نمایش رمز">◉</button></div></label>
+          <button class="landing-auth-submit" type="submit"><span>{{ 'ورود به پنل مدیریت' if language != 'en' else 'Sign in to Makia' }}</span><b aria-hidden="true">↗</b></button>
+        </form>
+        {% endif %}
+        <div class="landing-auth-bottom"><span><i></i>{{ 'نشست امن مدیر' if language != 'en' else 'Secure administrator session' }}</span><a href="/help/connect">{{ 'راهنمای اتصال' if language != 'en' else 'Connection guide' }} ↗</a><small>v{{version}}</small></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+  (() => {
+    const menu = document.getElementById('landing-mobile-menu');
+    const toggle = document.querySelector('.landing-menu-toggle');
+    const close = document.querySelector('.landing-menu-close');
+    const links = menu.querySelectorAll('a');
+    const auth = document.getElementById('landingAuth');
+    const authPassword = document.getElementById('landingAuthPassword');
+    const authPasswordToggle = document.getElementById('landingAuthPasswordToggle');
+    const watchers = document.getElementById('landingWatchers');
+    const authForms = auth.querySelectorAll('form.landing-auth-form');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    function setAuth(open, moveFocus = true) {
+      auth.classList.toggle('is-open', open);
+      auth.setAttribute('aria-hidden', String(!open));
+      document.body.classList.toggle('landing-auth-open', open);
+      if (open && moveFocus) auth.querySelector('input:not([type="hidden"])')?.focus({ preventScroll: true });
+      if (!open && moveFocus && (location.pathname === '/login' || location.pathname === '/login/2fa')) history.replaceState({}, '', '/');
+    }
+    function setMenu(open, moveFocus = true) {
+      menu.classList.toggle('is-open', open);
+      menu.setAttribute('aria-hidden', String(!open));
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'بستن منو' : 'باز کردن منو');
+      document.body.classList.toggle('landing-menu-open', open);
+      links.forEach((link) => { link.tabIndex = open ? 0 : -1; });
+      if (moveFocus && open) close.focus({ preventScroll: true });
+      else if (moveFocus) toggle.focus({ preventScroll: true });
+    }
+    toggle.addEventListener('click', () => setMenu(true));
+    close.addEventListener('click', () => setMenu(false));
+    links.forEach((link) => link.addEventListener('click', () => setMenu(false)));
+    document.querySelectorAll('a[href="/login"]').forEach((link) => link.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (menu.classList.contains('is-open')) setMenu(false, false);
+      setAuth(true);
+    }));
+    auth.querySelectorAll('[data-close-login]').forEach((button) => button.addEventListener('click', () => setAuth(false)));
+    window.addEventListener('pointermove', (event) => {
+      if (!watchers || !auth.classList.contains('is-open') || reducedMotion.matches) return;
+      const x = Math.max(-1, Math.min(1, (event.clientX / Math.max(1, window.innerWidth) - .5) * 2));
+      const y = Math.max(-1, Math.min(1, (event.clientY / Math.max(1, window.innerHeight) - .5) * 2));
+      watchers.querySelectorAll('.watcher-pupil').forEach((pupil, index) => {
+        const bias = index % 2 ? .82 : 1;
+        pupil.style.setProperty('--eye-x', `${(x * 4.1 * bias).toFixed(2)}px`);
+        pupil.style.setProperty('--eye-y', `${(y * 3.3).toFixed(2)}px`);
+      });
+    }, { passive: true });
+    authForms.forEach((form) => form.addEventListener('submit', (event) => {
+      if (form.dataset.nativeSubmit === 'true' || reducedMotion.matches) return;
+      event.preventDefault();
+      if (form.dataset.animating === 'true') return;
+      form.dataset.animating = 'true';
+      auth.classList.add('is-submitting');
+      document.body.classList.add('landing-auth-submitting');
+      const submit = form.querySelector('.landing-auth-submit');
+      if (submit) {
+        submit.disabled = true;
+        submit.querySelector('span').textContent = 'در حال اتصال به هسته ماکیا…';
+      }
+      window.setTimeout(() => {
+        form.dataset.nativeSubmit = 'true';
+        HTMLFormElement.prototype.submit.call(form);
+      }, 720);
+    }));
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      if (auth.classList.contains('is-open')) setAuth(false);
+      else if (menu.classList.contains('is-open')) setMenu(false);
+    });
+    authPasswordToggle?.addEventListener('click', () => {
+      authPassword.type = authPassword.type === 'password' ? 'text' : 'password';
+      authPasswordToggle.textContent = authPassword.type === 'password' ? '◉' : '◌';
+      authPassword.focus({ preventScroll: true });
+    });
+    setMenu(false, false);
+    setAuth(document.body.dataset.authOpen === 'true', false);
+    const video = document.querySelector('.landing-video');
+    const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (motionReduced.matches) video.pause();
+    motionReduced.addEventListener?.('change', (event) => { if (event.matches) video.pause(); else video.play().catch(() => {}); });
+  })();
+  </script>
+</body>
+</html>

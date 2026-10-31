@@ -1,3 +1,18 @@
+## 1.6.10-rc6 — 2026-10-31 (France parity, MTProxy endpoint feedback and QUIC UAT, NOT PRODUCTION)
+
+- Synchronized the complete deployed France application tree back into the release source, preserving the Axon 3D dashboard, landing/login assets and the expanded protocol operations module that were not present in the older GitHub RC5 branch.
+- Fixed MTProxy status to expose the public IPv4 saved in the generated mtg config; host changes now report whether the hostname, FakeTLS secret and delivered link actually changed.
+- Hardened the MTProxy UI save flow: it verifies the persisted hostname against the requested hostname, refreshes the displayed link, and explains that the Telegram link text intentionally remains unchanged when only the VPS IP behind the same DNS hostname changes.
+- Added regression coverage for MTProxy hostname rotation/link regeneration and the France endpoint display.
+- Updated the dashboard/service-worker cache revision to v175 so browsers fetch the refreshed Axon/MTProxy UI.
+- Updated CI test dependencies to use pinned pytest and httpx2, matching the installed Starlette TestClient runtime; refreshed dashboard tests for the deployed Axon interface.
+- Automated verification: 578 tests PASS, Python compile PASS, Bash syntax PASS, JavaScript syntax PASS, browser extension verified-egress contract 16 scenario groups PASS, mtg release smoke PASS, WStunnel 11.0.0 smoke PASS.
+- France host UAT: makia-uat-smoke 34 PASS / 1 WARN / 0 FAIL; makia-doctor 34 PASS / 1 WARN / 0 FAIL. Nginx, Xray config, OpenVPN, WireGuard, IKEv2, L2TP, SSTP backend, WStunnel, MTProxy, DNS, MahiNet containers and Outline were inspected.
+- External QUIC UAT from Germany to France: temporary TUIC UDP/8445 and Hysteria2 UDP/8446 client sessions both completed HTTPS egress through France (155.117.5.236); temporary users and client credentials were removed afterward.
+- MTProxy mtg doctor passed Telegram DC/front-domain checks; tg.mahinet.shop resolves directly to France and TCP/10443 was reachable from Germany.
+- Remaining stable-release gates: Telegram app handshake on a real phone/desktop, Windows native SSTP error 720, Android/inside-Iran field egress for the intended protocols, and an encrypted off-host backup plus restore/rollback rehearsal. Legacy global stunnel4 still owns the Stealth listener and is intentionally preserved pending dependency review; Client Portal is enabled and must be confirmed intentional.
+- This is still a release candidate. Do not tag/promote it as Stable or delete the Germany rollback VPS until the remaining field tests and off-host backup/rollback evidence are complete.
+
 ## 1.6.10-rc5 — 2026-10-28 (NEXUS control shell + inbound recovery + MTProxy hardening, NOT PRODUCTION)
 
 - Finalized the NEXUS future-control shell with a live runtime grid, Xray Inbound count, Telegram MTProto state, responsive glass/HUD layout and reduced-motion support.

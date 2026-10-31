@@ -6,8 +6,9 @@
   <meta name="theme-color" content="#0b101a"><title>{{app_name}} - 2FA</title>
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css?v={{version}}">
+  <link rel="stylesheet" href="/static/orbit.css?v={{version}}-orbit1">
 </head>
-<body class="sanaei-login" data-theme="glass">
+<body class="sanaei-login orbit-ui" data-theme="glass">
   <main class="sanaei-login-card">
     <div class="sanaei-login-brand"><img src="/static/makia.svg" alt=""><strong>MAKIA</strong><span>VPS MANAGER</span></div>
     <h1>{{'تأیید دو مرحله‌ای' if fa else 'Two-factor authentication'}}</h1><p>{{'کد ۶ رقمی برنامه احراز هویت را وارد کنید.' if fa else 'Enter the 6-digit code from your authenticator app.'}}</p>

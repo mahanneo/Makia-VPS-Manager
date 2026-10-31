@@ -2,7 +2,7 @@
 
 ## Release status
 
-This work is part of **Makia 1.6.10-rc5** and is not a production-stable release until CI, local data-plane checks and external client handshakes pass. The new managed TUIC and Hysteria2 services run independently under sing-box. Any existing Xray-based Hysteria2 entries are left untouched; the new service has its own user store and UDP port.
+This work is part of **Makia 1.6.10-rc6** and is not a production-stable release until CI, local data-plane checks and external client handshakes pass. The new managed TUIC and Hysteria2 services run independently under sing-box. Any existing Xray-based Hysteria2 entries are left untouched; the new service has its own user store and UDP port.
 
 ## Runtime design
 

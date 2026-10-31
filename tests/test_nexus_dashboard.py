@@ -3,20 +3,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_nexus_shell_has_live_command_hud_and_accessible_motion_preferences():
+def test_axon_dashboard_has_live_runtime_hub_and_accessible_motion_preferences():
     html = (ROOT / "app/templates/dashboard.html").read_text(encoding="utf-8")
-    css = (ROOT / "app/static/app.css").read_text(encoding="utf-8")
+    css = (ROOT / "app/static/axon-dashboard.css").read_text(encoding="utf-8")
+    system_css = (ROOT / "app/static/axon-system.css").read_text(encoding="utf-8")
     js = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
-    assert "NEXUS OPERATIONS GRID" in html
-    assert "pro-topbar-center" in html
-    assert "sx-future-hero" in css
-    assert "sx-runtime-grid" in css
+    assert "axon-global-environment" in html
+    assert "three-r150.min.js" in html
+    assert "axon-dashboard.js" in html
+    assert "axon-dashboard.css" in html
+    assert "axon-system.css" in html
+    assert ".axon-hub-metrics" in css
+    assert ".axon-module-grid" in css
     assert "@media(prefers-reduced-motion:reduce)" in css
-    assert 'html[dir="rtl"] .pro-main{margin-right:0}' in css
+    assert "@media(prefers-reduced-motion:reduce)" in system_css
     assert "const inboundCount=(x.inbounds||[]).length" in js
     assert "api('/api/network/mtproxy').catch" in js
-    assert "runtimeCard('TG','Telegram MTProto'" in js
-    assert "runtimeCard('X','Xray / V2Ray'" in js
+    assert "data-current-host=" in js
+    assert "savedHost!==requestedHost" in js
+    assert "r.public_ipv4" in js
+    assert "r.link_changed" in js
+    assert "moduleTiles" in js
+    assert "filterAxonModules" in js
+    assert "window.MakiaAxon?.mount" in js
 
 
 def test_inbounds_view_is_driven_by_xray_runtime_not_fake_demo_data():

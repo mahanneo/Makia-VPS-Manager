@@ -1,0 +1,454 @@
+/* MAKIA AXON DESIGN SYSTEM — shared by every authenticated workspace. */
+body.axon-app-active.orbit-ui.makia-pro-shell{
+  --pro-sidebar:286px;
+  --pro-text:#e9eef9;
+  --pro-muted:#8a96ad;
+  --pro-line:rgba(126,147,187,.19);
+  --pro-line-soft:rgba(126,147,187,.12);
+  --pro-surface:rgba(12,16,29,.84);
+  --pro-green:#5ce3b5;
+  --pro-cyan:#73e7ff;
+  --pro-violet:#b79aff;
+  --pro-shadow:0 18px 54px rgba(0,0,0,.22);
+  color:#e9eef9!important;
+  color-scheme:dark;
+  background:#05060b!important;
+  font-family:Inter,Tahoma,"Segoe UI",Arial,sans-serif!important;
+}
+body.axon-app-active.orbit-ui.makia-pro-shell::before,
+body.axon-app-active.orbit-ui.makia-pro-shell::after{display:block!important;content:"";position:fixed;inset:0;pointer-events:none;z-index:0}
+body.axon-app-active.orbit-ui.makia-pro-shell::before{
+  background:radial-gradient(ellipse at 76% 0%,rgba(81,61,174,.17),transparent 37%),radial-gradient(ellipse at 8% 64%,rgba(0,174,212,.08),transparent 33%),linear-gradient(rgba(109,132,175,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(109,132,175,.025) 1px,transparent 1px);
+  background-size:auto,auto,44px 44px,44px 44px;opacity:.92;
+}
+body.axon-app-active.orbit-ui.makia-pro-shell::after{background:linear-gradient(180deg,rgba(0,0,0,.03),rgba(0,0,0,.17));}
+body.axon-app-active .pro-main{position:relative;z-index:1;background:transparent!important;color:#e9eef9!important;min-width:0;}
+body.axon-app-active .pro-content{position:relative;z-index:1;width:100%;max-width:1840px;margin:0 auto;padding:25px clamp(16px,2.25vw,38px) 58px;color:#e9eef9!important;}
+html[dir="ltr"] body.axon-app-active .pro-main{margin-right:0;margin-left:var(--pro-sidebar)}
+html[dir="rtl"] body.axon-app-active .pro-main{margin-left:0;margin-right:var(--pro-sidebar)}
+
+/* Unified navigation shell: dark glass, restrained violet/cyan edge lighting. */
+body.axon-app-active .pro-sidebar{
+  z-index:80!important;width:var(--pro-sidebar);background:linear-gradient(180deg,rgba(10,13,24,.985),rgba(6,9,17,.985) 78%,rgba(8,11,20,.99))!important;
+  border-color:rgba(143,132,210,.2)!important;box-shadow:0 0 0 1px rgba(255,255,255,.018),0 24px 75px rgba(0,0,0,.36),inset 1px 0 rgba(255,255,255,.025)!important;
+  backdrop-filter:blur(26px) saturate(135%);color:#dfe7f5!important;
+}
+html[dir="rtl"] body.axon-app-active .pro-sidebar{border-left:1px solid rgba(143,132,210,.2)!important;border-right:0!important}
+html[dir="ltr"] body.axon-app-active .pro-sidebar{left:0;right:auto;border-right:1px solid rgba(143,132,210,.2)!important;border-left:0!important}
+body.axon-app-active .pro-sidebar::after{width:1px;opacity:.72;background:linear-gradient(180deg,transparent,#8c7bff 24%,#43dded 65%,transparent)!important}
+body.axon-app-active .pro-brand{background:linear-gradient(100deg,rgba(112,91,202,.11),transparent)!important;border-bottom-color:rgba(126,147,187,.14)!important;}
+body.axon-app-active .pro-brand img{border:1px solid rgba(134,222,255,.28)!important;border-radius:13px!important;box-shadow:0 0 28px rgba(77,177,255,.12)!important;filter:drop-shadow(0 0 9px rgba(87,203,255,.2))!important;}
+body.axon-app-active .pro-brand strong{color:#f5f4ff!important;letter-spacing:2.6px!important;font-size:15px!important;}
+body.axon-app-active .pro-brand span{color:#a99bff!important;letter-spacing:1.55px!important;}
+body.axon-app-active .pro-create-access{position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(122,111,255,.43)!important;border-radius:13px!important;background:linear-gradient(115deg,rgba(47,62,127,.36),rgba(70,49,138,.31) 58%,rgba(15,105,125,.2))!important;color:#f2f2ff!important;box-shadow:0 12px 30px rgba(0,0,0,.15),inset 0 1px rgba(255,255,255,.055)!important;}
+body.axon-app-active .pro-create-access::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(110deg,transparent 20%,rgba(255,255,255,.075) 50%,transparent 75%);transform:translateX(-130%);transition:transform .65s ease;}
+body.axon-app-active .pro-create-access:hover::after{transform:translateX(130%)}
+body.axon-app-active .pro-create-access>span{background:rgba(145,126,255,.13)!important;border:1px solid rgba(145,126,255,.27)!important;color:#c5baff!important;border-radius:10px!important;}
+body.axon-app-active .pro-create-access b{color:#f3f0ff!important;font-size:11px!important;}
+body.axon-app-active .pro-create-access small{color:#a5acc8!important;font-size:8px!important;}
+body.axon-app-active .pro-nav>p{color:#6e7798!important;font-size:8px!important;letter-spacing:1.65px!important;margin-top:20px!important;}
+body.axon-app-active .pro-nav>button,body.axon-app-active .pro-group-toggle,body.axon-app-active .pro-submenu button{
+  color:#929db5!important;border-color:transparent!important;border-radius:11px!important;background:transparent!important;min-height:41px;transition:background .18s,border-color .18s,color .18s,transform .18s;
+}
+body.axon-app-active .pro-nav>button:hover,body.axon-app-active .pro-group-toggle:hover,body.axon-app-active .pro-submenu button:hover{
+  color:#f2f5ff!important;border-color:rgba(139,129,225,.18)!important;background:rgba(88,83,150,.13)!important;transform:translateX(-2px);
+}
+html[dir="ltr"] body.axon-app-active .pro-nav>button:hover,html[dir="ltr"] body.axon-app-active .pro-group-toggle:hover,html[dir="ltr"] body.axon-app-active .pro-submenu button:hover{transform:translateX(2px)}
+body.axon-app-active .pro-nav>button.active,body.axon-app-active .pro-submenu button.active{
+  color:#fff!important;border-color:rgba(143,129,255,.29)!important;background:linear-gradient(100deg,rgba(117,94,255,.17),rgba(37,171,202,.065))!important;
+  box-shadow:inset -2px 0 #a897ff,0 8px 24px rgba(0,0,0,.12)!important;
+}
+html[dir="ltr"] body.axon-app-active .pro-nav>button.active,html[dir="ltr"] body.axon-app-active .pro-submenu button.active{box-shadow:inset 2px 0 #a897ff,0 8px 24px rgba(0,0,0,.12)!important}
+body.axon-app-active .pro-nav-icon{border:1px solid rgba(130,139,198,.16)!important;background:linear-gradient(145deg,rgba(38,38,69,.7),rgba(14,20,35,.9))!important;color:#aaa2ff!important;border-radius:10px!important;}
+body.axon-app-active .pro-nav>button.active .pro-nav-icon{background:rgba(145,126,255,.18)!important;border-color:rgba(145,126,255,.28)!important;color:#e0d7ff!important}
+body.axon-app-active .pro-nav button b{font-size:10px!important;font-weight:600!important}
+body.axon-app-active .pro-nav>button em{color:#65708c!important}
+body.axon-app-active .pro-group-toggle i{color:#737e9b!important}
+body.axon-app-active .pro-submenu{border-right-color:rgba(143,129,255,.2)!important}
+body.axon-app-active .proto-dot{box-shadow:0 0 10px currentColor!important}
+body.axon-app-active .pro-sidebar-footer{background:linear-gradient(0deg,rgba(15,18,34,.8),transparent)!important;border-top-color:rgba(126,147,187,.14)!important}
+body.axon-app-active .server-health{border:1px solid rgba(68,220,183,.16)!important;background:rgba(9,34,31,.48)!important;border-radius:12px!important}
+body.axon-app-active .server-health b{color:#8debd2!important}
+body.axon-app-active .server-health small,body.axon-app-active .footer-meta{color:#717b98!important}
+body.axon-app-active .footer-meta button{color:#9d9db8!important}
+body.axon-app-active .footer-meta button:hover{color:#c4b7ff!important}
+body.axon-app-active .sidebar-mobile-close{display:none;place-items:center;border:1px solid rgba(143,129,255,.3)!important;background:#121326!important;color:#e9e5ff!important;border-radius:10px!important;}
+
+/* Top bar and shared page typography. */
+body.axon-app-active .pro-topbar{
+  height:66px;margin:11px 17px 0;padding:0 18px;border:1px solid rgba(129,140,189,.2)!important;border-radius:16px!important;
+  background:linear-gradient(110deg,rgba(10,13,24,.94),rgba(12,15,30,.89) 58%,rgba(20,14,39,.9))!important;
+  box-shadow:0 16px 42px rgba(0,0,0,.17),inset 0 1px rgba(255,255,255,.035)!important;backdrop-filter:blur(24px) saturate(135%);
+}
+body.axon-app-active .pro-topbar::after{content:"";position:absolute;left:22px;right:22px;bottom:-1px;height:1px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(164,139,255,.5),rgba(79,222,239,.32),transparent)}
+body.axon-app-active .pro-topbar-center{display:flex!important;gap:10px;}
+body.axon-app-active .pro-topbar-center>i,body.axon-app-active .pro-topbar-beacon{background:#9d8cff!important;box-shadow:0 0 0 5px rgba(157,140,255,.08),0 0 18px rgba(157,140,255,.68)!important}
+body.axon-app-active .pro-topbar-center b{color:#d7d3ff!important;font-size:9px!important;letter-spacing:1.5px!important}
+body.axon-app-active .pro-topbar-center small{color:#777d9e!important;font-size:7px!important;letter-spacing:.9px!important}
+body.axon-app-active .pro-topbar-node{border:1px solid rgba(126,147,187,.19)!important;border-radius:7px!important;background:rgba(9,13,25,.75)!important;color:#929bb8!important}
+body.axon-app-active .global-command{border-color:rgba(126,147,187,.22)!important;border-radius:11px!important;background:rgba(7,10,20,.8)!important;color:#7f8ba7!important}
+body.axon-app-active .global-command:hover{border-color:rgba(144,129,255,.48)!important;box-shadow:0 0 0 3px rgba(144,129,255,.05)!important}
+body.axon-app-active .global-command kbd{border-color:rgba(126,147,187,.2)!important;background:#0a0e1b!important;color:#777f9d!important}
+body.axon-app-active .top-server-state{border-color:rgba(70,218,179,.2)!important;background:rgba(7,38,31,.58)!important;color:#7ee4c1!important;border-radius:999px!important}
+body.axon-app-active .top-server-state i{box-shadow:0 0 12px rgba(70,218,179,.8)!important}
+body.axon-app-active .top-refresh{border-color:rgba(126,147,187,.2)!important;background:#0c1020!important;color:#a1a5c0!important;border-radius:11px!important;}
+body.axon-app-active .top-refresh:hover{border-color:rgba(144,129,255,.5)!important;color:#c4b7ff!important}
+body.axon-app-active .top-user>span{border:1px solid rgba(143,129,255,.32)!important;background:linear-gradient(135deg,#29274e,#17475c 65%,#51417c)!important;box-shadow:0 0 22px rgba(112,104,226,.12)!important;color:#f4f0ff!important}
+body.axon-app-active .top-user b{color:#e5e8f5!important}
+body.axon-app-active .top-user small{color:#7f89a4!important}
+body.axon-app-active .mobile-menu-toggle{border:1px solid rgba(126,147,187,.22)!important;background:#0d1020!important;color:#b9b3ff!important;border-radius:11px!important}
+body.axon-app-active .pro-page,body.axon-app-active .sx-page{gap:16px}
+body.axon-app-active .pro-page-head h1,body.axon-app-active .sx-page-head h1{color:#f1f0ff!important;font-size:clamp(22px,2vw,29px)!important;letter-spacing:-.55px!important;font-weight:760!important;}
+body.axon-app-active .pro-page-head p,body.axon-app-active .sx-page-head p{color:#939bb4!important;font-size:11px!important;line-height:1.85!important;}
+body.axon-app-active .pro-kicker,body.axon-app-active .sx-section-kicker{color:#aa9cff!important;letter-spacing:1.35px!important;font-size:8px!important;}
+body.axon-app-active .pro-head-actions,body.axon-app-active .sx-head-actions{gap:8px}
+body.axon-app-active .primary,body.axon-app-active .primary-btn,body.axon-app-active .primaryish{
+  border:1px solid rgba(160,145,255,.4)!important;background:linear-gradient(115deg,#6551d8,#5a62ce 62%,#177d92)!important;color:#fff!important;border-radius:11px!important;
+  box-shadow:0 9px 25px rgba(81,72,181,.16),inset 0 1px rgba(255,255,255,.1)!important;
+}
+body.axon-app-active .primary:hover,body.axon-app-active .primary-btn:hover{filter:brightness(1.1);box-shadow:0 12px 29px rgba(81,72,181,.22)!important}
+body.axon-app-active .ghost,body.axon-app-active .soft,body.axon-app-active .engine-btn,body.axon-app-active .icon-btn,body.axon-app-active .link-btn{
+  border:1px solid rgba(126,147,187,.22)!important;background:rgba(12,16,29,.78)!important;color:#b5bdd2!important;border-radius:10px!important;
+}
+body.axon-app-active .ghost:hover,body.axon-app-active .soft:hover,body.axon-app-active .engine-btn:hover,body.axon-app-active .icon-btn:hover{border-color:rgba(144,129,255,.48)!important;background:rgba(37,32,67,.72)!important;color:#f3efff!important}
+body.axon-app-active .danger{border:1px solid rgba(255,103,136,.28)!important;background:rgba(73,20,38,.42)!important;color:#ff9bb5!important;border-radius:10px!important}
+body.axon-app-active .status-chip{border:1px solid rgba(126,147,187,.2)!important;background:rgba(16,20,36,.85)!important;color:#a7b1c8!important;border-radius:999px!important}
+body.axon-app-active .status-chip.ok{border-color:rgba(68,220,183,.23)!important;background:rgba(9,43,34,.62)!important;color:#7de4c2!important}
+body.axon-app-active .status-chip.warn{border-color:rgba(246,192,95,.24)!important;background:rgba(55,39,13,.55)!important;color:#f4ce83!important}
+body.axon-app-active .status-chip.bad{border-color:rgba(255,103,136,.24)!important;background:rgba(58,19,32,.6)!important;color:#ff9bb0!important}
+body.axon-app-active .muted{color:#8995ae!important}
+
+/* Every section card is normalized to the same translucent surface. */
+body.axon-app-active #content .panel,
+body.axon-app-active #content .pro-directory,
+body.axon-app-active #content .pro-stat-strip,
+body.axon-app-active #content .sx-card,
+body.axon-app-active #content .sx-vital,
+body.axon-app-active #content .settings-card-v2,
+body.axon-app-active #content .settings-nav-v2,
+body.axon-app-active #content .settings-section-head,
+body.axon-app-active #content .view-intro,
+body.axon-app-active #content .account-hero,
+body.axon-app-active #content .security-hero,
+body.axon-app-active #content .update-hero,
+body.axon-app-active #content .protocol-command,
+body.axon-app-active #content .engine-card,
+body.axon-app-active #content .service-card,
+body.axon-app-active #content .node-card,
+body.axon-app-active #content .plan-card,
+body.axon-app-active #content .client-card,
+body.axon-app-active #content .access-portal-card,
+body.axon-app-active #content .settings-card,
+body.axon-app-active #content .settings-nav,
+body.axon-app-active #content .ops-card,
+body.axon-app-active #content .connectivity-card,
+body.axon-app-active #content .risk-card,
+body.axon-app-active #content .security-score,
+body.axon-app-active #content .version-stack,
+body.axon-app-active #content .kpi,
+body.axon-app-active #content .quick-card,
+body.axon-app-active #content .pro-info-card,
+body.axon-app-active #content .detail-section,
+body.axon-app-active #content .access-detail-summary>div,
+body.axon-app-active #content .pro-review-grid>div,
+body.axon-app-active #content .credential-grid>div,
+body.axon-app-active #content .protocol-tile,
+body.axon-app-active #content .protocol-client,
+body.axon-app-active #content .protocol-mode-card,
+body.axon-app-active #content .domain-health-v2>div,
+body.axon-app-active #content .settings-inline-note,
+body.axon-app-active #content .security-feature-row,
+body.axon-app-active #content .network-tool-card,
+body.axon-app-active #content .settings-shortcuts button,
+body.axon-app-active #content .settings-tabs-sx,
+body.axon-app-active #content .port-management-panel,
+body.axon-app-active #content .glass-status-hero,
+body.axon-app-active #content .glass-resource-panel,
+body.axon-app-active #content .glass-service-card,
+body.axon-app-active #content .glass-services-panel,
+body.axon-app-active #content .glass-summary-grid,
+body.axon-app-active #content .session-cards>div,
+body.axon-app-active #content .protocol-modes-panel,
+body.axon-app-active #content .protocol-page-header,
+body.axon-app-active #content .protocol-policy-mini>div,
+body.axon-app-active #content .engine-inbound,
+body.axon-app-active #content .capability-card,
+body.axon-app-active #content .network-health-grid>div,
+body.axon-app-active #content .network-delivery-grid>div,
+body.axon-app-active #content .support-action-grid>div,
+body.axon-app-active #content .support-grid>div{
+  border-color:rgba(126,147,187,.18)!important;
+  background:linear-gradient(145deg,rgba(15,19,34,.91),rgba(9,12,23,.91))!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.13),inset 0 1px rgba(255,255,255,.025)!important;
+  color:#dfe5f4!important;
+}
+body.axon-app-active #content [class*="-card"]:not(.pro-create-access),
+body.axon-app-active #content [class*="-tile"],
+body.axon-app-active #content [class*="-panel"]:not(.modal-backdrop),
+body.axon-app-active #content [class*="-section-head"]{
+  border-color:rgba(126,147,187,.17);
+}
+body.axon-app-active #content [class*="-card"] h2,
+body.axon-app-active #content [class*="-card"] h3,
+body.axon-app-active #content [class*="-card"] h4,
+body.axon-app-active #content [class*="-panel"] h2,
+body.axon-app-active #content [class*="-panel"] h3,
+body.axon-app-active #content [class*="-section-head"] h2,
+body.axon-app-active #content [class*="-section-head"] h3,
+body.axon-app-active #content .panel h2,
+body.axon-app-active #content .panel h3,
+body.axon-app-active #content .panel-head h3,
+body.axon-app-active #content .sx-card-head h3,
+body.axon-app-active #content .view-intro h2,
+body.axon-app-active #content .settings-card-title b,
+body.axon-app-active #content .protocol-page-title h2{color:#eceaff!important}
+body.axon-app-active #content [class*="-card"] p,
+body.axon-app-active #content [class*="-panel"] p,
+body.axon-app-active #content .panel-head span,
+body.axon-app-active #content .view-intro p,
+body.axon-app-active #content .settings-section-head p,
+body.axon-app-active #content .settings-card-title span,
+body.axon-app-active #content .protocol-page-title p,
+body.axon-app-active #content .sx-card-head p{color:#929db7!important}
+body.axon-app-active #content .pro-stat-strip{overflow:hidden;border-radius:15px!important}
+body.axon-app-active #content .pro-stat-strip>div{background:rgba(13,17,31,.78)!important;border-color:rgba(126,147,187,.13)!important}
+body.axon-app-active #content .pro-stat-strip span{color:#8c97b0!important}
+body.axon-app-active #content .pro-stat-strip b{color:#f1efff!important}
+body.axon-app-active #content .sx-vitals{gap:12px}
+body.axon-app-active #content .sx-vital{border-radius:17px!important}
+body.axon-app-active #content .sx-vital-value b{color:#f3f0ff!important}
+body.axon-app-active #content .sx-vital-value span,body.axon-app-active #content .sx-vital-detail,body.axon-app-active #content .sx-vital-foot,body.axon-app-active #content .sx-vital-head{color:#929db6!important}
+body.axon-app-active #content .sx-meter,body.axon-app-active #content .bar{background:#202238!important}
+body.axon-app-active #content .sx-meter i,body.axon-app-active #content .bar i{background:linear-gradient(90deg,#aa8dff,#48d8e8)!important;box-shadow:0 0 13px rgba(143,123,255,.22)}
+body.axon-app-active #content .sx-system-strip{border-color:rgba(126,147,187,.18)!important;background:rgba(11,15,27,.86)!important;border-radius:15px!important}
+body.axon-app-active #content .sx-system-cell{border-color:rgba(126,147,187,.13)!important}
+body.axon-app-active #content .sx-system-cell span{color:#8d99b2!important}
+body.axon-app-active #content .sx-system-cell b{color:#e7e5fa!important}
+body.axon-app-active #content .sx-runtime-main b,body.axon-app-active #content .sx-protocol-row b{color:#eceaff!important}
+body.axon-app-active #content .sx-runtime-main small,body.axon-app-active #content .sx-runtime-main em,body.axon-app-active #content .sx-protocol-row span,body.axon-app-active #content .sx-protocol-row em{color:#8b97b0!important}
+body.axon-app-active #content .sx-runtime-glyph,body.axon-app-active #content .provision-preview,body.axon-app-active #content .provision-success,body.axon-app-active #content .wizard-note,body.axon-app-active #content .quick-card{background:linear-gradient(145deg,rgba(29,28,57,.8),rgba(11,16,29,.92))!important;border-color:rgba(126,147,187,.18)!important}
+body.axon-app-active #content .sx-runtime-state{background:rgba(9,43,34,.62)!important;border-color:rgba(68,220,183,.23)!important;color:#7de4c2!important}
+body.axon-app-active #content .sx-runtime-state i{box-shadow:0 0 9px rgba(68,220,183,.65)!important}
+body.axon-app-active #content .pro-user-table-head,body.axon-app-active #content .neon-table-head,body.axon-app-active #content .port-table-head,body.axon-app-active #content .lab-port-head{background:rgba(20,22,42,.93)!important;color:#929db7!important;border-color:rgba(126,147,187,.14)!important}
+body.axon-app-active #content .pro-user-row,body.axon-app-active #content .port-table-row,body.axon-app-active #content .audit-row,body.axon-app-active #content .backup-row,body.axon-app-active #content .session-row,body.axon-app-active #content .lab-port-row{border-color:rgba(126,147,187,.13)!important;background:transparent!important;color:#dbe2f2!important}
+body.axon-app-active #content .pro-user-row:hover,body.axon-app-active #content .port-table-row:hover,body.axon-app-active #content tr:hover td{background:rgba(116,98,204,.07)!important}
+body.axon-app-active #content .pro-user-id b,body.axon-app-active #content .pro-user-usage b,body.axon-app-active #content .pro-user-table-head,body.axon-app-active #content table{color:#dce3f3!important}
+body.axon-app-active #content .pro-user-id small,body.axon-app-active #content .pro-user-usage small{color:#8995ae!important}
+body.axon-app-active #content .pro-user-avatar{border-color:rgba(145,126,255,.3)!important;background:linear-gradient(135deg,#30265a,#18485c)!important;color:#f2edff!important}
+body.axon-app-active #content table{color:#dce3f3!important;border-color:rgba(126,147,187,.16)!important}
+body.axon-app-active #content th{background:rgba(20,22,42,.93)!important;color:#8e9ab5!important;border-color:rgba(126,147,187,.15)!important}
+body.axon-app-active #content td{color:#cbd4e8!important;border-color:rgba(126,147,187,.13)!important}
+body.axon-app-active #content .pro-directory-toolbar{border-color:rgba(126,147,187,.14)!important;background:rgba(12,15,28,.7)!important}
+body.axon-app-active #content .pro-directory-toolbar h3{color:#eceaff!important}
+body.axon-app-active #content .pro-directory-toolbar small{color:#858fac!important}
+body.axon-app-active #content .pro-filter-tabs button,body.axon-app-active #content .settings-nav-v2 button,body.axon-app-active #content .settings-tabs-sx button{color:#929db7!important}
+body.axon-app-active #content .pro-filter-tabs button.active,body.axon-app-active #content .settings-nav-v2 button.active,body.axon-app-active #content .settings-tabs-sx button.active{background:rgba(115,93,230,.2)!important;border-color:rgba(145,126,255,.3)!important;color:#e5ddff!important;box-shadow:inset -2px 0 #a897ff!important}
+body.axon-app-active #content input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+body.axon-app-active #content select,body.axon-app-active #content textarea,
+body.axon-app-active #content .filterbar input,body.axon-app-active #content .filterbar select,
+body.axon-app-active #content .pro-search-wrap,body.axon-app-active #content .command-modal>input{
+  background:rgba(6,9,18,.9)!important;border:1px solid rgba(126,147,187,.23)!important;color:#edf0ff!important;border-radius:10px!important;box-shadow:none!important;
+}
+body.axon-app-active #content input::placeholder,body.axon-app-active #content textarea::placeholder{color:#68728d!important}
+body.axon-app-active #content input:focus,body.axon-app-active #content select:focus,body.axon-app-active #content textarea:focus{border-color:rgba(156,139,255,.72)!important;box-shadow:0 0 0 3px rgba(156,139,255,.1)!important}
+body.axon-app-active #content input[type="checkbox"],body.axon-app-active #content input[type="radio"]{accent-color:#a18aff!important}
+body.axon-app-active #content .pro-search-wrap input{background:transparent!important;border:0!important;box-shadow:none!important}
+body.axon-app-active #content .config-output,body.axon-app-active #content pre,body.axon-app-active #content code,body.axon-app-active #content .command-box,body.axon-app-active #content .share-copy textarea,body.axon-app-active #content .xray-share textarea{background:#070a14!important;border-color:rgba(126,147,187,.2)!important;color:#b8f5ff!important}
+body.axon-app-active #content .notice,body.axon-app-active #content .iran-boundary,body.axon-app-active #content .notice.warn{background:rgba(54,39,13,.5)!important;border-color:rgba(246,192,95,.24)!important;color:#efd08c!important}
+body.axon-app-active #content .notice.success-note,body.axon-app-active #content .success-note{background:rgba(9,43,34,.55)!important;border-color:rgba(68,220,183,.22)!important;color:#8ce7c9!important}
+body.axon-app-active #content .field-badge{background:rgba(25,29,49,.8)!important;border-color:rgba(126,147,187,.18)!important;color:#a6b1ca!important}
+body.axon-app-active #content .empty,body.axon-app-active #content .loading-state{color:#929db7!important}
+body.axon-app-active #content .spinner{border-color:rgba(126,147,187,.2)!important;border-top-color:#a18aff!important}
+body.axon-app-active #content .history-chart{background:#080c18!important;border-color:rgba(126,147,187,.18)!important}
+body.axon-app-active #content .settings-nav-v2 button i{background:#11142a!important;border-color:rgba(126,147,187,.18)!important;color:#b6a7ff!important}
+body.axon-app-active #content .settings-actions{border-top-color:rgba(126,147,187,.15)!important}
+body.axon-app-active #content .settings-version{border-color:rgba(145,126,255,.28)!important;background:rgba(103,82,205,.1)!important;color:#c0b4ff!important}
+body.axon-app-active #content .settings-shortcuts button{color:#dfe4f4!important}
+body.axon-app-active #content .settings-shortcuts span{color:#8995ae!important}
+body.axon-app-active #content .settings-shortcuts button:hover{border-color:rgba(145,126,255,.4)!important;background:rgba(35,31,66,.85)!important}
+body.axon-app-active #content .ok-text{color:#7de4c2!important}
+body.axon-app-active #content .bad-text{color:#ff9bb0!important}
+body.axon-app-active #content .warn-text{color:#f4ce83!important}
+body.axon-app-active #content .status-dot.ok{background:#5ce3b5!important;box-shadow:0 0 12px rgba(92,227,181,.55)!important}
+body.axon-app-active #content .status-dot.bad{background:#ff7696!important}
+body.axon-app-active #content .settings-nav-v2{position:sticky}
+
+/* Modals, drawers, provisioning flows and command palette share the same visual language. */
+body.axon-app-active #modalRoot .modal-backdrop,body.axon-app-active #modalRoot .detail-backdrop,body.axon-app-active #modalRoot .provision-backdrop{background:rgba(2,4,11,.76)!important;backdrop-filter:blur(11px)!important}
+body.axon-app-active #modalRoot .modal,body.axon-app-active #modalRoot .command-modal,body.axon-app-active #modalRoot .change-protocol-modal,body.axon-app-active #modalRoot .migration-restore-modal,body.axon-app-active #modalRoot .access-detail-drawer,body.axon-app-active #modalRoot .provision-drawer,body.axon-app-active #modalRoot .share-modal,body.axon-app-active #modalRoot .credential-modal,body.axon-app-active #modalRoot .config-modal,body.axon-app-active #modalRoot .diagnostics-modal{
+  color:#e7ebf8!important;border-color:rgba(143,129,255,.24)!important;background:radial-gradient(ellipse at 100% 0%,rgba(104,83,200,.12),transparent 34%),linear-gradient(150deg,#111426,#080b15 72%)!important;box-shadow:0 35px 120px rgba(0,0,0,.58),inset 0 1px rgba(255,255,255,.035)!important;border-radius:20px!important;
+}
+body.axon-app-active #modalRoot .modal h1,body.axon-app-active #modalRoot .modal h2,body.axon-app-active #modalRoot .modal h3,body.axon-app-active #modalRoot .modal h4,body.axon-app-active #modalRoot .modal b,body.axon-app-active #modalRoot .modal strong{color:#f0edff!important}
+body.axon-app-active #modalRoot .modal p,body.axon-app-active #modalRoot .modal span,body.axon-app-active #modalRoot .modal small,body.axon-app-active #modalRoot .modal label{color:#9ba5be}
+body.axon-app-active #modalRoot .close-btn{border-color:rgba(126,147,187,.22)!important;background:#111528!important;color:#c1b7ff!important;border-radius:10px!important}
+body.axon-app-active #modalRoot .wizard-head,body.axon-app-active #modalRoot .wizard-footer,body.axon-app-active #modalRoot .provision-header,body.axon-app-active #modalRoot .provision-drawer .wizard-footer{border-color:rgba(126,147,187,.16)!important;background:rgba(8,11,21,.65)!important}
+body.axon-app-active #modalRoot input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),body.axon-app-active #modalRoot select,body.axon-app-active #modalRoot textarea{background:#070a14!important;border-color:rgba(126,147,187,.23)!important;color:#edf0ff!important}
+body.axon-app-active #modalRoot input:focus,body.axon-app-active #modalRoot select:focus,body.axon-app-active #modalRoot textarea:focus{border-color:rgba(156,139,255,.72)!important;box-shadow:0 0 0 3px rgba(156,139,255,.1)!important}
+body.axon-app-active #modalRoot .command-modal #commandList button{color:#cbd2e6!important;border-color:transparent!important;background:transparent!important}
+body.axon-app-active #modalRoot .command-modal #commandList button:hover{background:rgba(100,82,196,.13)!important;border-color:rgba(143,129,255,.2)!important}
+body.axon-app-active .toast{border-color:rgba(68,220,183,.25)!important;background:rgba(7,32,28,.96)!important;color:#8cebd0!important;box-shadow:0 15px 55px rgba(0,0,0,.45)!important}
+
+/* Motion language for page-to-page navigation and newly rendered sections. */
+body.axon-app-active .pro-main{animation:axon-main-arrive .58s cubic-bezier(.2,.8,.2,1) both}
+body.axon-app-active .pro-sidebar{animation:axon-sidebar-arrive .52s ease both}
+body.axon-app-active .pro-content>#content>*:not(.axon-shell){animation:axon-page-arrive .46s cubic-bezier(.2,.75,.2,1) both;transform-origin:50% 0}
+body.axon-app-active .pro-content>#content>.axon-shell{animation:axon-dashboard-arrive .7s cubic-bezier(.2,.75,.2,1) both}
+body.axon-app-active #content .pro-page-head,body.axon-app-active #content .sx-page-head{animation:axon-heading-arrive .42s ease both}
+body.axon-app-active #content .pro-page-head .pro-head-actions,body.axon-app-active #content .sx-page-head .sx-head-actions{animation:axon-heading-arrive .52s ease both}
+@keyframes axon-main-arrive{from{opacity:.25;filter:blur(3px)}to{opacity:1;filter:blur(0)}}
+@keyframes axon-sidebar-arrive{from{opacity:.45}to{opacity:1}}
+@keyframes axon-page-arrive{from{opacity:0;transform:translateY(12px) scale(.995);filter:blur(2px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+@keyframes axon-heading-arrive{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@keyframes axon-dashboard-arrive{from{opacity:0;filter:blur(5px);transform:scale(1.018)}to{opacity:1;filter:blur(0);transform:scale(1)}}
+
+/* Tablet and phone: keep the full sidebar as a sliding, usable drawer. */
+@media(max-width:900px){
+  body.axon-app-active.orbit-ui.makia-pro-shell{--pro-sidebar:0px}
+  html[dir="rtl"] body.axon-app-active .pro-main{margin-right:0!important;margin-left:0!important}
+  html[dir="ltr"] body.axon-app-active .pro-main{margin-left:0!important;margin-right:0!important}
+  body.axon-app-active .pro-content{padding:18px 14px 34px!important}
+  body.axon-app-active .pro-topbar{height:59px;margin:8px 9px 0;padding:0 11px;border-radius:14px!important}
+  body.axon-app-active .pro-topbar-center{display:none!important}
+  body.axon-app-active .pro-sidebar{width:min(310px,88vw)!important;top:0;bottom:0;transform:translateX(110%);box-shadow:0 0 0 1px rgba(143,129,255,.16),-25px 0 80px rgba(0,0,0,.55)!important}
+  html[dir="ltr"] body.axon-app-active .pro-sidebar{transform:translateX(-110%)}
+  body.axon-app-active.menu-open .pro-sidebar{transform:translateX(0)!important}
+  body.axon-app-active .sidebar-mobile-close{display:grid!important}
+  body.axon-app-active.menu-open::after{content:"";position:fixed;inset:0;z-index:55;pointer-events:none;background:rgba(1,3,9,.55);backdrop-filter:blur(3px)}
+  body.axon-app-active #content .pro-page-head,body.axon-app-active #content .sx-page-head{align-items:flex-start;flex-direction:column;gap:12px}
+  body.axon-app-active #content .pro-head-actions,body.axon-app-active #content .sx-head-actions{width:100%}
+  body.axon-app-active #content .settings-shell-v2{grid-template-columns:1fr}
+  body.axon-app-active #content .settings-nav-v2{position:static;display:flex;overflow-x:auto}
+  body.axon-app-active #content .settings-nav-title{display:none}
+}
+@media(max-width:620px){
+  body.axon-app-active .top-user>div{display:none}
+  body.axon-app-active .global-command{width:clamp(130px,42vw,220px)}
+  body.axon-app-active .global-command kbd{display:none}
+  body.axon-app-active .pro-topbar-left{gap:5px}
+  body.axon-app-active #content .pro-stat-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.axon-app-active #content .pro-stat-strip>div{border-bottom:1px solid rgba(126,147,187,.13)}
+  body.axon-app-active #content .sx-vitals{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.axon-app-active #content .sx-system-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.axon-app-active #content .sx-system-cell{border-bottom:1px solid rgba(126,147,187,.13)}
+  body.axon-app-active #content .settings-form-grid,body.axon-app-active #content .settings-form-grid.two{grid-template-columns:1fr}
+  body.axon-app-active #content .settings-shortcuts,body.axon-app-active #content .domain-health-v2{grid-template-columns:1fr 1fr}
+  body.axon-app-active #content .credential-grid,body.axon-app-active #content .review-grid,body.axon-app-active #content .success-grid{grid-template-columns:1fr}
+  body.axon-app-active #content .pro-user-table-head{display:none}
+  body.axon-app-active #content .pro-user-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
+}
+@media(prefers-reduced-motion:reduce){
+  body.axon-app-active .pro-main,body.axon-app-active .pro-sidebar,body.axon-app-active .pro-content>#content>*:not(.axon-shell),body.axon-app-active .pro-content>#content>.axon-shell,body.axon-app-active #content .pro-page-head,body.axon-app-active #content .sx-page-head{animation:none!important;filter:none!important;transform:none!important}
+}
+
+/* Catch legacy and newly-added feature cards without rewriting their behavior. */
+body.axon-app-active #content [class*="-card "],body.axon-app-active #content [class$="-card"],
+body.axon-app-active #content [class*="-panel "],body.axon-app-active #content [class$="-panel"]{
+  border-color:rgba(126,147,187,.18)!important;
+  background:linear-gradient(145deg,rgba(15,19,34,.91),rgba(9,12,23,.91))!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.13),inset 0 1px rgba(255,255,255,.025)!important;
+  color:#dfe5f4!important;
+}
+body.axon-app-active #content [class*="-card "] h1,body.axon-app-active #content [class*="-card "] h2,body.axon-app-active #content [class*="-card "] h3,body.axon-app-active #content [class*="-card "] h4,
+body.axon-app-active #content [class$="-card"] h1,body.axon-app-active #content [class$="-card"] h2,body.axon-app-active #content [class$="-card"] h3,body.axon-app-active #content [class$="-card"] h4,
+body.axon-app-active #content [class*="-panel "] h2,body.axon-app-active #content [class*="-panel "] h3,body.axon-app-active #content [class$="-panel"] h2,body.axon-app-active #content [class$="-panel"] h3{color:#eceaff!important}
+body.axon-app-active #content [class*="-card "] small,body.axon-app-active #content [class$="-card"] small,body.axon-app-active #content [class*="-panel "] small,body.axon-app-active #content [class$="-panel"] small{color:#8d99b2}
+body.axon-app-active #content .pro-protocol-card .protocol-card-icon,body.axon-app-active #content .protocol-card-icon,body.axon-app-active #content .protocol-icon,body.axon-app-active #content .access-protocol-icon{background:linear-gradient(145deg,rgba(54,49,94,.95),rgba(15,32,48,.95))!important;border-color:rgba(143,129,255,.25)!important;color:#c2b8ff!important}
+body.axon-app-active #content .pro-protocol-card>i{color:#7de4c2!important}
+body.axon-app-active #content .client-qr-card img,body.axon-app-active #content .share-qr{background:#fff!important;border-color:#dbeafe!important}
+body.axon-app-active #content [class*="-hero "],body.axon-app-active #content [class$="-hero"]{
+  border-color:rgba(126,147,187,.2)!important;
+  background:radial-gradient(ellipse at 92% 0%,rgba(112,88,214,.13),transparent 40%),linear-gradient(125deg,rgba(16,20,36,.95),rgba(8,12,23,.94))!important;
+  box-shadow:0 16px 42px rgba(0,0,0,.16),inset 0 1px rgba(255,255,255,.035)!important;
+  color:#e6e9f7!important;
+}
+body.axon-app-active.orbit-ui.makia-pro-shell.menu-open::after{z-index:55!important;background:rgba(1,3,9,.55)!important;backdrop-filter:blur(3px)!important}
+
+/* GLOBAL AXON 3D ENVIRONMENT — persistent behind every authenticated view. */
+body.axon-app-active.orbit-ui.makia-pro-shell{background:#04050b!important;isolation:isolate;}
+body.axon-app-active .axon-global-environment{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;perspective:1250px;isolation:isolate;background:radial-gradient(ellipse at 72% 8%,rgba(89,57,185,.17),transparent 36%),radial-gradient(ellipse at 20% 70%,rgba(0,178,210,.09),transparent 34%),linear-gradient(145deg,#05060d,#080a15 52%,#04060c);}
+body.axon-app-active .axon-global-canvas{position:absolute;inset:0;display:block;width:100%;height:100%;z-index:0;opacity:.5;mix-blend-mode:screen;pointer-events:none;background:transparent!important;outline:none;}
+body.axon-app-active .axon-global-canvas.axon-webgl-fallback{display:none;}
+body.axon-app-active .axon-global-environment::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 36%,transparent 0,rgba(4,5,11,.14) 44%,rgba(4,5,11,.65) 100%),linear-gradient(180deg,rgba(4,5,11,.02),rgba(4,5,11,.18) 65%,rgba(4,5,11,.58));}
+body.axon-app-active .axon-global-environment::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;opacity:.14;background:repeating-linear-gradient(0deg,rgba(151,171,255,.06) 0,rgba(151,171,255,.06) 1px,transparent 1px,transparent 4px);mask-image:linear-gradient(180deg,transparent,black 30%,black 80%,transparent);}
+body.axon-app-active .axon-environment-grid{position:absolute;z-index:1;left:-22%;right:-22%;top:37%;height:90%;pointer-events:none;transform-origin:50% 0;transform:perspective(740px) rotateX(65deg) translateY(0) scale(1.25);background-image:linear-gradient(rgba(100,125,205,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(100,125,205,.14) 1px,transparent 1px);background-size:58px 58px;mask-image:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.18) 14%,black 48%,transparent 100%);opacity:.3;animation:axon-floor-drift 26s linear infinite;}
+body.axon-app-active .axon-environment-ring{position:absolute;z-index:1;left:58%;top:45%;width:min(72vw,950px);aspect-ratio:1;border:1px solid rgba(135,117,255,.17);border-radius:50%;transform:translate(-50%,-50%) rotateX(69deg) rotateZ(-22deg);transform-style:preserve-3d;box-shadow:0 0 55px rgba(99,79,213,.04),inset 0 0 50px rgba(64,196,224,.035);opacity:.72;animation:axon-orbit-drift 42s linear infinite;}
+body.axon-app-active .axon-environment-ring::before,body.axon-app-active .axon-environment-ring::after{content:"";position:absolute;inset:12%;border:1px solid rgba(76,216,237,.17);border-radius:50%;transform:translateZ(50px) rotateZ(37deg);}
+body.axon-app-active .axon-environment-ring::after{inset:27%;border-color:rgba(166,132,255,.2);transform:translateZ(-45px) rotateZ(-52deg);}
+body.axon-app-active .axon-environment-prism{position:absolute;z-index:2;right:13%;top:19%;width:clamp(70px,9vw,140px);aspect-ratio:1;transform-style:preserve-3d;transform:rotateX(58deg) rotateY(36deg) rotateZ(17deg);border:1px solid rgba(128,120,255,.32);background:linear-gradient(135deg,rgba(87,72,178,.09),rgba(51,206,225,.025));box-shadow:inset 0 0 28px rgba(116,98,240,.08),0 0 50px rgba(103,83,214,.06);opacity:.4;animation:axon-prism-float 15s ease-in-out infinite;}
+body.axon-app-active .axon-environment-prism::before,body.axon-app-active .axon-environment-prism::after{content:"";position:absolute;inset:15%;border:1px solid rgba(85,222,238,.34);transform:translateZ(30px) rotateY(32deg) rotateX(22deg);}
+body.axon-app-active .axon-environment-prism::after{inset:-16%;border-color:rgba(166,132,255,.18);transform:translateZ(-24px) rotateY(-28deg) rotateX(-20deg);}
+body.axon-app-active .axon-environment-node{position:absolute;z-index:2;width:8px;height:8px;border-radius:50%;background:#b7a2ff;box-shadow:0 0 0 7px rgba(156,132,255,.06),0 0 24px rgba(151,127,255,.65);opacity:.65;}
+body.axon-app-active .axon-environment-node.node-a{left:35%;top:25%;animation:axon-node-float 7s ease-in-out infinite;}
+body.axon-app-active .axon-environment-node.node-b{left:78%;top:60%;width:5px;height:5px;background:#72e7ff;box-shadow:0 0 0 6px rgba(114,231,255,.06),0 0 20px rgba(114,231,255,.65);animation:axon-node-float 9s ease-in-out -2s infinite;}
+body.axon-app-active .axon-environment-node.node-c{left:48%;top:79%;width:4px;height:4px;animation:axon-node-float 8s ease-in-out -4s infinite;}
+body.axon-app-active .axon-environment-vignette{position:absolute;inset:0;z-index:3;pointer-events:none;background:linear-gradient(90deg,rgba(3,4,10,.16),transparent 22%,transparent 78%,rgba(3,4,10,.2));}
+@keyframes axon-floor-drift{from{background-position:0 0,0 0}to{background-position:0 116px,116px 0}}
+@keyframes axon-orbit-drift{from{transform:translate(-50%,-50%) rotateX(69deg) rotateZ(-22deg)}to{transform:translate(-50%,-50%) rotateX(69deg) rotateZ(338deg)}}
+@keyframes axon-prism-float{0%,100%{transform:translate3d(0,0,0) rotateX(58deg) rotateY(36deg) rotateZ(17deg)}50%{transform:translate3d(-9px,13px,20px) rotateX(66deg) rotateY(18deg) rotateZ(37deg)}}
+@keyframes axon-node-float{0%,100%{translate:0 0}50%{translate:0 -15px}}
+
+/* Every page's content sits above the same scene and uses true depth cues. */
+body.axon-app-active .pro-main{background:transparent!important;}
+body.axon-app-active .pro-content{perspective:1500px;transform-style:preserve-3d;}
+body.axon-app-active #content .panel,
+body.axon-app-active #content .pro-directory,
+body.axon-app-active #content .sx-card,
+body.axon-app-active #content .sx-vital,
+body.axon-app-active #content .kpi,
+body.axon-app-active #content .quick-card,
+body.axon-app-active #content .protocol-tile,
+body.axon-app-active #content .settings-card-v2,
+body.axon-app-active #content .settings-nav-v2,
+body.axon-app-active #content .settings-card,
+body.axon-app-active #content .settings-nav,
+body.axon-app-active #content .network-tool-card,
+body.axon-app-active #content .service-card,
+body.axon-app-active #content .node-card,
+body.axon-app-active #content .plan-card,
+body.axon-app-active #content .client-card,
+body.axon-app-active #content .access-portal-card,
+body.axon-app-active #content .engine-card,
+body.axon-app-active #content .protocol-client,
+body.axon-app-active #content .protocol-mode-card,
+body.axon-app-active #content .detail-section,
+body.axon-app-active #content .security-feature-row,
+body.axon-app-active #content .capability-card,
+body.axon-app-active #content .support-action-grid>div,
+body.axon-app-active #content .support-grid>div{
+  transform-style:preserve-3d;backface-visibility:hidden;transition:transform .24s cubic-bezier(.2,.75,.2,1),border-color .24s,box-shadow .24s,filter .24s;
+}
+body.axon-app-active #content .panel:hover,
+body.axon-app-active #content .pro-directory:hover,
+body.axon-app-active #content .sx-card:hover,
+body.axon-app-active #content .sx-vital:hover,
+body.axon-app-active #content .kpi:hover,
+body.axon-app-active #content .quick-card:hover,
+body.axon-app-active #content .protocol-tile:hover,
+body.axon-app-active #content .settings-card-v2:hover,
+body.axon-app-active #content .settings-card:hover,
+body.axon-app-active #content .network-tool-card:hover,
+body.axon-app-active #content .service-card:hover,
+body.axon-app-active #content .node-card:hover,
+body.axon-app-active #content .plan-card:hover,
+body.axon-app-active #content .client-card:hover,
+body.axon-app-active #content .access-portal-card:hover,
+body.axon-app-active #content .engine-card:hover,
+body.axon-app-active #content .protocol-client:hover,
+body.axon-app-active #content .protocol-mode-card:hover,
+body.axon-app-active #content .capability-card:hover{
+  transform:translateY(-3px) rotateX(.35deg) rotateY(-.25deg);border-color:rgba(157,139,255,.36)!important;box-shadow:0 20px 46px rgba(0,0,0,.24),0 0 24px rgba(111,91,214,.045),inset 0 1px rgba(255,255,255,.045)!important;filter:saturate(1.04);
+}
+body.axon-app-active #content .pro-user-row,body.axon-app-active #content .port-table-row,body.axon-app-active #content .service-control-row,body.axon-app-active #content .audit-row,body.axon-app-active #content .session-row{transition:background .2s,transform .2s,border-color .2s;}
+body.axon-app-active #content .pro-user-row:hover,body.axon-app-active #content .port-table-row:hover,body.axon-app-active #content .service-control-row:hover,body.axon-app-active #content .audit-row:hover,body.axon-app-active #content .session-row:hover{transform:translateZ(5px);background:rgba(117,94,220,.075)!important;border-color:rgba(151,132,255,.2)!important;}
+body.axon-app-active #content button.primary,body.axon-app-active #content button.ghost,body.axon-app-active #content button.soft,body.axon-app-active #content button.danger,body.axon-app-active #modalRoot button.primary,body.axon-app-active #modalRoot button.ghost{transform-style:preserve-3d;transition:transform .17s ease,filter .17s ease,box-shadow .17s ease,border-color .17s ease;}
+body.axon-app-active #content button.primary:active,body.axon-app-active #content button.ghost:active,body.axon-app-active #content button.soft:active,body.axon-app-active #modalRoot button.primary:active,body.axon-app-active #modalRoot button.ghost:active{transform:translateY(1px) scale(.99);}
+body.axon-app-active #content .pro-page-head,body.axon-app-active #content .sx-page-head{position:relative;}
+body.axon-app-active #content .pro-page-head::after,body.axon-app-active #content .sx-page-head::after{content:"";position:absolute;bottom:-8px;inset-inline-start:0;width:min(260px,36%);height:1px;background:linear-gradient(90deg,rgba(160,140,255,.45),rgba(90,219,238,.2),transparent);pointer-events:none;}
+body.axon-app-active #content .panel-head{border-bottom:1px solid rgba(126,147,187,.11);padding-bottom:10px;}
+body.axon-app-active #content .panel-head h3,body.axon-app-active #content .sx-card-head h3{letter-spacing:.1px;}
+body.axon-app-active #content .status-chip,body.axon-app-active #content .field-badge,body.axon-app-active #content .transport-badge{box-shadow:inset 0 1px rgba(255,255,255,.035),0 4px 12px rgba(0,0,0,.12);}
+body.axon-app-active #content .settings-nav-v2 button,body.axon-app-active #content .settings-shortcuts button{transform-style:preserve-3d;transition:transform .2s,border-color .2s,background .2s,box-shadow .2s;}
+body.axon-app-active #content .settings-nav-v2 button:hover,body.axon-app-active #content .settings-shortcuts button:hover{transform:translateZ(7px) translateY(-1px);box-shadow:0 12px 28px rgba(0,0,0,.17)!important;}
+body.axon-app-active #content .pro-user-avatar,body.axon-app-active #content .pro-nav-icon{box-shadow:inset 0 1px rgba(255,255,255,.055),0 6px 15px rgba(0,0,0,.17);transform:translateZ(8px);}
+@media(prefers-reduced-motion:reduce){body.axon-app-active .axon-environment-grid,body.axon-app-active .axon-environment-ring,body.axon-app-active .axon-environment-prism,body.axon-app-active .axon-environment-node{animation:none!important}body.axon-app-active #content .panel,body.axon-app-active #content .pro-directory,body.axon-app-active #content .sx-card,body.axon-app-active #content .sx-vital,body.axon-app-active #content .kpi,body.axon-app-active #content .quick-card,body.axon-app-active #content .protocol-tile,body.axon-app-active #content [class*="-card"]{transition:none!important;transform:none!important}}
+@media(min-width:901px){body.axon-app-active.orbit-ui.makia-pro-shell.menu-open::after{display:none!important;}}

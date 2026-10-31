@@ -1,8 +1,35 @@
 # Makia Release Status
 
-## Active candidate (2026-10-27)
+## Active candidate (2026-10-31)
 
-The VPS currently runs candidate **1.6.10-rc1** from branch `feature/sstp-v1.6.10-rc1`; it is not yet an official stable release. Local unit/regression tests passed **552 tests plus 8 subtests**. GitHub CI passed for the previous candidate commit; the exact release commit must pass CI before promotion. Host smoke passed. After correcting the stale Xray Doctor version gate, Doctor reported **34 PASS / 1 WARN / 0 FAIL**; the remaining Doctor warning is the inactive optional Stealth runtime. Host smoke separately warns that Client Portal is enabled and asks for confirmation that this is intentional. Remaining blockers before stable promotion: Windows built-in SSTP returns RasClient error 720 before IPv4 IPCP completes; Android's tunnel connected but post-DNS-change public egress/DNS evidence is not yet captured; and an encrypted off-host backup plus rollback demonstration must be verified. Do not tag or describe 1.6.10 as stable until these gates pass and the exact release source is promoted to `main`.
+The France VPS (155.117.5.236, p.mahinet.shop) is being validated on Makia 1.6.10-rc6. This is a release candidate, not an official Stable tag. The source branch is release/1.6.10-rc6-uat-20261031; GitHub publication and promotion to main must use the exact tested commit.
+
+### Automated and host verification
+
+- Python/pytest suite: 578 PASS.
+- Python compile, Bash syntax and JavaScript syntax: PASS.
+- Browser extension verified-egress contract: 16 scenario groups PASS.
+- mtg 2.2.8 release smoke: PASS.
+- WStunnel 11.0.0 installer/flag smoke: PASS.
+- makia-uat-smoke: 34 PASS / 1 WARN / 0 FAIL.
+- makia-doctor: 34 PASS / 1 WARN / 0 FAIL.
+- Nginx config and HTTPS domains: valid; Makia health endpoint returns OK.
+- Xray active config: valid; 11 inbounds are present.
+- TUIC UDP/8445 and Hysteria2 UDP/8446: server readiness, TLS certificate, listener and user checks PASS; temporary external clients from Germany both completed HTTPS egress through France (155.117.5.236). Temporary users were removed.
+- WireGuard, OpenVPN, IKEv2, L2TP, SSTP backend, WStunnel, MTProxy and DNS runtime checks are healthy.
+- MTProxy mtg doctor passed Telegram DC/front-domain checks. tg.mahinet.shop resolves to France; TCP/10443 is reachable from Germany. The Telegram app itself still needs a real-device handshake.
+- MahiNet storefront/worker and Outline Shadowbox containers are running.
+
+### Warnings and remaining Stable gates
+
+1. Telegram real-client UAT: import the current MTProxy link into Telegram on a real phone/desktop and confirm connection.
+2. Windows SSTP: the server-side SSTP service is ready on TCP/14443, but Windows RasClient error 720 has not been cleared by a real Windows connection test.
+3. Field-network UAT: verify Android and intended protocols from the actual Iranian/mobile/ISP networks; the Germany-to-France QUIC test does not prove every ISP path.
+4. Disaster recovery: create an encrypted off-host backup and demonstrate restore/rollback on a disposable target. The pre-update France backup is local to the France VPS and is not a substitute for off-host backup.
+5. Stealth ownership: legacy global stunnel4 owns the active Stealth listener; it was deliberately not stopped or migrated because old client dependencies have not been audited.
+6. Client Portal: the host smoke warns that Client Portal is enabled; confirm that exposure is intentional.
+
+Do not call 1.6.10 Stable, create the stable tag, or delete the Germany rollback VPS until the field tests and off-host backup/rollback gates above are complete. Keep the Germany server available for rollback until then.
 
 ## Current server release: 1.6.5 (2026-10-09)
 

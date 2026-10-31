@@ -164,73 +164,96 @@ async function ensureSessionContext(force=false){
   return window.__sessionContext;
 }
 async function dashboard(renderToken=window.__viewRenderToken){
-  title.textContent='داشبورد';setPageContext('OVERVIEW');
-  content.innerHTML='<div class="loading-state"><span class="spinner"></span><b>در حال دریافت وضعیت سرور…</b></div>';
-  const [d,hist,accessRows,stack,mtproxy]=await Promise.all([
-    api('/api/overview'),api('/api/metrics/history?hours=24'),api('/api/access'),api('/api/protocols'),
+  title.textContent='داشبورد';setPageContext('MAKIA / AXON CONTROL');
+  content.innerHTML='<div class="axon-loading"><span></span><b>در حال اتصال به هسته ماکیا…</b></div>';
+  const [d,accessRows,stack,mtproxy]=await Promise.all([
+    api('/api/overview'),api('/api/access'),api('/api/protocols'),
     api('/api/network/mtproxy').catch(()=>({configured:false,service_active:false,listener:false,host:'',port:0}))
   ]);
   if(renderToken!==window.__viewRenderToken||activeView!=='dashboard')return;
   const m=d.metrics||{},services=d.services||[],x=stack.xray||{},mt=mtproxy||{},tuic=stack.tuic||{},hyst=stack.hysteria2||{};
   const running=services.filter(s=>s.active).length;
-  const counts={
-    ssh:accessRows.filter(a=>a.kind==='ssh').length,
-    xray:accessRows.filter(a=>a.kind==='xray').length,
-    wireguard:accessRows.filter(a=>a.kind==='wireguard').length,
-    openvpn:accessRows.filter(a=>a.kind==='openvpn').length,
-    outline:accessRows.filter(a=>a.kind==='outline').length
-  };
-  const maxCount=Math.max(1,...Object.values(counts));
-  const traffic=Number(m.network?.sent||0)+Number(m.network?.recv||0);
   const activeClients=accessRows.filter(a=>a.status==='active').length;
   const endpoint=window.PANEL_DOMAIN||location.hostname;
   const inboundCount=(x.inbounds||[]).length;
-  const vital=(icon,label,value,unit,detail,percent,footL,footR)=>'<article class="sx-vital"><div class="sx-vital-head"><span>'+icon+'</span><b>'+htmlEsc(label)+'</b></div><div class="sx-vital-value"><b>'+htmlEsc(value)+'</b><span>'+htmlEsc(unit||'')+'</span></div><div class="sx-vital-detail">'+htmlEsc(detail)+'</div><div class="sx-meter"><i style="width:'+pct(percent)+'%"></i></div><div class="sx-vital-foot"><span>'+htmlEsc(footL||'')+'</span><span>'+htmlEsc(footR||'')+'</span></div></article>';
-  const proto=(label,count)=>'<div class="sx-protocol-row"><div><b>'+htmlEsc(label)+'</b><span>'+count+' client</span></div><em>'+Math.round((count/Math.max(1,accessRows.length))*100)+'%</em><div class="sx-protocol-bar"><i style="width:'+Math.round(count/maxCount*100)+'%"></i></div></div>';
-  const runtimeCard=(icon,label,subtitle,state,detail,view)=>{
-    const stateLabel=state==='live'?'LIVE':state==='ready'?'READY · IDLE':'CHECK';
-    return '<button type="button" class="sx-runtime-card '+state+'" data-action="nav" data-view="'+htmlEsc(view)+'"><span class="sx-runtime-glyph">'+htmlEsc(icon)+'</span><span class="sx-runtime-main"><b>'+htmlEsc(label)+'</b><small>'+htmlEsc(subtitle)+'</small><em>'+htmlEsc(detail)+'</em></span><span class="sx-runtime-state"><i></i>'+stateLabel+'</span><span class="sx-runtime-arrow">↗</span></button>';
-  };
-  const xState=x.service_active?'live':'attention';
-  const mtState=mt.service_active&&mt.listener?'live':'attention';
-  const tuicState=tuic.service_active&&tuic.listener?'live':(tuic.installed&&tuic.configured?'ready':'attention');
-  const hystState=hyst.service_active&&hyst.listener?'live':(hyst.installed&&hyst.configured?'ready':'attention');
-  const mtDetail=mt.configured?'TCP / '+String(mt.port||'—'):'Needs setup';
-  const xDetail=inboundCount+' active config inbound'+(inboundCount===1?'':'s');
-  const tuicDetail='UDP / '+String(tuic.port||8445)+(tuic.users_count===0?' · no users yet':'');
-  const hystDetail='UDP / '+String(hyst.port||8446)+(hyst.users_count===0?' · no users yet':'');
+  const traffic=Number(m.network?.sent||0)+Number(m.network?.recv||0);
+  const modules=Object.keys(stack||{}).length;
+  const moduleTiles=[
+    {title:'کاربران و دسترسی‌ها',detail:'ساخت، تمدید و تحویل دسترسی',view:'access',category:'access',icon:'◈'},
+    {title:'اپ کاربران',detail:'حساب، دستگاه و اشتراک',view:'clientplatform',category:'access',icon:'▣'},
+    {title:'پلن‌ها و تعرفه‌ها',detail:'مدیریت پلن‌های دسترسی',view:'plans',category:'access',icon:'◇'},
+    {title:'مرکز تمدید',detail:'انقضا و تمدید کاربران',view:'expiry',category:'access',icon:'◷'},
+    {title:'Xray / V2Ray',detail:'کاربران و وضعیت هسته',view:'xray',category:'protocols',icon:'⌘'},
+    {title:'Inboundها',detail:'Listener، پورت و ورودی‌ها',view:'inbounds',category:'protocols',icon:'⇄'},
+    {title:'SSH / NPV',detail:'حساب‌ها و دسترسی امن',view:'ssh',category:'protocols',icon:'⌁'},
+    {title:'WireGuard',detail:'Peerها و تونل‌ها',view:'wireguard',category:'protocols',icon:'⟷'},
+    {title:'OpenVPN',detail:'پروفایل‌ها و کاربران',view:'openvpn',category:'protocols',icon:'◉'},
+    {title:'IKEv2',detail:'کاربران و اتصال IPsec',view:'ikev2',category:'protocols',icon:'⬡'},
+    {title:'L2TP / IPsec',detail:'مدیریت اتصال‌های L2TP',view:'l2tp',category:'protocols',icon:'⛨'},
+    {title:'SSTP',detail:'دسترسی امن مبتنی بر TLS',view:'sstp',category:'protocols',icon:'⌑'},
+    {title:'TUIC / QUIC',detail:'کاربران و وضعیت سرویس',view:'tuic',category:'protocols',icon:'⟁'},
+    {title:'Hysteria2',detail:'QUIC، TLS و کاربران',view:'hysteria2',category:'protocols',icon:'⟢'},
+    {title:'Outline',detail:'کلیدهای دسترسی و سرویس',view:'outline',category:'protocols',icon:'⬢'},
+    {title:'پروکسی تلگرام',detail:'MTProto و پورت عمومی',view:'telegramproxy',category:'protocols',icon:'✳'},
+    {title:'DNS کاربران',detail:'تنظیمات DNS و مسیرها',view:'dnscenter',category:'protocols',icon:'⌬'},
+    {title:'شبکه و پورت‌ها',detail:'Listenerها و مسیرهای شبکه',view:'protocols',category:'infra',icon:'⌗'},
+    {title:'سرویس‌های سرور',detail:'وضعیت Runtime سرویس‌ها',view:'services',category:'infra',icon:'◌'},
+    {title:'اتصال‌های زنده',detail:'نشست‌های فعال کاربران',view:'sessions',category:'infra',icon:'⟲'},
+    {title:'نودها',detail:'مدیریت سرورهای متصل',view:'nodes',category:'infra',icon:'⌘'},
+    {title:'آزمایش اتصال',detail:'Endpoint، پورت و Runtime',view:'connectivity',category:'infra',icon:'⌁'},
+    {title:'مرکز عیب‌یابی',detail:'سلامت سرویس‌ها و شبکه',view:'diagnostics',category:'infra',icon:'⌕'},
+    {title:'امنیت میزبان',detail:'Firewall، SSH و 2FA',view:'security',category:'system',icon:'⛨'},
+    {title:'عملیات و بازیابی',detail:'Backup، Restore و DR',view:'operations',category:'system',icon:'⟳'},
+    {title:'مرکز بکاپ',detail:'آرشیو و بازیابی امن',view:'backups',category:'system',icon:'▤'},
+    {title:'گزارش عملیات',detail:'Audit trail و رویدادها',view:'audit',category:'system',icon:'≋'},
+    {title:'بروزرسانی',detail:'نسخه و وضعیت انتشار',view:'updates',category:'system',icon:'↻'},
+    {title:'تنظیمات پنل',detail:'ظاهر، امنیت و API',view:'settings',category:'system',icon:'⚙'},
+    {title:'راهنمای اتصال',detail:'راهنماهای کاربران و کلاینت‌ها',view:'guides',category:'system',icon:'?'},
+    {title:'پشتیبانی',detail:'گزارش مشکل و Self-Test',view:'support',category:'system',icon:'✉'}
+  ];
+  const cards=[
+    {title:'Lattices / zone',detail:'Ambient light / study',src:'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/oraciteslArea.mp4',view:'inbounds',left:'XRAY / INBOUND ENGINE',right:String(inboundCount).padStart(2,'0')+' INBOUNDS'},
+    {title:'Prism / shell',detail:'Dispersion hero / render',src:'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/facet-glass-hero.mp4',view:'protocols',left:'NETWORK / ROUTING',right:String(running).padStart(2,'0')+' SERVICES'},
+    {title:'Nebular / loop',detail:'Procedural hero / sequence',src:'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/stellarmind-hero.mp4',view:'access',left:'CLIENT ACCESS / USERS',right:String(activeClients).padStart(2,'0')+' ACTIVE'},
+    {title:'Fall / forward',detail:'Dolly track / study',src:'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/thedropthroughArea.mp4',view:'diagnostics',left:'SYSTEM / DIAGNOSTICS',right:Number(m.cpu||0).toFixed(1)+'% CPU'}
+  ];
+  const filters=[
+    ['all','همه بخش‌ها',moduleTiles.length],
+    ['access','کاربران و دسترسی',moduleTiles.filter(x=>x.category==='access').length],
+    ['protocols','پروتکل‌ها',moduleTiles.filter(x=>x.category==='protocols').length],
+    ['infra','زیرساخت',moduleTiles.filter(x=>x.category==='infra').length],
+    ['system','سیستم و نگهداری',moduleTiles.filter(x=>x.category==='system').length]
+  ];
   content.innerHTML=[
-    '<div class="sx-page sx-future-dashboard">',
-      '<section class="sx-future-hero">',
-        '<div class="sx-future-copy"><span class="sx-future-kicker"><i></i>MAKIA // NEXUS CONTROL</span><h1>مرکز فرماندهی شبکه</h1><p>یک نمای زنده از هسته سرور، Inboundها، پروکسی تلگرام و پروتکل‌های اتصال. وضعیت‌ها از سرویس واقعی خوانده می‌شوند، نه از مقادیر نمایشی.</p>',
-          '<div class="sx-future-badges"><span class="live"><i></i>CORE ONLINE</span><span>BUILD '+htmlEsc(window.MAKIA_VERSION||'')+'</span><span>'+running+'/'+services.length+' SERVICES ACTIVE</span></div>',
-          '<div class="sx-future-actions"><button class="primary" data-shell-action="create-access">＋ ساخت دسترسی</button><button class="ghost" data-action="nav" data-view="inbounds">مشاهده Inboundها <span>↗</span></button><button class="ghost" data-action="nav" data-view="diagnostics">عیب‌یابی سیستم</button></div>',
+    '<div class="axon-hub" id="axonDashboard">',
+      '<section class="axon-hub-hero">',
+        '<div class="axon-hub-copy">',
+          '<span class="axon-hub-kicker"><i></i> MAKIA / NEXUS OPERATIONS</span>',
+          '<h1>مرکز فرماندهی <span>ماکیا</span></h1>',
+          '<p>تمام ابزارهای مدیریت سرور در یک محیط یکپارچه؛ با پس‌زمینه سه‌بعدی زنده، دسترسی سریع و داده‌های واقعی Runtime.</p>',
+          '<div class="axon-hub-actions"><button class="primary" data-shell-action="create-access"><span>＋</span> ساخت دسترسی جدید</button><button class="ghost" data-action="nav" data-view="inbounds">مدیریت Inboundها <span>↗</span></button><button class="ghost" data-action="nav" data-view="diagnostics">بررسی سلامت <span>↗</span></button></div>',
+          '<div class="axon-hub-state"><span class="status-chip ok"><i></i> NODE ONLINE</span><span>ENGINE MODULES / '+String(modules).padStart(2,'0')+'</span><span>ENDPOINT / '+htmlEsc(endpoint)+'</span></div>',
         '</div>',
-        '<div class="sx-future-visual"><div class="sx-core-scene"><div class="sx-core-ring ring-a"></div><div class="sx-core-ring ring-b"></div><div class="sx-core-ring ring-c"></div><span class="sx-core-node node-a"></span><span class="sx-core-node node-b"></span><span class="sx-core-node node-c"></span><div class="sx-core-center"><span>MK</span><b>CORE</b><small>SECURE</small></div></div>',
-          '<div class="sx-core-readouts"><div><span>XRAY INBOUNDS</span><b>'+inboundCount+'</b></div><div><span>TELEGRAM MTPROTO</span><b class="'+(mtState==='live'?'good':'warn')+'">'+(mtState==='live'?'LIVE':'CHECK')+'</b></div><div><span>ACTIVE CLIENTS</span><b>'+activeClients+'</b></div></div>',
-        '</div>',
+        '<div class="axon-hub-reactor" aria-hidden="true"><div class="axon-reactor-orbit orbit-one"></div><div class="axon-reactor-orbit orbit-two"></div><div class="axon-reactor-orbit orbit-three"></div><div class="axon-reactor-core"><span>MK</span><small>NEXUS CORE</small></div><i class="axon-reactor-node node-one">01</i><i class="axon-reactor-node node-two">02</i><i class="axon-reactor-node node-three">03</i><span class="axon-reactor-axis">3D / LIVE</span></div>',
       '</section>',
-      '<section class="sx-actionbar sx-future-commandbar"><span class="sx-command-label">QUICK COMMANDS</span><button class="primary" data-action="nav" data-view="inbounds">▤ Inbounds</button><button data-action="nav" data-view="telegramproxy">↗ Telegram Proxy</button><button data-action="nav" data-view="backups">↺ Backup / DR</button><button data-action="nav" data-view="updates">⇧ Update</button><button data-action="self-test">◎ Self-Test</button><button data-action="refresh">↻ Refresh</button><span class="sx-version">NODE / '+htmlEsc(endpoint)+'</span></section>',
-      '<section class="sx-runtime-grid">',
-        runtimeCard('X','Xray / V2Ray','CORE · INBOUND ENGINE',xState,xDetail,'inbounds'),
-        runtimeCard('TG','Telegram MTProto','FAKETLS · FRONT DOMAIN',mtState,mtDetail,'telegramproxy'),
-        runtimeCard('Q','TUIC / QUIC','SING-BOX · UDP',tuicState,tuicDetail,'tuic'),
-        runtimeCard('H','Hysteria2 / QUIC','SING-BOX · UDP',hystState,hystDetail,'hysteria2'),
+      '<section class="axon-hub-metrics sx-vitals" aria-label="وضعیت لحظه‌ای">',
+        '<article class="axon-hub-metric metric-cyan"><span class="axon-metric-icon">◈</span><div><small>کاربران فعال</small><b>'+activeClients+'</b><em>ACTIVE CLIENTS</em></div><i class="axon-metric-line"></i></article>',
+        '<article class="axon-hub-metric metric-violet"><span class="axon-metric-icon">⇄</span><div><small>Inboundهای Xray</small><b>'+inboundCount+'</b><em>XRAY LISTENERS</em></div><i class="axon-metric-line"></i></article>',
+        '<article class="axon-hub-metric metric-green"><span class="axon-metric-icon">◌</span><div><small>سرویس‌های در حال اجرا</small><b>'+running+'<small> / '+services.length+'</small></b><em>ACTIVE SERVICES</em></div><i class="axon-metric-line"></i></article>',
+        '<article class="axon-hub-metric metric-amber"><span class="axon-metric-icon">⌁</span><div><small>مصرف CPU</small><b>'+Number(m.cpu||0).toFixed(1)+'<small>%</small></b><em>HOST TELEMETRY</em></div><i class="axon-metric-line"></i></article>',
       '</section>',
-      '<section class="sx-vitals">',
-        vital('◴','CPU',Number(m.cpu||0).toFixed(1),'%','مصرف لحظه‌ای پردازنده',Number(m.cpu||0),'HOST TELEMETRY',''),
-        vital('▥','Memory',Number(m.memory||0).toFixed(1),'%','مصرف حافظه سیستم',Number(m.memory||0),'RAM USAGE',''),
-        vital('▤','Disk',Number(m.disk||0).toFixed(1),'%','فضای ذخیره‌سازی استفاده‌شده',Number(m.disk||0),'HOST STORAGE',''),
-        vital('◉','Services',String(running),'','از '+services.length+' سرویس مدیریت‌شده',services.length?running/services.length*100:0,'ACTIVE SERVICES',running+'/'+services.length),
+      '<section class="axon-module-section">',
+        '<div class="axon-section-head"><div><span class="axon-section-kicker">CONTROL DECK / 01</span><h2>تمام بخش‌های ماکیا</h2><p>برای بازکردن هر ابزار، کارت آن را انتخاب کن؛ صفحه در همین محیط یکپارچه باز می‌شود.</p></div><label class="axon-module-search"><span>⌕</span><input id="axonModuleSearch" type="search" autocomplete="off" placeholder="جست‌وجوی بخش، پروتکل یا ابزار…"><kbd>⌘ K</kbd></label></div>',
+        '<div class="axon-hub-filters" role="group" aria-label="فیلتر بخش‌ها">'+filters.map((f,i)=>'<button type="button" class="axon-hub-filter'+(i===0?' active':'')+'" data-hub-filter="'+f[0]+'"><span>'+f[1]+'</span><b>'+f[2]+'</b></button>').join('')+'</div>',
+        '<div class="axon-module-grid" id="axonModuleGrid">'+moduleTiles.map((item,i)=>'<button type="button" class="axon-module-card" data-action="nav" data-view="'+htmlEsc(item.view)+'" data-hub-module="1" data-category="'+htmlEsc(item.category)+'" data-search="'+htmlEsc((item.title+' '+item.detail+' '+item.view).toLowerCase())+'"><span class="axon-module-top"><small>MK / '+String(i+1).padStart(2,'0')+'</small><i>↗</i></span><span class="axon-module-icon">'+htmlEsc(item.icon)+'</span><span class="axon-module-copy"><b>'+htmlEsc(item.title)+'</b><small>'+htmlEsc(item.detail)+'</small></span><span class="axon-module-depth" aria-hidden="true"></span></button>').join('')+'</div>',
+        '<div class="axon-hub-empty" id="axonModuleEmpty" hidden>بخشی با این عبارت پیدا نشد. عبارت دیگری جست‌وجو کن.</div>',
       '</section>',
-      '<section class="sx-mid-grid">',
-        '<article class="sx-card"><div class="sx-card-head"><div><span class="sx-section-kicker">SYSTEM TELEMETRY</span><h3>System history</h3><p>CPU و Memory در ۲۴ ساعت گذشته</p></div><span class="status-chip">'+(hist?.length||0)+' samples</span></div>'+svgHistory(hist)+'</article>',
-        '<article class="sx-card"><div class="sx-card-head"><div><span class="sx-section-kicker">ACCESS DISTRIBUTION</span><h3>Clients by protocol</h3><p>'+activeClients+' فعال از '+accessRows.length+' پروفایل</p></div><button class="ghost" data-action="nav" data-view="access">مدیریت کاربران ↗</button></div><div class="sx-protocol-list">'+proto('Xray / V2Ray',counts.xray)+proto('Outline',counts.outline)+proto('SSH / NPV',counts.ssh)+proto('WireGuard',counts.wireguard)+proto('OpenVPN',counts.openvpn)+'</div></article>',
-      '</section>',
-      '<section class="sx-system-strip"><div class="sx-system-cell"><span>UPTIME</span><b>'+htmlEsc(fmtUp(m.uptime_seconds||0))+'</b></div><div class="sx-system-cell"><span>TRAFFIC RECORDED</span><b>'+htmlEsc(fmtBytes(traffic))+'</b></div><div class="sx-system-cell"><span>LIVE SESSIONS</span><b>'+Number(d.online_sessions||0)+'</b></div><div class="sx-system-cell"><span>PANEL ENDPOINT</span><b>'+htmlEsc(endpoint)+'</b></div></section>',
+      '<section class="axon-visual-lab"><div class="axon-section-head"><div><span class="axon-section-kicker">VISUAL ENGINE / 02</span><h2>کتابخانه صحنه‌های سه‌بعدی</h2><p>پیش‌نمایش‌های تصویری محیط؛ عملیات مدیریتی همچنان از ماژول‌های واقعی بالا انجام می‌شود.</p></div><span class="axon-lab-status"><i></i> RENDER CHANNEL / ACTIVE</span></div><div class="axon-scene-grid">'+cards.map((card,i)=>'<button type="button" class="axon-scene-card" data-action="nav" data-view="'+htmlEsc(card.view)+'"><span class="axon-scene-thumb"><video autoplay muted loop playsinline preload="metadata" aria-hidden="true" tabindex="-1"><source src="'+htmlEsc(card.src)+'" type="video/mp4"></video><span class="axon-scene-shade"></span><small>SCENE / 0'+(i+1)+'</small><i>↗</i></span><span class="axon-scene-meta"><b>'+htmlEsc(card.title)+'</b><small>'+htmlEsc(card.detail)+'</small><span>'+htmlEsc(card.left)+' <i>·</i> '+htmlEsc(card.right)+'</span></span></button>').join('')+'</div></section>',
+      '<footer class="axon-hub-footer"><span><i></i> MAKIA NEXUS / CONTROL SYSTEM</span><span>CPU '+Number(m.cpu||0).toFixed(1)+'% · RAM '+Number(m.memory||0).toFixed(1)+'% · DISK '+Number(m.disk||0).toFixed(1)+'%</span><span>NODE / '+htmlEsc(endpoint)+'</span></footer>',
     '</div>'
   ].join('');
 }
+
 let accountCache=[];
 function setExpiryPreset(id,days){const el=document.getElementById(id);if(!el)return;if(Number(days)===0){el.value='';return}const base=new Date();base.setHours(12,0,0,0);base.setDate(base.getDate()+Number(days));el.value=base.toISOString().slice(0,10)}
 function shiftExpiry(id,days){const el=document.getElementById(id);if(!el)return;const today=new Date();today.setHours(12,0,0,0);let base=today;if(el.value){const current=new Date(el.value+'T12:00:00');if(!Number.isNaN(current.getTime())&&current>today)base=current}base.setDate(base.getDate()+Number(days));el.value=base.toISOString().slice(0,10)}
@@ -2716,13 +2739,19 @@ async function handleMakiaAction(btn){
 }
 
 document.addEventListener('click',e=>{
+  const hubFilter=e.target.closest('[data-hub-filter]');
+  if(hubFilter){document.querySelectorAll('[data-hub-filter]').forEach(x=>x.classList.toggle('active',x===hubFilter));filterAxonModules();return;}
   const shell=e.target.closest('[data-shell-action]');
   if(shell){
     const a=shell.dataset.shellAction;
     if(a==='command')openCommandPalette();
     else if(a==='refresh')currentView();
     else if(a==='create-access')openProvisionWizard();
-    else if(a==='sidebar-open'){document.body.classList.add('menu-open');shell.setAttribute('aria-expanded','true')}
+    else if(a==='sidebar-open'){
+      if(document.body.classList.contains('axon-dashboard-active')&&document.body.classList.contains('menu-open'))document.body.classList.remove('menu-open');
+      else document.body.classList.add('menu-open');
+      shell.setAttribute('aria-expanded',String(document.body.classList.contains('menu-open')));
+    }
     else if(a==='sidebar-close'){document.body.classList.remove('menu-open');document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false')}
     else if(a==='sidebar-group'){
       shell.closest('.pro-nav-group')?.classList.toggle('open');
@@ -2732,6 +2761,20 @@ document.addEventListener('click',e=>{
   const btn=e.target.closest('[data-action]');
   if(btn){e.preventDefault();Promise.resolve(handleMakiaAction(btn)).catch(err=>alert(err?.message||String(err)))}
 });
+function filterAxonModules(){
+  const root=document.getElementById('axonModuleGrid');if(!root)return;
+  const query=(document.getElementById('axonModuleSearch')?.value||'').trim().toLocaleLowerCase();
+  const category=document.querySelector('[data-hub-filter].active')?.dataset.hubFilter||'all';
+  let visible=0;
+  root.querySelectorAll('[data-hub-module]').forEach(card=>{
+    const matchesCategory=category==='all'||card.dataset.category===category;
+    const matchesQuery=!query||(card.dataset.search||'').toLocaleLowerCase().includes(query)||card.textContent.toLocaleLowerCase().includes(query);
+    card.hidden=!(matchesCategory&&matchesQuery);if(!card.hidden)visible++;
+  });
+  const empty=document.getElementById('axonModuleEmpty');if(empty)empty.hidden=visible!==0;
+}
+document.addEventListener('input',e=>{if(e.target.id==='axonModuleSearch')filterAxonModules();});
+
 document.addEventListener('change',e=>{
   if(e.target.id==='wizEndpointMode'&&provisionState){
     const next=e.target.value;
@@ -2822,6 +2865,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
         '</div>',
       '</div>',
       '<div class="notice">'+htmlEsc(tr('Secret تحویلی با FakeTLS secret نسخه mtg ساخته می‌شود. اپراتور Proxy به محتوای چت‌های Telegram دسترسی ندارد.','The delivered secret uses mtg FakeTLS format. A proxy operator cannot read Telegram chat contents.'))+'</div>',
+      '<div class="notice">'+htmlEsc(tr('اگر فقط IP سرور عوض شده و دامنه ثابت مانده، متن لینک عمداً تغییر نمی‌کند؛ DNS همین دامنه باید به IP زیر برسد: ','If only the server IP changed while the hostname stayed the same, the Telegram link text intentionally stays the same. DNS for this hostname must resolve to: '))+'<b dir="ltr">'+htmlEsc(r.public_ipv4||'—')+'</b></div>',
     '</section>'
   ].join(''):'');
   content.innerHTML=[
@@ -2839,7 +2883,7 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
         '<section class="network-tool-card">',
           '<div class="tool-card-head"><div><span class="pro-kicker">CONFIGURATION</span><h3>'+htmlEsc(tr('تنظیم Proxy','Proxy configuration'))+'</h3></div><small>'+htmlEsc(tr('Port از ابتدا خودکار انتخاب می‌شود و در Retry فقط وقتی لازم باشد تغییر می‌کند.','The port is automatic from the start and changes on retry only when required.'))+'</small></div>',
           '<div class="wizard-form two">',
-            '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" value="'+htmlEsc(r.configured?r.host:'')+'" placeholder="proxy.example.com"></label>',
+            '<label>'+htmlEsc(tr('دامنه FakeTLS پروکسی','Proxy FakeTLS hostname'))+'<input id="mtHost" dir="ltr" data-current-host="'+htmlEsc(r.configured?r.host:'')+'" value="'+htmlEsc(r.configured?r.host:'')+'" placeholder="proxy.example.com"></label>',
             '<label>'+htmlEsc(tr('Port پروکسی','Proxy port'))+'<input id="mtPortDisplay" type="text" dir="ltr" readonly value="'+htmlEsc(r.port?String(r.port):'AUTO')+'"><span class="muted">'+htmlEsc(tr('انتخاب Port کاملاً خودکار است؛ Makia از Portهای آزاد High-TCP استفاده می‌کند و 443 را پیش‌فرض نمی‌گیرد.','Port selection is fully automatic. Makia uses a free high TCP port and does not prefer 443.'))+'</span></label>',
           '</div>',
           '<div class="toolbar"><button class="primary" data-action="mtproxy-configure">'+htmlEsc(tr('ذخیره و راه‌اندازی','Save & start'))+'</button><button class="danger" data-action="mtproxy-rotate">'+htmlEsc(tr('تعویض Secret','Rotate secret'))+'</button></div>',
@@ -2852,19 +2896,27 @@ async function telegramProxyCenter(renderToken=window.__viewRenderToken){
 }
 
 async function configureTelegramProxy(rotate=false){
-  const host=(document.getElementById('mtHost')?.value||'').trim();
+  const input=document.getElementById('mtHost');
+  const host=(input?.value||'').trim();
+  const previousHost=(input?.dataset.currentHost||'').trim().toLowerCase().replace(/\.$/,'');
+  const requestedHost=host.toLowerCase().replace(/\.$/,'');
   const port=0;
   if(!host){alert(tr('دامنه DNS پروکسی را وارد کن.','Enter the proxy DNS hostname.'));return}
   if(/^\[?[0-9a-f:.]+\]?$/i.test(host)){alert(tr('برای FakeTLS باید دامنه DNS وارد شود؛ IP خام قابل قبول نیست.','FakeTLS requires a DNS hostname; a raw IP is not accepted.'));return}
   if(rotate&&!confirm(tr('Secret قبلی باطل شود؟','Invalidate the previous secret?')))return;
   try{
     const r=await api('/api/network/mtproxy/configure',{method:'POST',body:JSON.stringify({host,port,rotate_secret:Boolean(rotate)})});
+    const savedHost=String(r.host||'').trim().toLowerCase().replace(/\.$/,'');
+    if(savedHost!==requestedHost)throw new Error(tr('دامنه ذخیره‌شده با مقدار واردشده یکسان نیست؛ لینک قبلی حفظ شد.','The saved hostname does not match your input; the previous link was preserved.'));
+    if(previousHost&&previousHost!==requestedHost&&!r.secret_rotated)throw new Error(tr('دامنه تغییر کرده اما Secret جدید تأیید نشد؛ وضعیت را دوباره بررسی کن.','Hostname changed but a new FakeTLS secret was not confirmed; re-check the proxy state.'));
+    await telegramProxyCenter();
     if(r.firewall_warning){
       alert(tr('Proxy ذخیره و سرویس فعال شد، اما Rule فایروال اعمال نشد:\n','Proxy was saved and the service is active, but the firewall rule could not be applied:\n')+r.firewall_warning);
+    }else if(r.link_changed){
+      toast(tr('دامنه ذخیره شد و لینک جدید ساخته شد.','Hostname saved and a new Telegram link was generated.'));
     }else{
-      toast(r.port_adjusted?tr('Proxy ساخته شد؛ Port آزاد جایگزین شد.','Proxy saved; a free port was selected.'):tr('Proxy آماده است.','Proxy is ready.'));
+      toast(tr('دامنه همان است؛ لینک نیز ثابت می‌ماند. IP مقصد: ','Hostname unchanged; the link stays the same. Target IP: ')+(r.public_ipv4||'—'));
     }
-    await telegramProxyCenter();
   }catch(e){alert('MTProxy: '+e.message)}
 }
 
@@ -3649,6 +3701,9 @@ window.__viewRenderToken=0;
 function currentView(){const token=++window.__viewRenderToken;return(views[activeView]||dashboard)(token)}
 function switchView(v){
   activeView=v;
+  document.body.classList.add('axon-app-active');
+  document.body.classList.toggle('axon-dashboard-active',v==='dashboard');
+  document.body.classList.remove('menu-open');
   setPageContext(v==='dashboard'?'OVERVIEW':v==='clientplatform'?'CLIENT PLATFORM':v==='inbounds'?'INBOUNDS':v==='access'?'CLIENTS':v==='ssh'?'SSH CLIENTS':v==='xray'?'XRAY CLIENTS':v==='wireguard'?'WIREGUARD PEERS':v==='openvpn'?'OPENVPN CLIENTS':v==='ikev2'?'IKEV2 USERS':v==='l2tp'?'L2TP/IPSEC USERS':v==='sstp'?'SSTP USERS':v==='tuic'?'TUIC USERS':v==='hysteria2'?'HYSTERIA2 USERS':v==='connectivity'?'CONNECTIVITY LAB':v==='telegramproxy'?'TELEGRAM MTPROXY':v==='dnscenter'?'PRIVATE DNS':v==='settings'?'SETTINGS':'MAKIA CONTROL CENTER');
   document.querySelectorAll('nav button[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
   document.querySelectorAll('.pro-nav-group').forEach(g=>{
@@ -3661,5 +3716,11 @@ function switchView(v){
   return currentView();
 }
 document.querySelectorAll('nav button[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
-applyLanguageShell();localizeVisibleUi(document);ensureSessionContext().catch(()=>{});switchView('dashboard');
+document.addEventListener('pointerdown',e=>{
+  if(window.innerWidth>900||!document.body.classList.contains('menu-open'))return;
+  if(e.target.closest('.pro-sidebar')||e.target.closest('[data-shell-action="sidebar-open"]'))return;
+  document.body.classList.remove('menu-open');
+  document.querySelector('.mobile-menu-toggle')?.setAttribute('aria-expanded','false');
+},{passive:true});
+applyLanguageShell();localizeVisibleUi(document);ensureSessionContext().catch(()=>{});switchView('dashboard');window.MakiaAxon?.mount(document.getElementById('axonGlobalScene'));
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js?v='+encodeURIComponent(window.MAKIA_VERSION||'1.6.9')).catch(()=>{}));}

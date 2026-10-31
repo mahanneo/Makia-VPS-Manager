@@ -312,6 +312,13 @@ def mtproxy_status(host_hint=""):
     port=int(env.get("MTPROXY_PORT") or 0)
     secret=_mtproxy_secret()
     front_domain=env.get("MTPROXY_FRONT_DOMAIN") or ""
+    public_ipv4=""
+    try:
+        config_text=MTPROXY_CONFIG.read_text(encoding="utf-8",errors="ignore")
+        public_match=re.search(r'(?m)^public-ipv4\s*=\s*"([^"]+)"\s*$',config_text)
+        public_ipv4=public_match.group(1).strip() if public_match else ""
+    except OSError:
+        pass
     configured=bool(host and port and re.fullmatch(r"ee[0-9a-fA-F]+",secret))
     active=_active(MTPROXY_SERVICE)
     listener=bool(port and _port_busy(port,"tcp"))
@@ -330,6 +337,7 @@ def mtproxy_status(host_hint=""):
         "host":host,
         "port":port,
         "front_domain":front_domain,
+        "public_ipv4":public_ipv4,
         "secret":client_secret,
         "secret_last4":secret[-4:] if secret else "",
         "tg_link":f"tg://proxy?{query}" if query else "",
@@ -363,6 +371,9 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
             "tcp",kernel_fallback=True
         )
     secret=_mtproxy_secret()
+    previous_secret=secret
+    previous_host=str(old.get("MTPROXY_PUBLIC_HOST") or "").strip().lower().rstrip(".")
+    previous_front_domain=str(old.get("MTPROXY_FRONT_DOMAIN") or "").strip().lower().rstrip(".")
     front_domain=host
     try:
         ipaddress.ip_address(host)
@@ -425,7 +436,11 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
     result["firewall_warning"]=firewall_warning
     result["requested_port"]=requested
     result["port_adjusted"]=bool(requested and selected!=requested)
-    result["secret_rotated"]=bool(rotate_secret)
+    host_changed=previous_host!=host.lower().rstrip(".") or previous_front_domain!=front_domain.lower().rstrip(".")
+    secret_rotated=bool(secret and secret!=previous_secret)
+    result["host_changed"]=host_changed
+    result["secret_rotated"]=secret_rotated
+    result["link_changed"]=bool(host_changed or secret_rotated or selected!=current_port)
     return result
 
 

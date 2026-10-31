@@ -42,7 +42,7 @@ def test_mtproxy_status_generates_real_telegram_links(tmp_path,monkeypatch):
         encoding="utf-8",
     )
     config=tmp_path/"mtproxy.toml"
-    config.write_text(f'secret = "{secret}"\nbind-to = "0.0.0.0:8443"\n',encoding="utf-8")
+    config.write_text(f'secret = "{secret}"\nbind-to = "0.0.0.0:8443"\npublic-ipv4 = "155.117.5.236"\n',encoding="utf-8")
     binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
     monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
     monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
@@ -54,6 +54,7 @@ def test_mtproxy_status_generates_real_telegram_links(tmp_path,monkeypatch):
     assert state["configured"] is True
     assert state["service_active"] is True
     assert state["listener"] is True
+    assert state["public_ipv4"] == "155.117.5.236"
     assert state["https_link"].startswith("https://t.me/proxy?")
     assert "server=proxy.example.com" in state["https_link"]
     assert "port=8443" in state["https_link"]
@@ -91,6 +92,56 @@ def test_mtproxy_reconfigure_keeps_its_own_live_port(tmp_path,monkeypatch):
     assert state["port_adjusted"] is False
     assert "MTPROXY_PORT=443" in env.read_text(encoding="utf-8")
     assert secret in config.read_text(encoding="utf-8")
+
+
+
+
+def test_mtproxy_host_change_rotates_secret_and_returns_new_link(tmp_path,monkeypatch):
+    env=tmp_path/"mtproxy.env"
+    old_secret="ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d"
+    new_secret="eeabcdef0123456789abcdef0123456789abcdef6e65772e6578616d706c652e636f6d"
+    env.write_text(
+        "MTPROXY_PUBLIC_HOST=old.example.com\n"
+        "MTPROXY_PORT=10443\n"
+        "MTPROXY_FRONT_DOMAIN=old.example.com\n",
+        encoding="utf-8",
+    )
+    config=tmp_path/"mtproxy.toml"
+    config.write_text(
+        f'secret = "{old_secret}"\nbind-to = "0.0.0.0:10443"\npublic-ipv4 = "155.117.5.236"\n',
+        encoding="utf-8",
+    )
+    binary=tmp_path/"mtg";binary.write_text("binary",encoding="utf-8")
+    monkeypatch.setattr(network_services,"MTPROXY_ENV",env)
+    monkeypatch.setattr(network_services,"MTPROXY_CONFIG",config)
+    monkeypatch.setattr(network_services,"MTPROXY_BIN",binary)
+    monkeypatch.setattr(network_services,"_active",lambda service:True)
+    monkeypatch.setattr(network_services,"_port_busy",lambda port,proto="tcp",address="0.0.0.0":True)
+    monkeypatch.setattr(network_services,"_ensure_mtproxy_config_access",lambda:tmp_path.stat().st_gid)
+    monkeypatch.setattr(network_services,"_assert_mtproxy_config_access",lambda:True)
+    monkeypatch.setattr(network_services.os,"chown",lambda *a,**k:None)
+    def run(args,timeout=30):
+        if len(args)>2 and args[1:3]==["generate-secret","--hex"]:
+            return new_secret
+        return ""
+    monkeypatch.setattr(network_services,"_run",run)
+    monkeypatch.setattr(
+        network_services,"_write_mtproxy_config",
+        lambda value,port:config.write_text(
+            f'secret = "{value}"\nbind-to = "0.0.0.0:{port}"\npublic-ipv4 = "155.117.5.236"\n',
+            encoding="utf-8",
+        ),
+    )
+    monkeypatch.setattr(network_services,"_ufw_allow",lambda *a,**k:{"active":False})
+    state=network_services.configure_mtproxy("new.example.com",0,False)
+    assert state["host"]=="new.example.com"
+    assert state["port"]==10443
+    assert state["host_changed"] is True
+    assert state["secret_rotated"] is True
+    assert state["link_changed"] is True
+    assert "server=new.example.com" in state["https_link"]
+    assert "secret="+new_secret in state["https_link"]
+    assert old_secret not in state["https_link"]
 
 
 def test_mtproxy_auto_port_does_not_report_false_adjustment(tmp_path,monkeypatch):
