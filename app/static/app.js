@@ -301,6 +301,13 @@ function renderAccessRows(){
     return (!q||hay.includes(q))&&(filter==='all'||a.kind===filter);
   });
   root.innerHTML=rows.length?rows.map(accessCard).join(''):'<div class="empty pro-empty">کاربری مطابق فیلتر پیدا نشد.</div>';
+  root.querySelectorAll('[data-action="access-detail"]').forEach(btn=>{
+    btn.addEventListener('click',event=>{
+      event.preventDefault();
+      event.stopPropagation();
+      openAccessDetail(dataDec(btn.dataset.id)).catch(error=>alert(error?.message||String(error)));
+    });
+  });
 }
 
 function accessUsageText(a){

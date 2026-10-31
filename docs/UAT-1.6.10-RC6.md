@@ -10,7 +10,8 @@ Status: Release candidate; not Stable.
 - [x] Installed application source copied into the release worktree without replacing the existing repository documentation/client packages.
 - [x] Axon dashboard, landing page, login assets and expanded protocol operations preserved.
 - [x] MTProxy hostname-save regression added; status returns the configured public IPv4; UI verifies the saved hostname and explains same-domain/IP migrations.
-- [x] Service-worker cache revision advanced to v175.
+- [x] Access Center detail buttons have a direct click binding; browser smoke exercises the actual drawer button.
+- [x] Service-worker cache revision advanced to v176.
 - [x] 578 pytest tests pass.
 - [x] Python compile, Bash syntax, JavaScript syntax pass.
 - [x] Browser extension verified-egress contract: 16 scenario groups pass.

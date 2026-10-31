@@ -4,7 +4,8 @@
 - Fixed MTProxy status to expose the public IPv4 saved in the generated mtg config; host changes now report whether the hostname, FakeTLS secret and delivered link actually changed.
 - Hardened the MTProxy UI save flow: it verifies the persisted hostname against the requested hostname, refreshes the displayed link, and explains that the Telegram link text intentionally remains unchanged when only the VPS IP behind the same DNS hostname changes.
 - Added regression coverage for MTProxy hostname rotation/link regeneration and the France endpoint display.
-- Updated the dashboard/service-worker cache revision to v175 so browsers fetch the refreshed Axon/MTProxy UI.
+- Bound Access Center detail buttons directly to their drawer action as well as the delegated action path; browser smoke now exercises the real detail-button click.
+- Updated the dashboard/service-worker cache revision to v176 so browsers fetch the refreshed Axon/MTProxy UI.
 - Updated CI test dependencies to use pinned pytest and httpx2, matching the installed Starlette TestClient runtime; refreshed dashboard tests for the deployed Axon interface.
 - Automated verification: 578 tests PASS, Python compile PASS, Bash syntax PASS, JavaScript syntax PASS, browser extension verified-egress contract 16 scenario groups PASS, mtg release smoke PASS, WStunnel 11.0.0 smoke PASS.
 - France host UAT: makia-uat-smoke 34 PASS / 1 WARN / 0 FAIL; makia-doctor 34 PASS / 1 WARN / 0 FAIL. Nginx, Xray config, OpenVPN, WireGuard, IKEv2, L2TP, SSTP backend, WStunnel, MTProxy, DNS, MahiNet containers and Outline were inspected.

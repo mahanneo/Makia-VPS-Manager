@@ -330,27 +330,8 @@ def main():
 
             row=page.locator(".pro-user-row",has_text="browser-client")
             detail_button=row.locator('[data-action="access-detail"]')
-            dialog_messages=[]
-            def capture_access_dialog(dialog):
-                dialog_messages.append(dialog.message)
-                dialog.dismiss()
-            page.on("dialog",capture_access_dialog)
-            print("ACCESS_DETAIL_BUTTON_ACTION:",detail_button.get_attribute("data-action"))
-            print("ACCESS_DETAIL_BUTTON_ID:",detail_button.get_attribute("data-id"))
-            print("ACCESS_DETAIL_FUNCTION:",page.evaluate("typeof openAccessDetail"))
-            print("ACCESS_DETAIL_CACHE_IDS:",page.evaluate("accessCache.map(x=>x.id)"))
-            print("ACCESS_DETAIL_BUTTON_STATE:",detail_button.evaluate("(el)=>({connected:el.isConnected,disabled:el.disabled,root:el.getRootNode().constructor.name})"))
-            page.on("console",lambda msg: print("ACCESS_DETAIL_CONSOLE:",msg.text) if "CAPTURED_ACCESS_DETAIL_CLICK" in msg.text else None)
-            page.evaluate("document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b?.dataset.action==='access-detail')console.log('CAPTURED_ACCESS_DETAIL_CLICK')},true)")
+            assert detail_button.count()==1
             detail_button.click()
-            page.wait_for_timeout(250)
-            page.remove_listener("dialog",capture_access_dialog)
-            if not page.locator(".access-detail-drawer").count():
-                print("ACCESS_DETAIL_DIALOGS:",dialog_messages)
-                print("ACCESS_DETAIL_PAGE_ERRORS:",page_errors)
-                print("ACCESS_DETAIL_MODAL_ROOT:",page.locator("#modalRoot").inner_html())
-                print("ACCESS_DETAIL_CACHE_DIRECT_CALL")
-                page.evaluate("openAccessDetail('xray:1')")
             page.locator(".access-detail-drawer").wait_for()
             page.screenshot(path='/tmp/makia-user-detail.png',full_page=True)
             page.locator('[data-action="client-portal"]').click()
@@ -466,9 +447,9 @@ def main():
             assert "Security = NONE" in page.locator("#xbSecurityNote").inner_text()
             page.locator('.close-btn[data-action="modal-close"]').click()
 
-            page.locator('.pro-sidebar button[data-view="dashboard"]').click()
+            page.locator('.pro-sidebar button[data-view="access"]').click()
             leave_sidebar(page)
-            page.locator(".sx-vitals").wait_for()
+            page.locator(".pro-user-row",has_text="browser-client").wait_for()
             page.locator('[data-action="self-test"]').click()
             page.locator(".diagnostics-modal").wait_for()
             assert page.locator(".diagnostic-score.pass").count()==1
