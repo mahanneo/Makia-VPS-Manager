@@ -329,7 +329,19 @@ def main():
             page.screenshot(path='/tmp/makia-users.png',full_page=True)
 
             row=page.locator(".pro-user-row",has_text="browser-client")
-            row.locator('[data-action="access-detail"]').click()
+            detail_button=row.locator('[data-action="access-detail"]')
+            dialog_messages=[]
+            def capture_access_dialog(dialog):
+                dialog_messages.append(dialog.message)
+                dialog.dismiss()
+            page.on("dialog",capture_access_dialog)
+            print("ACCESS_DETAIL_BUTTON_ID:",detail_button.get_attribute("data-id"))
+            detail_button.click()
+            page.wait_for_timeout(250)
+            page.remove_listener("dialog",capture_access_dialog)
+            if not page.locator(".access-detail-drawer").count():
+                print("ACCESS_DETAIL_DIALOGS:",dialog_messages)
+                print("ACCESS_DETAIL_PAGE_ERRORS:",page_errors)
             page.locator(".access-detail-drawer").wait_for()
             page.screenshot(path='/tmp/makia-user-detail.png',full_page=True)
             page.locator('[data-action="client-portal"]').click()
