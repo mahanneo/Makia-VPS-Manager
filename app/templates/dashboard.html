@@ -3,16 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#0b1220">
+  <meta name="theme-color" content="#eeebed">
   <meta name="application-name" content="Makia VPS Manager">
   <title>{{app_name}}</title>
   <link rel="manifest" href="/static/manifest.webmanifest?v={{version}}">
   <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css?v={{version}}">
+  <link rel="stylesheet" href="/static/makia-velvet.css?v={{version}}-velvet5">
+  <link rel="stylesheet" href="/static/makia-unified-1.6.12.css?v={{version}}-responsive2">
 </head>
 {% set fa = language != "en" %}
-<body class="makia-pro-shell" data-theme="{{theme}}" data-density="{{density}}">
+<body class="makia-command-shell makia-atlas-shell makia-velvet" data-theme="{{theme}}" data-density="{{density}}">
+
   <aside class="pro-sidebar" id="sidebar">
+  <nav class="ref-rail" aria-label="{{'میانبرهای اصلی' if fa else 'Quick navigation'}}">
+    <div class="ref-rail-logo" aria-hidden="true">M</div>
+    <button data-view="dashboard" class="active" type="button" title="{{'داشبورد' if fa else 'Dashboard'}}" aria-label="{{'داشبورد' if fa else 'Dashboard'}}"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></button>
+    <button data-view="access" type="button" title="{{'کاربران' if fa else 'Users'}}" aria-label="{{'کاربران' if fa else 'Users'}}"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c.5-4 2.4-6 6-6s5.5 2 6 6M17 5a3 3 0 0 1 0 6m-1 4c3 .3 4.5 2 5 5"/></svg></button>
+    <button data-view="statistics" type="button" title="{{'آمار' if fa else 'Analytics'}}" aria-label="{{'آمار' if fa else 'Analytics'}}"><svg viewBox="0 0 24 24"><path d="M3 19V5M3 19h18M7 15l4-5 4 3 5-8"/></svg></button>
+    <button data-view="inbounds" type="button" title="{{'ورودی‌ها' if fa else 'Inbounds'}}" aria-label="{{'ورودی‌ها' if fa else 'Inbounds'}}"><svg viewBox="0 0 24 24"><path d="M10 7h9v10h-9M4 12h11m-4-4 4 4-4 4"/></svg></button>
+    <button data-view="services" type="button" title="{{'سرویس‌ها' if fa else 'Services'}}" aria-label="{{'سرویس‌ها' if fa else 'Services'}}"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5"/></svg></button>
+    <button data-view="payments" type="button" title="{{'پرداخت‌ها' if fa else 'Payments'}}" aria-label="{{'پرداخت‌ها' if fa else 'Payments'}}"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 10h18M7 15h5"/></svg></button>
+    <button data-view="settings" type="button" class="ref-rail-bottom" title="{{'تنظیمات' if fa else 'Settings'}}" aria-label="{{'تنظیمات' if fa else 'Settings'}}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m19 13.5 1 2-2 3-2.2-.3-1.5 1-1 2h-3l-1-2-1.5-1-2.2.3-2-3 1-2v-3l-1-2 2-3 2.2.3 1.5-1 1-2h3l1 2 1.5 1 2.2-.3 2 3-1 2z"/></svg></button>
+  </nav>
     <div class="pro-brand">
       <img src="/static/makia-brand.png?v={{version}}" alt="Makia">
       <div><strong>MAKIA</strong><span>VPS MANAGER</span></div>
@@ -20,58 +32,66 @@
     </div>
 
     <button class="pro-create-access" type="button" data-shell-action="create-access">
-      <span>＋</span><div><b>{{'ساخت دسترسی' if fa else 'Create access'}}</b><small>SSH · Xray · WireGuard · OpenVPN · Outline</small></div>
+      <span>＋</span><div><b>{{'ساخت کاربر' if fa else 'Create user'}}</b><small>{{'ایجاد دسترسی جدید برای پروتکل‌ها' if fa else 'Create a new protocol user'}}</small></div>
     </button>
 
     <nav class="pro-nav" aria-label="{{'منوی اصلی پنل' if fa else 'Main navigation'}}">
-      <p>{{'اصلی' if fa else 'Main'}}</p>
-      <button data-view="dashboard" class="active"><span class="pro-nav-icon">⌂</span><b>{{'داشبورد' if fa else 'Dashboard'}}</b></button>
-      <button data-view="access"><span class="pro-nav-icon">♙</span><b>{{'کاربران' if fa else 'Clients'}}</b><em>{{'همه دسترسی‌ها' if fa else 'All access'}}</em></button>
-      <button data-view="clientplatform"><span class="pro-nav-icon">▣</span><b>{{'اپ کاربران' if fa else 'Client Platform'}}</b><em>{{'PWA · دستگاه · اشتراک' if fa else 'PWA · Device · Subscription'}}</em></button>
-      <button data-view="plans"><span class="pro-nav-icon">◇</span><b>{{'پلن‌ها' if fa else 'Plans'}}</b></button>
-      <button data-view="expiry"><span class="pro-nav-icon">◷</span><b>{{'مرکز تمدید' if fa else 'Expiry Center'}}</b></button>
+      <p>{{'فضای کار' if fa else 'WORKSPACE'}}</p>
+      <button data-view="dashboard" class="active"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></span><b>{{'داشبورد' if fa else 'Dashboard'}}</b></button>
+      <button data-view="access"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.5-3.2 2.3-4.8 5.5-4.8s5 1.6 5.5 4.8M16 5.2a3.1 3.1 0 0 1 0 5.9M17 14.8c2.2.5 3.4 2 3.8 4.7"/></svg></span><b>{{'کاربران' if fa else 'Users'}}</b></button>
+      <button data-view="statistics"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-7"/></svg></span><b>{{'آمار و نمودارها' if fa else 'Statistics'}}</b></button>
+      <button data-view="sessions"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h13M14 4l3 3-3 3M20 17H7m3-3-3 3 3 3"/></svg></span><b>{{'اتصال‌های زنده' if fa else 'Live Sessions'}}</b></button>
 
-      <p>{{'پروتکل‌ها' if fa else 'Protocols'}}</p>
-      <div class="pro-nav-group open" data-group-root="protocols">
-        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="protocols"><span class="pro-nav-icon">◫</span><b>{{'مدیریت پروتکل‌ها' if fa else 'Protocol management'}}</b><i>⌄</i></button>
+      <p>{{'دسترسی و پروتکل‌ها' if fa else 'ACCESS & PROTOCOLS'}}</p>
+      <div class="pro-nav-group" data-group-root="protocols">
+        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="protocols" aria-expanded="false"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6.5 7.5l4 8.5M17.5 7.5l-4 8.5"/></svg></span><b>{{'پروتکل‌ها' if fa else 'Protocols'}}</b><i>⌄</i></button>
         <div class="pro-submenu" data-group-panel="protocols">
           <button data-view="xray"><span class="proto-dot xray"></span><b>Xray / V2Ray</b></button>
           <button data-view="inbounds"><span class="proto-dot inbound"></span><b>{{'Inboundها' if fa else 'Inbounds'}}</b></button>
           <button data-view="ssh"><span class="proto-dot ssh"></span><b>SSH / NPV</b></button>
           <button data-view="wireguard"><span class="proto-dot wg"></span><b>WireGuard</b></button>
           <button data-view="openvpn"><span class="proto-dot ovpn"></span><b>OpenVPN</b></button>
+          <button data-view="ikev2"><span class="proto-dot ikev2"></span><b>IKEv2</b></button>
+          <button data-view="l2tp"><span class="proto-dot l2tp"></span><b>L2TP/IPsec</b></button>
+          <button data-view="sstp"><span class="proto-dot sstp"></span><b>SSTP</b></button>
+          <button data-view="tuic"><span class="proto-dot tuic"></span><b>TUIC / QUIC</b></button>
+          <button data-view="hysteria2"><span class="proto-dot hysteria2"></span><b>Hysteria2</b></button>
           <button data-view="outline"><span class="proto-dot outline"></span><b>Outline</b></button>
           <button data-view="telegramproxy"><span class="proto-dot telegram"></span><b>{{'پروکسی تلگرام' if fa else 'Telegram Proxy'}}</b></button>
-          <button data-view="dnscenter"><span class="proto-dot dns"></span><b>{{'DNS برای کاربران' if fa else 'Client DNS'}}</b></button>
+          <button data-view="dnscenter"><span class="proto-dot dns"></span><b>{{'DNS کاربران' if fa else 'Client DNS'}}</b></button>
         </div>
       </div>
 
-      <p>{{'زیرساخت' if fa else 'Infrastructure'}}</p>
+      <p>{{'زیرساخت' if fa else 'INFRASTRUCTURE'}}</p>
       <div class="pro-nav-group" data-group-root="infra">
-        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="infra"><span class="pro-nav-icon">▦</span><b>{{'سرور و شبکه' if fa else 'Server & Network'}}</b><i>⌄</i></button>
+        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="infra" aria-expanded="false"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3.5" width="18" height="6" rx="1.5"/><rect x="3" y="14.5" width="18" height="6" rx="1.5"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/></svg></span><b>{{'سرورها و شبکه' if fa else 'Hosts & Network'}}</b><i>⌄</i></button>
         <div class="pro-submenu" data-group-panel="infra">
+          <button data-view="nodes"><span>•</span><b>{{'نودها و هاست‌ها' if fa else 'Nodes & Hosts'}}</b></button>
           <button data-view="services"><span>•</span><b>{{'سرویس‌ها' if fa else 'Services'}}</b></button>
-          <button data-view="protocols"><span>•</span><b>{{'شبکه و پورت‌ها' if fa else 'Network / Ports'}}</b></button>
-          <button data-view="sessions"><span>•</span><b>{{'اتصال‌های زنده' if fa else 'Live Sessions'}}</b></button>
-          <button data-view="nodes"><span>•</span><b>{{'نودها' if fa else 'Nodes'}}</b></button>
+          <button data-view="protocols"><span>•</span><b>{{'پورت‌ها و شبکه' if fa else 'Ports & Network'}}</b></button>
           <button data-view="connectivity"><span>•</span><b>Connectivity Lab</b></button>
-          <button data-view="diagnostics"><span>•</span><b>{{'مرکز عیب‌یابی' if fa else 'Diagnostics Center'}}</b></button>
-          <button data-view="operations"><span>•</span><b>{{'عملیات و انتقال' if fa else 'Operations / DR'}}</b></button>
+          <button data-view="diagnostics"><span>•</span><b>{{'عیب‌یابی' if fa else 'Diagnostics'}}</b></button>
+          <button data-view="operations"><span>•</span><b>{{'عملیات و بازیابی' if fa else 'Operations & DR'}}</b></button>
         </div>
       </div>
 
-      <p>{{'سیستم' if fa else 'System'}}</p>
+      <p>{{'مدیریت سرویس' if fa else 'SERVICE MANAGEMENT'}}</p>
+      <button data-view="clientplatform"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.1"/><path d="M10 5.8h4M10.5 18.1h3"/></svg></span><b>{{'اپلیکیشن کاربران' if fa else 'Client Platform'}}</b></button>
+      <button data-view="plans"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8.5 4.5L12 12 3.5 7.5 12 3Z"/><path d="m3.5 12 8.5 4.5 8.5-4.5M3.5 16.5 12 21l8.5-4.5"/></svg></span><b>{{'پلن‌ها' if fa else 'Plans'}}</b></button>
+      <button data-view="expiry"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M7.5 2.8v4.4M16.5 2.8v4.4M3.5 9.5h17M12 12.5v3l2 1.2"/></svg></span><b>{{'تمدید و انقضا' if fa else 'Expiry Center'}}</b></button>
+      <button data-view="payments"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 14.5h4"/></svg></span><b>{{'پرداخت‌ها' if fa else 'Payments'}}</b></button>
+
+      <p>{{'سیستم' if fa else 'SYSTEM'}}</p>
       <div class="pro-nav-group" data-group-root="system">
-        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="system"><span class="pro-nav-icon">⌘</span><b>{{'نگهداری' if fa else 'Maintenance'}}</b><i>⌄</i></button>
+        <button class="pro-group-toggle" type="button" data-shell-action="sidebar-group" data-group="system" aria-expanded="false"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 19 6v5.3c0 4.4-2.6 7.7-7 9.5-4.4-1.8-7-5.1-7-9.5V6l7-2.8Z"/><path d="m9 12 2 2 4-4"/></svg></span><b>{{'نگهداری و امنیت' if fa else 'Maintenance'}}</b><i>⌄</i></button>
         <div class="pro-submenu" data-group-panel="system">
-          <button data-view="audit"><span>•</span><b>{{'لاگ‌ها' if fa else 'Logs'}}</b></button>
-          <button data-view="backups"><span>•</span><b>{{'بکاپ' if fa else 'Backups'}}</b></button>
-          <button data-view="updates"><span>•</span><b>{{'بروزرسانی' if fa else 'Update'}}</b></button>
+          <button data-view="audit"><span>•</span><b>{{'گزارش رویدادها' if fa else 'Audit Logs'}}</b></button>
+          <button data-view="backups"><span>•</span><b>{{'پشتیبان‌گیری' if fa else 'Backups'}}</b></button>
+          <button data-view="updates"><span>•</span><b>{{'بروزرسانی' if fa else 'Updates'}}</b></button>
         </div>
       </div>
-
-      <button data-view="settings"><span class="pro-nav-icon">⚙</span><b>{{'تنظیمات' if fa else 'Settings'}}</b></button>
-      <button data-view="support"><span class="pro-nav-icon">?</span><b>{{'پشتیبانی' if fa else 'Support'}}</b></button>
+      <button data-view="settings"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.2 13.5 1.1 1.8-2 3.4-2.1-.2a7.8 7.8 0 0 1-1.7 1l-.9 1.8h-3.9l-.9-1.8a7.8 7.8 0 0 1-1.7-1l-2.1.2-2-3.4 1.1-1.8a7.8 7.8 0 0 1 0-2.9L3 8.8l2-3.4 2.1.2a7.8 7.8 0 0 1 1.7-1l.9-1.8h3.9l.9 1.8a7.8 7.8 0 0 1 1.7 1l2.1-.2 2 3.4-1.1 1.8a7.8 7.8 0 0 1 0 2.9Z"/></svg></span><b>{{'تنظیمات' if fa else 'Settings'}}</b></button>
+      <button data-view="support"><span class="pro-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 1 1 4.4 1.3c-.8 1.1-2.1 1.2-2.1 2.8M12 17.2h.01"/></svg></span><b>{{'پشتیبانی' if fa else 'Support'}}</b></button>
     </nav>
 
     <div class="pro-sidebar-footer">
@@ -83,18 +103,26 @@
   <main class="pro-main">
     <header class="pro-topbar">
       <div class="pro-topbar-right">
-        <button class="mobile-menu-toggle" type="button" data-shell-action="sidebar-open" aria-label="{{'باز کردن منو' if fa else 'Open menu'}}">☰</button>
-        <button class="global-command" type="button" data-shell-action="command"><span>⌕</span><b>{{'جستجو در پنل...' if fa else 'Search panel...'}}</b><kbd>Ctrl K</kbd></button>
+        <button class="mobile-menu-toggle" type="button" data-shell-action="sidebar-open" aria-label="{{'باز کردن منو' if fa else 'Open menu'}}" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div class="mc-page-heading">
+          <span id="pageContext">MAKIA / OVERVIEW</span>
+          <h1 id="pageTitle">{{'داشبورد' if fa else 'Dashboard'}}</h1>
+        </div>
+      </div>
+      <div class="pro-topbar-center">
+        <button class="global-command" type="button" data-shell-action="command">
+          <span>⌕</span><b>{{'جستجو در پنل...' if fa else 'Search panel...'}}</b><kbd>Ctrl K</kbd>
+        </button>
       </div>
       <div class="pro-topbar-left">
-        <span class="top-server-state"><i></i>{{'آنلاین' if fa else 'ONLINE'}}</span>
+        <span class="top-server-state"><i></i>{{'سرور آنلاین' if fa else 'SERVER ONLINE'}}</span>
         <button class="top-refresh" type="button" data-shell-action="refresh" title="{{'بروزرسانی' if fa else 'Refresh'}}">↻</button>
         <div class="top-user"><span>{{ (current_username or 'A')[:1]|upper }}</span><div><b>{{current_username or 'admin'}}</b><small>{{'مدیر' if fa else 'Administrator'}}</small></div></div>
       </div>
     </header>
-
-    <div class="compat-page-meta" aria-hidden="true"><span id="pageContext">MAKIA CONTROL CENTER</span><span id="pageTitle">{{'داشبورد' if fa else 'Dashboard'}}</span></div>
-    <section id="content" class="pro-content" aria-live="polite"></section>
+<section id="content" class="pro-content" aria-live="polite"></section>
   </main>
 
   <div id="modalRoot"></div>
@@ -106,6 +134,6 @@
     window.MAKIA_DENSITY='{{density}}';
     window.MAKIA_USER='{{current_username or "admin"}}';
   </script>
-  <script src="/static/app.js?v={{version}}-wstunnel-hotfix2"></script>
+  <script defer src="/static/app.js?v={{version}}-multiport-ss16"></script>
 </body>
 </html>

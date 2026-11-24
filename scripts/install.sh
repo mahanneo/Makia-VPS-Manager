@@ -64,7 +64,7 @@ echo "[MAKIA] Installing required Ubuntu packages..."
 apt_retry update
 apt_retry install -y --no-install-recommends \
   python3 python3-venv python3-pip nginx curl ca-certificates tar gzip unzip \
-  iproute2 openssl fail2ban \
+  iproute2 openssl fail2ban dnsutils sqlite3 \
   wireguard-tools openvpn easy-rsa iptables stunnel4 \
   certbot python3-certbot-nginx strongswan strongswan-pki libcharon-extra-plugins
 
@@ -157,14 +157,14 @@ EOF
   chmod 0600 /etc/makia-vps-manager/makia.env
 fi
 
-cp -a "$SOURCE_DIR/app" "$SOURCE_DIR/requirements.txt" "$SOURCE_DIR/VERSION" "$APP/"
+cp -a "$SOURCE_DIR/app" "$SOURCE_DIR/requirements.txt" "$SOURCE_DIR/requirements-lock.txt" "$SOURCE_DIR/VERSION" "$APP/"
 chown -R root:root "$APP/app"
 find "$APP/app" -type d -exec chmod 0750 {} +
 find "$APP/app" -type f -exec chmod 0640 {} +
 chmod 0640 "$APP/requirements.txt" "$APP/VERSION"
 python3 -m venv "$APP/.venv"
 "$APP/.venv/bin/pip" install --upgrade pip
-"$APP/.venv/bin/pip" install -r "$APP/requirements.txt"
+"$APP/.venv/bin/pip" install -r "$APP/requirements-lock.txt"
 
 (
   cd "$APP"

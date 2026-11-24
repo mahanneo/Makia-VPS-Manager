@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eeebed">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="ماکیا؛ پنل یکپارچه مدیریت سرور، کاربران و پروتکل‌های ارتباطی.">
+  <title>MAKIA — مدیریت هوشمند سرور</title>
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://db.onlinewebfonts.com/c/8b75d9dcff6a48c35a46656192adf019?family=FSP+DEMO+-+PODIUM+Sharp+4.11" rel="stylesheet">
+  <link rel="stylesheet" href="/static/makia-velvet-login.css?v={{version}}-velvet2">
+</head>
+<body class="makia-landing nebula-pro-landing makia-velvet-entry" data-auth-open="{{ 'true' if login_open else 'false' }}">
+  <main class="landing-shell" id="top">
+<div class="landing-overlay landing-overlay-left" aria-hidden="true"></div>
+
+    <header class="landing-nav">
+      <a class="landing-brand" href="/welcome" aria-label="صفحه اصلی ماکیا">
+        <span class="landing-brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="landing-brand-copy"><strong>MAKIA</strong><small>VPS MANAGER</small></span>
+      </a>
+      <nav class="landing-links" aria-label="ناوبری اصلی">
+        <a href="#features">قابلیت‌ها</a>
+        <a href="#protocols">پروتکل‌ها</a>
+        <a href="/help/connect">راهنمای اتصال</a>
+        <a href="/client/login">پنل کاربر</a>
+      </nav>
+      <a class="landing-nav-cta" href="/login"><span>ورود به پنل</span><b aria-hidden="true">↗</b></a>
+      <button class="landing-menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false" aria-controls="landing-mobile-menu">
+        <i></i><i></i><i></i>
+      </button>
+    </header>
+
+    <div class="landing-mobile-menu" id="landing-mobile-menu" aria-hidden="true">
+      <div class="landing-mobile-head">
+        <a class="landing-brand" href="/welcome"><span class="landing-brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="landing-brand-copy"><strong>MAKIA</strong><small>VPS MANAGER</small></span></a>
+        <button class="landing-menu-close" type="button" aria-label="بستن منو">×</button>
+      </div>
+      <nav aria-label="ناوبری موبایل">
+        <a href="#features">قابلیت‌ها</a>
+        <a href="#protocols">پروتکل‌ها</a>
+        <a href="/help/connect">راهنمای اتصال</a>
+        <a href="/client/login">پنل کاربر</a>
+        <a class="landing-mobile-login" href="/login">ورود به پنل مدیریت <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+
+    <section class="landing-hero" aria-labelledby="landing-title">
+      <div class="landing-hero-copy">
+        <div class="landing-eyebrow" id="features"><span class="landing-status-dot"></span><span>ADVANCED SERVER CONTROL PLATFORM</span></div>
+        <h1 id="landing-title"><span>CONTROL.</span><span>CONNECT.</span><span class="landing-title-accent">SCALE.</span></h1>
+        <p class="landing-description">مدیریت سرور، کاربران و پروتکل‌های ارتباطی؛<br class="desktop-break"> همه‌چیز در یک پنل سریع، یکپارچه و حرفه‌ای.</p>
+        <div class="landing-actions">
+          <a class="landing-primary-cta" href="/login"><span>ورود به پنل مدیریت</span><b aria-hidden="true">↗</b></a>
+          <a class="landing-secondary-cta" href="/help/connect"><span class="landing-play-icon" aria-hidden="true">▷</span><span>راهنمای اتصال کاربران</span></a>
+        </div>
+        <div class="landing-capabilities" id="protocols">
+          <div class="landing-capability"><span class="landing-capability-icon" aria-hidden="true">01</span><span><b>مدیریت متمرکز</b><small>کاربران و دسترسی‌ها</small></span></div>
+          <div class="landing-capability"><span class="landing-capability-icon" aria-hidden="true">02</span><span><b>چندپروتکلی</b><small>تنظیم و کنترل سرویس‌ها</small></span></div>
+          <div class="landing-capability"><span class="landing-capability-icon" aria-hidden="true">03</span><span><b>پایش عملیاتی</b><small>وضعیت و عیب‌یابی</small></span></div>
+        </div>
+      </div>
+      <div class="landing-side-note" aria-hidden="true"><span class="landing-side-line"></span><span>ENGINEERED FOR CONTROL</span></div>
+    </section>
+
+    <footer class="landing-footer"><span><i></i> MAKIA SYSTEMS</span><span>SECURE ACCESS · UNIFIED CONTROL</span><a href="/login">ورود مدیر <b aria-hidden="true">↗</b></a></footer>
+    <div class="landing-scroll-mark" aria-hidden="true"><span></span></div>
+
+    <div class="landing-auth-overlay{% if login_open %} is-open{% endif %}" id="landingAuth" aria-hidden="{{ 'false' if login_open else 'true' }}">
+      <button class="landing-auth-backdrop" type="button" data-close-login aria-label="بستن پنجره ورود"></button>
+<section class="landing-auth-panel" role="dialog" aria-modal="true" aria-labelledby="landingAuthTitle">
+        <div class="landing-auth-top"><span>MAKIA / SECURE ACCESS</span><button class="landing-auth-close" type="button" data-close-login aria-label="بستن">×</button></div>
+        <div class="landing-auth-brand"><img src="/static/makia-brand.png?v={{version}}" alt="Makia"><div><strong>MAKIA</strong><small>VPS MANAGER</small></div></div>
+        <div class="landing-auth-heading">
+          <span class="landing-auth-kicker">{{ 'TWO-FACTOR VERIFICATION' if twofa_token else 'SECURE CONTROL CENTER' }}</span>
+          <h2 id="landingAuthTitle">{{ 'تأیید دو مرحله‌ای' if twofa_token and language != 'en' else 'Two-factor authentication' if twofa_token else 'ورود به مرکز فرماندهی' if language != 'en' else 'Access the control center' }}</h2>
+          <p>{{ 'کد ۶ رقمی برنامه احراز هویت را وارد کنید.' if twofa_token and language != 'en' else 'Enter the 6-digit code from your authenticator app.' if twofa_token else 'برای ورود امن به پنل مدیریت، اطلاعات مدیر را وارد کنید.' if language != 'en' else 'Enter your administrator credentials to continue securely.' }}</p>
+        </div>
+        {% if error %}<div class="landing-auth-error" role="alert">{{error}}</div>{% endif %}
+        {% if twofa_token %}
+        <form method="post" action="/login/2fa" class="landing-auth-form" autocomplete="on">
+          <input type="hidden" name="token" value="{{twofa_token}}">
+          <label><span>{{ 'کد احراز هویت' if language != 'en' else 'Authenticator code' }}</span><div class="landing-auth-field"><i aria-hidden="true">◇</i><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required {% if login_open %}autofocus{% endif %} placeholder="123456"></div></label>
+          <button class="landing-auth-submit" type="submit"><span>{{ 'تأیید و ورود' if language != 'en' else 'Verify and sign in' }}</span><b aria-hidden="true">↗</b></button>
+        </form>
+        {% else %}
+        <form method="post" action="/login" class="landing-auth-form" autocomplete="on">
+          <label><span>{{ 'نام کاربری' if language != 'en' else 'Username' }}</span><div class="landing-auth-field"><i aria-hidden="true">♙</i><input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required {% if login_open %}autofocus{% endif %} placeholder="admin"></div></label>
+          <label><span>{{ 'رمز عبور' if language != 'en' else 'Password' }}</span><div class="landing-auth-field"><i aria-hidden="true">⌑</i><input id="landingAuthPassword" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"><button type="button" id="landingAuthPasswordToggle" aria-label="نمایش رمز" title="نمایش رمز">◉</button></div></label>
+          <button class="landing-auth-submit" type="submit"><span>{{ 'ورود به پنل مدیریت' if language != 'en' else 'Sign in to Makia' }}</span><b aria-hidden="true">↗</b></button>
+        </form>
+        {% endif %}
+        <div class="landing-auth-bottom"><span><i></i>{{ 'نشست امن مدیر' if language != 'en' else 'Secure administrator session' }}</span><a href="/help/connect">{{ 'راهنمای اتصال' if language != 'en' else 'Connection guide' }} ↗</a><small>v{{version}}</small></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+  (() => {
+    const menu = document.getElementById('landing-mobile-menu');
+    const toggle = document.querySelector('.landing-menu-toggle');
+    const close = document.querySelector('.landing-menu-close');
+    const links = menu.querySelectorAll('a');
+    const auth = document.getElementById('landingAuth');
+    const authPassword = document.getElementById('landingAuthPassword');
+    const authPasswordToggle = document.getElementById('landingAuthPasswordToggle');
+    const watchers = document.getElementById('landingWatchers');
+    const authForms = auth.querySelectorAll('form.landing-auth-form');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    function setAuth(open, moveFocus = true) {
+      auth.classList.toggle('is-open', open);
+      auth.setAttribute('aria-hidden', String(!open));
+      document.body.classList.toggle('landing-auth-open', open);
+      if (open && moveFocus) auth.querySelector('input:not([type="hidden"])')?.focus({ preventScroll: true });
+      if (!open && moveFocus && (location.pathname === '/login' || location.pathname === '/login/2fa')) history.replaceState({}, '', '/');
+    }
+    function setMenu(open, moveFocus = true) {
+      menu.classList.toggle('is-open', open);
+      menu.setAttribute('aria-hidden', String(!open));
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'بستن منو' : 'باز کردن منو');
+      document.body.classList.toggle('landing-menu-open', open);
+      links.forEach((link) => { link.tabIndex = open ? 0 : -1; });
+      if (moveFocus && open) close.focus({ preventScroll: true });
+      else if (moveFocus) toggle.focus({ preventScroll: true });
+    }
+    toggle.addEventListener('click', () => setMenu(true));
+    close.addEventListener('click', () => setMenu(false));
+    links.forEach((link) => link.addEventListener('click', () => setMenu(false)));
+    document.querySelectorAll('a[href="/login"]').forEach((link) => link.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (menu.classList.contains('is-open')) setMenu(false, false);
+      setAuth(true);
+    }));
+    auth.querySelectorAll('[data-close-login]').forEach((button) => button.addEventListener('click', () => setAuth(false)));
+    window.addEventListener('pointermove', (event) => {
+      if (!watchers || !auth.classList.contains('is-open') || reducedMotion.matches) return;
+      const x = Math.max(-1, Math.min(1, (event.clientX / Math.max(1, window.innerWidth) - .5) * 2));
+      const y = Math.max(-1, Math.min(1, (event.clientY / Math.max(1, window.innerHeight) - .5) * 2));
+      watchers.querySelectorAll('.watcher-pupil').forEach((pupil, index) => {
+        const bias = index % 2 ? .82 : 1;
+        pupil.style.setProperty('--eye-x', `${(x * 4.1 * bias).toFixed(2)}px`);
+        pupil.style.setProperty('--eye-y', `${(y * 3.3).toFixed(2)}px`);
+      });
+    }, { passive: true });
+    authForms.forEach((form) => form.addEventListener('submit', (event) => {
+      if (form.dataset.nativeSubmit === 'true' || reducedMotion.matches) return;
+      event.preventDefault();
+      if (form.dataset.animating === 'true') return;
+      form.dataset.animating = 'true';
+      auth.classList.add('is-submitting');
+      document.body.classList.add('landing-auth-submitting');
+      const submit = form.querySelector('.landing-auth-submit');
+      if (submit) {
+        submit.disabled = true;
+        submit.querySelector('span').textContent = 'در حال اتصال به هسته ماکیا…';
+      }
+      window.setTimeout(() => {
+        form.dataset.nativeSubmit = 'true';
+        HTMLFormElement.prototype.submit.call(form);
+      }, 720);
+    }));
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      if (auth.classList.contains('is-open')) setAuth(false);
+      else if (menu.classList.contains('is-open')) setMenu(false);
+    });
+    authPasswordToggle?.addEventListener('click', () => {
+      authPassword.type = authPassword.type === 'password' ? 'text' : 'password';
+      authPasswordToggle.textContent = authPassword.type === 'password' ? '◉' : '◌';
+      authPassword.focus({ preventScroll: true });
+    });
+    setMenu(false, false);
+    setAuth(document.body.dataset.authOpen === 'true', false);
+    const video = document.querySelector('.landing-video');
+    const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (motionReduced.matches) video?.pause();
+    motionReduced.addEventListener?.('change', (event) => { if (event.matches) video?.pause(); else video?.play().catch(() => {}); });
+  })();
+  </script>
+</body>
+</html>

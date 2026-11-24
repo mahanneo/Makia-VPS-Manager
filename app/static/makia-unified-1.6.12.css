@@ -1,0 +1,265 @@
+/* MAKIA UNIFIED LIGHT • v1.6.12
+   Final authoritative skin; imported AFTER the compiled legacy compatibility CSS.
+   Scope: admin console only. Semantic status badges remain distinct.
+*/
+body.makia-velvet{
+  --sx-bg:#f4f2f4!important;
+  --sx-panel:#ffffff!important;
+  --sx-panel-2:#faf8fa!important;
+  --sx-line:#e7e1e8!important;
+  --sx-muted:#625b67!important;
+  --sx-text:#24212a!important;
+  --sx-green:#18794e!important;
+  --sx-yellow:#9a5b0a!important;
+  --sx-red:#b4233c!important;
+  --pro-bg:#f4f2f4!important;
+  --pro-surface:#ffffff!important;
+  --pro-line:#e7e1e8!important;
+  --pro-text:#24212a!important;
+  --pro-muted:#625b67!important;
+}
+body.makia-velvet #content .sx-page,
+body.makia-velvet #content .pro-page{
+  color:#24212a!important;
+}
+body.makia-velvet #content :is(
+  .sx-summary,.sx-summary-row>div,.sx-table-wrap,.sx-inbound-list,
+  .sx-inbound-row,.sx-runtime-card,.sx-vital,.sx-vitals>div,
+  .sx-card,.sx-system-cell,.sx-table-toolbar,.sx-actionbar,
+  .sx-client-tabs,.sx-hero,.sx-future-hero,.sx-core-readouts>div,
+  .sx-runtime-state,.sx-detail-card,.sx-section,.sx-config-panel,
+  .sx-client-card,.sx-stat,.sx-stat-card,.sx-metric,.sx-metric-card,
+  .sx-page-content,.sx-overview,.sx-status-card
+){
+  background:#fff!important;
+  border-color:#e7e1e8!important;
+  color:#24212a!important;
+  box-shadow:0 2px 12px rgba(35,25,36,.035)!important;
+  text-shadow:none!important;
+}
+body.makia-velvet #content .sx-summary-row{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:12px!important;
+}
+body.makia-velvet #content .sx-summary{
+  min-width:0!important;min-height:84px!important;
+  padding:16px 18px!important;
+  border:1px solid #e7e1e8!important;
+  border-radius:15px!important;
+}
+body.makia-velvet #content .sx-summary span,
+body.makia-velvet #content .sx-summary small{
+  display:block!important;
+  color:#625b67!important;font-size:11px!important;
+  opacity:1!important;letter-spacing:0!important;
+}
+body.makia-velvet #content .sx-summary b{
+  display:block!important;margin:5px 0!important;
+  color:#24212a!important;font-size:24px!important;
+  font-weight:800!important;line-height:1.35!important;
+}
+body.makia-velvet #content .sx-table-wrap{
+  overflow:auto!important;border:1px solid #e7e1e8!important;
+  border-radius:17px!important;
+}
+body.makia-velvet #content .sx-table-toolbar{
+  background:#faf8fa!important;
+  border:0!important;border-bottom:1px solid #e7e1e8!important;
+  border-radius:0!important;padding:14px 18px!important;
+}
+body.makia-velvet #content .sx-table-toolbar h3{
+  font-size:14px!important;font-weight:750!important;
+  color:#24212a!important;
+}
+body.makia-velvet #content .sx-table-toolbar small{
+  font-size:10px!important;color:#625b67!important;
+  opacity:1!important;
+}
+body.makia-velvet #content .sx-inbound-list{
+  gap:0!important;
+  background:#fff!important;border:0!important;
+}
+body.makia-velvet #content .sx-inbound-row{
+  display:grid!important;
+  grid-template-columns:44px minmax(170px,1.25fr) minmax(98px,.8fr) minmax(65px,.4fr) minmax(62px,.4fr) minmax(70px,.4fr) minmax(270px,1.25fr)!important;
+  align-items:center!important;
+  gap:12px!important;min-width:1030px!important;
+  padding:14px 16px!important;
+  margin:0!important;border:0!important;
+  border-bottom:1px solid #eee9ef!important;
+  border-radius:0!important;
+  background:#fff!important;color:#24212a!important;
+}
+body.makia-velvet #content .sx-inbound-row:nth-child(even){
+  background:#fcfafb!important;
+}
+body.makia-velvet #content .sx-inbound-row:hover{
+  background:#fff5f8!important;
+  border-color:#f0d1dc!important;
+}
+body.makia-velvet #content .sx-inbound-icon{
+  width:38px!important;height:38px!important;
+  display:grid!important;place-items:center!important;
+  border:1px solid #f0d5e0!important;
+  border-radius:11px!important;
+  background:#fdebf1!important;
+  color:#aa2c58!important;
+  font-size:11px!important;font-weight:800!important;
+}
+body.makia-velvet #content .sx-inbound-main,
+body.makia-velvet #content .sx-inbound-cell{
+  min-width:0!important;color:#24212a!important;
+}
+body.makia-velvet #content .sx-inbound-main b{
+  display:block!important;color:#24212a!important;
+  font-size:12px!important;font-weight:750!important;
+  overflow-wrap:anywhere!important;line-height:1.6!important;
+}
+body.makia-velvet #content .sx-inbound-cell b{
+  display:block!important;color:#302a34!important;
+  font-size:12px!important;font-weight:650!important;
+  direction:ltr;unicode-bidi:plaintext;
+  line-height:1.6!important;
+}
+body.makia-velvet #content .sx-inbound-main span,
+body.makia-velvet #content .sx-inbound-cell span{
+  display:block!important;
+  color:#625b67!important;
+  font-size:10px!important;
+  line-height:1.7!important;
+  margin-top:3px!important;
+  opacity:1!important;
+}
+body.makia-velvet #content .sx-inbound-actions{
+  display:flex!important;flex-wrap:wrap!important;
+  gap:7px!important;justify-content:flex-end!important;
+}
+body.makia-velvet #content .sx-inbound-actions button{
+  min-height:33px!important;
+  font-size:10px!important;font-weight:600!important;
+}
+body.makia-velvet #content .sx-state-pill{
+  display:inline-flex!important;
+  align-items:center!important;gap:7px!important;
+  background:#eaf6ef!important;
+  border:1px solid #cfe9da!important;
+  color:#176b46!important;
+  font-size:11px!important;font-weight:650!important;
+  border-radius:10px!important;
+  min-height:34px!important;
+}
+body.makia-velvet #content .sx-state-pill.warn{
+  background:#fff5e5!important;
+  border-color:#efdcb3!important;
+  color:#80500b!important;
+}
+body.makia-velvet #content .sx-state-pill.bad{
+  background:#fff0f2!important;
+  border-color:#f0cdd3!important;
+  color:#a61b36!important;
+}
+body.makia-velvet #content .sx-state-pill i{
+  background:#18794e!important;
+}
+body.makia-velvet #content .sx-state-pill.warn i{background:#c68c24!important}
+body.makia-velvet #content .sx-state-pill.bad i{background:#b4233c!important}
+body.makia-velvet #content :is(
+  .sx-page-head h1,.sx-page-head h2,.sx-runtime-main b,
+  .sx-vital b,.sx-card h3,.sx-system-cell b,
+  .sx-section-title,.sx-summary b
+){color:#24212a!important;text-shadow:none!important;opacity:1!important}
+body.makia-velvet #content :is(
+  .sx-page-head p,.sx-runtime-main small,.sx-runtime-main em,
+  .sx-vital small,.sx-card small,.sx-system-cell small,
+  .sx-runtime-state,.sx-actionbar .sx-version
+){
+  color:#625b67!important;opacity:1!important;
+}
+body.makia-velvet #content .sx-runtime-glyph{
+  background:#fdebf1!important;color:#a72d58!important;
+  border-color:#f0d5e0!important;
+}
+body.makia-velvet #content .sx-runtime-state.live{
+  background:#eaf6ef!important;color:#176b46!important;
+  border-color:#cfe9da!important;
+}
+body.makia-velvet #content .sx-runtime-card.live .sx-runtime-state{
+  background:#eaf6ef!important;color:#176b46!important;
+  border-color:#cfe9da!important;
+}
+body.makia-velvet #content .sx-runtime-card.ready .sx-runtime-state{
+  background:#edf5ff!important;color:#245ca6!important;
+  border-color:#d5e3f5!important;
+}
+body.makia-velvet #content .sx-runtime-card.attention .sx-runtime-state{
+  background:#fff5e5!important;color:#80500b!important;
+  border-color:#efdcb3!important;
+}
+body.makia-velvet #content :is(
+  .sx-client-tabs button,.sx-actionbar button,
+  .sx-head-actions .ghost,.sx-inbound-actions .ghost
+){
+  border:1px solid #e7e1e8!important;
+  background:#fff!important;
+  color:#403944!important;
+  box-shadow:none!important;
+}
+body.makia-velvet #content :is(
+  .sx-client-tabs button.active,.sx-actionbar button.primary
+){
+  border-color:#f1b8cc!important;
+  background:#fdebf1!important;
+  color:#a72d58!important;
+}
+body.makia-velvet #content :is(.sx-client-tabs button,.sx-actionbar button):hover{
+  background:#fff5f8!important;border-color:#e8becd!important;
+}
+body.makia-velvet #content .sx-page-head{
+  background:#fff!important;border-color:#e7e1e8!important;
+}
+body.makia-velvet #content :is(
+  .sx-table-wrap input,.sx-table-wrap select,
+  .sx-actionbar input,.sx-actionbar select
+){
+  background:#fff!important;border-color:#ded6df!important;
+  color:#24212a!important;
+}
+@media(max-width:1100px){
+  body.makia-velvet #content .sx-summary-row{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+}
+@media(max-width:550px){
+  body.makia-velvet #content .sx-summary-row{
+    grid-template-columns:1fr!important;
+  }
+  body.makia-velvet #content .sx-summary{min-height:72px!important}
+}
+
+/* Client Platform responsiveness: avoid expensive full-screen backdrop repaint. */
+body.makia-velvet #modalRoot .modal-backdrop:has(.cp-modal),
+body.makia-velvet #modalRoot .detail-backdrop:has(.cp-manage-drawer){
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  background:rgba(23,29,43,.36)!important;
+}
+body.makia-velvet #content .client-platform-page :is(button,[data-action]),
+body.makia-velvet #modalRoot :is(.cp-modal,.cp-manage-drawer) button{
+  touch-action:manipulation;
+  transition:background-color .12s ease,border-color .12s ease!important;
+}
+body.makia-velvet #content .client-platform-page button:active,
+body.makia-velvet #modalRoot :is(.cp-modal,.cp-manage-drawer) button:active{
+  transform:translateY(1px);
+}
+body.makia-velvet #content .client-platform-page button[aria-busy="true"],
+body.makia-velvet #modalRoot button[aria-busy="true"]{
+  opacity:.68;cursor:progress!important;
+}
+@media(prefers-reduced-motion:reduce){
+  body.makia-velvet #content .client-platform-page *,
+  body.makia-velvet #modalRoot :is(.cp-modal,.cp-manage-drawer) *{
+    animation:none!important;transition:none!important;
+  }
+}

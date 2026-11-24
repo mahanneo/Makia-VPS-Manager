@@ -21,6 +21,7 @@ router=APIRouter()
 CLIENT_SESSION_COOKIE="makia_client_session"
 CLIENT_DEVICE_COOKIE="makia_client_device"
 CLIENT_SESSION_TTL=12*60*60
+CLIENT_REMEMBER_TTL=30*24*60*60
 CLIENT_DEVICE_TTL=365*24*60*60
 
 
@@ -187,8 +188,9 @@ def client_login_page(request:Request):
     if _session(request):
         return _no_store(RedirectResponse("/client/app",302))
     response=templates.TemplateResponse(
-        "client_login.html",
-        {
+        request=request,
+        name="client_login.html",
+        context={
             "request":request,"app_name":APP_NAME,"version":VERSION,"error":None,
             "default_username":str(request.query_params.get("u") or "")[:64],
             "detected_platform":_client_platform(request),
@@ -203,6 +205,7 @@ def client_login(
     username:str=Form(...),
     password:str=Form(...),
     device_label:str=Form(""),
+    remember_device:str=Form(""),
 ):
     _require_enabled()
     remote_ip=_ip(request) or "unknown"
@@ -212,8 +215,9 @@ def client_login(
     if int(state.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(state["blocked_until"])-now_ts)
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {
+            request=request,
+            name="client_login.html",
+            context={
                 "request":request,"app_name":APP_NAME,"version":VERSION,
                 "error":f"تلاش‌های ناموفق زیاد بوده است. حدود {max(1,wait//60)} دقیقه بعد دوباره امتحان کنید.",
             },
@@ -224,8 +228,9 @@ def client_login(
         state=record_login_failure(rate_key,now_ts,max_failures=6,window_seconds=900,block_seconds=900)
         audit("client:"+str(username or "unknown"),"client_login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {"request":request,"app_name":APP_NAME,"version":VERSION,"error":"نام کاربری یا رمز عبور صحیح نیست."},
+            request=request,
+            name="client_login.html",
+            context={"request":request,"app_name":APP_NAME,"version":VERSION,"error":"نام کاربری یا رمز عبور صحیح نیست."},
             status_code=401,
         ))
     ok,reason=client_store.account_available(account,now_ts)
@@ -237,8 +242,9 @@ def client_login(
             "disabled":"حساب کاربری غیرفعال است.",
         }.get(reason,"دسترسی حساب در حال حاضر فعال نیست.")
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
+            request=request,
+            name="client_login.html",
+            context={"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
             status_code=403,
         ))
     try:
@@ -251,17 +257,19 @@ def client_login(
             user_agent=request.headers.get("user-agent",""),
             ip=remote_ip,
         )
-        token,expires_at=client_store.create_session(account["id"],device["id"],remote_ip,CLIENT_SESSION_TTL)
+        session_ttl=CLIENT_REMEMBER_TTL if remember_device=="1" else CLIENT_SESSION_TTL
+        token,expires_at=client_store.create_session(account["id"],device["id"],remote_ip,session_ttl)
     except PermissionError as exc:
         audit("client:"+account["username"],"client_login_device_denied",detail=str(exc),ip=remote_ip)
         message="سقف دستگاه یا اتصال همزمان این اشتراک پر شده است."
         return _no_store(templates.TemplateResponse(
-            "client_login.html",
-            {"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
+            request=request,
+            name="client_login.html",
+            context={"request":request,"app_name":APP_NAME,"version":VERSION,"error":message},
             status_code=403,
         ))
     clear_login_failures(rate_key)
-    audit("client:"+account["username"],"client_login_success",target=str(device["id"]),ip=remote_ip)
+    audit("client:"+account["username"],"client_login_success",target=str(device["id"]),detail="remember_device="+str(remember_device=="1"),ip=remote_ip)
     response=RedirectResponse("/client/app",302)
     secure=_secure_cookie(request)
     response.set_cookie(
@@ -297,8 +305,9 @@ def client_app(request:Request):
     if not session:
         return RedirectResponse("/client/login",302)
     response=templates.TemplateResponse(
-        "client_app.html",
-        {
+        request=request,
+        name="client_app.html",
+        context={
             "request":request,"app_name":APP_NAME,"version":VERSION,
             "username":session["username"],"display_name":session.get("display_name") or session["username"],
             "detected_platform":_client_platform(request),
@@ -549,6 +558,7 @@ async def client_extension_login(request:Request):
     password=str(body.get("password") or "")
     device_key=str(body.get("device_key") or "").strip()
     device_label=str(body.get("device_label") or "Chrome / Edge · Makia Browser VPN")[:120]
+    remember_device=body.get("remember_device") is True
     remote_ip=_ip(request) or "unknown"
     rate_key="client-extension:"+remote_ip
     now_ts=int(time.time())
@@ -569,17 +579,19 @@ async def client_extension_login(request:Request):
             user_agent=request.headers.get("user-agent",""),ip=remote_ip,
         )
         token,expires_at=client_store.create_session(
-            account["id"],device["id"],remote_ip,CLIENT_SESSION_TTL
+            account["id"],device["id"],remote_ip,
+            CLIENT_REMEMBER_TTL if remember_device else CLIENT_SESSION_TTL
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403,detail=str(exc))
     clear_login_failures(rate_key)
     snapshot=client_store.account_snapshot(account["id"]) or {}
     snapshot["current_device_id"]=device["id"]
-    audit("client:"+account["username"],"browser_extension_login_success",target=str(device["id"]),ip=remote_ip)
+    audit("client:"+account["username"],"browser_extension_login_success",target=str(device["id"]),detail="remember_device="+str(remember_device),ip=remote_ip)
     return _extension_response(request,{
         "token":token,
         "expires_at":expires_at,
+        "remember_device":remember_device,
         "device_key":new_device_key or "",
         "account":snapshot,
         "extension_id":MAKIA_BROWSER_EXTENSION_ID,

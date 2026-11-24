@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <strong>Stable server release 1.6.5</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
+  <strong>Maintenance build 1.6.12 (2026-11-24)</strong> · Persian/English · Responsive · Backup/DR · Multi-VPS · Client Portal
 </p>
 
-**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[v1.6.5 release status](docs/RELEASE-STATUS.md)**
+**[راهنمای فارسی](README_FA.md)** · **[راهنمای اتصال کاربران](docs/CLIENT-GUIDE-FA.md)** · **[1.6.12 maintenance notes](RELEASE-NOTES.md)** · **[Fresh installation guide](INSTALL-FA.md)**
 
 ---
 
@@ -90,15 +90,19 @@ Read the [English IP/domain and cross-platform setup guide](docs/IP-DOMAIN-SETUP
 
 ## Quick install
 
-Use a **fresh Ubuntu 22.04 or 24.04 VPS** and run as root:
+Use a **fresh Ubuntu 24.04 VPS** with a domain pointing to the VPS. Run:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/install.sh)
+git clone https://github.com/mahanneo/Makia-VPS-Manager.git
+cd Makia-VPS-Manager
+sudo bash install.sh vpn.example.org admin@example.org
 ```
 
-The installer prints a unique administrator bootstrap password. Change it after first login.
+Replace the example domain and email. The installer creates a fresh administrator and VPN keys; change the administrator password after first login. The 1.6.12 maintenance build passed isolated application and configuration tests; a clean second-VPS installation and external client acceptance test remain outstanding. See [maintenance notes](RELEASE-NOTES.md).
 
 ### Update an existing installation
+
+**Maintenance build warning:** the 1.6.12 fresh-host configuration is not a migration procedure. Back up and test on a staging VPS before updating an existing installation; custom Nginx, VPN and certificate state may require separate migration.
 
 ```bash
 sudo makia-upgrade

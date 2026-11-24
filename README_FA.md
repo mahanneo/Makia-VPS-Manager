@@ -1,3 +1,5 @@
+> نسخه نگهداری 1.6.12 — [راهنمای نصب مستقل](INSTALL-FA.md) و [وضعیت آزمون‌ها](RELEASE-NOTES.md). نصب روی VPS دوم هنوز تأیید نشده است؛ برای نصب روی سیستم دارای کاربران فعال، از این راه‌انداز استفاده نکنید.
+
 <p align="center">
   <img src="docs/assets/makia-brand.png" width="128" alt="لوگوی Makia VPS Manager">
 </p>
@@ -92,7 +94,9 @@ Makia داخل مرورگر **Shell روت عمومی** ارائه نمی‌کن
 روی **Ubuntu 22.04 یا Ubuntu 24.04 تمیز** و با دسترسی Root:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mahanneo/Makia-VPS-Manager/main/install.sh)
+git clone https://github.com/mahanneo/Makia-VPS-Manager.git
+cd Makia-VPS-Manager
+sudo bash install.sh vpn.example.org admin@example.org
 ```
 
 Installer یک رمز اولیه تصادفی برای مدیر نمایش می‌دهد. بعد از اولین ورود آن را عوض کنید.

@@ -7,7 +7,8 @@ from .security import hash_password
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    con.execute("PRAGMA foreign_keys=ON")
     try:
         os.chmod(DB_PATH, 0o600)
     except OSError:
@@ -111,6 +112,13 @@ def init_db():
           UNIQUE(engine,inbound_tag,name)
         );
         CREATE INDEX IF NOT EXISTS idx_protocol_clients_name ON protocol_clients(name);
+        CREATE TABLE IF NOT EXISTS dns_client_ips (
+          client_id INTEGER PRIMARY KEY,
+          ip TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY(client_id) REFERENCES protocol_clients(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_dns_client_ips_ip ON dns_client_ips(ip);
         CREATE TABLE IF NOT EXISTS account_profiles (
           username TEXT PRIMARY KEY,
           plan TEXT NOT NULL DEFAULT '',
@@ -549,6 +557,9 @@ def replace_protocol_client_identity(client_id,inbound_tag,credential,share_link
 
 def delete_protocol_client(client_id):
     with connect() as con:
+        # DNS observations may refer to this client; clear dependent rows first.
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dns_client_ips'").fetchone():
+            con.execute("DELETE FROM dns_client_ips WHERE client_id=?",(int(client_id),))
         con.execute("DELETE FROM protocol_clients WHERE id=?",(int(client_id),))
 
 

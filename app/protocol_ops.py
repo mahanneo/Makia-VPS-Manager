@@ -17,7 +17,9 @@ from pathlib import Path
 
 XRAY_BIN_CANDIDATES=["/usr/local/bin/xray","/usr/bin/xray"]
 XRAY_CONFIG_CANDIDATES=["/usr/local/etc/xray/config.json","/etc/xray/config.json"]
-XRAY_VALIDATED_VERSION="v26.3.27"
+XRAY_VALIDATED_VERSION="v26.10.21"
+# Immutable installer commit verified for explicit --version and -u nobody arguments.
+XRAY_INSTALLER_COMMIT="e741a4f56d368afbb9e5be3361b40c4552d3710d"
 XRAY_TLS_DIR=Path("/usr/local/etc/xray/tls")
 WG_DIR=Path("/etc/wireguard")
 OVPN_DIR=Path("/etc/openvpn")
@@ -25,6 +27,10 @@ OVPN_EASYRSA=OVPN_DIR/"easy-rsa"
 IKEV2_CONF=Path("/etc/ipsec.conf")
 IKEV2_SECRETS=Path("/etc/ipsec.secrets")
 IKEV2_ENV=Path("/etc/makia-vps-manager/ikev2.env")
+L2TP_ENV=Path("/etc/makia-vps-manager/l2tp.env")
+L2TP_CONF=Path("/etc/xl2tpd/xl2tpd.conf")
+L2TP_PPP_OPTIONS=Path("/etc/ppp/options.xl2tpd")
+L2TP_CHAP=Path("/etc/ppp/chap-secrets")
 STUNNEL_MAKIA_CONF=Path("/etc/stunnel/makia-openvpn.conf")
 STUNNEL_MAKIA_SERVICE="makia-stealth"
 WSTUNNEL_ENV=Path("/etc/makia-vps-manager/wstunnel.env")
@@ -212,14 +218,110 @@ def _xray_test_config_as_service(binary,path):
             return _xray_static_service_validation(path,user)
         raise
 
-def _xray_materialize_tls(domain):
-    domain=_validate_endpoint_host(domain,"TLS domain")
+def _xray_tls_certificate_issue(domain):
+    """Return a safe, actionable reason when a Let's Encrypt TLS identity cannot be used."""
+    domain=str(domain or "").strip().lower().rstrip(".")
+    if not domain:
+        return "TLS requires a DNS hostname with a valid certificate; an IP address is not an SNI domain."
+    try:
+        ipaddress.ip_address(domain)
+        return "TLS SNI must be a DNS hostname, not an IP address. Select a domain with a valid certificate."
+    except ValueError:
+        pass
+    try:
+        domain=_validate_endpoint_host(domain,"TLS domain")
+    except ProtocolError as exc:
+        return str(exc)
     cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
-    if not cert.exists() or not key.exists():
-        raise ProtocolError("TLS certificate not found for this domain; issue HTTPS/Let's Encrypt first")
-    target=XRAY_TLS_DIR/domain
-    target.mkdir(parents=True,exist_ok=True)
+    if not cert.is_file() or not key.is_file():
+        return f"No Let's Encrypt certificate/key was found for TLS domain {domain}. Issue a certificate first."
+    try:
+        valid=subprocess.run(["openssl","x509","-in",str(cert),"-noout","-checkend","0"],capture_output=True,text=True,timeout=8,check=False)
+        if valid.returncode!=0:
+            return f"The TLS certificate for {domain} is expired or not yet valid. Renew it before creating this inbound."
+        hostname=subprocess.run(["openssl","x509","-in",str(cert),"-noout","-checkhost",domain],capture_output=True,text=True,timeout=8,check=False)
+        if hostname.returncode!=0:
+            return f"The TLS certificate does not cover {domain}. Choose a domain included in the certificate SAN."
+        cert_pub=subprocess.run(["openssl","x509","-in",str(cert),"-pubkey","-noout"],capture_output=True,text=True,timeout=8,check=False)
+        key_pub=subprocess.run(["openssl","pkey","-in",str(key),"-pubout"],capture_output=True,text=True,timeout=8,check=False)
+        if cert_pub.returncode!=0 or key_pub.returncode!=0 or cert_pub.stdout.strip()!=key_pub.stdout.strip():
+            return f"The TLS certificate and private key for {domain} do not match. Reissue the certificate before creating this inbound."
+    except (OSError,subprocess.SubprocessError) as exc:
+        return f"Unable to validate the TLS certificate for {domain}: {type(exc).__name__}."
+    return ""
+
+
+def xray_tls_certificate_inventory():
+    """Return valid, matching Let's Encrypt certificate domains available to Xray."""
+    root=Path("/etc/letsencrypt/live")
+    if not root.is_dir():
+        return []
+    domains=[]
+    try:
+        entries=sorted(root.iterdir(),key=lambda x:x.name.lower())
+    except OSError:
+        return []
+    for entry in entries:
+        domain=entry.name.lower().rstrip(".")
+        if not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",domain):
+            continue
+        if not _xray_tls_certificate_issue(domain):
+            domains.append(domain)
+    return domains
+
+
+def xray_tls_domain_inventory():
+    """List valid certificate domains that resolve directly to this VPS."""
+    local4={x for x in _local_ipv4_candidates() if ipaddress.ip_address(x).is_global}
+    local6=set(_local_ipv6_candidates())
+    domains=[]
+    for domain in xray_tls_certificate_inventory():
+        try:
+            resolved4=sorted({x[4][0] for x in socket.getaddrinfo(domain,None,socket.AF_INET,socket.SOCK_STREAM)})
+        except OSError:
+            resolved4=[]
+        if not resolved4 or not local4 or not set(resolved4).issubset(local4):
+            continue
+        try:
+            resolved6=sorted({str(ipaddress.IPv6Address(x[4][0].split("%",1)[0])) for x in socket.getaddrinfo(domain,None,socket.AF_INET6,socket.SOCK_STREAM)})
+        except OSError:
+            resolved6=[]
+        if resolved6 and (not local6 or not set(resolved6).issubset(local6)):
+            continue
+        domains.append(domain)
+    return domains
+
+
+def _xray_prepare_tls_root():
+    """Allow the Xray service identity to traverse the TLS root without listing it."""
+    root=Path(XRAY_TLS_DIR)
+    root.mkdir(parents=True,exist_ok=True,mode=0o710)
+    user=_xray_service_user()
+    if os.geteuid()==0 and user not in {"","root"}:
+        try:
+            info=pwd.getpwnam(user)
+            os.chown(root,0,info.pw_gid)
+            os.chmod(root,0o710)
+        except (KeyError,OSError) as exc:
+            raise ProtocolError(f"unable to prepare Xray TLS directory permissions for {user}: {exc}") from exc
+    else:
+        os.chmod(root,0o700)
+    return root
+
+
+def _xray_materialize_tls(domain):
+    domain=str(domain or "").strip().lower().rstrip(".")
+    issue=_xray_tls_certificate_issue(domain)
+    if issue:
+        available=xray_tls_domain_inventory()
+        suffix=(" Available TLS domains on this VPS: "+", ".join(available)+".") if available else " Configure a domain that points directly to this VPS and issue its certificate."
+        raise ProtocolError(issue+suffix)
+    cert=Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+    key=Path(f"/etc/letsencrypt/live/{domain}/privkey.pem")
+    root=_xray_prepare_tls_root()
+    target=root/domain
+    target.mkdir(parents=True,exist_ok=True,mode=0o700)
     if os.geteuid()==0:
         user=_xray_service_user()
         if user not in {"","root"}:
@@ -277,13 +379,14 @@ def xray_diagnostics():
         "version":"","validated_version":False,"root_validation":False,
         "service_validation":False,"root_error":"","service_error":"",
         "journal":_xray_journal_tail(),"hints":[],
+        "outbound_count":0,"outbound_ready":False,
         "cert_sync_hook":Path("/etc/letsencrypt/renewal-hooks/deploy/makia-xray-sync").is_file(),
     }
     if binary:
         try:
             p=subprocess.run([binary,"version"],text=True,capture_output=True,timeout=5,check=False)
             result["version"]=(p.stdout or p.stderr).splitlines()[0][:160] if (p.stdout or p.stderr) else ""
-            result["validated_version"]="26.3.27" in result["version"]
+            result["validated_version"]="26.10.21" in result["version"]
         except Exception:
             pass
     if config:
@@ -304,7 +407,16 @@ def xray_diagnostics():
             result["config_uid"]=st.st_uid
         except OSError:
             pass
+    try:
+        current=json.loads(Path(config).read_text(encoding="utf-8")) if config else {}
+        outbounds=current.get("outbounds") or []
+        result["outbound_count"]=len(outbounds) if isinstance(outbounds,list) else 0
+        result["outbound_ready"]=bool(result["outbound_count"])
+    except Exception:
+        pass
     journal=(result["journal"] or "").lower()
+    if not result["outbound_ready"]:
+        result["hints"].append("هیچ Outbound در کانفیگ Xray تعریف نشده؛ اتصال ممکن است برقرار شود اما ترافیک به اینترنت مسیر نداشته باشد.")
     if result["root_validation"] and not result["service_validation"]:
         result["hints"].append("کانفیگ برای root معتبر است ولی کاربر systemd نمی‌تواند آن را بخواند؛ مشکل Permission/Certificate محتمل است.")
     if "permission denied" in journal:
@@ -316,7 +428,7 @@ def xray_diagnostics():
     if not result["root_validation"] and result["root_error"]:
         result["hints"].append("خود Xray Core کانفیگ فعال را نامعتبر تشخیص داده است.")
     if binary and not result["validated_version"]:
-        result["hints"].append("نسخه Core نصب‌شده با نسخه‌ای که Makia در CI اعتبارسنجی می‌کند (26.3.27) متفاوت است.")
+        result["hints"].append("نسخه Core نصب‌شده با نسخه‌ای که Makia در CI اعتبارسنجی می‌کند (26.10.21) متفاوت است.")
     return result
 
 def repair_xray_runtime():
@@ -397,7 +509,7 @@ def xray_status():
                     "listen":item.get("listen") or "0.0.0.0",
                     "port":item.get("port"),
                     "clients":client_count,
-                    "transport":stream.get("method") or stream.get("network") or "raw",
+                    "transport":stream.get("network") or stream.get("method") or "raw",
                     "security":stream.get("security") or "none",
                     "sniffing":bool((item.get("sniffing") or {}).get("enabled")),
                 })
@@ -514,6 +626,29 @@ def _wait_listener(port, proto="tcp", timeout=8.0, interval=0.25):
         time.sleep(max(0.05,float(interval)))
 
 
+def _vpn_network_status(cidr,service_name):
+    network_active=_active(service_name)
+    try:
+        ip_forward=Path("/proc/sys/net/ipv4/ip_forward").read_text(encoding="utf-8").strip()=="1"
+    except OSError:
+        ip_forward=False
+    uplink=""
+    try:
+        route=_run(["ip","-4","route","show","default"],timeout=5)
+        match=re.search(r"(?m)^default\s+.*?\bdev\s+(\S+)",route)
+        if match: uplink=match.group(1)
+    except ProtocolError:
+        pass
+    forward_in=_iptables_check(["-C","FORWARD","-s",cidr,"-j","ACCEPT"]) if cidr else False
+    forward_out=_iptables_check(["-C","FORWARD","-d",cidr,"-m","state","--state","ESTABLISHED,RELATED","-j","ACCEPT"]) if cidr else False
+    nat=_iptables_check(["-t","nat","-C","POSTROUTING","-s",cidr,"-o",uplink,"-j","MASQUERADE"]) if cidr and uplink else False
+    return {
+        "network_active":network_active,"ip_forward":ip_forward,"uplink":uplink,
+        "forward_in":forward_in,"forward_out":forward_out,"nat":nat,
+        "forwarding_ready":bool(network_active and ip_forward and forward_in and forward_out and nat),
+    }
+
+
 def ikev2_status():
     installed=bool(shutil.which("ipsec"))
     active=_active("strongswan-starter") or _active("strongswan")
@@ -532,10 +667,34 @@ def ikev2_status():
         for line in IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore").splitlines():
             if "# makia-eap:" in line:
                 users+=1
+    listeners={"500_udp":_listener_present(500,"udp"),"4500_udp":_listener_present(4500,"udp")}
+    cert_path=Path("/etc/ipsec.d/certs/makia-ikev2.pem")
+    key_path=Path("/etc/ipsec.d/private/makia-ikev2.key")
+    cert_valid=False; cert_matches_domain=False; cert_key_matches=False; cert_error=""
+    if cert_path.is_file() and key_path.is_file() and domain:
+        try:
+            valid=subprocess.run(["openssl","x509","-in",str(cert_path),"-noout","-checkend","0"],capture_output=True,text=True,timeout=8,check=False)
+            host=subprocess.run(["openssl","x509","-in",str(cert_path),"-noout","-checkhost",domain],capture_output=True,text=True,timeout=8,check=False)
+            cert_pub=subprocess.run(["openssl","x509","-in",str(cert_path),"-pubkey","-noout"],capture_output=True,text=True,timeout=8,check=False)
+            key_pub=subprocess.run(["openssl","pkey","-in",str(key_path),"-pubout"],capture_output=True,text=True,timeout=8,check=False)
+            cert_valid=valid.returncode==0
+            cert_matches_domain=host.returncode==0
+            cert_key_matches=cert_pub.returncode==0 and key_pub.returncode==0 and cert_pub.stdout.strip()==key_pub.stdout.strip()
+            if not cert_valid: cert_error="IKEv2 certificate is expired or not yet valid."
+            elif not cert_matches_domain: cert_error="IKEv2 certificate SAN does not match the configured Remote ID."
+            elif not cert_key_matches: cert_error="IKEv2 certificate and private key do not match."
+        except (OSError,subprocess.SubprocessError) as exc:
+            cert_error="Unable to inspect IKEv2 certificate: "+type(exc).__name__
+    else:
+        cert_error="IKEv2 server certificate or private key is missing."
+    network=_vpn_network_status(cidr,"makia-ikev2-network") if cidr else _vpn_network_status("","makia-ikev2-network")
+    ready=bool(installed and configured and active and all(listeners.values()) and cert_valid and cert_matches_domain and cert_key_matches and network["forwarding_ready"])
     return {
         "installed":installed,"configured":configured,"service_active":active,
-        "listeners":{"500_udp":_listener_present(500,"udp"),"4500_udp":_listener_present(4500,"udp")},
-        "domain":domain,"cidr":cidr,"users":users,
+        "listeners":listeners,"domain":domain,"cidr":cidr,"users":users,
+        "certificate_valid":cert_valid,"certificate_matches_domain":cert_matches_domain,
+        "certificate_key_matches":cert_key_matches,"certificate_error":cert_error,
+        **network,"ready":ready,
     }
 
 
@@ -732,6 +891,190 @@ def remove_ikev2_user(name):
     IKEV2_SECRETS.write_text("\n".join(kept).rstrip()+"\n",encoding="utf-8")
     os.chmod(IKEV2_SECRETS,0o600)
     _run(["ipsec","rereadsecrets"],timeout=20)
+    return {"ok":True,"name":name}
+
+
+def get_ikev2_user_credentials(name):
+    """Return the current managed EAP password for internal encrypted export only."""
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,48}",name) or not IKEV2_SECRETS.exists():
+        return None
+    marker=re.compile(r"#\s*makia-eap:"+re.escape(name)+r"\s*$")
+    for line in IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore").splitlines():
+        if not marker.search(line):
+            continue
+        match=re.match(r"^\s*"+re.escape(name)+r"\s*:\s*EAP\s+\"([^\"]*)\"\s+#\s*makia-eap:"+re.escape(name)+r"\s*$",line)
+        if match:
+            return {"name":name,"password":match.group(1)}
+    return None
+
+
+def _l2tp_environment():
+    data={}
+    if L2TP_ENV.exists():
+        for line in L2TP_ENV.read_text(encoding="utf-8",errors="ignore").splitlines():
+            s=line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            key,value=s.split("=",1)
+            data[key.strip()]=value.strip().strip('"').strip("'")
+    return data
+
+
+def _l2tp_shared_psk():
+    env=_l2tp_environment()
+    psk=str(env.get("MAKIA_L2TP_PSK") or "")
+    if not psk or not IKEV2_SECRETS.exists():
+        raise ProtocolError("L2TP/IPsec pre-shared key is not configured; run sudo makia-upgrade")
+    matches=[]
+    for line in IKEV2_SECRETS.read_text(encoding="utf-8",errors="ignore").splitlines():
+        if not line.strip() or line.lstrip().startswith("#") or "PSK" not in line.upper():
+            continue
+        match=re.search(r"\bPSK\s+(?:\"([^\"]+)\"|([^\s]+))",line,re.I)
+        if match:
+            matches.append(match.group(1) or match.group(2))
+    if psk not in matches:
+        raise ProtocolError("L2TP/IPsec pre-shared key does not match the active strongSwan configuration")
+    return psk
+
+
+def _l2tp_ppp_option_issues(ppp_text):
+    issues=[]
+    if not str(ppp_text or "").strip():
+        issues.append("PPP options file /etc/ppp/options.xl2tpd is missing or empty.")
+    if re.search(r"(?m)^\s*lock\s*(?:#.*)?$",str(ppp_text or "")):
+        issues.append("The active xl2tpd/pppd session rejected the 'lock' option and exited before PPP authentication; remove it from options.xl2tpd.")
+    return issues
+
+
+def l2tp_status():
+    env=_l2tp_environment()
+    ipsec_text=IKEV2_CONF.read_text(encoding="utf-8",errors="ignore") if IKEV2_CONF.exists() else ""
+    l2tp_text=L2TP_CONF.read_text(encoding="utf-8",errors="ignore") if L2TP_CONF.exists() else ""
+    ppp_text=L2TP_PPP_OPTIONS.read_text(encoding="utf-8",errors="ignore") if L2TP_PPP_OPTIONS.exists() else ""
+    ppp_issues=_l2tp_ppp_option_issues(ppp_text)
+    ppp_options_ready=not ppp_issues
+    psk_ready=False
+    try:
+        _l2tp_shared_psk()
+        psk_ready=True
+    except ProtocolError:
+        pass
+    users=len(list_l2tp_users()) if L2TP_CHAP.exists() else 0
+    ike=ikev2_status()
+    listeners={
+        "1701_udp":_listener_present(1701,"udp"),
+        "500_udp":_listener_present(500,"udp"),
+        "4500_udp":_listener_present(4500,"udp"),
+    }
+    configured=bool(
+        "# BEGIN MAKIA L2TP" in ipsec_text and "# END MAKIA L2TP" in ipsec_text
+        and "; BEGIN MAKIA L2TP" in l2tp_text and "; END MAKIA L2TP" in l2tp_text
+        and "# BEGIN MAKIA L2TP PPP OPTIONS" in ppp_text and "# END MAKIA L2TP PPP OPTIONS" in ppp_text
+        and psk_ready and ppp_options_ready
+    )
+    active=_active("xl2tpd")
+    network_active=_active("makia-l2tp-network")
+    domain=str(env.get("MAKIA_L2TP_SERVER") or ike.get("domain") or "")
+    cidr=str(env.get("MAKIA_L2TP_CIDR") or "10.78.0.0/24")
+    network=_vpn_network_status(cidr,"makia-l2tp-network")
+    ready=bool(configured and active and all(listeners.values()) and ike.get("ready") and network["forwarding_ready"] and ppp_options_ready)
+    return {
+        "installed":bool(shutil.which("xl2tpd") and shutil.which("ipsec")),
+        "configured":configured,"service_active":active,"network_active":network_active,
+        "listeners":listeners,"domain":domain,"cidr":cidr,"users":users,
+        "psk_ready":psk_ready,"ppp_options_ready":ppp_options_ready,"warnings":ppp_issues,
+        **network,"ikev2_ready":bool(ike.get("ready")),"ready":ready,
+    }
+
+
+def get_l2tp_user_credentials(name):
+    """Return a managed L2TP username/password for internal encrypted export only."""
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,48}",name) or not L2TP_CHAP.exists():
+        return None
+    marker=re.compile(r"#\s*makia-l2tp:"+re.escape(name)+r"\s*$")
+    for line in L2TP_CHAP.read_text(encoding="utf-8",errors="ignore").splitlines():
+        if not marker.search(line):
+            continue
+        parts=line.split()
+        if len(parts)>=4 and parts[0]==name and parts[1]=="xl2tpd":
+            return {"name":name,"password":parts[2]}
+    return None
+
+
+def create_l2tp_user(name,password=None):
+    status=l2tp_status()
+    if not status.get("ready"):
+        raise ProtocolError("L2TP/IPsec server is not ready; check xl2tpd, strongSwan, UDP 500/4500/1701 and NAT")
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,48}",name):
+        raise ProtocolError("L2TP username must be 3-48 characters: letters, numbers, dot, dash or underscore")
+    if get_l2tp_user_credentials(name):
+        raise ProtocolError("L2TP username already exists; revoke it before creating a replacement")
+    password=str(password or secrets.token_urlsafe(18))
+    if not re.fullmatch(r"[A-Za-z0-9._~-]{10,128}",password):
+        raise ProtocolError("L2TP password must be 10-128 characters using letters, numbers, dot, dash, underscore or tilde")
+    psk=_l2tp_shared_psk()
+    before=L2TP_CHAP.read_text(encoding="utf-8",errors="ignore") if L2TP_CHAP.exists() else ""
+    backup_dir=_backup_dir()
+    if L2TP_CHAP.exists():
+        backup=backup_dir/f"chap-secrets.l2tp-{int(time.time())}.bak"
+        shutil.copy2(L2TP_CHAP,backup)
+        os.chmod(backup,0o600)
+    line=f"{name} xl2tpd {password} * # makia-l2tp:{name}"
+    updated=before.rstrip()+"\n"+line+"\n" if before.strip() else line+"\n"
+    fd,temp=tempfile.mkstemp(prefix=".makia-l2tp-",dir=str(L2TP_CHAP.parent))
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(),0o600)
+            handle.write(updated)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp,L2TP_CHAP)
+        os.chmod(L2TP_CHAP,0o600)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+    profile=(
+        "Makia L2TP/IPsec\n"
+        f"Server: {status.get('domain') or ''}\n"
+        "VPN type: L2TP/IPsec with pre-shared key\n"
+        f"IPsec pre-shared key: {psk}\n"
+        f"Username: {name}\n"
+        f"Password: {password}\n"
+        "Security: IPsec PSK + MS-CHAPv2\n"
+    )
+    return {"ok":True,"name":name,"password":password,"psk":psk,"server":status.get("domain") or "","profile":profile}
+
+
+def list_l2tp_users():
+    if not L2TP_CHAP.exists():
+        return []
+    out=[]
+    pattern=re.compile(r"^\s*([A-Za-z0-9_.-]{3,48})\s+xl2tpd\s+\S+\s+\*\s+#\s*makia-l2tp:([A-Za-z0-9_.-]{3,48})\s*$")
+    for line in L2TP_CHAP.read_text(encoding="utf-8",errors="ignore").splitlines():
+        match=pattern.match(line)
+        if match and match.group(1)==match.group(2):
+            out.append({"name":match.group(1)})
+    return sorted(out,key=lambda item:item["name"].lower())
+
+
+def remove_l2tp_user(name):
+    name=str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,48}",name) or not L2TP_CHAP.exists():
+        raise ProtocolError("invalid L2TP username or chap-secrets file is missing")
+    before=L2TP_CHAP.read_text(encoding="utf-8",errors="ignore")
+    marker=re.compile(r"#\s*makia-l2tp:"+re.escape(name)+r"\s*$")
+    lines=before.splitlines()
+    kept=[line for line in lines if not marker.search(line)]
+    if len(kept)==len(lines):
+        raise ProtocolError("L2TP user not found")
+    backup=_backup_dir()/f"chap-secrets.l2tp-revoke-{int(time.time())}.bak"
+    shutil.copy2(L2TP_CHAP,backup)
+    os.chmod(backup,0o600)
+    L2TP_CHAP.write_text("\n".join(kept).rstrip()+"\n",encoding="utf-8")
+    os.chmod(L2TP_CHAP,0o600)
     return {"ok":True,"name":name}
 
 
@@ -1341,6 +1684,9 @@ def protocol_modes():
     wg=wireguard_status()
     ov=_openvpn_server_runtime()
     ike=ikev2_status()
+    l2tp=l2tp_status()
+    from . import sstp_ops
+    sstp=sstp_ops.sstp_status()
     st=stealth_status()
     ws=wstunnel_status()
     ovws=openvpn_wstunnel_status()
@@ -1348,6 +1694,8 @@ def protocol_modes():
     return {
         "modes":[
             {"id":"ikev2","label":"IKEv2","ports":[500,4500],"transport":"UDP/IPsec","ready":bool(ike.get("configured") and ike.get("service_active")),"status":ike},
+            {"id":"l2tp","label":"L2TP/IPsec","ports":[500,4500,1701],"transport":"UDP / IPsec + L2TP","ready":bool(l2tp.get("ready")),"status":l2tp},
+            {"id":"sstp","label":"SSTP","ports":[443],"transport":"TCP/443 TLS / MS-CHAPv2","ready":bool(sstp.get("ready")),"status":sstp},
             {"id":"wireguard","label":"WireGuard","ports":[wg.get("port")] if wg.get("port") else [],"transport":"UDP","ready":bool(wg.get("service_active") and wg.get("config")),"status":wg},
             {"id":"udp","label":"UDP","ports":[ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("udp") else [],"transport":"OpenVPN UDP","ready":bool(ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("udp")),"status":ov},
             {"id":"tcp","label":"TCP","ports":[tcp.get("port")] if tcp.get("port") else ([ov.get("port")] if ov.get("port") and str(ov.get("proto") or "").startswith("tcp") else []),"transport":"OpenVPN TCP fallback","ready":bool((tcp.get("service_active") and tcp.get("listener")) or (ov.get("service_active") and ov.get("listener") and str(ov.get("proto") or "").startswith("tcp"))),"status":tcp if tcp.get("config") else ov},
@@ -1378,6 +1726,7 @@ def catalog():
     st=stunnel_status()
     ssh=ssh_status()
     ike=ikev2_status()
+    l2tp=l2tp_status()
     stealth=stealth_status()
     ws=wstunnel_status()
     return {
@@ -1386,6 +1735,7 @@ def catalog():
         "openvpn":ovpn,
         "stunnel":st,
         "ikev2":ike,
+        "l2tp":l2tp,
         "stealth":stealth,
         "wstunnel":ws,
         "openvpn_wstunnel":openvpn_wstunnel_status(),
@@ -1395,7 +1745,6 @@ def catalog():
             {"id":"vmess","engine":"xray","available":x["installed"]},
             {"id":"trojan","engine":"xray","available":x["installed"]},
             {"id":"shadowsocks","engine":"xray","available":x["installed"]},
-            {"id":"hysteria2","engine":"xray","available":x["installed"],"mode":"guided"},
             {"id":"http","engine":"xray","available":x["installed"],"mode":"guided"},
             {"id":"socks","engine":"xray","available":x["installed"],"mode":"guided"},
             {"id":"tunnel","engine":"xray","available":x["installed"],"mode":"guided"},
@@ -1405,12 +1754,14 @@ def catalog():
             {"id":"ssh","engine":"openssh","available":ssh["installed"],"mode":"guided"},
             {"id":"stunnel","engine":"stunnel","available":st["installed"],"mode":"service"},
             {"id":"ikev2","engine":"strongswan","available":ike["installed"],"mode":"guided"},
+            {"id":"l2tp","engine":"xl2tpd","available":l2tp["installed"],"mode":"guided"},
             {"id":"stealth","engine":"stunnel","available":st["installed"],"mode":"guided"},
             {"id":"wstunnel-openvpn","engine":"wstunnel","available":ws["installed"] and ovpn["installed"],"mode":"guided"},
             {"id":"wstunnel","engine":"wstunnel","available":ws["installed"],"mode":"guided"},
-            {"id":"tuic","engine":"external","available":False,"mode":"unavailable"},
-            {"id":"amneziawg","engine":"external","available":False,"mode":"unavailable"},
-            {"id":"mtproto","engine":"external","available":False,"mode":"unavailable"},
+            {"id":"tuic","engine":"sing-box","available":_installed("sing-box") and _active("makia-tuic"),"installed":_installed("sing-box"),"mode":"managed"},
+            {"id":"hysteria2","engine":"sing-box","available":_installed("sing-box") and _active("makia-hysteria2"),"installed":_installed("sing-box"),"mode":"managed"},
+            {"id":"amneziawg","engine":"awg","available":_installed("awg") and _active("awg-quick@awg0"),"installed":_installed("awg"),"mode":"managed"},
+            {"id":"mtproto","engine":"mtg","available":_active("makia-mtproxy"),"installed":os.path.isfile("/opt/makia-mtproxy/mtg") and os.access("/opt/makia-mtproxy/mtg",os.X_OK),"mode":"managed"},
         ]
     }
 
@@ -1430,7 +1781,15 @@ def install_component(component):
     if component=="xray":
         # Official XTLS installer. It installs the core + systemd service and
         # verifies the release artifacts handled by the upstream installer.
-        _run(["bash","-lc",f'bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --version {XRAY_VALIDATED_VERSION} -u nobody'],timeout=600)
+        fd,installer=tempfile.mkstemp(prefix="makia-xray-installer-",suffix=".sh")
+        os.close(fd)
+        try:
+            url=f"https://raw.githubusercontent.com/XTLS/Xray-install/{XRAY_INSTALLER_COMMIT}/install-release.sh"
+            _run(["curl","--fail","--silent","--show-error","--location","--retry","3","--output",installer,url],timeout=90)
+            _run(["bash","-n",installer],timeout=15)
+            _run(["bash",installer,"install","--version",XRAY_VALIDATED_VERSION,"-u","nobody"],timeout=600)
+        finally:
+            Path(installer).unlink(missing_ok=True)
         config=Path("/usr/local/etc/xray/config.json")
         config.parent.mkdir(parents=True,exist_ok=True)
         if not config.exists():
@@ -1956,8 +2315,16 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
     if nat is False: warnings.append("NAT/MASQUERADE برای شبکه WireGuard روی uplink پیدا نشد.")
     peers=_wireguard_peer_runtime(iface)
     recent=sum(1 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)
+    handshake_response_seen=any(
+        p.get("enabled",True) and not p.get("latest_handshake")
+        and int(p.get("rx") or 0)>=148 and int(p.get("tx") or 0)>=92
+        for p in peers
+    )
     if any(p.get("enabled",True) for p in peers) and recent==0:
-        warnings.append("هیچ Handshake تازه‌ای از Peerها دیده نشده است. اگر Client در حال تلاش برای اتصال است، علاوه بر Endpoint/Key، احتمال مسدودبودن UDP در فایروال دیتاسنتر، NAT بالادست یا شبکه/ISP را بررسی کنید؛ سلامت سمت سرور به‌تنهایی دسترسی UDP از اینترنت را اثبات نمی‌کند.")
+        if handshake_response_seen:
+            warnings.append("سرور درخواست WireGuard را دریافت کرده و پاسخ اولیه فرستاده است، اما Handshake کامل نشده. ابتدا فایل .conf فعلی را دوباره از Access Center دریافت و روی گوشی Import کنید؛ اگر هنوز برقرار نشد، مسیر برگشت UDP/443 و فایروال بالادست VPS باید با Packet Capture بررسی شود.")
+        else:
+            warnings.append("هیچ Handshake تازه‌ای از Peerها دیده نشده است. Endpoint/Key و دسترسی UDP در فایروال دیتاسنتر، NAT بالادست یا شبکه/ISP را بررسی کنید؛ سلامت سمت سرور به‌تنهایی دسترسی UDP از اینترنت را اثبات نمی‌کند.")
     endpoint_ok=True
     if endpoint:
         endpoint_ok=bool(
@@ -1994,6 +2361,12 @@ def wireguard_endpoint_diagnostics(endpoint="",iface="wg0"):
         "ipv6_matches_server":ipv6_matches_server,
         "peers":peers,
         "recent_handshakes":recent,
+        "handshake_response_seen":handshake_response_seen,
+        "handshake_state":"established" if recent else ("response_seen_no_completion" if handshake_response_seen else "no_recent_handshake"),
+        "client_handshake_ok":bool(recent),
+        "client_data_plane_verified":bool(recent and any(int(p.get("rx") or 0)>512 and int(p.get("tx") or 0)>512 for p in peers if p.get("handshake_age") is not None and int(p["handshake_age"])<=180)),
+        "rx_bytes":sum(int(p.get("rx") or 0) for p in peers),
+        "tx_bytes":sum(int(p.get("tx") or 0) for p in peers),
         "external_udp_verified":False,
         "external_udp_note":"برای اثبات دسترسی UDP باید Handshake واقعی از Client خارج VPS دیده شود؛ Diagnostics سمت سرور نمی‌تواند فیلترینگ اپراتور/کشور یا فایروال بالادست را به‌تنهایی رد کند.",
         "warnings":warnings,
@@ -2089,12 +2462,21 @@ def protocol_endpoint_matrix(endpoint):
     wg=wireguard_endpoint_diagnostics(endpoint) if (WG_DIR/"wg0.conf").exists() else {"ok":False,"runtime_ok":False,"warnings":["WireGuard server not bootstrapped"]}
     ov=openvpn_endpoint_diagnostics(endpoint) if (OVPN_DIR/"server/server.conf").exists() else {"ok":False,"warnings":["OpenVPN server not bootstrapped"]}
     ssh=ssh_status()
+    try:
+        from . import tuic_ops, hysteria2_ops
+        tuic=tuic_ops.status()
+        hysteria2=hysteria2_ops.status()
+    except Exception:
+        tuic={"ready":False,"listener":False,"port":8445,"endpoint":""}
+        hysteria2={"ready":False,"listener":False,"port":8446,"endpoint":""}
     x_ports=[int(i.get("port")) for i in (x.get("inbounds") or []) if i.get("port")]
     rows=[
         {"id":"ssh","label":"SSH","transport":"TCP","ports":[22],"runtime":bool(ssh.get("service_active")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
         {"id":"xray","label":"Xray","transport":"TCP/UDP by inbound","ports":x_ports,"runtime":bool(x.get("service_active") and x_ports),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
         {"id":"wireguard","label":"WireGuard","transport":"UDP","ports":[wg.get("port")] if wg.get("port") else [],"runtime":bool(wg.get("runtime_ok")),"endpoint_ok":bool(wg.get("endpoint_ok",False))},
         {"id":"openvpn","label":"OpenVPN","transport":str(ov.get("proto") or "").upper(),"ports":[ov.get("port")] if ov.get("port") else [],"runtime":bool(ov.get("service_active") and ov.get("listener")),"endpoint_ok":bool(ov.get("endpoint_is_ip") or (ov.get("resolved_ipv4") and ov.get("dns_matches_server") is not False))},
+        {"id":"tuic","label":"TUIC / QUIC","transport":"UDP/QUIC","ports":[int(tuic.get("port") or 8445)] if tuic.get("listener") else [],"runtime":bool(tuic.get("ready")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
+        {"id":"hysteria2","label":"Hysteria2 / QUIC","transport":"UDP/QUIC","ports":[int(hysteria2.get("port") or 8446)] if hysteria2.get("listener") else [],"runtime":bool(hysteria2.get("ready")),"endpoint_ok":bool(is_ip or (resolved4 and dns_match is not False))},
     ]
     for row in rows:
         row["ready"]=bool(row["runtime"] and row["endpoint_ok"])
@@ -2102,7 +2484,7 @@ def protocol_endpoint_matrix(endpoint):
         "endpoint":endpoint,"endpoint_is_ip":is_ip,"resolved_ipv4":resolved4,"resolved_ipv6":resolved6,
         "local_ipv4":local4,"dns_matches_server":dns_match,
         "rows":rows,"all_ready":all(r["ready"] for r in rows),
-        "wireguard":wg,"openvpn":ov,
+        "wireguard":wg,"openvpn":ov,"tuic":tuic,"hysteria2":hysteria2,
         "note":"این تست Readiness سمت سرور، DNS و Listener را بررسی می‌کند؛ تأیید نهایی اتصال از اینترنت باید با Client واقعی خارج از VPS انجام شود."
     }
 
@@ -2468,6 +2850,8 @@ def bootstrap_openvpn(port=1194, proto="udp"):
         (pki/"crl.pem",server_dir/"crl.pem"),
     ]:
         shutil.copy2(src,dst)
+        if dst.name=="crl.pem":
+            os.chmod(dst,0o644)
     uplink=_default_iface()
     up,down=_openvpn_forward_scripts(uplink)
     OVPN_CLIENT_POLICY_DIR.mkdir(parents=True,exist_ok=True)
@@ -3058,6 +3442,9 @@ def revoke_openvpn_client(name):
     crl=OVPN_EASYRSA/"pki/crl.pem"
     if crl.exists():
         shutil.copy2(crl,OVPN_DIR/"server/crl.pem")
+        # The OpenVPN daemon drops privileges to nobody. The signed CRL is
+        # public revocation data and must remain readable after privilege drop.
+        os.chmod(OVPN_DIR/"server/crl.pem",0o644)
     archive=OVPN_DIR/"revoked"
     archive.mkdir(parents=True,exist_ok=True)
     os.chmod(archive,0o700)
@@ -3085,6 +3472,22 @@ def _port_in_use(port):
     return _port_transport_in_use(port,"tcp") or _port_transport_in_use(port,"udp")
 
 
+def _xray_transport_protocols(protocol,transport):
+    protocol=str(protocol or "").lower()
+    transport=str(transport or "raw").lower()
+    transport={"tcp":"raw","ws":"websocket","mkcp":"kcp"}.get(transport,transport)
+    if protocol in {"hysteria","hysteria2"} or transport in {"kcp","hysteria"}:
+        return {"udp"}
+    if protocol in {"shadowsocks","socks"}:
+        return {"tcp","udp"}
+    return {"tcp"}
+
+
+def _xray_inbound_transport_protocols(inbound):
+    stream=inbound.get("streamSettings") or {}
+    return _xray_transport_protocols(inbound.get("protocol"),stream.get("network") or stream.get("method") or "raw")
+
+
 def allocate_xray_inbound_port(requested,protocol,transport):
     """Return a collision-free port for a new Xray inbound."""
     requested=_validate_port(requested)
@@ -3100,20 +3503,20 @@ def allocate_xray_inbound_port(requested,protocol,transport):
     else:
         protos=("tcp",)
         fallback=(2053,2087,8443,9443,10443,11443,12443,13001,13002,13003,13004,13005)
-    configured=set()
+    configured={}
     try:
         for row in xray_status().get("inbounds") or []:
             if row.get("port"):
-                configured.add(int(row["port"]))
+                configured.setdefault(int(row["port"]),set()).update(_xray_transport_protocols(row.get("protocol"),row.get("transport") or "raw"))
     except Exception:
         pass
     candidates=[]
-    for value in (requested,*fallback):
+    for value in (requested,*fallback,*range(13006,14000),*range(20000,21000)):
         value=int(value)
         if value not in candidates:
             candidates.append(value)
     for port in candidates:
-        if port in configured:
+        if set(protos) & configured.get(port,set()):
             continue
         if all(not _port_transport_in_use(port,proto) for proto in protos):
             return {
@@ -3296,7 +3699,7 @@ def ensure_full_protocol_stack():
         install_component("wireguard")
         wg=wireguard_status()
     if not wg.get("config"):
-        wg_port=_select_available_port(443,"udp",(51820,51821,8443,2053,2083))
+        wg_port=_select_available_port(51820,"udp",(51821,))
         bootstrap_wireguard(wg_port,"10.66.66.1/24","wg0",1280)
     elif not wg.get("service_active"):
         repair_wireguard_runtime("wg0")
@@ -3331,6 +3734,13 @@ def ensure_full_protocol_stack():
 def _ensure_xray_stats(data):
     if not isinstance(data,dict):
         raise ProtocolError("invalid Xray configuration root")
+    outbounds=data.get("outbounds")
+    if outbounds is None:
+        outbounds=[]
+    if not isinstance(outbounds,list):
+        raise ProtocolError("invalid Xray outbounds collection")
+    if not outbounds:
+        data["outbounds"]=[{"protocol":"freedom","tag":"direct"}]
     data.setdefault("stats",{})
     api=data.setdefault("api",{})
     api["tag"]="api"
@@ -3461,6 +3871,19 @@ def _x25519_pair(binary):
         raise ProtocolError("unable to parse Xray x25519 output")
     return private,public
 
+def _xray_tls_alpn_for_transport(transport):
+    transport=str(transport or "tcp").lower()
+    aliases={"tcp":"raw","ws":"websocket","websocket":"websocket","mkcp":"mkcp"}
+    transport=aliases.get(transport,transport)
+    if transport in {"websocket","httpupgrade"}:
+        return ["http/1.1"]
+    if transport=="grpc":
+        return ["h2"]
+    if transport in {"hysteria","hysteria2"}:
+        return ["h3"]
+    return ["h2","http/1.1"]
+
+
 def _build_xray_stream(binary,protocol,transport,security,path_value,server_name,reality_dest):
     transport=(transport or "tcp").lower()
     security=(security or "none").lower()
@@ -3475,7 +3898,7 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
             raise ProtocolError("REALITY is only available for VLESS or Trojan")
         if transport not in {"raw","grpc","xhttp"}:
             raise ProtocolError("REALITY is only compatible with TCP/RAW, gRPC or XHTTP here")
-    stream={"method":transport,"security":security}
+    stream={"network":transport,"security":security}
     path_value=(path_value or "/").strip() or "/"
     if not path_value.startswith("/") and transport in {"websocket","httpupgrade","xhttp"}:
         path_value="/"+path_value
@@ -3488,7 +3911,7 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
     elif transport=="xhttp":
         stream["xhttpSettings"]={"path":path_value,"mode":"auto"}
     elif transport=="mkcp":
-        # Xray 26.3.27 removed the legacy kcpSettings.header/seed fields.
+        # Current Xray Core versions do not support the legacy kcpSettings.header/seed fields.
         # Guided mKCP therefore uses Core defaults without hidden obfuscation
         # state, which also keeps exported client links reproducible.
         stream["kcpSettings"]={}
@@ -3500,7 +3923,7 @@ def _build_xray_stream(binary,protocol,transport,security,path_value,server_name
         cert,key=_xray_materialize_tls(sni)
         stream["tlsSettings"]={
             "serverName":sni,
-            "alpn":["h2","http/1.1"],
+            "alpn":_xray_tls_alpn_for_transport(transport),
             "certificates":[{"certificateFile":str(cert),"keyFile":str(key)}],
         }
     elif security=="reality":
@@ -3690,7 +4113,7 @@ def xray_inbound_builder_capabilities():
                 "path":"/makia-xhttp","sni":"www.microsoft.com","reality_dest":"www.microsoft.com:443",
                 "xhttp_mode":"packet-up",
                 "summary":"Experimental XHTTP profile, exposed for controlled field testing only.",
-                "note":"Pinned Xray 26.3.27 has recent XHTTP compatibility/resource reports; do not use as the default fleet profile."
+                "note":"XHTTP remains an advanced transport; test the selected mode with target clients before using it as a fleet default."
             },
         ],
     }
@@ -3788,7 +4211,7 @@ def _xray_builder_stream(binary,protocol,transport,security,options):
             raise ProtocolError("Hysteria2 requires a TLS domain/SNI")
         cert,key=_xray_materialize_tls(server_name)
         stream={
-            "method":"hysteria","security":"tls",
+            "network":"hysteria","security":"tls",
             "hysteriaSettings":{"version":2},
             "tlsSettings":{
                 "serverName":server_name,"alpn":["h3"],
@@ -3805,7 +4228,7 @@ def _xray_builder_stream(binary,protocol,transport,security,options):
     stream,reality_meta=_build_xray_stream(
         binary,protocol,transport,security,path_value,server_name,reality_dest
     )
-    method=stream.get("method","raw")
+    method=stream.get("network") or stream.get("method") or "raw"
     headers=_xray_builder_headers(options.get("headers") or {})
 
     if method=="raw":
@@ -3887,6 +4310,14 @@ def _xray_builder_stream(binary,protocol,transport,security,options):
         if isinstance(alpn,str):
             alpn=[x.strip() for x in alpn.split(",") if x.strip()]
         if alpn:
+            # Never permit an incompatible custom ALPN to break the transport.
+            # A WS client sends HTTP/1.1 Upgrade, not an HTTP/2 preface.
+            if method in {"websocket","httpupgrade"}:
+                alpn=["http/1.1"]
+            elif method=="grpc":
+                alpn=["h2"]
+            elif method in {"hysteria","hysteria2"}:
+                alpn=["h3"]
             stream.setdefault("tlsSettings",{})["alpn"]=list(alpn)[:8]
     elif security=="reality":
         rs=stream.setdefault("realitySettings",{})
@@ -3931,7 +4362,8 @@ def _xray_builder_stream(binary,protocol,transport,security,options):
         if not isinstance(extra,dict):
             raise ProtocolError("Extra stream options must be a JSON object")
         _xray_deep_merge(stream,extra)
-    stream["method"]=method
+    stream.pop("method",None)
+    stream["network"]=method
     stream["security"]=security
     return stream,reality_meta
 
@@ -3991,7 +4423,7 @@ def _xray_builder_credential(protocol,value=""):
 
 def _xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_meta=None,flow="",fingerprint="chrome",spider_x="/"):
     stream=inbound.get("streamSettings") or {}
-    method=stream.get("method") or "raw"
+    method=stream.get("network") or stream.get("method") or "raw"
     security=stream.get("security") or "none"
     host=_uri_host(endpoint)
     port=int(inbound.get("port") or 0)
@@ -4041,6 +4473,11 @@ def _xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_m
             "spx":spider_x or meta.get("spider_x") or "/",
         })
         if flow:q["flow"]=flow
+    # Hiddify 2.x ships an Xray core but defaults to sing-box. Explicitly select
+    # Xray for XHTTP links so legacy clients do not try to parse XHTTP with a core
+    # that cannot handle this transport. Other clients ignore this Hiddify hint.
+    if method == "xhttp":
+        q["core"] = "xray"
     query=urllib.parse.urlencode({k:v for k,v in q.items() if v not in (None,"")})
     if protocol=="vless":
         return f"vless://{credential}@{host}:{port}?{query}#{label}"
@@ -4126,7 +4563,7 @@ def add_xray_client_to_inbound(inbound_tag,name,endpoint,credential="",flow=""):
         raise ProtocolError("this inbound protocol does not support multiple managed clients in Makia")
     settings=inbound.setdefault("settings",{})
     stream=inbound.get("streamSettings") or {}
-    method=stream.get("method") or stream.get("network") or "raw"
+    method=stream.get("network") or stream.get("method") or "raw"
     security=stream.get("security") or "none"
     flow=str(flow or "").strip()
     if flow and not (protocol=="vless" and method in {"raw","tcp"} and security in {"tls","reality"}):
@@ -4241,14 +4678,13 @@ def create_xray_full_inbound(spec):
     inbounds=data.setdefault("inbounds",[])
     if not isinstance(inbounds,list):
         raise ProtocolError("invalid Xray inbounds collection")
-    if any(isinstance(item,dict) and int(item.get("port") or -1)==port for item in inbounds):
-        raise ProtocolError("this port is already used by another Xray inbound")
-    if transport in {"kcp","hysteria"}:
-        transport_protos={"udp"}
-    elif protocol in {"shadowsocks","socks"}:
-        transport_protos={"tcp","udp"}
-    else:
-        transport_protos={"tcp"}
+    transport_protos=_xray_transport_protocols(protocol,transport)
+    if any(
+        isinstance(item,dict) and int(item.get("port") or -1)==port
+        and bool(transport_protos & _xray_inbound_transport_protocols(item))
+        for item in inbounds
+    ):
+        raise ProtocolError("this port/transport is already used by another Xray inbound")
     for transport_proto in sorted(transport_protos):
         if _port_transport_in_use(port,transport_proto):
             owner=_port_owner_label(port,transport_proto)
@@ -4309,7 +4745,7 @@ def create_xray_full_inbound(spec):
     share=_xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality_meta,flow,fingerprint,spider_x)
     return {
         "protocol":protocol,"tag":tag,"remark":remark,"listen":listen,"port":port,
-        "name":name,"credential":credential,"transport":stream.get("method"),
+        "name":name,"credential":credential,"transport":stream.get("network") or stream.get("method"),
         "security":stream.get("security"),"share_link":share,
         "reality":reality_meta,"backup":str(backup) if backup else None,
         "inbound":inbound,
@@ -4352,9 +4788,9 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
     inbounds=data.setdefault("inbounds",[])
     if not isinstance(inbounds,list):
         raise ProtocolError("invalid Xray inbounds collection")
-    if any(isinstance(i,dict) and int(i.get("port") or -1)==port for i in inbounds):
-        raise ProtocolError("this port is already used by another Xray inbound")
-    port_transports={"udp"} if protocol=="hysteria2" or str(transport or "").lower() in {"kcp","mkcp"} else ({"tcp","udp"} if protocol in {"shadowsocks","socks"} else {"tcp"})
+    port_transports=_xray_transport_protocols(protocol,transport)
+    if any(isinstance(i,dict) and int(i.get("port") or -1)==port and bool(port_transports & _xray_inbound_transport_protocols(i)) for i in inbounds):
+        raise ProtocolError("this port/transport is already used by another Xray inbound")
     if any(_port_transport_in_use(port,item) for item in port_transports):
         raise ProtocolError("this port/transport is already in use on the server")
     tag=f"makia-{protocol}-{port}"
@@ -4390,7 +4826,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         credential=secrets.token_urlsafe(18)
         settings={"method":"aes-128-gcm","password":credential,"network":"tcp,udp"}
     if protocol in {"http","socks"}:
-        stream={"method":"raw","security":"none"}
+        stream={"network":"raw","security":"none"}
         reality_meta={}
     elif protocol=="hysteria2":
         sni=(server_name or "").strip().lower()
@@ -4398,7 +4834,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
             raise ProtocolError("Hysteria2 requires a TLS domain/SNI")
         cert,key=_xray_materialize_tls(sni)
         stream={
-            "method":"hysteria",
+            "network":"hysteria",
             "security":"tls",
             "hysteriaSettings":{"version":2},
             "tlsSettings":{
@@ -4410,7 +4846,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         reality_meta={}
     else:
         stream,reality_meta=_build_xray_stream(binary,protocol,transport,security,path_value,server_name,reality_dest)
-    if protocol=="vless" and security=="reality" and stream.get("method")=="raw":
+    if protocol=="vless" and security=="reality" and (stream.get("network") or stream.get("method"))=="raw":
         client_obj["flow"]="xtls-rprx-vision"
     inbound={
         "tag":tag,
@@ -4438,7 +4874,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         _run(["systemctl","restart","xray"],timeout=30)
         if not _active("xray"):
             raise ProtocolError("Xray did not become active after restart")
-        firewall_proto="udp" if protocol=="hysteria2" or stream.get("method")=="mkcp" else "tcp"
+        firewall_proto="udp" if protocol=="hysteria2" or (stream.get("network") or stream.get("method"))=="mkcp" else "tcp"
         if not _wait_listener(port,firewall_proto,timeout=8.0,interval=0.25):
             detail=""
             try:
@@ -4467,7 +4903,7 @@ def create_xray_inbound(protocol, port, name, endpoint, transport="tcp", securit
         raise
     label=urllib.parse.quote(name,safe="")
     host=_uri_host(endpoint)
-    method=stream.get("method","raw")
+    method=stream.get("network") or stream.get("method") or "raw"
     link_type={"raw":"tcp","websocket":"ws","mkcp":"kcp"}.get(method,method)
     q={"type":link_type,"security":security}
     if method=="websocket": q["path"]=path_value
@@ -4696,7 +5132,7 @@ def enable_xray_client(inbound_tag,email,protocol,credential):
             return {"enabled":True,"already_present":True}
         item={"id":credential,"email":email,"level":0}
         stream=target.get("streamSettings") or {}
-        method=stream.get("method") or stream.get("network")
+        method=stream.get("network") or stream.get("method")
         if stream.get("security")=="reality" and method in {"raw","tcp"}:
             item["flow"]="xtls-rprx-vision"
         clients.append(item)
@@ -4865,3 +5301,138 @@ def apply_xray_config(data):
 
 def status():
     return xray_status()
+
+
+# Multi-inbound provisioning uses one validated config change and ONE restart.
+# The ordinary single-inbound API stays unchanged for backwards compatibility.
+def batch_xray_client_change(entries,endpoint="",remove=False):
+    """Add or remove managed Xray clients in one runtime commit.
+
+    entries is a list of {tag, name}. A failure restores the exact original
+    file and attempts one recovery restart; existing users are never replaced.
+    """
+    binary=_binary()
+    config_path=_config_path()
+    if not binary or not config_path:
+        raise ProtocolError("Xray is not installed or its configuration is missing")
+    path=Path(config_path)
+    data=json.loads(path.read_text(encoding="utf-8"))
+    endpoint=_validate_endpoint_host(endpoint) if not remove else ""
+    result=[]
+    for entry in entries:
+        tag=str(entry.get("tag") or "")
+        name=str(entry.get("name") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name):
+            raise ProtocolError("Invalid managed Xray identity")
+        inbound=_xray_find_inbound(data,tag)
+        if not inbound:
+            raise ProtocolError("Missing Xray inbound: "+tag)
+        protocol=_xray_inbound_protocol(inbound)
+        if protocol not in {"vless","vmess","trojan"}:
+            raise ProtocolError("Unsupported batch inbound protocol")
+        settings=inbound.setdefault("settings",{})
+        clients=settings.get("clients")
+        if not isinstance(clients,list):
+            raise ProtocolError("Invalid Xray inbound client collection")
+        previous=[row for row in clients if isinstance(row,dict) and row.get("email")==name]
+        if remove:
+            if previous:
+                settings["clients"]=[row for row in clients if not (isinstance(row,dict) and row.get("email")==name)]
+                result.append({"tag":tag,"name":name,"removed":True})
+            continue
+        if previous:
+            raise ProtocolError("Xray identity already exists: "+name)
+        credential=_xray_builder_credential(protocol,entry.get("credential", ""))
+        client={"email":name,"level":0}
+        client["id" if protocol in {"vless","vmess"} else "password"]=credential
+        clients.append(client)
+        stream=inbound.get("streamSettings") or {}
+        reality=_xray_inbound_reality_meta(binary,inbound)
+        result.append({
+            "tag":tag,"name":name,"protocol":protocol,"credential":credential,
+            "port":int(inbound.get("port") or 0),
+            "transport":stream.get("network") or "raw",
+            "security":stream.get("security") or "none",
+            "share_link":_xray_builder_share_link(protocol,inbound,credential,name,endpoint,reality),
+        })
+    if not result:
+        return []
+    backup=_backup_dir()/f"xray-batch-{int(time.time())}-{secrets.token_hex(3)}.json"
+    shutil.copy2(path,backup)
+    tmp=_xray_temp_json_path(path,"batch-remove" if remove else "batch-create")
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    os.chmod(tmp,0o600)
+    changed=False
+    try:
+        _xray_test_config(binary,tmp)
+        os.replace(tmp,path)
+        changed=True
+        _xray_secure_runtime_file(path)
+        _xray_test_config_as_service(binary,path)
+        _run(["systemctl","restart","xray"],timeout=30)
+        if not _active("xray"):
+            raise ProtocolError("Xray failed to restart during batch provisioning")
+        for entry in result:
+            if not remove and not _wait_listener(entry["port"],"tcp",timeout=4.0,interval=0.25):
+                raise ProtocolError("Xray listener did not recover: "+entry["tag"])
+    except Exception as exc:
+        if tmp.exists():tmp.unlink()
+        if changed:
+            shutil.copy2(backup,path)
+            _xray_secure_runtime_file(path)
+            # Recovery should not be prevented by an earlier systemd rate limit.
+            try:
+                _run(["systemctl","reset-failed","xray"],timeout=10)
+                _run(["systemctl","restart","xray"],timeout=30)
+            except Exception as recovery_exc:
+                raise ProtocolError("Xray rollback restart failed: "+str(recovery_exc)[:150]) from exc
+        raise
+    return result
+
+
+# The external HTTPS edge terminates VLESS WebSocket TLS and proxies to
+# the existing TLS inbound.  Its public path/port differ from the inner Xray
+# listener; never hand users the backend port in their subscription.
+LEGACY_WS443_PATH="/makia-vless-ws"
+LEGACY_WS443_TAG="makia-IR-vless-ws-tls-13003-13003"
+
+def legacy_ws443_share_link(name,credential,host):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",str(name)):
+        raise ProtocolError("Invalid VLESS WS443 client name")
+    identity=_xray_builder_credential("vless",credential)
+    host=_validate_endpoint_host(host)
+    query=urllib.parse.urlencode({
+        "encryption":"none","security":"tls","sni":host,
+        "alpn":"http/1.1","type":"ws","host":host,
+        "path":LEGACY_WS443_PATH,"insecure":"0",
+    })
+    return f"vless://{identity}@{host}:443?{query}#{urllib.parse.quote(name,safe='')}"
+
+
+def vmess_public_443_link(share_link,host):
+    """Present existing VMess WS/TLS identities through nginx HTTPS 443."""
+    if not str(share_link).startswith("vmess://"):
+        raise ProtocolError("Not a VMess share link")
+    encoded=str(share_link)[8:].split("#",1)[0]
+    data=json.loads(base64.b64decode(encoded+"="*((-len(encoded))%4)))
+    if data.get("net")!="ws" or data.get("path")!="/makia-vmess" or data.get("tls")!="tls":
+        raise ProtocolError("VMess profile is not the expected WS/TLS transport")
+    host=_validate_endpoint_host(host)
+    data["add"]=host
+    data["port"]="443"
+    data["host"]=host
+    data["sni"]=host
+    data["alpn"]="http/1.1"
+    return "vmess://"+base64.b64encode(json.dumps(data,ensure_ascii=False,separators=(",",":")).encode()).decode()
+
+
+def trojan_grpc_public_443_link(share_link,host):
+    """Present the existing Trojan/gRPC/TLS inbound through public HTTPS 443."""
+    uri=urllib.parse.urlsplit(str(share_link))
+    q=urllib.parse.parse_qs(uri.query)
+    if uri.scheme!="trojan" or q.get("type")!=["grpc"] or q.get("security")!=["tls"] or q.get("serviceName")!=["makia-trojan"]:
+        raise ProtocolError("Trojan is not the expected gRPC/TLS transport")
+    host=_validate_endpoint_host(host)
+    if not uri.username:
+        raise ProtocolError("Missing Trojan credential")
+    return urllib.parse.urlunsplit(("trojan",f"{uri.username}@{host}:443",uri.path,uri.query,uri.fragment))

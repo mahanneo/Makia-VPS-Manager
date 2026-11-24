@@ -269,7 +269,11 @@ def security_status():
         if not shutil.which(binary): return {"installed":False,"active":False,"detail":"not installed"}
         p=subprocess.run(args,text=True,capture_output=True)
         text=(p.stdout or p.stderr or "").strip()
-        return {"installed":True,"active":p.returncode==0,"detail":text[:400]}
+        if binary == "ufw":
+            active = any(line.strip().lower() == "status: active" for line in text.splitlines())
+        else:
+            active = p.returncode == 0
+        return {"installed":True,"active":active,"detail":text[:400]}
     ufw=cmd_state("ufw",["ufw","status"])
     fail2ban=cmd_state("systemctl",["systemctl","is-active","fail2ban"])
     ssh=cmd_state("systemctl",["systemctl","is-active","ssh"])

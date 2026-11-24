@@ -906,12 +906,13 @@ def account_admin_snapshot(account_id):
     return account
 
 
-def delete_account(account_id):
+def delete_account(account_id,preserve_suspension=False):
     """Delete only client-plane ownership/session metadata.
 
     Existing protocol_clients, access_artifacts and live protocol runtime state
     are deliberately left untouched. A policy-suspended credential must first
-    be restored so deletion can never strand a runtime in a disabled state.
+    be restored, or explicitly retained in the disabled state by the operator.
+    Retention never enables any protocol or changes its runtime configuration.
     """
     account_id=int(account_id)
     if not get_account(account_id):
@@ -929,7 +930,23 @@ def delete_account(account_id):
             (account_id,),
         ).fetchone()
         if protocol_hold or artifact_hold:
-            raise PermissionError("restore the Client account policy before deleting this account")
+            if not preserve_suspension:
+                raise PermissionError("client_account_policy_suspended")
+            # Preserve the disabled runtime and its managed-credential status.
+            # The account link is removed, but suspended protocol identities
+            # must remain disabled until an administrator explicitly restores them.
+            con.execute(
+                """UPDATE protocol_clients SET disabled_reason='manual_detached_client_policy'
+                   WHERE id IN (SELECT protocol_client_id FROM client_protocol_bindings WHERE account_id=?)
+                   AND enabled=0 AND disabled_reason LIKE 'client_account_%'""",
+                (account_id,),
+            )
+        # Remove short-lived connector tickets before their parent device/session rows.
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='client_connector_tickets'").fetchone():
+            con.execute("DELETE FROM client_connector_tickets WHERE account_id=?",(account_id,))
+        # Revoke and remove dependent browser proxy credentials before sessions/devices.
+        con.execute("DELETE FROM client_browser_tokens WHERE account_id=?",(account_id,))
+        con.execute("DELETE FROM client_browser_usage WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_sessions WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_devices WHERE account_id=?",(account_id,))
         con.execute("DELETE FROM client_usage_baselines WHERE account_id=?",(account_id,))

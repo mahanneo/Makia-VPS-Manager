@@ -11,21 +11,30 @@ from pydantic import BaseModel, Field
 from .config import APP_NAME, VERSION, COOKIE_NAME, ALLOWED_SERVICES, DATA_DIR, SECRET_PATH
 from .db import init_db, connect, audit, upsert_profile, all_profiles, get_profile, delete_profile, metrics_since, get_admin_2fa, set_admin_totp_secret, set_admin_totp_enabled, clear_admin_totp, create_api_token, list_api_tokens, revoke_api_token, verify_api_token, create_node, list_nodes, revoke_node, node_by_token, update_node_heartbeat, get_setting, set_setting, all_settings, create_protocol_client, list_protocol_clients, get_protocol_client, update_protocol_client_state, replace_protocol_client_identity, delete_protocol_client, reset_protocol_traffic, protocol_client_by_subscription, login_rate_state, record_login_failure, clear_login_failures, upsert_access_artifact, list_access_artifacts, get_access_artifact_by_key, delete_access_artifact_by_key, create_support_request, list_support_requests, update_support_request_delivery, create_support_grant, consume_support_grant, support_grant_by_id, list_support_grants, revoke_support_grant, create_service_plan, list_service_plans, get_service_plan, update_service_plan, delete_service_plan, add_notification_event, list_notification_events, mark_notification_delivered
 from .security import verify_password, make_session, read_session, hash_password, make_preauth, read_preauth
-from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight
+from . import system_ops, protocol_ops, panel_ops, access_ops, integration_ops, network_services, client_store, client_portal, client_admin, endpoint_preflight, sstp_ops, tuic_ops, hysteria2_ops
+from . import payments
 
 BASE=Path(__file__).resolve().parent
 app=FastAPI(title=APP_NAME,version=VERSION,docs_url=None,redoc_url=None)
 app.mount("/static",StaticFiles(directory=BASE/"static"),name="static")
 templates=Jinja2Templates(directory=BASE/"templates")
+
+def render_template(request:Request, name:str, context:dict, **kwargs):
+    """Render a Jinja template using Starlette's current request-first API."""
+    return templates.TemplateResponse(request=request, name=name, context=context, **kwargs)
 app.include_router(client_portal.router)
+app.include_router(payments.router)
 
 @app.middleware("http")
 async def security_headers(request:Request,call_next):
     allowed_raw=(os.getenv("MAKIA_ADMIN_ALLOWED_CIDRS") or "").strip()
+    raw_actor=read_session(request.cookies.get(COOKIE_NAME))
     public_path=(
         request.url.path=="/healthz" or
+        request.url.path in {"/pay","/pay/","/api/public/payments/submit"} or
         request.url.path=="/help/connect" or
-        request.url.path in {"/support/login","/support/logout"} or
+        request.url.path in {"/support/login","/support/logout","/welcome"} or
+        (request.url.path=="/" and not raw_actor) or
         request.url.path.startswith("/static/") or
         request.url.path.startswith("/sub/") or
         request.url.path.startswith("/client/") or
@@ -34,7 +43,6 @@ async def security_headers(request:Request,call_next):
         request.url.path=="/api/node/heartbeat"
     )
     support_override=False
-    raw_actor=read_session(request.cookies.get(COOKIE_NAME))
     if raw_actor and raw_actor.startswith("support:"):
         parts=raw_actor.split(":")
         if len(parts)==3:
@@ -61,10 +69,11 @@ async def security_headers(request:Request,call_next):
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
-        "img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; media-src 'self' https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
         "connect-src 'self'; form-action 'self'"
     )
-    if request.url.path.startswith("/api/") or request.url.path in {"/","/login","/login/2fa"}:
+    if request.url.path.startswith("/api/") or request.url.path in {"/","/welcome","/login","/login/2fa","/pay","/pay/"}:
         response.headers["Cache-Control"]="no-store"
     if request.headers.get("x-forwarded-proto","").lower()=="https" or request.url.scheme=="https":
         response.headers.setdefault("Strict-Transport-Security","max-age=31536000; includeSubDomains")
@@ -73,10 +82,11 @@ async def security_headers(request:Request,call_next):
 @app.on_event("startup")
 def startup():
     init_db()
+    payments.init()
     client_store.init_client_db()
-    if get_setting("ui_generation","")!="glass-v1":
-        set_setting("theme","glass")
-        set_setting("ui_generation","glass-v1")
+    if get_setting("ui_generation","")!="velvet-v1":
+        set_setting("theme","velvet")
+        set_setting("ui_generation","velvet-v1")
 
 def current_user(request:Request):
     actor=read_session(request.cookies.get(COOKIE_NAME))
@@ -151,7 +161,7 @@ def require_access_kind(request:Request,kind:str,mutation:bool=False):
     kind=str(kind or "").lower()
     if kind=="ssh":
         return require_mutation(request) if mutation else require_user(request)
-    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline"}.get(kind)
+    feature={"xray":"xray","wireguard":"wireguard","openvpn":"openvpn","openvpn_wstunnel":"openvpn","outline":"outline","ikev2":"strongswan","l2tp":"xl2tpd","sstp":"accel-ppp","tuic":"sing-box","hysteria2":"sing-box"}.get(kind)
     if not feature:
         raise HTTPException(404,"unknown access type")
     return require_capability(request,feature,mutation)
@@ -317,16 +327,25 @@ def _portal_device(request:Request):
 
 def _portal_one_tap(kind,share_text,download_url):
     share=str(share_text or "").strip()
-    if kind in {"xray","outline"}:
+    if kind in {"xray","outline","tuic","hysteria2"}:
         scheme=urllib.parse.urlsplit(share).scheme.lower()
-        if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks"}:
+        if scheme in {"vless","vmess","trojan","ss","hysteria2","hy2","socks","tuic"}:
             return share
-    if kind in {"wireguard","openvpn"}:
+    if kind in {"wireguard","openvpn","ikev2","l2tp"}:
         return download_url
     return ""
 
 
 def _public_access_state(kind,key):
+    if kind in {"tuic","hysteria2"}:
+        ops=hysteria2_ops if kind=="hysteria2" else tuic_ops
+        try:
+            credentials=ops.get_user_credentials(key)
+            state=ops.status()
+        except Exception:
+            credentials=None;state={"ready":False}
+        active=bool(credentials and state.get("ready"))
+        return {"active":active,"reason":"active" if active else "disabled","usage":None}
     if kind in {"xray","outline"}:
         try: row=get_protocol_client(int(key))
         except Exception: row=None
@@ -423,19 +442,43 @@ def account_rows():
         })
     return rows
 
+def landing_response(request:Request,*,login_open:bool=False,error:str|None=None,twofa_token:str|None=None,status_code:int=200):
+    response=render_template(request,"makia_landing.html",{
+        "request":request,"app_name":APP_NAME,"version":VERSION,
+        "language":get_setting("language","fa"),"login_open":login_open,
+        "error":error,"twofa_token":twofa_token,
+    },status_code=status_code)
+    response.headers["Cache-Control"]="no-store"
+    # Permit only the explicitly selected background-video and font hosts on this public page.
+    response.headers["Content-Security-Policy"]=(
+        "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; "
+        "img-src 'self' data:; "
+        "media-src 'self' https://d8j0ntlcm91z4.cloudfront.net; "
+        "style-src 'self' 'unsafe-inline' https://db.onlinewebfonts.com https://fonts.googleapis.com; "
+        "font-src 'self' data: https://db.onlinewebfonts.com https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'"
+    )
+    return response
+
 @app.get("/",response_class=HTMLResponse)
 def root(request:Request):
-    if not current_user(request): return RedirectResponse("/login",302)
-    return templates.TemplateResponse("dashboard.html",{
+    actor=current_user(request)
+    if not actor:
+        return landing_response(request)
+    return render_template(request, "dashboard.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
-        "theme":get_setting("theme","glass"),"density":get_setting("density","comfortable"),
-        "current_username":current_user(request) or "admin"
+        "theme":get_setting("theme","velvet"),"density":get_setting("density","comfortable"),
+        "current_username":actor or "admin"
     })
+
+@app.get("/welcome",response_class=HTMLResponse)
+def welcome_page(request:Request):
+    return landing_response(request)
 
 @app.get("/help/connect",response_class=HTMLResponse)
 def connection_help(request:Request):
-    response=templates.TemplateResponse("client_guide.html",{
+    response=render_template(request, "client_guide.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "language":get_setting("language","fa"),"panel_domain":get_setting("panel_domain",""),
     })
@@ -446,19 +489,19 @@ def connection_help(request:Request):
 @app.get("/support/login",response_class=HTMLResponse)
 def support_login_page(request:Request):
     if current_user(request): return RedirectResponse("/",302)
-    return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
+    return render_template(request, "support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
 
 @app.post("/support/login")
 def support_login(request:Request,code:str=Form(...)):
     remote_ip=ip(request) or "unknown"
     state=login_rate_state("support:"+remote_ip,int(time.time()))
     if int(state.get("blocked_until") or 0)>int(time.time()):
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید." if get_setting("language","fa")!="en" else "Too many failed attempts. Try again later.")},status_code=429)
+        return render_template(request, "support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره امتحان کنید." if get_setting("language","fa")!="en" else "Too many failed attempts. Try again later.")},status_code=429)
     grant=consume_support_grant(code)
     if not grant:
         state=record_login_failure("support:"+remote_ip,int(time.time()),max_failures=5,window_seconds=900,block_seconds=900)
         audit("remote-support","support_login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است." if get_setting("language","fa")!="en" else "The support code is invalid, already used or expired.")},status_code=401)
+        return render_template(request, "support_login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("کد پشتیبانی نامعتبر، استفاده‌شده یا منقضی است." if get_setting("language","fa")!="en" else "The support code is invalid, already used or expired.")},status_code=401)
     clear_login_failures("support:"+remote_ip)
     actor=f"support:{grant['id']}:{grant['scope']}"
     ttl=max(60,int(grant["expires_at"])-int(time.time()))
@@ -478,7 +521,8 @@ def support_logout(request:Request):
 
 @app.get("/login",response_class=HTMLResponse)
 def login_page(request:Request):
-    return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":None})
+    if current_user(request): return RedirectResponse("/",302)
+    return landing_response(request,login_open=True)
 
 @app.post("/login")
 def login(request:Request,username:str=Form(...),password:str=Form(...)):
@@ -488,18 +532,18 @@ def login(request:Request,username:str=Form(...),password:str=Form(...)):
     if int(rate.get("blocked_until") or 0)>now_ts:
         wait=max(1,int(rate["blocked_until"])-now_ts)
         audit(username or "unknown","login_rate_limited",detail=f"retry_after={wait}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s).")},status_code=429)
+        return landing_response(request,login_open=True,error=(f"تلاش‌های ناموفق زیاد بوده است. {max(1,wait//60)} دقیقه دیگر دوباره امتحان کنید." if get_setting("language","fa")!="en" else f"Too many failed attempts. Try again in {max(1,wait//60)} minute(s)."),status_code=429)
     with connect() as con:
         row=con.execute("SELECT * FROM admins WHERE username=? AND active=1",(username,)).fetchone()
     if not row or not verify_password(password,row["password_hash"]):
         state=record_login_failure(remote_ip,now_ts)
         audit(username or "unknown","login_failed",detail=f"failures={state['failures']}",ip=remote_ip)
-        return templates.TemplateResponse("login.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"error":("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password.")},status_code=401)
+        return landing_response(request,login_open=True,error=("نام کاربری یا رمز عبور صحیح نیست." if get_setting("language","fa")!="en" else "Invalid username or password."),status_code=401)
     clear_login_failures(remote_ip)
     twofa=get_admin_2fa(username)
     if twofa and twofa.get("totp_enabled"):
         audit(username,"login_password_success_2fa_required",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":make_preauth(username),"error":None})
+        return landing_response(request,login_open=True,twofa_token=make_preauth(username))
     audit(username,"login_success",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -516,7 +560,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
     valid=bool(state and state.get("totp_enabled") and state.get("totp_secret") and pyotp.TOTP(state["totp_secret"]).verify(code.strip(),valid_window=1))
     if not valid:
         audit(username,"login_2fa_failed",ip=ip(request))
-        return templates.TemplateResponse("login_2fa.html",{"request":request,"app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),"token":token,"error":("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid.")},status_code=401)
+        return landing_response(request,login_open=True,twofa_token=token,error=("کد تایید صحیح نیست." if get_setting("language","fa")!="en" else "The verification code is invalid."),status_code=401)
     audit(username,"login_success_2fa",ip=ip(request))
     r=RedirectResponse("/",302)
     secure_cookie=request.headers.get("x-forwarded-proto","").lower()=="https"
@@ -528,7 +572,7 @@ def login_2fa(request:Request,token:str=Form(...),code:str=Form(...)):
 def logout(request:Request):
     user=current_user(request)
     if user: audit(user,"logout",ip=ip(request))
-    r=RedirectResponse("/login",302); r.delete_cookie(COOKIE_NAME); return r
+    r=RedirectResponse("/",302); r.delete_cookie(COOKIE_NAME); return r
 
 class SupportRequestCreate(BaseModel):
     subject:str=Field(min_length=3,max_length=160)
@@ -959,6 +1003,13 @@ def protocols(request:Request):
     try:outline=integration_ops.outline_status()
     except Exception as exc:outline={"installed":False,"container_active":False,"api_ok":False,"error":str(exc)[:300]}
     result["outline"]=outline
+    result["sstp"]=sstp_ops.sstp_status()
+    result["tuic"]=tuic_ops.status()
+    result["hysteria2"]=hysteria2_ops.status()
+    result.setdefault("capabilities",[]).append({
+        "id":"sstp","engine":"accel-ppp","available":bool(result["sstp"]["ready"]),
+        "installed":bool(result["sstp"]["installed"]),"mode":"managed"
+    })
     result.setdefault("capabilities",[]).append({
         "id":"outline","engine":"outline","available":bool(outline.get("installed") and outline.get("api_ok")),
         "installed":bool(outline.get("installed")),"mode":"managed"
@@ -1071,6 +1122,20 @@ def ikev2_user_create(payload:IKEv2UserCreate,request:Request):
         result=protocol_ops.create_ikev2_user(payload.name,payload.password or None)
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
+    try:
+        profile=access_ops.native_vpn_payload(
+            "ikev2",payload.name,result.get("server") or protocol_ops.ikev2_status().get("domain") or "",
+            payload.name,result.get("password") or "",
+        )
+        artifact_id=artifact_save("ikev2",payload.name,payload.name,"ikev2",profile,{
+            "endpoint":result.get("server") or protocol_ops.ikev2_status().get("domain") or "",
+            "username":payload.name,"auth":"EAP-MSCHAPv2",
+        })
+        result["artifact_id"]=artifact_id
+    except access_ops.AccessPackageError as exc:
+        try: protocol_ops.remove_ikev2_user(payload.name)
+        except protocol_ops.ProtocolError: pass
+        raise HTTPException(500,"IKEv2 profile export failed: "+str(exc)) from exc
     audit(actor,"ikev2_user_create",payload.name,ip=ip(request))
     return result
 
@@ -1086,8 +1151,253 @@ def ikev2_user_delete(name:str,request:Request):
         result=protocol_ops.remove_ikev2_user(name)
     except protocol_ops.ProtocolError as e:
         raise HTTPException(400,str(e))
+    delete_access_artifact_by_key("ikev2",name)
     audit(actor,"ikev2_user_delete",name,ip=ip(request))
     return result
+
+
+class L2TPUserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/l2tp/diagnostics")
+def l2tp_diagnostics(request:Request):
+    require_user(request)
+    return protocol_ops.l2tp_status()
+
+
+@app.get("/api/protocols/ikev2/diagnostics")
+def ikev2_diagnostics(request:Request):
+    require_user(request)
+    status=protocol_ops.ikev2_status()
+    # ikev2_status validates the certificate expiry, SAN, private-key match,
+    # forwarding, NAT, service and both IPsec UDP listeners.
+    warnings=[]
+    if not status.get("certificate_valid"):
+        warnings.append(status.get("certificate_error") or "IKEv2 certificate is invalid or missing.")
+    if not status.get("certificate_matches_domain"):
+        warnings.append("IKEv2 server certificate SAN does not match Remote ID.")
+    if not status.get("certificate_key_matches"):
+        warnings.append("IKEv2 certificate and private key do not match.")
+    if not status.get("service_active"):
+        warnings.append("strongSwan service is not active.")
+    if not all((status.get("listeners") or {}).values()):
+        warnings.append("One or more IPsec UDP listeners (500/4500) are missing.")
+    if not status.get("forwarding_ready"):
+        warnings.append("IKEv2 client-network forwarding/NAT is not ready.")
+    return {**status,"warnings":warnings,"ready":bool(status.get("ready") and not warnings)}
+
+@app.get("/api/protocols/l2tp/users")
+def l2tp_users_get(request:Request):
+    require_user(request)
+    return {"users":protocol_ops.list_l2tp_users()}
+
+
+@app.post("/api/protocols/l2tp/users")
+def l2tp_user_create(payload:L2TPUserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.create_l2tp_user(payload.name,payload.password or None)
+        profile=access_ops.native_vpn_payload(
+            "l2tp",payload.name,result.get("server") or "",
+            payload.name,result.get("password") or "",result.get("psk") or "",
+        )
+        artifact_id=artifact_save("l2tp",payload.name,payload.name,"l2tp",profile,{
+            "endpoint":result.get("server") or "","username":payload.name,"auth":"IPsec PSK + MS-CHAPv2",
+        })
+        result["artifact_id"]=artifact_id
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    except access_ops.AccessPackageError as exc:
+        try: protocol_ops.remove_l2tp_user(payload.name)
+        except protocol_ops.ProtocolError: pass
+        raise HTTPException(500,"L2TP profile export failed: "+str(exc)) from exc
+    audit(actor,"l2tp_user_create",payload.name,ip=ip(request))
+    return result
+
+
+@app.delete("/api/protocols/l2tp/users/{name}")
+def l2tp_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=protocol_ops.remove_l2tp_user(name)
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc))
+    delete_access_artifact_by_key("l2tp",name)
+    audit(actor,"l2tp_user_delete",name,ip=ip(request))
+    return result
+
+
+class SSTPUserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/sstp/diagnostics")
+def sstp_diagnostics(request:Request):
+    require_user(request)
+    return sstp_ops.sstp_status()
+
+
+@app.get("/api/protocols/sstp/users")
+def sstp_users_get(request:Request):
+    require_user(request)
+    return {"users":sstp_ops.list_sstp_users()}
+
+
+@app.post("/api/protocols/sstp/users")
+def sstp_user_create(payload:SSTPUserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=sstp_ops.create_sstp_user(payload.name,payload.password or None)
+        profile=access_ops.native_vpn_payload(
+            "sstp",payload.name,result["server"],payload.name,result["password"]
+        )
+        artifact_id=artifact_save("sstp",payload.name,payload.name,"sstp",profile,{
+            "endpoint":result["server"],"username":payload.name,"auth":"MS-CHAPv2 / SSTP"
+        })
+        result["profile"]=profile["primary_text"]
+        result["artifact_id"]=artifact_id
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except access_ops.AccessPackageError as exc:
+        try: sstp_ops.remove_sstp_user(payload.name)
+        except protocol_ops.ProtocolError: pass
+        raise HTTPException(500,"SSTP export failed") from exc
+    audit(actor,"sstp_user_create",payload.name,ip=ip(request))
+    return result
+
+
+@app.delete("/api/protocols/sstp/users/{name}")
+def sstp_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=sstp_ops.remove_sstp_user(name)
+    except protocol_ops.ProtocolError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    delete_access_artifact_by_key("sstp",name)
+    audit(actor,"sstp_user_delete",name,ip=ip(request))
+    return result
+
+
+class TUICUserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/tuic/diagnostics")
+def tuic_diagnostics(request:Request):
+    require_user(request)
+    return tuic_ops.diagnostics()
+
+
+@app.get("/api/protocols/tuic/users")
+def tuic_users_get(request:Request):
+    require_user(request)
+    return {"users":tuic_ops.list_users()}
+
+
+@app.post("/api/protocols/tuic/users")
+def tuic_user_create(payload:TUICUserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=tuic_ops.create_user(payload.name,payload.password or "")
+        profile=access_ops.tuic_payload(
+            payload.name,result["share_link"],result["server"],result["port"]
+        )
+        artifact_id=artifact_save("tuic",payload.name,payload.name,"tuic",profile,{
+            "endpoint":result["server"],"port":result["port"],"username":payload.name,
+            "transport":"udp/quic","auth":"UUID + password",
+        })
+    except tuic_ops.TUICError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except access_ops.AccessPackageError as exc:
+        try: tuic_ops.remove_user(payload.name)
+        except tuic_ops.TUICError: pass
+        raise HTTPException(500,"TUIC profile export failed") from exc
+    except Exception as exc:
+        try: tuic_ops.remove_user(payload.name)
+        except tuic_ops.TUICError: pass
+        delete_access_artifact_by_key("tuic",payload.name)
+        raise HTTPException(500,"TUIC user provisioning failed; rollback was attempted") from exc
+    audit(actor,"tuic_user_create",payload.name,f"port={result['port']}",ip=ip(request))
+    return {
+        "name":payload.name,"server":result["server"],"port":result["port"],
+        "profile":result["share_link"],"artifact_id":artifact_id,
+    }
+
+
+@app.delete("/api/protocols/tuic/users/{name}")
+def tuic_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=tuic_ops.remove_user(name)
+    except tuic_ops.TUICError as exc:
+        raise HTTPException(409,str(exc)) from exc
+    delete_access_artifact_by_key("tuic",name)
+    audit(actor,"tuic_user_delete",name,ip=ip(request))
+    return result
+
+
+class Hysteria2UserCreate(BaseModel):
+    name:str=Field(min_length=3,max_length=48)
+    password:str=Field(default="",max_length=128)
+
+
+@app.get("/api/protocols/hysteria2/diagnostics")
+def hysteria2_diagnostics(request:Request):
+    require_user(request)
+    return hysteria2_ops.diagnostics()
+
+
+@app.get("/api/protocols/hysteria2/users")
+def hysteria2_users_get(request:Request):
+    require_user(request)
+    return {"users":hysteria2_ops.list_users()}
+
+
+@app.post("/api/protocols/hysteria2/users")
+def hysteria2_user_create(payload:Hysteria2UserCreate,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=hysteria2_ops.create_user(payload.name,payload.password or "")
+        profile=access_ops.hysteria2_payload(
+            payload.name,result["share_link"],result["server"],result["port"]
+        )
+        artifact_id=artifact_save("hysteria2",payload.name,payload.name,"hysteria2",profile,{
+            "endpoint":result["server"],"port":result["port"],"username":payload.name,
+            "transport":"udp/quic","auth":"password",
+        })
+    except hysteria2_ops.Hysteria2Error as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except access_ops.AccessPackageError as exc:
+        try: hysteria2_ops.remove_user(payload.name)
+        except hysteria2_ops.Hysteria2Error: pass
+        raise HTTPException(500,"Hysteria2 profile export failed") from exc
+    except Exception as exc:
+        try: hysteria2_ops.remove_user(payload.name)
+        except hysteria2_ops.Hysteria2Error: pass
+        delete_access_artifact_by_key("hysteria2",payload.name)
+        raise HTTPException(500,"Hysteria2 user provisioning failed; rollback was attempted") from exc
+    audit(actor,"hysteria2_user_create",payload.name,f"port={result['port']}",ip=ip(request))
+    return {
+        "name":payload.name,"server":result["server"],"port":result["port"],
+        "profile":result["share_link"],"artifact_id":artifact_id,
+    }
+
+
+@app.delete("/api/protocols/hysteria2/users/{name}")
+def hysteria2_user_delete(name:str,request:Request):
+    actor=require_mutation(request)
+    try:
+        result=hysteria2_ops.remove_user(name)
+    except hysteria2_ops.Hysteria2Error as exc:
+        raise HTTPException(409,str(exc)) from exc
+    delete_access_artifact_by_key("hysteria2",name)
+    audit(actor,"hysteria2_user_delete",name,ip=ip(request))
+    return result
+
 
 class OpenVPNTCPFallback(BaseModel):
     port:int=Field(default=8443,ge=1,le=65535)
@@ -1187,6 +1497,17 @@ class XrayInboundBuilderPayload(BaseModel):
 def xray_inbound_capabilities(request:Request):
     require_capability(request,"xray")
     caps=protocol_ops.xray_inbound_builder_capabilities()
+    cert_domains=protocol_ops.xray_tls_certificate_inventory()
+    tls_domains=protocol_ops.xray_tls_domain_inventory()
+    configured_domain=str(get_setting("panel_domain","") or "").strip().lower()
+    default_tls_domain=configured_domain if configured_domain in tls_domains else (tls_domains[0] if tls_domains else "")
+    caps["tls_cert_domains"]=cert_domains
+    caps["tls_domains"]=tls_domains
+    caps["default_tls_domain"]=default_tls_domain
+    for preset in caps.get("presets") or []:
+        preset["tls_domain_ready"]=bool(default_tls_domain) if preset.get("requires_domain") else True
+        preset["tls_domain"]=default_tls_domain if preset.get("requires_domain") else ""
+        preset["tls_domain_error"]="" if preset["tls_domain_ready"] else "No valid TLS domain with a certificate pointing directly to this VPS."
     # Presets are enriched with actual host port readiness so selecting a
     # profile does not blindly collide with Nginx, OpenVPN, WireGuard or
     # another Xray listener. This is advisory; create/apply still performs
@@ -1202,7 +1523,24 @@ def xray_inbound_capabilities(request:Request):
                 "owner":protocol_ops._port_owner_label(port,transport_proto) if occupied else "",
             })
         preset["port_state"]=states
-        preset["suggested_port"]=next((x["port"] for x in states if not x["occupied"]),None)
+        try:
+            allocation=protocol_ops.allocate_xray_inbound_port(
+                int((preset.get("ports") or [2087])[0]),
+                preset.get("protocol") or "vless",
+                preset.get("transport") or "tcp",
+            )
+            preset["suggested_port"]=int(allocation["port"])
+            preset["port_adjusted"]=bool(allocation.get("adjusted"))
+            preset["port_error"]=""
+            if not any(int(x.get("port") or 0)==preset["suggested_port"] for x in states):
+                states.append({
+                    "port":preset["suggested_port"],"transport":transport_proto,
+                    "occupied":False,"owner":"","auto_selected":True,
+                })
+        except protocol_ops.ProtocolError as exc:
+            preset["suggested_port"]=None
+            preset["port_adjusted"]=False
+            preset["port_error"]=str(exc)[:300]
     return caps
 
 
@@ -1470,6 +1808,8 @@ def subscription_page(subscription_id:str,request:Request):
     if not row:
         raise HTTPException(404,"subscription not found")
     snap=_subscription_snapshot(row)
+    if not snap.get("enabled") or snap.get("expired") or snap.get("quota_exhausted"):
+        raise HTTPException(403,"subscription is inactive")
     link=(row.get("share_link") or "").strip()
     origin=public_origin(request)
     sub_url=f"{origin}/sub/{subscription_id}?format={subscription_settings['default_format']}" if subscription_settings["enabled"] else ""
@@ -1479,12 +1819,13 @@ def subscription_page(subscription_id:str,request:Request):
         profile_qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(link)).decode("ascii")
     if sub_url:
         subscription_qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(sub_url)).decode("ascii")
-    response=templates.TemplateResponse("subscription.html",{
+    response=render_template(request, "subscription.html",{
         "request":request,"client":snap,"subscription_id":subscription_id,
         "app_name":APP_NAME,"version":VERSION,"language":get_setting("language","fa"),
         "profile_qr":profile_qr,"subscription_qr":subscription_qr,"subscription_url":sub_url,
         "subscription_enabled":subscription_settings["enabled"],
         "guide_url":f"{origin}/help/connect#xray",
+        "public_dns_address":network_services._dns_state().get("public_address","") if network_services._dns_state().get("mode")=="public" else "",
     })
     response.headers["Cache-Control"]="no-store, private"
     response.headers["X-Content-Type-Options"]="nosniff"
@@ -1755,7 +2096,9 @@ class WireGuardPeer(BaseModel):
     name:str=Field(min_length=1,max_length=48)
     endpoint:str=Field(min_length=1,max_length=255)
     endpoint_mode:str="auto"
-    dns:str=Field(default="1.1.1.1",max_length=64)
+    # Use the Makia resolver inside the WireGuard tunnel, not an external
+    # resolver that may be blocked on client networks.
+    dns:str=Field(default="10.66.66.1",max_length=64)
     mtu:int=Field(default=1280,ge=576,le=1500)
     keepalive:int=Field(default=15,ge=0,le=3600)
     allowed_ips:str=Field(default="0.0.0.0/0",max_length=255)
@@ -1864,6 +2207,15 @@ def openvpn_client_create(payload:OpenVPNClient,request:Request):
         result=protocol_ops.create_openvpn_client(payload.name,endpoint,payload.port,payload.proto)
         result["diagnostics"]=protocol_ops.openvpn_endpoint_diagnostics(endpoint)
         delivery=access_ops.openvpn_payload(payload.name,result["config"])
+        # Ship an additional TCP fallback for standard OpenVPN clients.
+        if (int(payload.port)==1194 and str(payload.proto).lower()=="udp" and
+            protocol_ops._active("openvpn-server@makia-tcp")):
+            fallback=access_ops.openvpn_tcp_fallback_config(result["config"],8443)
+            delivery["files"][f"{access_ops.safe_filename(payload.name)}-TCP-8443.ovpn"]=fallback.encode("utf-8")
+            delivery["files"]["OpenVPN-transport-guide.txt"]=(
+                "UDP 1194: primary profile. TCP 8443: import the alternative .ovpn file when UDP is blocked. "
+                "TCP 8443 must also be reachable from your network.\n"
+            ).encode("utf-8")
         artifact_id=artifact_save("openvpn",payload.name,payload.name,"openvpn",delivery,{
             "endpoint":endpoint,"endpoint_mode":payload.endpoint_mode,
             "port":payload.port,"transport":payload.proto
@@ -2078,6 +2430,78 @@ def _resolve_access_payload(kind,key,request):
         return payload,get_access_artifact_by_key("openvpn",key)
     if kind=="wireguard":
         raise HTTPException(409,"legacy WireGuard peer has no recoverable client private key; reissue this peer to create a new exportable config")
+    if kind=="ikev2":
+        credentials=protocol_ops.get_ikev2_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"IKEv2 user not found")
+        status=protocol_ops.ikev2_status()
+        payload=access_ops.native_vpn_payload(
+            "ikev2",key,status.get("domain") or "",credentials["name"],credentials["password"]
+        )
+        artifact_save("ikev2",key,key,"ikev2",payload,{
+            "endpoint":status.get("domain") or "","username":key,"auth":"EAP-MSCHAPv2",
+        })
+        return payload,get_access_artifact_by_key("ikev2",key)
+    if kind=="l2tp":
+        credentials=protocol_ops.get_l2tp_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"L2TP user not found")
+        status=protocol_ops.l2tp_status()
+        try:
+            psk=protocol_ops._l2tp_shared_psk()
+            payload=access_ops.native_vpn_payload(
+                "l2tp",key,status.get("domain") or "",credentials["name"],credentials["password"],psk
+            )
+        except (protocol_ops.ProtocolError,access_ops.AccessPackageError) as exc:
+            raise HTTPException(409,str(exc)) from exc
+        artifact_save("l2tp",key,key,"l2tp",payload,{
+            "endpoint":status.get("domain") or "","username":key,"auth":"IPsec PSK + MS-CHAPv2",
+        })
+        return payload,get_access_artifact_by_key("l2tp",key)
+    if kind=="sstp":
+        credentials=sstp_ops.get_sstp_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"SSTP user not found")
+        status=sstp_ops.sstp_status()
+        payload=access_ops.native_vpn_payload(
+            "sstp",key,status.get("domain") or "",credentials["name"],credentials["password"]
+        )
+        artifact_save("sstp",key,key,"sstp",payload,{
+            "endpoint":status.get("domain") or "","username":key,"auth":"MS-CHAPv2 / SSTP",
+        })
+        return payload,get_access_artifact_by_key("sstp",key)
+    if kind=="tuic":
+        credentials=tuic_ops.get_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"TUIC user not found")
+        status=tuic_ops.status()
+        share=tuic_ops.share_link_for_user(
+            key,credentials,status.get("domain") or "",int(status.get("port") or tuic_ops.DEFAULT_PORT)
+        )
+        payload=access_ops.tuic_payload(
+            key,share,status.get("domain") or "",int(status.get("port") or tuic_ops.DEFAULT_PORT)
+        )
+        artifact_save("tuic",key,key,"tuic",payload,{
+            "endpoint":status.get("domain") or "","port":int(status.get("port") or tuic_ops.DEFAULT_PORT),
+            "username":key,"transport":"udp/quic","auth":"UUID + password",
+        })
+        return payload,get_access_artifact_by_key("tuic",key)
+    if kind=="hysteria2":
+        credentials=hysteria2_ops.get_user_credentials(key)
+        if not credentials:
+            raise HTTPException(404,"Hysteria2 user not found")
+        status=hysteria2_ops.status()
+        share=hysteria2_ops.share_link_for_user(
+            key,credentials,status.get("domain") or "",int(status.get("port") or hysteria2_ops.DEFAULT_PORT)
+        )
+        payload=access_ops.hysteria2_payload(
+            key,share,status.get("domain") or "",int(status.get("port") or hysteria2_ops.DEFAULT_PORT)
+        )
+        artifact_save("hysteria2",key,key,"hysteria2",payload,{
+            "endpoint":status.get("domain") or "","port":int(status.get("port") or hysteria2_ops.DEFAULT_PORT),
+            "username":key,"transport":"udp/quic","auth":"password",
+        })
+        return payload,get_access_artifact_by_key("hysteria2",key)
     if kind=="ssh":
         raise HTTPException(409,"SSH password was not retained for this legacy account; set a new password once to enable encrypted exports")
     raise HTTPException(404,"access entry not found")
@@ -2133,7 +2557,7 @@ def _current_delivery_payload(kind,key,payload,request):
             )
     # Older encrypted artifacts predate the bundled Persian guide. Add it at
     # delivery time without changing any credential or native configuration.
-    if kind in {"ssh","xray","wireguard","openvpn","outline"}:
+    if kind in {"ssh","xray","wireguard","openvpn","outline","ikev2","l2tp","sstp","tuic","hysteria2"}:
         result=dict(result)
         files=dict(result.get("files") or {})
         protocol=""
@@ -2186,6 +2610,69 @@ def access_entries(request:Request):
             "legacy":not bool(art),"endpoint":saved_endpoint(art)
         })
 
+    ike_status=protocol_ops.ikev2_status()
+    for item in protocol_ops.list_ikev2_users():
+        key=item["name"]
+        art=artifacts.get(("ikev2",key))
+        rows.append({
+            "id":f"ikev2:{key}","kind":"ikev2","key":key,"name":key,"protocol":"ikev2",
+            "status":"active" if ike_status.get("configured") and ike_status.get("service_active") else "disabled",
+            "enabled":bool(ike_status.get("configured") and ike_status.get("service_active")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,"can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or ike_status.get("domain") or "",
+        })
+
+    l2tp_status=protocol_ops.l2tp_status()
+    for item in protocol_ops.list_l2tp_users():
+        key=item["name"]
+        art=artifacts.get(("l2tp",key))
+        rows.append({
+            "id":f"l2tp:{key}","kind":"l2tp","key":key,"name":key,"protocol":"l2tp/ipsec",
+            "status":"active" if l2tp_status.get("ready") else "disabled",
+            "enabled":bool(l2tp_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,"can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or l2tp_status.get("domain") or "",
+        })
+
+    sstp_status=sstp_ops.sstp_status()
+    for item in sstp_ops.list_sstp_users():
+        key=item["name"]
+        art=artifacts.get(("sstp",key))
+        rows.append({
+            "id":f"sstp:{key}","kind":"sstp","key":key,"name":key,"protocol":"sstp",
+            "status":"active" if sstp_status.get("ready") else "disabled",
+            "enabled":bool(sstp_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or sstp_status.get("endpoint") or "",
+        })
+
+    tuic_status=tuic_ops.status()
+    for item in tuic_ops.list_users():
+        key=item["name"]
+        art=artifacts.get(("tuic",key))
+        rows.append({
+            "id":f"tuic:{key}","kind":"tuic","key":key,"name":key,"protocol":"tuic",
+            "status":"active" if tuic_status.get("ready") else "disabled",
+            "enabled":bool(tuic_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or tuic_status.get("endpoint") or "",
+        })
+
+    hysteria2_status=hysteria2_ops.status()
+    for item in hysteria2_ops.list_users():
+        key=item["name"]
+        art=artifacts.get(("hysteria2",key))
+        rows.append({
+            "id":f"hysteria2:{key}","kind":"hysteria2","key":key,"name":key,"protocol":"hysteria2",
+            "status":"active" if hysteria2_status.get("ready") else "disabled",
+            "enabled":bool(hysteria2_status.get("ready")),"expired":False,"days_left":None,
+            "quota_mb":0,"used_mb":0,"remaining_mb":0,"online":None,"device_limit":1,
+            "can_export":True,"artifact_id":art["id"] if art else None,
+            "legacy":not bool(art),"endpoint":saved_endpoint(art) or hysteria2_status.get("endpoint") or "",
+        })
+
     known_wg={a["external_key"] for a in artifacts.values() if a["kind"]=="wireguard"}
     wg_runtime={p["public_key"]:p for p in protocol_ops._wireguard_peer_runtime()}
     for peer in protocol_ops.list_wireguard_peers():
@@ -2227,7 +2714,7 @@ def access_entries(request:Request):
             "endpoint":saved_endpoint(art)
         })
 
-    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5}
+    order={"ssh":0,"xray":1,"outline":2,"wireguard":3,"openvpn":4,"openvpn_wstunnel":5,"ikev2":6,"l2tp":7,"sstp":8,"tuic":9,"hysteria2":10}
     rows.sort(key=lambda x:(order.get(x["kind"],9),str(x["name"]).lower()))
     return rows
 
@@ -2286,7 +2773,7 @@ def public_access_portal(token:str,request:Request):
     except access_ops.AccessPackageError as exc:
         raise HTTPException(404,str(exc))
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         share_text=""
     else:
         share_text=str(payload.get("share_text") or payload.get("primary_text") or "")
@@ -2306,12 +2793,12 @@ def public_access_portal(token:str,request:Request):
             "url":f"/access/{token}/files/{urllib.parse.quote(safe_name,safe='')}",
         })
     qr=""
-    if share_text and kind in {"xray","wireguard","ssh","outline"}:
+    if share_text and kind in {"xray","wireguard","ssh","outline","tuic","hysteria2"}:
         qr="data:image/svg+xml;base64,"+base64.b64encode(access_ops.make_qr_svg(share_text)).decode("ascii")
     guide_kind="xray" if kind=="xray" else kind
     protocol=str(artifact.get("protocol") or summary.get("protocol") or kind)
     portal_url=f"{public_origin(request)}/access/{token}"
-    response=templates.TemplateResponse("access_portal.html",{
+    response=render_template(request, "access_portal.html",{
         "request":request,"app_name":APP_NAME,"version":VERSION,
         "lang":lang,"dir":"rtl" if lang=="fa" else "ltr",
         "kind":kind,"key":key,"name":artifact.get("display_name") or key,
@@ -2342,7 +2829,7 @@ def public_access_download(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -2353,7 +2840,8 @@ def public_access_download(token:str,request:Request):
         data=(payload.get("primary_text") or "").encode("utf-8")
     if isinstance(data,str): data=data.encode("utf-8")
     media="application/octet-stream"
-    if filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
+    if filename.endswith(".mobileconfig"): media="application/x-apple-aspen-config"
+    elif filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
     elif filename.endswith(".ovpn"): media="application/x-openvpn-profile"
     safe=access_ops.safe_filename(filename)
     return Response(content=bytes(data),media_type=media,headers={
@@ -2373,7 +2861,7 @@ def public_access_file(token:str,filename:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
@@ -2384,7 +2872,8 @@ def public_access_file(token:str,filename:str,request:Request):
     data=files[requested]
     if isinstance(data,str):data=data.encode("utf-8")
     media="application/octet-stream"
-    if requested.endswith((".txt",".conf",".json")):media="text/plain; charset=utf-8"
+    if requested.endswith(".mobileconfig"):media="application/x-apple-aspen-config"
+    elif requested.endswith((".txt",".conf",".json")):media="text/plain; charset=utf-8"
     elif requested.endswith(".ovpn"):media="application/x-openvpn-profile"
     elif requested.endswith(".svg"):media="image/svg+xml"
     return Response(content=bytes(data),media_type=media,headers={
@@ -2403,11 +2892,11 @@ def public_access_qr(token:str,request:Request):
     kind=str(artifact.get("kind") or "")
     key=str(artifact.get("external_key") or "")
     state=_public_access_state(kind,key)
-    if kind in {"xray","outline"} and not state.get("active"):
+    if kind in {"xray","outline","tuic","hysteria2"} and not state.get("active"):
         raise HTTPException(410,"access is no longer active")
     payload=access_ops.open_payload(artifact["payload_enc"])
     payload=_current_delivery_payload(kind,key,payload,request)
-    if kind not in {"xray","wireguard","ssh","outline"}:
+    if kind not in {"xray","wireguard","ssh","outline","tuic","hysteria2"}:
         raise HTTPException(404,"QR is not available for this access type")
     share=str(payload.get("share_text") or payload.get("primary_text") or "")
     if not share:
@@ -2423,7 +2912,7 @@ def public_access_qr(token:str,request:Request):
 def access_share(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
     require_local_admin(request)
-    if kind not in {"ssh","xray","wireguard","outline"}:
+    if kind not in {"ssh","xray","wireguard","outline","tuic","hysteria2"}:
         raise HTTPException(404,"share view is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -2434,7 +2923,11 @@ def access_share(kind:str,key:str,request:Request):
     qr=access_ops.make_qr_svg(share)
     summary=dict(payload.get("summary") or {})
     connection={}
-    if kind=="xray":
+    if kind=="tuic":
+        connection=access_ops.describe_tuic_share(share)
+    elif kind=="hysteria2":
+        connection=access_ops.describe_hysteria2_share(share)
+    elif kind=="xray":
         try: xray_row=get_protocol_client(int(key))
         except Exception: xray_row=None
         connection=access_ops.describe_xray_share(share,(xray_row or {}).get("protocol") or summary.get("protocol"))
@@ -2443,7 +2936,7 @@ def access_share(kind:str,key:str,request:Request):
             sid=xray_row["subscription_id"]
             summary["subscription_url"]=f"{public_origin(request)}/sub/{sid}?format={subscription_settings['default_format']}" if subscription_settings["enabled"] else ""
             summary["client_url"]=f"{public_origin(request)}/client/{sid}" if subscription_settings["client_page_enabled"] else ""
-    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'wireguard' if kind=='wireguard' else 'ssh'}"
+    summary["guide_url"]=f"{public_origin(request)}/help/connect#{'xray' if kind=='xray' else 'tuic' if kind=='tuic' else 'hysteria2' if kind=='hysteria2' else 'wireguard' if kind=='wireguard' else 'ssh'}"
     subscription=str(summary.get("subscription_url") or "")
     subscription_qr=""
     if subscription:
@@ -2462,7 +2955,7 @@ def access_share(kind:str,key:str,request:Request):
 @app.get("/api/access/{kind}/{key}/qr.svg")
 def access_qr(kind:str,key:str,request:Request):
     require_access_kind(request,kind)
-    if kind not in {"ssh","xray","wireguard","outline"}:
+    if kind not in {"ssh","xray","wireguard","outline","tuic","hysteria2"}:
         raise HTTPException(404,"QR is not available for this access type")
     if kind=="ssh" and not operator_settings_snapshot()["delivery"]["npv_enabled"]:
         raise HTTPException(409,"NPV SSH delivery is disabled in Settings")
@@ -2514,7 +3007,8 @@ def access_native(kind:str,key:str,request:Request):
         data=(payload.get("primary_text") or "").encode("utf-8")
     if isinstance(data,str): data=data.encode("utf-8")
     media="application/octet-stream"
-    if filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
+    if filename.endswith(".mobileconfig"): media="application/x-apple-aspen-config"
+    elif filename.endswith((".txt",".conf",".json")): media="text/plain; charset=utf-8"
     elif filename.endswith(".ovpn"): media="application/x-openvpn-profile"
     audit(current_user(request),"access_native_export",f"{kind}:{key}",filename,ip(request))
     safe=access_ops.safe_filename(filename)
@@ -2613,6 +3107,15 @@ def access_revoke(kind:str,key:str,request:Request):
         elif kind=="openvpn":
             protocol_ops.revoke_openvpn_client(key)
             delete_access_artifact_by_key("openvpn",key)
+        elif kind=="ikev2":
+            protocol_ops.remove_ikev2_user(key)
+            delete_access_artifact_by_key("ikev2",key)
+        elif kind=="l2tp":
+            protocol_ops.remove_l2tp_user(key)
+            delete_access_artifact_by_key("l2tp",key)
+        elif kind=="sstp":
+            sstp_ops.remove_sstp_user(key)
+            delete_access_artifact_by_key("sstp",key)
         elif kind=="openvpn_wstunnel":
             artifact=get_access_artifact_by_key("openvpn_wstunnel",key)
             if not artifact:
@@ -2926,6 +3429,7 @@ class OutlineInstallPayload(BaseModel):
     keys_port:int=Field(default=0,ge=0,le=65535)
 
 class OutlineKeyCreate(BaseModel):
+    port:int=Field(default=0,ge=0,le=65535)
     name:str=Field(min_length=1,max_length=80)
     quota_gb:float=Field(default=0,ge=0,le=100000)
     expire_days:int=Field(default=0,ge=0,le=3650)
@@ -2988,7 +3492,7 @@ def outline_key_create(payload:OutlineKeyCreate,request:Request):
     created=None
     client_id=None
     try:
-        created=integration_ops.outline_create_key(payload.name,quota_bytes)
+        created=integration_ops.outline_create_key(payload.name,quota_bytes,port=payload.port)
         key_id=str(created.get("id") or "")
         access_url=str(created.get("accessUrl") or "")
         client_id=create_protocol_client(
@@ -2997,7 +3501,7 @@ def outline_key_create(payload:OutlineKeyCreate,request:Request):
         )
         delivery=access_ops.outline_payload(payload.name,access_url,key_id,quota_bytes)
         artifact_id=artifact_save("outline",str(client_id),payload.name,"outline",delivery,{
-            "client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes
+            "client_id":client_id,"outline_key_id":key_id,"quota_bytes":quota_bytes,"port":created.get("port")
         })
     except (integration_ops.IntegrationError,Exception) as exc:
         if created and created.get("id"):
@@ -3044,7 +3548,8 @@ def _outline_reissue_managed_client(row,quota_bytes=None):
     old_share=str(row.get("share_link") or "")
     created=None
     try:
-        created=integration_ops.outline_create_key(row["name"],quota)
+        prior_port=urllib.parse.urlsplit(old_share).port or 0
+        created=integration_ops.outline_create_key(row["name"],quota,port=prior_port)
         new_id=str(created.get("id") or "")
         access_url=str(created.get("accessUrl") or "")
         if not new_id or not access_url.startswith("ss://"):
@@ -4064,7 +4569,7 @@ def node_heartbeat(payload:NodeHeartbeat,request:Request):
 class GeneralSettings(BaseModel):
     language:str="fa"
     panel_domain:str=""
-    theme:str="glass"
+    theme:str="velvet"
     density:str="comfortable"
 
 @app.get("/api/settings/endpoint/preflight")
@@ -4100,7 +4605,7 @@ def general_settings_get(request:Request):
     return {
         "language":data.get("language","fa"),
         "panel_domain":domain,
-        "theme":data.get("theme","glass"),
+        "theme":data.get("theme","velvet"),
         "density":data.get("density","comfortable"),
         "domain_status":panel_ops.domain_status(domain or None),
     }
@@ -4109,7 +4614,7 @@ def general_settings_get(request:Request):
 def general_settings_put(payload:GeneralSettings,request:Request):
     actor=require_mutation(request)
     language=payload.language if payload.language in {"fa","en"} else "fa"
-    theme=payload.theme if payload.theme in {"glass","midnight","amoled","graphite"} else "glass"
+    theme=payload.theme if payload.theme=="velvet" else "velvet"
     density=payload.density if payload.density in {"comfortable","compact"} else "comfortable"
     domain=(payload.panel_domain or "").strip().lower()
     if domain:
@@ -4320,10 +4825,306 @@ def update_status(request:Request):
             headers={"User-Agent":"Makia-VPS-Manager"}
         )
         with urllib.request.urlopen(req,timeout=4) as resp:
-            latest=resp.read(64).decode("utf-8","replace").strip()
+            candidate=resp.read(64).decode("utf-8","replace").strip()
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",candidate):
+            raise ValueError("upstream VERSION is not valid semantic versioning")
+        latest=candidate
     except Exception as exc:
         error=str(exc)[:160]
-    return {"current":VERSION,"latest":latest,"update_available":bool(latest and latest!=VERSION),"error":error}
+
+    def version_key(value):
+        if not value or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",str(value)):
+            return None
+        return tuple(int(part) for part in str(value).split("."))
+
+    current_key=version_key(VERSION)
+    latest_key=version_key(latest)
+    update_available=bool(current_key and latest_key and latest_key>current_key)
+    if latest_key is None:
+        release_state="unavailable"
+    elif current_key is None:
+        release_state="invalid_current_version"
+    elif latest_key>current_key:
+        release_state="update_available"
+    elif latest_key<current_key:
+        release_state="installed_ahead_of_release"
+    else:
+        release_state="current"
+    return {
+        "current":VERSION,
+        "latest":latest,
+        "update_available":update_available,
+        "release_state":release_state,
+        "latest_source":"GitHub main",
+        "error":error,
+    }
 
 @app.get("/healthz")
 def healthz(): return {"ok":True,"version":VERSION,"product":APP_NAME}
+
+
+# Unified account provisioning: the account owns a single usage and expiry budget.
+# Only protocols with hard Client Platform policy enforcement are provisioned.
+_unified_provision_lock=threading.RLock()
+
+UNIFIED_SS_PORTS=(2083,2096,1080)
+
+class UnifiedClientProvision(BaseModel):
+    username:str=Field(min_length=3,max_length=32,pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
+    quota_gb:float=Field(default=50,gt=0,le=100000)
+    expire_days:int=Field(default=30,ge=1,le=3650)
+    device_limit:int=Field(default=1,ge=1,le=20)
+
+
+def _unified_xray_targets():
+    path=Path(protocol_ops._config_path() or "/usr/local/etc/xray/config.json")
+    data=json.loads(path.read_text(encoding="utf-8"))
+    result={}
+    for inbound in data.get("inbounds",[]):
+        protocol=inbound.get("protocol")
+        if protocol not in {"vless","vmess","trojan"}:
+            continue
+        network=(inbound.get("streamSettings") or {}).get("network","raw")
+        security=(inbound.get("streamSettings") or {}).get("security","none")
+        if protocol=="vless" and network=="xhttp" and security=="reality":
+            # Reuse the pre-existing Iran XHTTP+REALITY transport, including
+            # its original path, serverName, shortId and public key derivation.
+            result.setdefault("iran_xhttp",inbound.get("tag"))
+        elif protocol=="vless" and network in {"raw","tcp"} and security=="reality":
+            result.setdefault("vless",inbound.get("tag"))
+        elif protocol=="vmess" and security=="tls":
+            result.setdefault("vmess",inbound.get("tag"))
+        elif protocol=="trojan" and security=="tls":
+            result.setdefault("trojan",inbound.get("tag"))
+    if any(i.get("tag")==protocol_ops.LEGACY_WS443_TAG and i.get("protocol")=="vless" and
+           (i.get("streamSettings") or {}).get("network") in {"websocket","ws"} and
+           (i.get("streamSettings") or {}).get("security")=="tls"
+           for i in data.get("inbounds",[])):
+        result["ws443"]=protocol_ops.LEGACY_WS443_TAG
+    return result
+
+
+@app.get("/api/client-platform/unified/readiness")
+def unified_client_readiness(request:Request):
+    require_user(request)
+    policy=protocol_ops.openvpn_policy_status()
+    pki=protocol_ops.OVPN_EASYRSA/"pki"
+    ready=(bool(policy.get("ready")) and (pki/"ca.crt").is_file() and
+           (pki/"private/ca.key").is_file() and
+           (protocol_ops.OVPN_EASYRSA/"easyrsa").is_file())
+    targets=_unified_xray_targets()
+    has_iran_xhttp=bool(targets.get("iran_xhttp"))
+    has_ws443=bool(targets.get("ws443"))
+    return {"openvpn_issuance_ready":ready,"iran_xhttp_ready":has_iran_xhttp,
+            "ws443_ready":has_ws443,
+            "shadowsocks_ports":list(UNIFIED_SS_PORTS),
+            "total_access_methods":(7 if ready else 6)+int(has_iran_xhttp)+int(has_ws443)+len(UNIFIED_SS_PORTS),
+            "openvpn_notice":"" if ready else "Original OpenVPN CA private key / Easy-RSA PKI is missing; no existing OpenVPN service will be reconfigured."}
+
+
+@app.post("/api/client-platform/unified/provision")
+def unified_client_provision(payload:UnifiedClientProvision,request:Request):
+    actor=require_mutation(request)
+    require_local_admin(request)
+    with _unified_provision_lock:
+        username=payload.username
+        if client_store.account_by_username(username):
+            raise HTTPException(409,"Client username already exists")
+        # A running OpenVPN service is not proof that its original CA private
+        # key/PKI is available for signing new client certificates. Never
+        # reinitialize an existing CA: that would invalidate legacy clients.
+        openvpn_policy_ready=bool(protocol_ops.openvpn_policy_status().get("ready"))
+        openvpn_pki=protocol_ops.OVPN_EASYRSA/"pki"
+        openvpn_issuance_ready=(openvpn_policy_ready and
+            (openvpn_pki/"ca.crt").is_file() and
+            (openvpn_pki/"private/ca.key").is_file() and
+            (protocol_ops.OVPN_EASYRSA/"easyrsa").is_file())
+        outline_state=integration_ops.outline_status()
+        if not outline_state.get("api_ok"):
+            raise HTTPException(409,"Outline Manager API is not ready")
+        try:
+            integration_ops.outline_transfer_metrics()
+        except integration_ops.IntegrationError as exc:
+            raise HTTPException(409,"Outline quota metrics are not available") from exc
+        if not protocol_ops._active("xray"):
+            raise HTTPException(503,"Xray is not running. Ask the administrator to restore the Xray service before provisioning.")
+        targets=_unified_xray_targets()
+        if set(targets)!={"ws443","iran_xhttp","vless","vmess","trojan"}:
+            raise HTTPException(409,"Required HTTPS WS443, XHTTP REALITY or Xray inbounds are missing")
+        endpoint=str(get_setting("panel_domain","") or "").strip()
+        if not endpoint:
+            raise HTTPException(409,"Set the public panel domain before provisioning")
+        endpoint=protocol_ops.validate_endpoint_selection(endpoint,"auto",direct=True)
+        # Preflight every identity before touching account or runtime.
+        names={kind:("u_"+username+"_"+kind) for kind in targets}
+        names["wireguard"]="u_"+username+"_wg"
+        names["openvpn"]="u_"+username+"_ovpn"
+        names["outline"]="u_"+username+"_outline"
+        for port in UNIFIED_SS_PORTS:names[f"ss_{port}"]="u_"+username+f"_ss{port}"
+        names["ssh"]="u_"+username+"_ssh"
+        if any(len(name)>48 for name in names.values()):
+            raise HTTPException(400,"Provisioned identity exceeds 48 characters")
+        if len(names["ssh"])>32:
+            raise HTTPException(400,"Username is too long for the NPV SSH system identity (maximum 26 characters)")
+        if get_profile(names["ssh"]) or get_access_artifact_by_key("ssh",names["ssh"]):
+            raise HTTPException(409,"NPV SSH profile or artifact already exists")
+        import pwd
+        try:pwd.getpwnam(names["ssh"])
+        except KeyError:pass
+        else:raise HTTPException(409,"NPV SSH Linux user already exists")
+        if any(str(k.get("name") or "") in set(names.values()) for k in outline_state.get("keys",[])):
+            raise HTTPException(409,"Outline key name already exists")
+        existing=list_protocol_clients()
+        if any(row.get("engine")=="xray" and row.get("name") in set(names.values()) for row in existing):
+            raise HTTPException(409,"An Xray credential already uses this identity")
+        if any(peer.get("name")==names["wireguard"] for peer in protocol_ops.list_wireguard_peers()):
+            raise HTTPException(409,"WireGuard identity already exists")
+        pki=protocol_ops.OVPN_EASYRSA/"pki"
+        if any((pki/sub/f"{names['openvpn']}.{ext}").exists() for sub,ext in (("issued","crt"),("private","key"))):
+            raise HTTPException(409,"OpenVPN identity already exists")
+        password=secrets.token_urlsafe(18)
+        account_id=None
+        created=[]
+        cleanup_errors=[]
+        try:
+            account_id=client_store.create_account(username,password,username,"Unified VPN",
+                int(time.time())+payload.expire_days*86400,int(payload.quota_gb*1024**3),
+                payload.device_limit,payload.device_limit,True)
+            # Individual protocol quotas and expiry remain unlimited. The parent
+            # account is the only common budget/clock for every managed binding.
+            # Add all Xray identities with one config test and one service restart.
+            # Record the batch before any DB writes so a later failure can
+            # compensate for every runtime identity, including partial DB saves.
+            # Put Iran XHTTP/REALITY first; the other transports are optional
+            # client compatibility alternatives under the same account.
+            entries=[{"tag":targets[kind],"name":names[kind]} for kind in ("ws443","iran_xhttp","vless","vmess","trojan")]
+            xray_results=protocol_ops.batch_xray_client_change(entries,endpoint=endpoint)
+            created.append(("xray_batch","","",xray_results))
+            origin=public_origin(request)
+            subscription_settings=operator_settings_snapshot()["subscription"]
+            for priority,result in enumerate(xray_results,10):
+                if result["tag"]==protocol_ops.LEGACY_WS443_TAG:
+                    result["backend_port"]=result["port"]
+                    result["port"]=443
+                    result["share_link"]=protocol_ops.legacy_ws443_share_link(
+                        result["name"],result["credential"],endpoint
+                    )
+                if result["protocol"]=="vmess" and result["transport"] in {"websocket","ws"}:
+                    result["backend_port"]=result["port"]
+                    result["port"]=443
+                    result["share_link"]=protocol_ops.vmess_public_443_link(result["share_link"],endpoint)
+                if result["protocol"]=="trojan" and result["transport"]=="grpc":
+                    result["backend_port"]=result["port"]
+                    result["port"]=443
+                    result["share_link"]=protocol_ops.trojan_grpc_public_443_link(result["share_link"],endpoint)
+                client_id=create_protocol_client(
+                    result["name"],"xray",result["protocol"],result["tag"],
+                    result["credential"],result["share_link"],0,0,payload.device_limit,0
+                )
+                result["client_id"]=client_id
+                client_row=get_protocol_client(client_id)
+                sub_id=(client_row or {}).get("subscription_id") or ""
+                delivery=access_ops.xray_payload(
+                    result["name"],result["protocol"],result["share_link"],
+                    f"{origin}/sub/{sub_id}?format={subscription_settings['default_format']}" if sub_id and subscription_settings["enabled"] else "",
+                    f"{origin}/client/{sub_id}" if sub_id and subscription_settings["client_page_enabled"] else ""
+                )
+                result["artifact_id"]=artifact_save(
+                    "xray",str(client_id),result["name"],result["protocol"],delivery,{
+                        "client_id":client_id,"inbound_tag":result["tag"],
+                        "port":result["port"],"transport":result["transport"],
+                        "security":result["security"],"subscription_id":sub_id,
+                        "endpoint":endpoint,"endpoint_mode":"auto","builder":"unified-batch-v2",
+                    }
+                )
+                client_store.bind_protocol_client(
+                    account_id,client_id,
+                    "VLESS WS443 (Iran)" if result["tag"]==protocol_ops.LEGACY_WS443_TAG else
+                    ("VLESS XHTTP REALITY (Iran)" if result["transport"]=="xhttp" else result["protocol"].upper()),
+                    priority,True
+                )
+            wg=wireguard_peer_create(WireGuardPeer(name=names["wireguard"],endpoint=endpoint),request)
+            created.append(("wireguard",names["wireguard"],"",wg))
+            client_store.bind_access_artifact(account_id,wg["artifact_id"],"WireGuard",40,True)
+            if openvpn_issuance_ready:
+                ovpn=openvpn_client_create(OpenVPNClient(name=names["openvpn"],endpoint=endpoint),request)
+                created.append(("openvpn",names["openvpn"],"",ovpn))
+                client_store.bind_access_artifact(account_id,ovpn["artifact_id"],"OpenVPN",50,True)
+            # Without the original PKI, create the remaining six credentials.
+            # This is explicitly reported as a partial capability, never as 7/7.
+            outline=outline_key_create(OutlineKeyCreate(name=names["outline"],quota_gb=0,expire_days=0),request)
+            created.append(("outline",names["outline"],"",outline))
+            client_store.bind_protocol_client(account_id,outline["client_id"],"Outline",60,True)
+            for priority,port in enumerate(UNIFIED_SS_PORTS,61):
+                name=names[f"ss_{port}"]
+                ss=outline_key_create(OutlineKeyCreate(name=name,quota_gb=0,expire_days=0,port=port),request)
+                created.append(("outline",name,"",ss))
+                client_store.bind_protocol_client(account_id,ss["client_id"],f"Shadowsocks {port}",priority,True)
+            # SSH/NPV is account-bound for expiry and aggregate-account lockout,
+            # but SSH tunnel traffic is NOT metered into the aggregate byte count.
+            ssh_password=secrets.token_urlsafe(18)
+            expire_date=(datetime.now(timezone.utc)+timedelta(days=payload.expire_days)).date().isoformat()
+            ssh=create_account(AccountCreate(
+                username=names["ssh"],endpoint=endpoint,password=ssh_password,
+                password_mode="manual",expire_date=expire_date,plan="Unified VPN / NPV SSH",
+                connection_limit=payload.device_limit,device_limit=payload.device_limit,
+                quota_mb=0),request)
+            created.append(("ssh",names["ssh"],"",ssh))
+            client_store.bind_access_artifact(account_id,ssh["artifact_id"],"NPV SSH (byte usage not metered)",70,True)
+            snapshot=client_store.account_admin_snapshot(account_id)
+        except Exception as exc:
+            # Unbind first; then roll back only resources created in this request.
+            # Existing users are never overwritten or rotated.
+            if account_id is not None:
+                try:client_store.delete_account(account_id)
+                except Exception as error:cleanup_errors.append("account: "+str(error)[:150])
+            for kind,name,tag,result in reversed(created):
+                try:
+                    if kind=="xray_batch":
+                        protocol_ops.batch_xray_client_change(
+                            [{"tag":item["tag"],"name":item["name"]} for item in result],remove=True
+                        )
+                        for item in result:
+                            if item.get("client_id"):
+                                delete_access_artifact_by_key("xray",str(item["client_id"]))
+                                delete_protocol_client(item["client_id"])
+                    elif kind=="xray":
+                        protocol_ops.remove_xray_client_from_inbound(tag,name)
+                        delete_access_artifact_by_key("xray",str(result["client_id"]))
+                        delete_protocol_client(result["client_id"])
+                    elif kind=="wireguard":
+                        protocol_ops.remove_wireguard_peer(result["public_key"])
+                        delete_access_artifact_by_key("wireguard",name)
+                    elif kind=="openvpn":
+                        protocol_ops.revoke_openvpn_client(name)
+                        delete_access_artifact_by_key("openvpn",name)
+                    elif kind=="outline":
+                        integration_ops.outline_delete_key(result["id"])
+                        delete_access_artifact_by_key("outline",str(result["client_id"]))
+                        delete_protocol_client(result["client_id"])
+                    elif kind=="ssh":
+                        system_ops.lock_user(name,True)
+                        system_ops.delete_user(name)
+                        delete_access_artifact_by_key("ssh",name)
+                        delete_profile(name)
+                except Exception as error:cleanup_errors.append(kind+": "+str(error)[:150])
+            audit(actor,"unified_provision_failed",username,
+                  "completed="+str(len(created))+" cleanup_errors="+str(cleanup_errors)[:400],ip(request))
+            if cleanup_errors:
+                raise HTTPException(500,"Provisioning failed and partial cleanup requires review: "+"; ".join(cleanup_errors)) from exc
+            if isinstance(exc,HTTPException):raise
+            raise HTTPException(500,"Provisioning failed; created resources were rolled back") from exc
+        created_protocols=["ws443","iran_xhttp","vless","vmess","trojan","wireguard"]
+        if openvpn_issuance_ready:created_protocols.append("openvpn")
+        created_protocols.extend(["outline",*[f"ss_{port}" for port in UNIFIED_SS_PORTS],"ssh"])
+        warnings=[] if openvpn_issuance_ready else [
+            "OpenVPN certificate issuance is unavailable: the original CA private key and Easy-RSA PKI are missing. Existing OpenVPN clients were not changed."
+        ]
+        audit(actor,"unified_provision",username,
+              f"account={account_id}; protocols={','.join(created_protocols)}; warnings={len(warnings)}",ip(request))
+        return {"ok":True,"username":username,"password":password,
+                "warnings":warnings,"openvpn_created":openvpn_issuance_ready,
+                "npv_ssh_password":ssh_password,"npv_ssh_username":names["ssh"],
+                "ssh_traffic_metered":False,
+                "portal_url":public_origin(request)+"/client/login?u="+urllib.parse.quote(username),
+                "protocols":created_protocols,"account":snapshot}

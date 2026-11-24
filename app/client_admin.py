@@ -359,15 +359,21 @@ def register_client_admin(app,require_user,require_mutation,require_local_admin,
         return {**result,"policy_recheck_seconds":30}
 
     @app.delete("/api/client-platform/accounts/{account_id}")
-    def client_platform_account_delete(account_id:int,request:Request):
+    def client_platform_account_delete(account_id:int,request:Request,preserve_suspension:bool=False):
         actor=require_mutation(request)
         account=client_store.get_account(account_id)
         if not account:
             raise HTTPException(404,"client account not found")
         username=account.get("username") or str(account_id)
         try:
-            client_store.delete_account(account_id)
+            client_store.delete_account(account_id,preserve_suspension=preserve_suspension)
         except PermissionError as exc:
+            if str(exc)=="client_account_policy_suspended":
+                raise HTTPException(409,{
+                    "code":"client_account_policy_suspended",
+                    "message":"This account has suspended access. Confirm retaining the suspension before deleting the account.",
+                }) from exc
             raise HTTPException(409,str(exc))
-        audit_func(actor,"client_account_delete",str(account_id),f"username={username}; runtime_untouched=true",ip_func(request))
-        return {"ok":True,"runtime_untouched":True}
+        audit_func(actor,"client_account_delete",str(account_id),
+                   f"username={username}; runtime_untouched=true; preserve_suspension={preserve_suspension}",ip_func(request))
+        return {"ok":True,"runtime_untouched":True,"suspensions_retained":preserve_suspension}

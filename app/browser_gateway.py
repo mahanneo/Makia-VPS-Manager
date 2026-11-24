@@ -23,8 +23,15 @@ ALLOWED_PORTS={
 MAX_HEADER=64*1024
 CONNECT_TIMEOUT=12
 IDLE_TIMEOUT=120
+HEADER_TIMEOUT=max(3,int(os.getenv("MAKIA_BROWSER_GATEWAY_HEADER_TIMEOUT","12")))
 MAX_CONNECTIONS_PER_ACCOUNT=max(4,int(os.getenv("MAKIA_BROWSER_GATEWAY_MAX_CONNECTIONS","32")))
+MAX_TOTAL_CONNECTIONS=max(16,int(os.getenv("MAKIA_BROWSER_GATEWAY_MAX_TOTAL_CONNECTIONS","64")))
+MAX_PENDING_CONNECTIONS=max(8,int(os.getenv("MAKIA_BROWSER_GATEWAY_MAX_PENDING_CONNECTIONS","32")))
+MAX_PENDING_PER_IP=max(4,int(os.getenv("MAKIA_BROWSER_GATEWAY_MAX_PENDING_PER_IP","12")))
 _active={}
+_total_connections=0
+_pending_connections=0
+_pending_by_ip={}
 _stopping=False
 
 
@@ -102,8 +109,36 @@ def _proxy_error(writer,status,message,auth=False):
     writer.write("".join(headers).encode("ascii")+message.encode("utf-8"))
 
 
+async def _safe_proxy_error(writer,status,message,auth=False):
+    try:
+        _proxy_error(writer,status,message,auth)
+        await asyncio.wait_for(writer.drain(),timeout=1.0)
+    except (ConnectionError,OSError,RuntimeError,asyncio.TimeoutError):
+        pass
+
+
+def _abort_writer(writer):
+    try:
+        writer.transport.abort()
+    except Exception:
+        try:
+            writer.close()
+        except Exception:
+            pass
+
+
+def _release_pending(peer_ip):
+    global _pending_connections
+    _pending_connections=max(0,_pending_connections-1)
+    count=max(0,_pending_by_ip.get(peer_ip,1)-1)
+    if count:
+        _pending_by_ip[peer_ip]=count
+    else:
+        _pending_by_ip.pop(peer_ip,None)
+
+
 async def _read_headers(reader):
-    data=await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"),timeout=IDLE_TIMEOUT)
+    data=await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"),timeout=HEADER_TIMEOUT)
     if len(data)>MAX_HEADER:
         raise ValueError("request headers too large")
     return data
@@ -185,23 +220,35 @@ async def _serve_tunnel(client_reader,client_writer,target_reader,target_writer,
 
 
 async def _handle(reader,writer):
+    global _total_connections,_pending_connections
+    peer_ip=_peer_ip(writer) or "unknown"
+    if _total_connections >= MAX_TOTAL_CONNECTIONS:
+        _abort_writer(writer)
+        return
+    if _pending_connections >= MAX_PENDING_CONNECTIONS or _pending_by_ip.get(peer_ip,0) >= MAX_PENDING_PER_IP:
+        _abort_writer(writer)
+        return
+    _total_connections += 1
+    _pending_connections += 1
+    _pending_by_ip[peer_ip]=_pending_by_ip.get(peer_ip,0)+1
+    pending_counted=True
     account_id=0
     counted_active=False
     try:
         raw=await _read_headers(reader)
         method,target,version,headers,auth_header=_parse_request(raw)
         username,password=_parse_basic(auth_header)
-        auth=client_store.browser_proxy_auth(username,password,_peer_ip(writer))
+        auth=client_store.browser_proxy_auth(username,password,peer_ip)
+        _release_pending(peer_ip)
+        pending_counted=False
         if not auth:
-            _proxy_error(writer,"407 Proxy Authentication Required","Proxy authentication required.",True)
-            await writer.drain()
+            await _safe_proxy_error(writer,"407 Proxy Authentication Required","Proxy authentication required.",True)
             return
 
         account_id=int(auth["account_id"])
         current=_active.get(account_id,0)
         if current>=MAX_CONNECTIONS_PER_ACCOUNT:
-            _proxy_error(writer,"429 Too Many Requests","Too many browser connections.")
-            await writer.drain()
+            await _safe_proxy_error(writer,"429 Too Many Requests","Too many browser connections.")
             return
         _active[account_id]=current+1
         counted_active=True
@@ -211,8 +258,7 @@ async def _handle(reader,writer):
         quota=int((account or {}).get("quota_bytes") or 0)
         remaining=max(0,quota-used) if quota else 0
         if quota and remaining<=0:
-            _proxy_error(writer,"403 Forbidden","Traffic quota exhausted.")
-            await writer.drain()
+            await _safe_proxy_error(writer,"403 Forbidden","Traffic quota exhausted.")
             return
 
         if method=="CONNECT":
@@ -229,8 +275,7 @@ async def _handle(reader,writer):
 
         url=urllib.parse.urlsplit(target)
         if url.scheme.lower()!="http" or not url.hostname:
-            _proxy_error(writer,"400 Bad Request","Only HTTP requests and HTTPS CONNECT are supported.")
-            await writer.drain()
+            await _safe_proxy_error(writer,"400 Bad Request","Only HTTP requests and HTTPS CONNECT are supported.")
             return
         port=url.port or 80
         target_reader,target_writer=await _connect_public(url.hostname,port)
@@ -249,21 +294,21 @@ async def _handle(reader,writer):
         await target_writer.drain()
         await _serve_tunnel(reader,writer,target_reader,target_writer,account_id,remaining)
     except asyncio.LimitOverrunError:
-        _proxy_error(writer,"431 Request Header Fields Too Large","Headers too large.")
-        await writer.drain()
+        await _safe_proxy_error(writer,"431 Request Header Fields Too Large","Headers too large.")
     except PermissionError:
-        _proxy_error(writer,"403 Forbidden","Destination is not allowed.")
-        await writer.drain()
-    except (ValueError,urllib.parse.PortNotFoundError):
-        _proxy_error(writer,"400 Bad Request","Invalid proxy request.")
-        await writer.drain()
+        await _safe_proxy_error(writer,"403 Forbidden","Destination is not allowed.")
+    except ValueError:
+        await _safe_proxy_error(writer,"400 Bad Request","Invalid proxy request.")
+    except (ConnectionError,OSError,asyncio.IncompleteReadError):
+        pass
+    except asyncio.TimeoutError:
+        await _safe_proxy_error(writer,"504 Gateway Timeout","Proxy request timed out.")
     except Exception:
-        try:
-            _proxy_error(writer,"502 Bad Gateway","Proxy destination unavailable.")
-            await writer.drain()
-        except Exception:
-            pass
+        await _safe_proxy_error(writer,"502 Bad Gateway","Proxy destination unavailable.")
     finally:
+        if pending_counted:
+            _release_pending(peer_ip)
+        _total_connections=max(0,_total_connections-1)
         if account_id and counted_active:
             _active[account_id]=max(0,_active.get(account_id,1)-1)
             if not _active[account_id]:
@@ -307,7 +352,10 @@ async def run():
                 ctx.load_cert_chain(str(cert),str(key))
                 server=await asyncio.start_server(
                     _handle,"0.0.0.0",DEFAULT_PORT,ssl=ctx,
+                    ssl_handshake_timeout=8,
+                    ssl_shutdown_timeout=1,
                     limit=MAX_HEADER,
+                    backlog=32,
                     reuse_address=True,
                 )
                 print(f"Makia Browser Gateway listening on {domain}:{DEFAULT_PORT}",flush=True)

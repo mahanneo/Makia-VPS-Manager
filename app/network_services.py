@@ -188,6 +188,31 @@ def _ensure_mtproxy_config_access():
     return gid
 
 
+def _assert_mtproxy_config_access(gid=None):
+    """Validate the service account's group-based access without setuid probes.
+
+    Hardened systemd units may intentionally block setuid/setgid transitions,
+    making runuser-based readability tests fail even when the config ACL is
+    correct. The service runs with Group=makia-mtproxy, so validate the actual
+    directory traverse and file read bits instead of attempting a UID switch.
+    """
+    if gid is None:
+        try:
+            gid=grp.getgrnam("makia-mtproxy").gr_gid
+        except KeyError as exc:
+            raise NetworkServiceError("makia-mtproxy system group is missing") from exc
+    try:
+        directory=MTPROXY_CONFIG.parent.stat()
+        config=MTPROXY_CONFIG.stat()
+    except OSError as exc:
+        raise NetworkServiceError(f"MTProxy config permissions cannot be checked: {exc}") from exc
+    if directory.st_gid!=gid or not (directory.st_mode & 0o010):
+        raise NetworkServiceError("MTProxy config directory is not traversable by the service group")
+    if config.st_gid!=gid or not (config.st_mode & 0o040):
+        raise NetworkServiceError("MTProxy config is not readable by the service group")
+    return True
+
+
 def _mtproxy_secret():
     if not MTPROXY_CONFIG.exists():
         return ""
@@ -203,10 +228,12 @@ def _write_mtproxy_config(secret,port):
     if not re.fullmatch(r"ee[0-9a-fA-F]+",str(secret or "")):
         raise NetworkServiceError("invalid mtg FakeTLS secret")
     port=_validate_port(port)
+    public_ipv4=_default_public_ipv4()
     text=(
         f'secret = "{secret}"\n'
-        f'bind-to = "0.0.0.0:{port}"\n\n'
-        '[network]\n'
+        f'bind-to = "0.0.0.0:{port}"\n'
+        +(f'public-ipv4 = "{public_ipv4}"\n' if public_ipv4 else '')
+        +'\n[network]\n'
         'dns = "https://1.1.1.1"\n'
     )
     gid=_ensure_mtproxy_config_access()
@@ -285,6 +312,13 @@ def mtproxy_status(host_hint=""):
     port=int(env.get("MTPROXY_PORT") or 0)
     secret=_mtproxy_secret()
     front_domain=env.get("MTPROXY_FRONT_DOMAIN") or ""
+    public_ipv4=""
+    try:
+        config_text=MTPROXY_CONFIG.read_text(encoding="utf-8",errors="ignore")
+        public_match=re.search(r'(?m)^public-ipv4\s*=\s*"([^"]+)"\s*$',config_text)
+        public_ipv4=public_match.group(1).strip() if public_match else ""
+    except OSError:
+        pass
     configured=bool(host and port and re.fullmatch(r"ee[0-9a-fA-F]+",secret))
     active=_active(MTPROXY_SERVICE)
     listener=bool(port and _port_busy(port,"tcp"))
@@ -303,6 +337,7 @@ def mtproxy_status(host_hint=""):
         "host":host,
         "port":port,
         "front_domain":front_domain,
+        "public_ipv4":public_ipv4,
         "secret":client_secret,
         "secret_last4":secret[-4:] if secret else "",
         "tg_link":f"tg://proxy?{query}" if query else "",
@@ -336,6 +371,9 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
             "tcp",kernel_fallback=True
         )
     secret=_mtproxy_secret()
+    previous_secret=secret
+    previous_host=str(old.get("MTPROXY_PUBLIC_HOST") or "").strip().lower().rstrip(".")
+    previous_front_domain=str(old.get("MTPROXY_FRONT_DOMAIN") or "").strip().lower().rstrip(".")
     front_domain=host
     try:
         ipaddress.ip_address(host)
@@ -359,7 +397,7 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
         # Telegram/fronting connectivity. The generated TOML is deterministic;
         # the critical host preflight is that the real service account can
         # traverse/read it before systemd is started.
-        _run(["runuser","-u","makia-mtproxy","--","test","-r",str(MTPROXY_CONFIG)],timeout=10)
+        _assert_mtproxy_config_access()
         _run(["systemctl","daemon-reload"],timeout=15)
         _run(["systemctl","enable","--now",MTPROXY_SERVICE],timeout=30)
         _run(["systemctl","restart",MTPROXY_SERVICE],timeout=30)
@@ -397,8 +435,12 @@ def configure_mtproxy(host,port=0,rotate_secret=False):
     result=mtproxy_status(host)
     result["firewall_warning"]=firewall_warning
     result["requested_port"]=requested
-    result["port_adjusted"]=selected!=requested
-    result["secret_rotated"]=bool(rotate_secret)
+    result["port_adjusted"]=bool(requested and selected!=requested)
+    host_changed=previous_host!=host.lower().rstrip(".") or previous_front_domain!=front_domain.lower().rstrip(".")
+    secret_rotated=bool(secret and secret!=previous_secret)
+    result["host_changed"]=host_changed
+    result["secret_rotated"]=secret_rotated
+    result["link_changed"]=bool(host_changed or secret_rotated or selected!=current_port)
     return result
 
 
@@ -444,14 +486,22 @@ def _dns_query_probe():
         return {"ok":False,"query_ms":None,"error":"dig is not installed"}
     try:
         proc=subprocess.run(
-            ["dig","@127.0.0.1","example.com","A","+short","+stats","+time=3","+tries=1"],
+            ["dig","@127.0.0.1","example.com","A","+noall","+answer","+stats","+time=3","+tries=1"],
             text=True,capture_output=True,timeout=5,check=False,
         )
     except Exception as exc:
         return {"ok":False,"query_ms":None,"error":str(exc)[:800]}
     output=(proc.stdout or "")
     match=re.search(r"Query time:\s*(\d+)\s*msec",output)
-    answers=[line.strip() for line in output.splitlines() if re.fullmatch(r"\d+\.\d+\.\d+\.\d+",line.strip())]
+    answers=[]
+    for line in output.splitlines():
+        parts=line.split()
+        if len(parts)>=5 and parts[-2].upper()=="A" and parts[-3].upper()=="IN":
+            try:
+                address=ipaddress.ip_address(parts[-1])
+                if address.version==4:answers.append(str(address))
+            except ValueError:
+                pass
     ok=proc.returncode==0 and bool(answers)
     error=""
     if not ok:
@@ -491,7 +541,14 @@ def dns_status():
         "runtime_error":probe.get("error") or "",
         "install_command":dns_install_command(),
         "upstreams":[{"id":key,"label":value["label"]} for key,value in DNS_UPSTREAMS.items()],
-        "warning":"DNS resolver latency is not the same as game-server ping and DNS alone cannot guarantee geo-restriction bypass.",
+        "open_resolver":bool(state.get("mode")=="public" and any(
+            ipaddress.ip_network(str(net),strict=False).prefixlen==0
+            for net in (state.get("allowed_cidrs") or [])
+        )),
+        "warning":(
+            "SECURITY WARNING: Public DNS currently accepts queries from every IPv4 address. Configure a limited source-IP/CIDR allowlist to prevent resolver abuse. "
+            if state.get("mode")=="public" and "0.0.0.0/0" in (state.get("allowed_cidrs") or []) else ""
+        )+"DNS resolver latency is not game-server ping; DNS alone cannot guarantee geo-restriction bypass.",
     }
 
 
@@ -547,10 +604,20 @@ def configure_dns(mode="private",upstream="cloudflare",allowed_cidrs=None,public
         "    hide-identity: yes",
         "    hide-version: yes",
         "    qname-minimisation: yes",
+        "    minimal-responses: yes",
+        "    edns-buffer-size: 1232",
+        "    max-udp-size: 1232",
+        "    num-threads: 1",
+        "    msg-cache-size: 32m",
+        "    rrset-cache-size: 64m",
+        "    ip-ratelimit: 100",
         "    harden-glue: yes",
         "    harden-dnssec-stripped: yes",
         "    prefetch: yes",
         "    serve-expired: yes",
+        "    serve-expired-ttl: 86400",
+        "    serve-expired-reply-ttl: 30",
+        "    prefetch-key: yes",
         "    cache-min-ttl: 30",
         "    cache-max-ttl: 86400",
         "    access-control: 0.0.0.0/0 refuse",
@@ -571,9 +638,11 @@ def configure_dns(mode="private",upstream="cloudflare",allowed_cidrs=None,public
     fd,tmp=tempfile.mkstemp(prefix=".makia-unbound-",suffix=".conf",dir=str(DNS_CONF.parent))
     try:
         with os.fdopen(fd,"w",encoding="utf-8") as fh:
-            os.fchmod(fh.fileno(),0o600);fh.write(text);fh.flush();os.fsync(fh.fileno())
+            # Unbound drops to the unbound account and must be able to reopen
+            # its non-secret configuration during SIGHUP reload.
+            os.fchmod(fh.fileno(),0o644);fh.write(text);fh.flush();os.fsync(fh.fileno())
         _run(["unbound-checkconf",tmp],timeout=10)
-        os.replace(tmp,DNS_CONF);os.chmod(DNS_CONF,0o600)
+        os.replace(tmp,DNS_CONF);os.chmod(DNS_CONF,0o644)
         state={
             "mode":mode,"upstream":upstream,"bind_addresses":bind,
             "allowed_cidrs":allowed,"public_address":public,"wireguard_address":wg,
@@ -593,7 +662,7 @@ def configure_dns(mode="private",upstream="cloudflare",allowed_cidrs=None,public
     except Exception:
         if os.path.exists(tmp):os.unlink(tmp)
         if old_conf is None:DNS_CONF.unlink(missing_ok=True)
-        else:DNS_CONF.write_bytes(old_conf);os.chmod(DNS_CONF,0o600)
+        else:DNS_CONF.write_bytes(old_conf);os.chmod(DNS_CONF,0o644)
         if old_state is None:DNS_STATE.unlink(missing_ok=True)
         else:DNS_STATE.write_bytes(old_state);os.chmod(DNS_STATE,0o600)
         try:_run(["systemctl","restart",DNS_SERVICE],timeout=20)

@@ -39,6 +39,17 @@
         <a class="ghost link-btn" href="/sub/{{subscription_id}}?format=json">JSON</a>
       </div>
       {% endif %}
+      {% if public_dns_address %}
+      <div class="client-share-box" id="gamingDnsCard">
+        <label>{{'DNS عمومی گیمینگ ماکیا' if fa else 'MAKIA PUBLIC GAMING DNS'}}</label>
+        <p>{{'دسترسی DNS عمومی تابع تنظیمات و فهرست IPهای مجاز سرور است.' if fa else 'Public DNS access is subject to the configured server allowlist.'}}</p>
+        <div class="client-kpis">
+          <div><span>DNS 1</span><b dir="ltr">{{public_dns_address}}</b></div>
+          <div><span>DNS 2 · Fallback</span><b dir="ltr">1.1.1.1</b></div>
+        </div>
+        <p class="notice">{{'این سرویس درخواست‌های DNS را مدیریت می‌کند؛ برای عبور ترافیک بازی از سرور ماکیا و تغییر مسیر منطقه‌ای، اتصال VPN یا تونل جداگانه لازم است.' if fa else 'This service resolves DNS requests. Routing game traffic through Makia or changing its region requires a separate VPN or tunnel.'}}</p>
+      </div>
+      {% endif %}
       <div class="client-actions guide-actions"><a class="ghost link-btn" href="{{guide_url}}" target="_blank" rel="noopener">{{'راهنمای نصب و اتصال' if fa else 'Installation and connection guide'}}</a></div>
       <div class="notice">{{'QR و لینک اتصال شامل اطلاعات محرمانه این پروفایل هستند. فقط برای صاحب همین دسترسی ارسال شوند؛ محدودیت حجم، انقضا و IP همچنان سمت سرور اعمال می‌شود.' if fa else 'The QR and connection link contain this profile\'s private credentials. Share them only with the owner; quota, expiry and IP limits are still enforced by the server.'}}</div>
     </section>
@@ -51,6 +62,22 @@
     document.getElementById('quota').textContent=quota?f(quota):{{ "'نامحدود'" if fa else "'Unlimited'" }};
     document.getElementById('expire').textContent=exp?new Date(exp*1000).toLocaleDateString({{ "'fa-IR'" if fa else "'en-US'" }}):{{ "'نامحدود'" if fa else "'Unlimited'" }};
     document.getElementById('usageBar').style.width=quota?Math.min(100,used/quota*100)+'%':'0%';
+    const dnsMessage=document.getElementById('gamingDnsMessage');
+    async function dnsAction(action){
+      const button=document.getElementById(action==='register'?'registerGamingDns':'unregisterGamingDns');
+      if(button)button.disabled=true;
+      if(dnsMessage)dnsMessage.textContent={{ "'در حال ثبت IP عمومی…'" if fa else "'Registering public IP…'" }};
+      try{
+        const response=await fetch('/client/{{subscription_id}}/dns/'+action,{method:'POST',headers:{'X-Makia-DNS-Register':'1','Accept':'application/json'}});
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(data.detail||'DNS registration failed');
+        if(dnsMessage)dnsMessage.textContent=action==='register'?({{ "'DNS فعال شد. IP ثبت‌شده: '" if fa else "'DNS activated. Registered IP: '" }}+(data.ip||'')):{{ "'ثبت DNS حذف شد.'" if fa else "'DNS registration removed.'" }};
+        setTimeout(()=>location.reload(),900);
+      }catch(error){if(dnsMessage)dnsMessage.textContent=error.message;}
+      finally{if(button)button.disabled=false;}
+    }
+    document.getElementById('registerGamingDns')?.addEventListener('click',()=>dnsAction('register'));
+    document.getElementById('unregisterGamingDns')?.addEventListener('click',()=>dnsAction('unregister'));
   </script>
 </body>
 </html>

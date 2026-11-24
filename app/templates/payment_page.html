@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#080d19">
+  <meta name="robots" content="noindex,nofollow">
+  <title>MAKIA PAY · پرداخت</title>
+  <link rel="icon" href="/static/makia.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/payments.css?v=1.0.0">
+  <script defer src="/static/payments.js?v=1.0.0"></script>
+</head>
+<body class="pay-public">
+  <div class="pay-bg-grid" aria-hidden="true"></div>
+  <main class="pay-shell">
+    <header class="pay-header">
+      <a class="pay-brand" href="/pay" aria-label="MAKIA PAY">
+        <span class="pay-brand-mark">M</span>
+        <span><b>MAKIA</b><small>PAYMENT PORTAL</small></span>
+      </a>
+      <span class="pay-secure"><i></i> درگاه دریافت وجه</span>
+    </header>
+
+    <section class="pay-hero">
+      <div class="pay-eyebrow"><span></span> SIMPLE · DIRECT · VERIFIED</div>
+      <h1>پرداخت، <em>ساده و مطمئن.</em></h1>
+      <p>مبلغ موردنظر را به کارت زیر انتقال دهید و اطلاعات تراکنش را ثبت کنید تا پس از بررسی، وضعیت پرداخت شما مشخص شود.</p>
+    </section>
+
+    <section class="pay-layout">
+      <article class="pay-card-panel">
+        <div class="pay-card-top">
+          <div><span class="pay-section-label">BANK TRANSFER</span><h2>انتقال کارت به کارت</h2></div>
+          <span class="pay-bank-chip">IRAN · CARD</span>
+        </div>
+        <div class="pay-card-visual">
+          <div class="pay-card-glow"></div>
+          <div class="pay-card-visual-head"><span>MAKIA PAY</span><span class="pay-chip-icon">◈</span></div>
+          <div class="pay-card-number" dir="ltr">{{ card_formatted }}</div>
+          <div class="pay-card-bottom">
+            <div><small>به نام</small><b>{{ card_holder }}</b></div>
+            <div class="pay-card-brand">CARD<br>TRANSFER</div>
+          </div>
+        </div>
+        <div class="pay-copy-row">
+          <div><small>شماره کارت مقصد</small><b dir="ltr">{{ card_formatted }}</b></div>
+          <button type="button" class="pay-copy-btn" data-copy-card="{{ card_number }}"><span>▣</span> کپی شماره کارت</button>
+        </div>
+        <div class="pay-card-note"><span>i</span><p>شماره کارت را کپی کنید یا QR را اسکن کنید. QR فقط شماره کارت را نمایش می‌دهد و پرداخت را به‌صورت خودکار انجام نمی‌دهد.</p></div>
+        <div class="pay-qr-block">
+          <img src="{{ card_qr }}" alt="QR شماره کارت">
+          <div><b>اسکن برای مشاهده شماره کارت</b><small>پس از اسکن، شماره را در اپ بانکی وارد کنید.</small></div>
+        </div>
+      </article>
+
+      <article class="pay-form-panel">
+        <div class="pay-form-heading"><span class="pay-section-label">PAYMENT CONFIRMATION</span><h2>ثبت اطلاعات پرداخت</h2><p>پس از انتقال وجه، مشخصات تراکنش را وارد کنید.</p></div>
+        <form id="paymentForm" class="pay-form" enctype="multipart/form-data" novalidate>
+          <label class="pay-field"><span>مبلغ پرداختی <i>تومان</i></span><div class="pay-input-wrap"><input name="amount_toman" id="payAmount" type="text" inputmode="numeric" autocomplete="off" placeholder="مثلاً ۲۵۰۰۰۰" required maxlength="16"><b>تومان</b></div></label>
+          <label class="pay-field"><span>نام پرداخت‌کننده</span><input name="payer_name" type="text" autocomplete="name" placeholder="نام و نام خانوادگی" minlength="2" maxlength="80" required></label>
+          <label class="pay-field"><span>شماره تماس <i>اختیاری</i></span><input name="payer_phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="09xxxxxxxxx" maxlength="24"></label>
+          <label class="pay-field"><span>شماره پیگیری / شناسه تراکنش <i>در صورت نداشتن، رسید را بارگذاری کنید</i></span><input name="tracking_code" type="text" autocomplete="off" placeholder="شناسه درج‌شده در رسید بانکی" maxlength="100"></label>
+          <label class="pay-field"><span>تصویر رسید یا فایل PDF <i>اختیاری · حداکثر ۵ مگابایت</i></span><input class="pay-file" name="receipt" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small class="pay-file-hint" id="payFileName">JPG · PNG · WEBP · PDF</small></label>
+          <label class="pay-field"><span>توضیحات <i>اختیاری</i></span><textarea name="note" rows="2" maxlength="500" placeholder="در صورت نیاز توضیح کوتاهی بنویسید"></textarea></label>
+          <div class="pay-honeypot" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div>
+          <button class="pay-submit" id="paySubmit" type="submit"><span>ثبت اطلاعات پرداخت</span><b>←</b></button>
+          <div class="pay-form-status" id="payFormStatus" role="status" aria-live="polite"></div>
+        </form>
+        <div class="pay-privacy"><span>◇</span> اطلاعات ارسالی فقط برای بررسی همین پرداخت استفاده می‌شود.</div>
+      </article>
+    </section>
+
+    <section class="pay-steps">
+      <div><span>01</span><b>انتقال وجه</b><small>مبلغ را به شماره کارت بالا واریز کنید.</small></div>
+      <div><span>02</span><b>ثبت رسید</b><small>شناسه پیگیری یا تصویر رسید را ارسال کنید.</small></div>
+      <div><span>03</span><b>بررسی پرداخت</b><small>وضعیت پس از بررسی دستی اعلام می‌شود.</small></div>
+    </section>
+
+    <footer class="pay-footer"><span>© MAKIA PAY</span><span>پرداخت شما تا زمان بررسی، در وضعیت «در انتظار تأیید» باقی می‌ماند.</span></footer>
+  </main>
+</body>
+</html>

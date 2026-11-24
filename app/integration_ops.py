@@ -269,7 +269,7 @@ def outline_list_keys():
     return result.get("accessKeys") or []
 
 
-def outline_create_key(name,data_limit_bytes=0):
+def outline_create_key(name,data_limit_bytes=0,port=0):
     """Create one real Outline access key using the Manager API's stable flow.
 
     The official server creates the credential first; naming and data limits are
@@ -280,10 +280,14 @@ def outline_create_key(name,data_limit_bytes=0):
     if not re.fullmatch(r"[A-Za-z0-9_. -]{1,80}",name):
         raise IntegrationError("Outline key name contains unsupported characters")
     limit=max(0,int(data_limit_bytes or 0))
-    created=_outline_request("/access-keys",method="POST")
+    port=int(port or 0)
+    if port and not 1024<=port<=65535:
+        raise IntegrationError("Invalid Outline access-key port")
+    created=_outline_request("/access-keys",method="POST",body={"port":port,"method":"chacha20-ietf-poly1305"} if port else None)
     key_id=str(created.get("id") or "").strip()
     access_url=str(created.get("accessUrl") or "").strip()
-    if not key_id or not access_url.startswith("ss://") or any(ch.isspace() for ch in access_url):
+    if (not key_id or not access_url.startswith("ss://") or any(ch.isspace() for ch in access_url)
+            or (port and (int(created.get("port") or 0)!=port or created.get("method")!="chacha20-ietf-poly1305"))):
         if key_id:
             try:_outline_request(f"/access-keys/{urllib.parse.quote(key_id,safe='')}",method="DELETE")
             except Exception:pass

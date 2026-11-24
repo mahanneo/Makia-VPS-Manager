@@ -1,0 +1,83 @@
+:root{color-scheme:dark;--pay-bg:#080d19;--pay-panel:rgba(17,26,45,.88);--pay-line:rgba(158,177,216,.15);--pay-muted:#8d9bb4;--pay-text:#eef3ff;--pay-cyan:#6ce5d3;--pay-purple:#9d8cff}
+*{box-sizing:border-box}
+body.pay-public{margin:0;min-height:100vh;background:radial-gradient(ellipse at 78% 5%,rgba(80,82,177,.22),transparent 34%),radial-gradient(ellipse at 12% 68%,rgba(30,164,164,.12),transparent 34%),var(--pay-bg);color:var(--pay-text);font-family:Vazirmatn,Tahoma,sans-serif}
+.pay-bg-grid{position:fixed;inset:0;pointer-events:none;opacity:.18;background-image:linear-gradient(rgba(130,160,210,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(130,160,210,.08) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,black,transparent 85%)}
+.pay-shell{position:relative;width:min(1120px,calc(100% - 40px));margin:auto;padding:30px 0 22px}
+.pay-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:24px;border-bottom:1px solid var(--pay-line)}
+.pay-brand{display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none;direction:ltr}
+.pay-brand-mark{display:grid;place-items:center;width:44px;height:44px;border:1px solid rgba(108,229,211,.45);border-radius:14px;background:linear-gradient(145deg,rgba(108,229,211,.16),rgba(157,140,255,.13));color:var(--pay-cyan);font:500 24px 'DM Mono',monospace;box-shadow:0 0 28px rgba(108,229,211,.12)}
+.pay-brand>span:last-child{display:grid;gap:2px}.pay-brand b{font:500 17px 'DM Mono',monospace;letter-spacing:.2em}.pay-brand small{font:10px 'DM Mono',monospace;letter-spacing:.18em;color:var(--pay-muted)}
+.pay-secure{display:flex;align-items:center;gap:9px;padding:8px 13px;border:1px solid var(--pay-line);border-radius:30px;color:#c1d2e8;font-size:12px;background:rgba(255,255,255,.025)}
+.pay-secure i{width:7px;height:7px;border-radius:50%;background:var(--pay-cyan);box-shadow:0 0 12px var(--pay-cyan)}
+.pay-hero{max-width:720px;padding:45px 0 30px}
+.pay-eyebrow,.pay-section-label{font:10px 'DM Mono',monospace;letter-spacing:.16em;color:var(--pay-cyan)}
+.pay-eyebrow{display:flex;align-items:center;gap:10px}.pay-eyebrow span{width:22px;height:1px;background:var(--pay-cyan)}
+.pay-hero h1{margin:13px 0 8px;font-size:clamp(30px,5vw,48px);line-height:1.35;font-weight:800;letter-spacing:-.04em}
+.pay-hero h1 em{font-style:normal;background:linear-gradient(90deg,#8ce9db,#a99bff);background-clip:text;-webkit-background-clip:text;color:transparent}
+.pay-hero p{max-width:650px;margin:0;color:#9eabc0;font-size:14px;line-height:2}
+.pay-layout{display:grid;grid-template-columns:1fr 1.05fr;gap:18px;align-items:start}
+.pay-card-panel,.pay-form-panel{border:1px solid var(--pay-line);border-radius:22px;background:linear-gradient(145deg,rgba(21,32,54,.94),rgba(11,18,32,.92));box-shadow:0 24px 70px rgba(0,0,0,.22);padding:24px}
+.pay-card-top,.pay-card-visual-head,.pay-card-bottom,.pay-copy-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pay-card-top h2,.pay-form-heading h2{margin:5px 0 0;font-size:19px}
+.pay-bank-chip{padding:6px 9px;border:1px solid var(--pay-line);border-radius:7px;color:#aab8d0;font:9px 'DM Mono',monospace;letter-spacing:.1em}
+.pay-card-visual{position:relative;isolation:isolate;overflow:hidden;margin:23px 0 17px;padding:21px 22px 18px;border:1px solid rgba(188,205,240,.22);border-radius:17px;background:linear-gradient(120deg,#172944 0%,#243d5d 46%,#242449 100%);box-shadow:0 16px 35px rgba(0,0,0,.25);direction:ltr}
+.pay-card-visual:after{content:"";position:absolute;z-index:-1;right:-35px;top:-85px;width:240px;height:240px;border:1px solid rgba(255,255,255,.1);border-radius:50%;box-shadow:0 0 0 25px rgba(255,255,255,.025),0 0 0 55px rgba(255,255,255,.02)}
+.pay-card-glow{position:absolute;z-index:-1;left:-60px;bottom:-105px;width:220px;height:180px;border-radius:50%;background:rgba(108,229,211,.18);filter:blur(40px)}
+.pay-card-visual-head{font:11px 'DM Mono',monospace;letter-spacing:.16em;color:#e8efff}
+.pay-chip-icon{font-size:28px;color:#a8f4e9}
+.pay-card-number{margin:35px 0 27px;font:clamp(17px,2.5vw,22px) 'DM Mono',monospace;letter-spacing:.045em;color:#fff;white-space:nowrap;text-align:center}
+.pay-card-bottom small{display:block;margin-bottom:5px;color:#a8b9d2;font-size:10px}.pay-card-bottom b{font-size:15px;font-weight:600;color:#fff}
+.pay-card-brand{font:9px/1.6 'DM Mono',monospace;letter-spacing:.13em;color:#bdc9df;text-align:right}
+.pay-copy-row{padding:14px 0;border-top:1px solid var(--pay-line);border-bottom:1px solid var(--pay-line)}
+.pay-copy-row>div{display:grid;gap:6px}.pay-copy-row small{font-size:11px;color:var(--pay-muted)}.pay-copy-row b{font:13px 'DM Mono',monospace;letter-spacing:.03em;color:#eaf2ff}
+.pay-copy-btn{border:1px solid rgba(108,229,211,.35);border-radius:10px;padding:10px 12px;background:rgba(108,229,211,.08);color:#a4f1e4;font:600 11px Vazirmatn;cursor:pointer;white-space:nowrap;transition:.2s}
+.pay-copy-btn:hover{background:rgba(108,229,211,.17);transform:translateY(-1px)}
+.pay-card-note{display:flex;gap:9px;align-items:flex-start;margin:13px 0;color:#9baac1;font-size:10px;line-height:1.9}
+.pay-card-note>span{display:grid;place-items:center;flex:0 0 17px;height:17px;border:1px solid rgba(157,140,255,.55);border-radius:50%;color:#b5aaff;font:11px 'DM Mono',monospace}
+.pay-card-note p{margin:0}
+.pay-qr-block{display:flex;align-items:center;gap:13px;margin-top:8px;padding:12px;border:1px solid var(--pay-line);border-radius:13px;background:rgba(255,255,255,.025)}
+.pay-qr-block img{width:76px;height:76px;padding:6px;border-radius:9px;background:#fff}
+.pay-qr-block div{display:grid;gap:5px}.pay-qr-block b{font-size:12px}.pay-qr-block small{font-size:10px;line-height:1.7;color:var(--pay-muted)}
+.pay-form-heading p{margin:7px 0 0;color:var(--pay-muted);font-size:12px}
+.pay-form{display:grid;gap:13px;margin-top:21px}
+.pay-field{display:grid;gap:7px;color:#dce5f5;font-size:12px}
+.pay-field>span{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.pay-field>span i{font-style:normal;color:#7f8da6;font-size:10px}
+.pay-field input,.pay-field textarea{width:100%;min-width:0;border:1px solid rgba(160,180,218,.17);border-radius:10px;background:rgba(4,9,19,.62);padding:12px 13px;color:#f0f5ff;font:13px Vazirmatn;outline:none;transition:border-color .2s,box-shadow .2s}
+.pay-field input:focus,.pay-field textarea:focus{border-color:rgba(108,229,211,.65);box-shadow:0 0 0 3px rgba(108,229,211,.08)}
+.pay-field input::placeholder,.pay-field textarea::placeholder{color:#687791}
+.pay-field textarea{resize:vertical;min-height:66px}
+.pay-input-wrap{position:relative}.pay-input-wrap input{padding-left:65px;direction:ltr;text-align:right}.pay-input-wrap>b{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:10px;color:#9baac1}
+.pay-field .pay-file{padding:9px;font-size:11px;color:#9eabc0}
+.pay-file-hint{font:10px 'DM Mono',monospace;color:#74839b;direction:ltr;text-align:left}
+.pay-submit{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:4px;padding:14px 17px;border:1px solid rgba(128,245,223,.48);border-radius:11px;background:linear-gradient(105deg,#3ac7b3,#69dcca 58%,#9d9aff);color:#071421;font:700 13px Vazirmatn;cursor:pointer;box-shadow:0 10px 30px rgba(49,194,174,.13);transition:transform .2s,filter .2s}
+.pay-submit:hover{transform:translateY(-2px);filter:brightness(1.07)}.pay-submit:disabled{opacity:.6;cursor:wait;transform:none}
+.pay-submit b{font:20px 'DM Mono',monospace}
+.pay-form-status{display:none;padding:11px 13px;border-radius:10px;font-size:12px;line-height:1.8}
+.pay-form-status.show{display:block}.pay-form-status.success{border:1px solid rgba(108,229,211,.3);background:rgba(108,229,211,.08);color:#9ff0e3}.pay-form-status.error{border:1px solid rgba(255,125,143,.3);background:rgba(255,125,143,.08);color:#ffb1bd}
+.pay-privacy{display:flex;align-items:center;gap:8px;margin-top:17px;padding-top:14px;border-top:1px solid var(--pay-line);color:#7f8da6;font-size:10px}.pay-privacy span{color:var(--pay-cyan);font-size:17px}
+.pay-honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+.pay-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.pay-steps>div{display:grid;grid-template-columns:34px 1fr;column-gap:10px;align-items:center;padding:15px;border:1px solid var(--pay-line);border-radius:13px;background:rgba(16,25,43,.62)}
+.pay-steps>div>span{grid-row:span 2;display:grid;place-items:center;width:32px;height:32px;border:1px solid rgba(108,229,211,.3);border-radius:10px;color:var(--pay-cyan);font:11px 'DM Mono',monospace}
+.pay-steps b{font-size:12px}.pay-steps small{margin-top:3px;color:var(--pay-muted);font-size:10px;line-height:1.6}
+.pay-footer{display:flex;justify-content:space-between;gap:12px;margin-top:24px;padding-top:15px;border-top:1px solid var(--pay-line);color:#67758d;font:9px 'DM Mono',monospace;letter-spacing:.04em}
+@media(max-width:800px){.pay-layout{grid-template-columns:1fr}.pay-card-panel,.pay-form-panel{padding:20px}.pay-hero{padding:34px 0 23px}}
+@media(max-width:560px){.pay-shell{width:min(100% - 24px,500px);padding-top:17px}.pay-header{padding-bottom:17px}.pay-brand-mark{width:39px;height:39px}.pay-secure{font-size:10px;padding:7px 9px}.pay-hero h1{font-size:31px}.pay-hero p{font-size:12px}.pay-card-panel,.pay-form-panel{padding:16px;border-radius:17px}.pay-card-number{font-size:17px;margin:30px 0 24px}.pay-copy-row{align-items:flex-start;flex-direction:column}.pay-copy-btn{width:100%}.pay-steps{grid-template-columns:1fr;gap:8px}.pay-footer{flex-direction:column;line-height:1.8}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+/* Makia admin payment workspace */
+.payment-admin{display:grid;gap:18px}
+.payment-admin-hero{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:22px;border:1px solid rgba(141,157,203,.18);border-radius:18px;background:radial-gradient(circle at 12% 0,rgba(108,229,211,.12),transparent 40%),linear-gradient(135deg,#121d32,#101426)}
+.payment-admin-hero h2{margin:5px 0;font-size:22px}.payment-admin-hero p{margin:0;color:#93a2bd;font-size:12px}
+.payment-admin-link{display:flex;gap:8px;align-items:center;max-width:390px;width:100%}.payment-admin-link input{flex:1;min-width:0;background:#070d19;border:1px solid #293854;border-radius:9px;padding:11px;color:#dce8fa;direction:ltr;font:11px 'DM Mono',monospace}
+.payment-admin-link button,.payment-admin button{cursor:pointer}
+.payment-admin-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.payment-admin-kpi{padding:16px;border:1px solid rgba(141,157,203,.15);border-radius:13px;background:rgba(12,19,33,.8)}
+.payment-admin-kpi small{display:block;color:#8494af;font-size:11px}.payment-admin-kpi b{display:block;margin-top:7px;font-size:23px;color:#e8f1ff}
+.payment-admin-grid{display:grid;grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr);gap:14px}
+.payment-admin-panel{min-width:0;padding:18px;border:1px solid rgba(141,157,203,.16);border-radius:15px;background:rgba(12,19,33,.78)}
+.payment-admin-panel h3{margin:0 0 13px;font-size:15px}.payment-admin-form{display:grid;gap:11px}.payment-admin-form label{display:grid;gap:6px;color:#9cabc4;font-size:11px}.payment-admin-form input{width:100%;padding:10px 11px;border:1px solid #293854;border-radius:8px;background:#070d19;color:#eef4ff;font:13px Vazirmatn}
+.payment-admin-table{width:100%;border-collapse:collapse;font-size:11px}.payment-admin-table th,.payment-admin-table td{padding:11px 9px;border-bottom:1px solid rgba(141,157,203,.12);text-align:right;vertical-align:middle}.payment-admin-table th{color:#8292ad;font-weight:500}.payment-admin-table td{color:#dce6f7}.payment-admin-table .muted{display:block;margin-top:3px;color:#8292ad;font-size:10px}.payment-admin-table .toolbar{display:flex;gap:6px;flex-wrap:wrap}.payment-admin-table button{padding:6px 9px;border:1px solid #34435d;border-radius:7px;background:#111d31;color:#dce8fa;font:10px Vazirmatn}.payment-admin-table button.good{border-color:rgba(67,204,167,.4);color:#8fe8cf}.payment-admin-table button.bad{border-color:rgba(255,125,143,.35);color:#ffabb8}
+.payment-admin-state{display:inline-flex;padding:4px 7px;border:1px solid rgba(255,255,255,.12);border-radius:30px;font-size:10px}.payment-admin-state.pending{color:#ffd18c}.payment-admin-state.verified{color:#8fe8cf}.payment-admin-state.rejected{color:#ffabb8}
+.payment-admin-table-wrap{overflow:auto}.payment-admin-empty{padding:28px;text-align:center;color:#8292ad;font-size:12px}
+@media(max-width:900px){.payment-admin-grid{grid-template-columns:1fr}.payment-admin-hero{align-items:flex-start;flex-direction:column}.payment-admin-link{max-width:none}}
+@media(max-width:600px){.payment-admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.payment-admin-kpi b{font-size:19px}.payment-admin-table{min-width:650px}}

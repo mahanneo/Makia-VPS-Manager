@@ -86,10 +86,10 @@ if [[ -n "$XRAY" ]]; then
   if [[ -n "$CONF" ]]; then
     TMP_XRAY="$(mktemp)"
     XRAY_VERSION="$("$XRAY" version 2>/dev/null | head -n1 || true)"
-    if [[ "$XRAY_VERSION" == *"26.3.27"* ]]; then
+    if [[ "$XRAY_VERSION" == *"26.10.21"* ]]; then
       ok "Xray version" "$XRAY_VERSION"
     else
-      warn "Xray version" "${XRAY_VERSION:-unknown} (CI target: 26.3.27)"
+      warn "Xray version" "${XRAY_VERSION:-unknown} (CI target: 26.10.21)"
     fi
     if "$XRAY" run -test -format=json -config "$CONF" >"$TMP_XRAY" 2>&1; then
       ok "Xray config (root)" "valid"

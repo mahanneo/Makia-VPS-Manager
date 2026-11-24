@@ -381,6 +381,16 @@ RELEASE_VERSION="$(tr -d '[:space:]' < "$SRC/VERSION")"
 }
 echo "Downloaded immutable Makia release: version=$RELEASE_VERSION commit=${SOURCE_COMMIT:-custom-archive}"
 
+INSTALLED_VERSION="$(tr -d '[:space:]' < "$APP/VERSION" 2>/dev/null || true)"
+if [[ "${MAKIA_ALLOW_DOWNGRADE:-0}" != "1" && "$INSTALLED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  SORTED_NEWEST="$(printf '%s\n%s\n' "$INSTALLED_VERSION" "$RELEASE_VERSION" | sort -V | tail -n1)"
+  if [[ "$SORTED_NEWEST" == "$INSTALLED_VERSION" && "$RELEASE_VERSION" != "$INSTALLED_VERSION" ]]; then
+    echo "Refusing downgrade: installed=$INSTALLED_VERSION downloaded=$RELEASE_VERSION." >&2
+    echo "The configured release source is older than this installation. Publish a newer release first; no application files or services have been changed." >&2
+    exit 3
+  fi
+fi
+
 install_verified_shell(){
   local src="$1" dest="$2" mode="${3:-0755}" tmp src_sha tmp_sha dest_sha
   [[ -f "$src" ]] || { echo "Missing shell source: $src" >&2; return 1; }
